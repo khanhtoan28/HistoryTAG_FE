@@ -1,13 +1,17 @@
 @import url("https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap")
 layer(base);
 
+@import url("https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Outfit:wght@100..900&display=swap");
+@import "tailwindcss";
+
+
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme {
   --font-*: initial;
-  --font-outfit: Outfit, sans-serif;
+  --font-outfit: Outfit, sans-serif,"Be Vietnam Pro";
 
   --breakpoint-*: initial;
   --breakpoint-2xsm: 375px;
@@ -181,14 +185,26 @@ layer(base);
   ::file-selector-button {
     border-color: var(--color-gray-200, currentColor);
   }
+
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
-  body {
-    @apply relative font-normal font-outfit z-1 bg-gray-50;
+
+  :root {
+    --default-font-family: "Be Vietnam Pro", sans-serif;
+  }
+
+  html, body {
+    font-family: var(--default-font-family);
+    @apply relative font-normal z-1 bg-gray-50;
+  }
+
+  input, textarea, select, button {
+    font: inherit;
   }
 }
+
 
 @utility menu-item {
   @apply relative flex items-center w-full gap-3 px-3 py-2 font-medium rounded-lg text-theme-sm;
