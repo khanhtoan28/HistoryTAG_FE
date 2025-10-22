@@ -1,6 +1,5 @@
 import api from "./client";
 
-/** ====== TYPES khớp BE hiện tại ====== */
 export type LoginPayload = { username: string; password: string };
 
 export type RegisterPayload = {
@@ -13,7 +12,6 @@ export type RegisterPayload = {
   phoneNumber?: string;
 };
 
-// BE trả roles có thể là Set<Role> hoặc list string
 export type RoleLike =
   | string
   | { roleId?: number; roleName: string }
@@ -22,39 +20,95 @@ export type RoleLike =
 export type LoginResponse = {
   userId: number;
   username: string;
-  typeToken: string;   // ví dụ "Bearer Token"
-  accessToken: string; // JWT
+  typeToken: string; 
+  accessToken: string; 
   roles: RoleLike[];
 };
 
-/** ====== CALLS ====== */
-export const signIn = (data: LoginPayload) =>
-  api.post<LoginResponse>("/api/v1/public/sign-in", data);
+function setCookie(
+  name: string,
+  value: string,
+  days = 7,
+  sameSite: "Lax" | "None" = window.location.protocol === "https:" ? "None" : "Lax"
+) {
+  const d = new Date();
+  d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
+  const expires = `; Expires=${d.toUTCString()}`;
+  const path = `; Path=/`;
+  const secure = sameSite === "None" ? "; Secure" : "";
+  const domain = window.location.hostname === "localhost" ? "" : `; Domain=${window.location.hostname}`;
+  document.cookie = `${name}=${encodeURIComponent(
+    value
+  )}${expires}${path}${domain}; SameSite=${sameSite}${secure}`;
+}
+
+
+export const signIn = async (data: LoginPayload) => {
+  const res = await api.post<LoginResponse>("/api/v1/public/sign-in", data);
+  const payload = res.data;
+
+  const token = payload?.accessToken;
+  if (token) {
+    localStorage.setItem("access_token", token);
+    setCookie("access_token", token, 7);
+  }
+
+  localStorage.setItem("username", payload?.username ?? "");
+  localStorage.setItem("roles", JSON.stringify(normalizeRoles(payload?.roles)));
+
+  return payload;
+};
 
 export const signUp = (data: RegisterPayload) =>
   api.post("/api/v1/public/sign-up", data);
 
-/** Normalize roles -> mảng string */
+
+export const logout = async () => {
+  try {
+    await api.get("/api/v1/auth/logout", { withCredentials: true });
+  } catch (e) {
+    console.warn("Logout API error:", e);
+  } finally {
+    const name = "access_token";
+    const host = window.location.hostname;
+    const base = `${name}=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0`;
+
+    document.cookie = `${base}; Path=/; SameSite=Lax`;
+    document.cookie = `${base}; Path=/; SameSite=None; Secure`;
+
+    document.cookie = `${base}; Path=/; Domain=${host}; SameSite=Lax`;
+    document.cookie = `${base}; Path=/; Domain=${host}; SameSite=None; Secure`;
+    if (host !== "127.0.0.1") {
+      document.cookie = `${base}; Path=/; Domain=127.0.0.1; SameSite=Lax`;
+      document.cookie = `${base}; Path=/; Domain=127.0.0.1; SameSite=None; Secure`;
+    }
+
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("token");
+    localStorage.removeItem("username");
+    localStorage.removeItem("roles");
+    sessionStorage.removeItem("access_token");
+    console.log("Cookies sau khi logout:", document.cookie);
+  }
+};
+
+
 export const normalizeRoles = (roles: RoleLike[] = []) =>
   roles.map((r) => (typeof r === "string" ? r : r.roleName));
-
-/** Helper bóc lỗi từ DataError(code, data) của BE */
 export const pickErrMsg = (err: any): string => {
   const data = err?.response?.data;
   if (!data) return "Đã xảy ra lỗi";
-  // Nếu data = { code: 400, data: "string message" }
   if (typeof data.data === "string") return data.data;
-  // Nếu data = { code: 400, data: { field: message } }
   if (data.data && typeof data.data === "object") {
     const first = Object.values(data.data)[0];
     if (typeof first === "string") return first;
   }
-  // Nếu BE trả message/error
+
   return data.message || data.error || "Yêu cầu không hợp lệ";
 };
 
 export const pickFieldErrors = (err: any): Record<string, string> => {
   const d = err?.response?.data;
-  if (d?.data && typeof d.data === "object") return d.data as Record<string,string>;
+  if (d?.data && typeof d.data === "object") return d.data as Record<string, string>;
   return {};
 };

@@ -69,10 +69,11 @@ export default function SignInForm() {
 
     setLoading(true);
     try {
-      const { data } = await signIn({
+      const data = await signIn({
         username: form.username.trim(),
         password: form.password,
       });
+
 
       const storage = remember ? localStorage : sessionStorage;
       storage.setItem("access_token", data.accessToken);
@@ -81,7 +82,7 @@ export default function SignInForm() {
 
       api.defaults.headers.common.Authorization = `Bearer ${data.accessToken}`;
       const roles = normalizeRoles(data.roles);
-      if (roles.includes("ADMIN")) navigate("/admin/users");
+      if (roles.includes("ADMIN")) navigate("/");
       else navigate("/");
     } catch (e: any) {
       // lỗi từ BE (sai tài khoản/mật khẩu, v.v…)
