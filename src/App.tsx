@@ -16,8 +16,9 @@ import FormElements from "./pages/Forms/FormElements";
 import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
 import Home from "./pages/Dashboard/Home";
-import ImplementationTasksPage from "./pages/implementation-tasks";
-import Hospitals from "./pages/Tables/Hospitals";
+import ImplementationTasksPage from "./pages/PageClients/implementation-tasks";
+import Hospitals from "./pages/Page/Hospitals";
+import HisSystemPage from "./pages/Page/HisSystem";
 
 export default function App() {
   return (
@@ -39,6 +40,7 @@ export default function App() {
 
             {/* Tables */}
             <Route path="/hospitals" element={<Hospitals />} />
+            <Route path="/his-sys" element={<HisSystemPage />} />
 
             {/* Ui Elements */}
             <Route path="/alerts" element={<Alerts />} />
