@@ -1,82 +1,79 @@
-import type React from "react";
-import type { FC } from "react";
+import * as React from "react";
 
-interface InputProps {
-  type?: "text" | "number" | "email" | "password" | "date" | "time" | string;
-  id?: string;
-  name?: string;
-  placeholder?: string;
-  value?: string | number;
-  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  className?: string;
-  min?: string;
-  max?: string;
-  step?: number;
-  disabled?: boolean;
+// Kế thừa tất cả props của <input>
+export type InputProps = React.InputHTMLAttributes<HTMLInputElement> & {
   success?: boolean;
   error?: boolean;
   hint?: string;
-}
-
-const Input: FC<InputProps> = ({
-  type = "text",
-  id,
-  name,
-  placeholder,
-  value,
-  onChange,
-  className = "",
-  min,
-  max,
-  step,
-  disabled = false,
-  success = false,
-  error = false,
-  hint,
-}) => {
-  let inputClasses = ` h-11 w-full rounded-lg border appearance-none px-4 py-2.5 text-sm shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3  dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 ${className}`;
-
-  if (disabled) {
-    inputClasses += ` text-gray-500 border-gray-300 opacity-40 bg-gray-100 cursor-not-allowed dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 opacity-40`;
-  } else if (error) {
-    inputClasses += `  border-error-500 focus:border-error-300 focus:ring-error-500/20 dark:text-error-400 dark:border-error-500 dark:focus:border-error-800`;
-  } else if (success) {
-    inputClasses += `  border-success-500 focus:border-success-300 focus:ring-success-500/20 dark:text-success-400 dark:border-success-500 dark:focus:border-success-800`;
-  } else {
-    inputClasses += ` bg-transparent text-gray-800 border-gray-300 focus:border-brand-300 focus:ring-brand-500/20 dark:border-gray-700 dark:text-white/90  dark:focus:border-brand-800`;
-  }
-
-  return (
-    <div className="relative">
-      <input
-        type={type}
-        id={id}
-        name={name}
-        placeholder={placeholder}
-        value={value}
-        onChange={onChange}
-        min={min}
-        max={max}
-        step={step}
-        disabled={disabled}
-        className={inputClasses}
-      />
-
-      {hint && (
-        <p
-          className={`mt-1.5 text-xs ${
-            error
-              ? "text-error-500"
-              : success
-              ? "text-success-500"
-              : "text-gray-500"
-          }`}
-        >
-          {hint}
-        </p>
-      )}
-    </div>
-  );
 };
 
+const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  (
+    {
+      type = "text",
+      className = "",
+      disabled = false,
+      success = false,
+      error = false,
+      hint,
+      ...props // ✅ chứa onBlur, onChange, value, name, id, autoComplete, inputMode, v.v…
+    },
+    ref
+  ) => {
+    let baseClasses = `
+      h-11 w-full rounded-md border px-4 py-2.5 text-sm
+      placeholder:text-gray-400
+      focus:outline-none focus:ring-0
+      transition-all duration-150
+    `;
+
+    if (disabled) {
+      baseClasses += `
+        text-gray-400 border-gray-300 bg-gray-100 cursor-not-allowed
+      `;
+    } else if (error) {
+      // viền đỏ rõ ràng
+      baseClasses += `
+        border-[#EF4444] text-gray-900 bg-white
+        focus:border-[#EF4444]
+        placeholder:text-gray-400
+      `;
+    } else if (success) {
+      baseClasses += `
+        border-green-500 focus:border-green-500
+        bg-white
+      `;
+    } else {
+      baseClasses += `
+        border-gray-300 bg-white
+        focus:border-brand-500
+        dark:border-gray-700 dark:bg-transparent dark:text-white/90
+      `;
+    }
+
+    return (
+      <div className="relative">
+        <input
+          ref={ref}
+          type={type}
+          className={`${baseClasses} ${className}`}
+          disabled={disabled}
+          {...props} // ✅ forward toàn bộ props (onBlur, onChange, value, id, name, min, max, step, autoComplete, inputMode...)
+        />
+
+        {hint && (
+          <p
+            className={`mt-1.5 text-xs ${
+              error ? "text-[#EF4444]" : success ? "text-green-500" : "text-gray-500"
+            }`}
+          >
+            {hint}
+          </p>
+        )}
+      </div>
+    );
+  }
+);
+
+Input.displayName = "Input";
 export default Input;

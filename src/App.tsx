@@ -21,7 +21,7 @@ import Home from "./pages/Dashboard/Home";
 
 export default function App() {
   return (
-    <>
+    <div className="font-outfit">   {/* 👈 ép toàn bộ app dùng Be Vietnam Pro */}
       <Router>
         <ScrollToTop />
         <Routes>
@@ -61,6 +61,6 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Router>
-    </>
+    </div>
   );
 }
