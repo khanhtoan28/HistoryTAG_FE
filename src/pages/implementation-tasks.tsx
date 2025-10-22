@@ -1,0 +1,576 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+
+// =====================
+// Types khớp với BE DTOs
+// =====================
+export type ImplementationTaskResponseDTO = {
+    id: number;
+    name: string;
+    hospitalId: number | null;
+    hospitalName?: string | null;
+    picDeploymentId: number | null;
+    picDeploymentName?: string | null;
+    quantity?: number | null;
+    agencyId?: number | null;
+    hisSystemId?: number | null;
+    hardwareId?: number | null;
+    endDate?: string | null; // ISO string từ LocalDateTime
+    additionalRequest?: string | null;
+    apiUrl?: string | null;
+    deadline?: string | null;
+    completionDate?: string | null;
+    apiTestStatus?: string | null;
+    bhytPortCheckInfo?: string | null;
+    status?: string | null;
+    startDate?: string | null;
+    acceptanceDate?: string | null;
+    team?: "DEPLOYMENT" | string;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+};
+
+export type ImplementationTaskRequestDTO = {
+    name: string;
+    hospitalId: number;
+    picDeploymentId: number;
+    agencyId?: number | null;
+    hisSystemId?: number | null;
+    hardwareId?: number | null;
+    quantity?: number | null;
+    apiTestStatus?: string | null;
+    bhytPortCheckInfo?: string | null;
+    additionalRequest?: string | null;
+    apiUrl?: string | null;
+    deadline?: string | null; // ISO
+    completionDate?: string | null; // ISO
+    status?: string | null;
+    startDate?: string | null;
+    acceptanceDate?: string | null;
+};
+
+export type ImplementationTaskUpdateDTO = Partial<ImplementationTaskRequestDTO>;
+
+const apiBase = "http://localhost:8080/api/v1/admin/implementation/tasks";
+
+function authHeaders(extra?: Record<string, string>) {
+    const token = localStorage.getItem("access_token");
+    return {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(extra || {}),
+    };
+}
+
+function toISOOrNull(v?: string | Date | null) {
+    if (!v) return null;
+    try {
+        return typeof v === "string" ? (v.trim() ? new Date(v).toISOString() : null) : v.toISOString();
+    } catch {
+        return null;
+    }
+}
+
+function fmt(dt?: string | null) {
+    if (!dt) return "";
+    const d = new Date(dt);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString();
+}
+
+function clsx(...arr: Array<string | false | undefined>) {
+    return arr.filter(Boolean).join(" ");
+}
+
+// =====================
+// UI: Modal + Input primitive
+// =====================
+function Backdrop({ onClose }: { onClose: () => void }) {
+    return (
+        <div className="fixed inset-0 z-40" onClick={onClose}>
+            <div className="absolute inset-0 bg-black/40" />
+        </div>
+    );
+}
+
+function Field({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
+    return (
+        <label className="grid gap-1">
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+                {label} {required && <span className="text-red-500">*</span>}
+            </span>
+            {children}
+        </label>
+    );
+}
+
+function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+    return (
+        <input
+            {...props}
+            className={clsx(
+                "h-10 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 outline-none",
+                "focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500",
+                props.className || ""
+            )}
+        />
+    );
+}
+
+function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+    return (
+        <textarea
+            {...props}
+            className={clsx(
+                "min-h-[90px] rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 outline-none",
+                "focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500",
+                props.className || ""
+            )}
+        />
+    );
+}
+
+function Button(
+    props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "ghost" | "danger" }
+) {
+    const { variant = "primary", className, ...rest } = props;
+    const base = "h-10 rounded-xl px-4 text-sm font-medium transition shadow-sm";
+    const styles =
+        variant === "primary"
+            ? "bg-gray-900 text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-white/90"
+            : variant === "danger"
+                ? "bg-red-600 text-white hover:bg-red-700"
+                : "bg-transparent border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800";
+    return <button className={clsx(base, styles, className)} {...rest} />;
+}
+
+function TaskFormModal({
+    open,
+    onClose,
+    initial,
+    onSubmit,
+}: {
+    open: boolean;
+    onClose: () => void;
+    initial?: Partial<ImplementationTaskRequestDTO> & { id?: number };
+    onSubmit: (payload: ImplementationTaskRequestDTO, id?: number) => Promise<void>;
+}) {
+    const [model, setModel] = useState<ImplementationTaskRequestDTO>(() => ({
+        name: initial?.name || "",
+        hospitalId: (initial?.hospitalId as number) || 0,
+        picDeploymentId: (initial?.picDeploymentId as number) || 0,
+        agencyId: initial?.agencyId ?? null,
+        hisSystemId: initial?.hisSystemId ?? null,
+        hardwareId: initial?.hardwareId ?? null,
+        quantity: initial?.quantity ?? null,
+        apiTestStatus: initial?.apiTestStatus ?? "",
+        bhytPortCheckInfo: initial?.bhytPortCheckInfo ?? "",
+        additionalRequest: initial?.additionalRequest ?? "",
+        apiUrl: initial?.apiUrl ?? "",
+        deadline: initial?.deadline ?? "",
+        completionDate: initial?.completionDate ?? "",
+        status: initial?.status ?? "",
+        startDate: initial?.startDate ?? "",
+        acceptanceDate: initial?.acceptanceDate ?? "",
+    }));
+
+    useEffect(() => {
+        if (open) {
+            setModel({
+                name: initial?.name || "",
+                hospitalId: (initial?.hospitalId as number) || 0,
+                picDeploymentId: (initial?.picDeploymentId as number) || 0,
+                agencyId: initial?.agencyId ?? null,
+                hisSystemId: initial?.hisSystemId ?? null,
+                hardwareId: initial?.hardwareId ?? null,
+                quantity: initial?.quantity ?? null,
+                apiTestStatus: initial?.apiTestStatus ?? "",
+                bhytPortCheckInfo: initial?.bhytPortCheckInfo ?? "",
+                additionalRequest: initial?.additionalRequest ?? "",
+                apiUrl: initial?.apiUrl ?? "",
+                deadline: initial?.deadline ?? "",
+                completionDate: initial?.completionDate ?? "",
+                status: initial?.status ?? "",
+                startDate: initial?.startDate ?? "",
+                acceptanceDate: initial?.acceptanceDate ?? "",
+            });
+        }
+    }, [open, initial]);
+
+    const [submitting, setSubmitting] = useState(false);
+
+    if (!open) return null;
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!model.name?.trim()) {
+            alert("Tên dự án không được để trống");
+            return;
+        }
+        if (!model.hospitalId) {
+            alert("ID Bệnh viện không được để trống");
+            return;
+        }
+        if (!model.picDeploymentId) {
+            alert("ID người phụ trách không được để trống");
+            return;
+        }
+
+        const payload: ImplementationTaskRequestDTO = {
+            ...model,
+            deadline: toISOOrNull(model.deadline) || undefined,
+            completionDate: toISOOrNull(model.completionDate) || undefined,
+            startDate: toISOOrNull(model.startDate) || undefined,
+            acceptanceDate: toISOOrNull(model.acceptanceDate) || undefined,
+        } as any;
+
+        try {
+            setSubmitting(true);
+            await onSubmit(payload, (initial as any)?.id);
+            onClose();
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <>
+            <Backdrop onClose={onClose} />
+            <div className="fixed inset-0 z-50 grid place-items-center p-4">
+                <AnimatePresence initial={false}>
+                    <motion.div
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: 20, opacity: 0 }}
+                        transition={{ type: "spring", stiffness: 260, damping: 22 }}
+                        className="w-full max-w-3xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800"
+                    >
+                        <form onSubmit={handleSubmit} className="p-6 grid gap-4">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-lg font-semibold">{initial?.id ? "Cập nhật tác vụ triển khai" : "Tạo tác vụ triển khai"}</h3>
+                                <Button type="button" variant="ghost" onClick={onClose}>Đóng</Button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <Field label="Tên dự án" required>
+                                    <TextInput
+                                        value={model.name}
+                                        onChange={(e) => setModel((s) => ({ ...s, name: e.target.value }))}
+                                        placeholder="Nhập tên dự án"
+                                    />
+                                </Field>
+                                <Field label="ID Bệnh viện" required>
+                                    <TextInput
+                                        type="number"
+                                        value={model.hospitalId ?? 0}
+                                        onChange={(e) => setModel((s) => ({ ...s, hospitalId: Number(e.target.value) }))}
+                                    />
+                                </Field>
+                                <Field label="ID người phụ trách (PIC)" required>
+                                    <TextInput
+                                        type="number"
+                                        value={model.picDeploymentId ?? 0}
+                                        onChange={(e) => setModel((s) => ({ ...s, picDeploymentId: Number(e.target.value) }))}
+                                    />
+                                </Field>
+                                <Field label="Số lượng">
+                                    <TextInput
+                                        type="number"
+                                        value={model.quantity ?? ""}
+                                        onChange={(e) => setModel((s) => ({ ...s, quantity: e.target.value ? Number(e.target.value) : null }))}
+                                    />
+                                </Field>
+                                <Field label="Agency ID">
+                                    <TextInput
+                                        type="number"
+                                        value={model.agencyId ?? ""}
+                                        onChange={(e) => setModel((s) => ({ ...s, agencyId: e.target.value ? Number(e.target.value) : null }))}
+                                    />
+                                </Field>
+                                <Field label="HIS System ID">
+                                    <TextInput
+                                        type="number"
+                                        value={model.hisSystemId ?? ""}
+                                        onChange={(e) => setModel((s) => ({ ...s, hisSystemId: e.target.value ? Number(e.target.value) : null }))}
+                                    />
+                                </Field>
+                                <Field label="Hardware ID">
+                                    <TextInput
+                                        type="number"
+                                        value={model.hardwareId ?? ""}
+                                        onChange={(e) => setModel((s) => ({ ...s, hardwareId: e.target.value ? Number(e.target.value) : null }))}
+                                    />
+                                </Field>
+                                <Field label="API URL">
+                                    <TextInput
+                                        value={model.apiUrl ?? ""}
+                                        onChange={(e) => setModel((s) => ({ ...s, apiUrl: e.target.value }))}
+                                        placeholder="https://..."
+                                    />
+                                </Field>
+                                <Field label="Trạng thái API Test">
+                                    <TextInput
+                                        value={model.apiTestStatus ?? ""}
+                                        onChange={(e) => setModel((s) => ({ ...s, apiTestStatus: e.target.value }))}
+                                        placeholder="PASSED / FAILED / PENDING..."
+                                    />
+                                </Field>
+                                <Field label="BHYT Port Check Info">
+                                    <TextInput
+                                        value={model.bhytPortCheckInfo ?? ""}
+                                        onChange={(e) => setModel((s) => ({ ...s, bhytPortCheckInfo: e.target.value }))}
+                                    />
+                                </Field>
+                                <Field label="Trạng thái">
+                                    <TextInput
+                                        value={model.status ?? ""}
+                                        onChange={(e) => setModel((s) => ({ ...s, status: e.target.value }))}
+                                        placeholder="NEW / IN_PROGRESS / DONE..."
+                                    />
+                                </Field>
+                                <Field label="Deadline (ngày)">
+                                    <TextInput
+                                        type="datetime-local"
+                                        value={model.deadline ? new Date(model.deadline).toISOString().slice(0, 16) : ""}
+                                        onChange={(e) => setModel((s) => ({ ...s, deadline: e.target.value }))}
+                                    />
+                                </Field>
+                                <Field label="Ngày bắt đầu">
+                                    <TextInput
+                                        type="datetime-local"
+                                        value={model.startDate ? new Date(model.startDate).toISOString().slice(0, 16) : ""}
+                                        onChange={(e) => setModel((s) => ({ ...s, startDate: e.target.value }))}
+                                    />
+                                </Field>
+                                <Field label="Ngày nghiệm thu">
+                                    <TextInput
+                                        type="datetime-local"
+                                        value={model.acceptanceDate ? new Date(model.acceptanceDate).toISOString().slice(0, 16) : ""}
+                                        onChange={(e) => setModel((s) => ({ ...s, acceptanceDate: e.target.value }))}
+                                    />
+                                </Field>
+                                <Field label="Ngày hoàn thành">
+                                    <TextInput
+                                        type="datetime-local"
+                                        value={model.completionDate ? new Date(model.completionDate).toISOString().slice(0, 16) : ""}
+                                        onChange={(e) => setModel((s) => ({ ...s, completionDate: e.target.value }))}
+                                    />
+                                </Field>
+                            </div>
+
+                            <Field label="Yêu cầu bổ sung">
+                                <TextArea
+                                    value={model.additionalRequest ?? ""}
+                                    onChange={(e) => setModel((s) => ({ ...s, additionalRequest: e.target.value }))}
+                                    placeholder="Mô tả chi tiết yêu cầu"
+                                />
+                            </Field>
+
+                            <div className="flex items-center justify-end gap-3 pt-2">
+                                <Button type="button" variant="ghost" onClick={onClose}>Hủy</Button>
+                                <Button type="submit" disabled={submitting}>{submitting ? "Đang lưu..." : initial?.id ? "Cập nhật" : "Tạo mới"}</Button>
+                            </div>
+                        </form>
+                    </motion.div>
+                </AnimatePresence>
+            </div>
+        </>
+    );
+}
+
+const ImplementationTasksPage: React.FC = () => {
+    const [data, setData] = useState<ImplementationTaskResponseDTO[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const [modalOpen, setModalOpen] = useState(false);
+    const [editing, setEditing] = useState<ImplementationTaskResponseDTO | null>(null);
+
+    const [query, setQuery] = useState("");
+
+    const filtered = useMemo(() => {
+        if (!query.trim()) return data;
+        const q = query.toLowerCase();
+        return data.filter((x) =>
+            [x.name, x.hospitalName, x.picDeploymentName, x.status, x.apiTestStatus]
+                .filter(Boolean)
+                .some((v) => String(v).toLowerCase().includes(q))
+        );
+    }, [data, query]);
+
+    async function fetchList() {
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await fetch(`${apiBase}?page=0&size=50&sortBy=id&sortDir=asc`, {
+                method: "GET",
+                headers: authHeaders(),
+                credentials: "include",
+            });
+            if (!res.ok) throw new Error(`GET ${apiBase} failed: ${res.status}`);
+            const page = await res.json(); 
+            setData(Array.isArray(page?.content) ? page.content : []);
+        } catch (e: any) {
+            setError(e.message || "Lỗi tải dữ liệu");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    useEffect(() => {
+        fetchList();
+    }, []);
+
+    const handleSubmit = async (payload: ImplementationTaskRequestDTO, id?: number) => {
+        const isUpdate = Boolean(id);
+        const url = isUpdate ? `${apiBase}/${id}` : apiBase;
+        const method = isUpdate ? "PUT" : "POST";
+
+        const res = await fetch(url, {
+            method,
+            headers: authHeaders(),
+            body: JSON.stringify(payload),
+            credentials: "include",
+        });
+        if (!res.ok) {
+            const msg = await res.text();
+            alert(`${method} thất bại: ${msg || res.status}`);
+            return;
+        }
+        await fetchList();
+        alert(isUpdate ? "Cập nhật thành công" : "Tạo mới thành công");
+    };
+
+    // DELETE
+    const handleDelete = async (id: number) => {
+        if (!confirm("Xóa bản ghi này?")) return;
+        const res = await fetch(`${apiBase}/${id}`, {
+            method: "DELETE",
+            headers: authHeaders(),
+            credentials: "include",
+        });
+        if (!res.ok) {
+            const msg = await res.text();
+            alert(`Xóa thất bại: ${msg || res.status}`);
+            return;
+        }
+        setData((s) => s.filter((x) => x.id !== id));
+        alert("Đã xóa");
+    };
+
+    return (
+        <div className="p-6 xl:p-10">
+            {/* Header */}
+            <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h1 className="text-2xl font-semibold">Tác vụ triển khai</h1>
+                </div>
+                <div className="flex items-center gap-2">
+                    <input
+                        placeholder="Tìm kiếm theo tên, bệnh viện, trạng thái..."
+                        className="h-10 w-64 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 outline-none"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                    />
+                    <Button onClick={() => { setEditing(null); setModalOpen(true); }}>+ Thêm mới</Button>
+                </div>
+            </div>
+
+            {/* Table */}
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                        <thead className="bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-300">
+                            <tr>
+                                <th className="px-4 py-3 text-left">ID</th>
+                                <th className="px-4 py-3 text-left">Tên</th>
+                                <th className="px-4 py-3 text-left">Bệnh viện</th>
+                                <th className="px-4 py-3 text-left">PIC</th>
+                                <th className="px-4 py-3 text-left">Trạng thái</th>
+                                <th className="px-4 py-3 text-left">API Test</th>
+                                <th className="px-4 py-3 text-left">Deadline</th>
+                                <th className="px-4 py-3 text-left">Tạo lúc</th>
+                                <th className="px-4 py-3 text-right">Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {loading && (
+                                <tr>
+                                    <td colSpan={9} className="px-4 py-6 text-center text-gray-500">Đang tải...</td>
+                                </tr>
+                            )}
+                            {error && !loading && (
+                                <tr>
+                                    <td colSpan={9} className="px-4 py-6 text-center text-red-600">{error}</td>
+                                </tr>
+                            )}
+                            {!loading && !error && filtered.length === 0 && (
+                                <tr>
+                                    <td colSpan={9} className="px-4 py-6 text-center text-gray-500">Không có dữ liệu</td>
+                                </tr>
+                            )}
+                            {!loading && !error && filtered.map((row) => (
+                                <tr key={row.id} className="border-t border-gray-100 dark:border-gray-800">
+                                    <td className="px-4 py-3">{row.id}</td>
+                                    <td className="px-4 py-3 font-medium">{row.name}</td>
+                                    <td className="px-4 py-3">{row.hospitalName || row.hospitalId}</td>
+                                    <td className="px-4 py-3">{row.picDeploymentName || row.picDeploymentId}</td>
+                                    <td className="px-4 py-3">{row.status}</td>
+                                    <td className="px-4 py-3">{row.apiTestStatus}</td>
+                                    <td className="px-4 py-3">{fmt(row.deadline)}</td>
+                                    <td className="px-4 py-3">{fmt(row.createdAt)}</td>
+                                    <td className="px-4 py-3 text-right">
+                                        <div className="flex justify-end gap-2">
+                                            <Button
+                                                variant="ghost"
+                                                onClick={() => {
+                                                    setEditing(row);
+                                                    setModalOpen(true);
+                                                }}
+                                            >Sửa</Button>
+                                            <Button variant="danger" onClick={() => handleDelete(row.id)}>Xóa</Button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Modal */}
+            <TaskFormModal
+                open={modalOpen}
+                onClose={() => setModalOpen(false)}
+                initial={
+                    editing
+                        ? {
+                            id: editing.id,
+                            name: editing.name,
+                            hospitalId: editing.hospitalId ?? 0,
+                            picDeploymentId: editing.picDeploymentId ?? 0,
+                            agencyId: editing.agencyId ?? undefined,
+                            hisSystemId: editing.hisSystemId ?? undefined,
+                            hardwareId: editing.hardwareId ?? undefined,
+                            quantity: editing.quantity ?? undefined,
+                            apiTestStatus: editing.apiTestStatus ?? undefined,
+                            bhytPortCheckInfo: editing.bhytPortCheckInfo ?? undefined,
+                            additionalRequest: editing.additionalRequest ?? undefined,
+                            apiUrl: editing.apiUrl ?? undefined,
+                            deadline: editing.deadline ?? undefined,
+                            completionDate: editing.completionDate ?? undefined,
+                            status: editing.status ?? undefined,
+                            startDate: editing.startDate ?? undefined,
+                            acceptanceDate: editing.acceptanceDate ?? undefined,
+                        }
+                        : undefined
+                }
+                onSubmit={(payload, id) => handleSubmit(payload, id)}
+            />
+
+        </div>
+    );
+};
+
+export default ImplementationTasksPage;

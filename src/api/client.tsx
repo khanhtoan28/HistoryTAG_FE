@@ -1,16 +1,41 @@
+// src/api/client.ts
 import axios from "axios";
 
+/** Helpers cho cookie */
+function getCookie(name: string) {
+  const m = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
+  return m ? decodeURIComponent(m[2]) : null;
+}
+
+/** Ưu tiên đọc token từ cookie rồi tới localStorage */
+export function getAuthToken(): string | null {
+  return getCookie("access_token") || localStorage.getItem("access_token") || localStorage.getItem("token");
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL, // có thể thêm '/api' nếu BE có prefix
-  withCredentials: false,                 // bật nếu dùng cookie/session
-  headers: { "Content-Type": "application/json" },
+  baseURL: "http://localhost:8080",
+  withCredentials: true, // cho phép gửi cookie (nếu bạn dùng cookie để BE đọc)
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
-// (tuỳ chọn) gắn JWT từ localStorage
+// 🧩 Gắn token cho tất cả request
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("access_token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  // Đọc token từ localStorage hoặc cookie
+  const token =
+    localStorage.getItem("access_token") ||
+    document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("access_token="))
+      ?.split("=")[1];
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`; // 🔥 thêm dòng này
+  }
+
   return config;
 });
+
 
 export default api;
