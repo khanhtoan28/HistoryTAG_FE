@@ -404,9 +404,6 @@ export default function HospitalsPage() {
   }
 
   // ✅ Pagination logic
-  const totalPages = Math.ceil(totalElements / size);
-  const hasNext = page < totalPages - 1;
-  const hasPrev = page > 0;
 
   return (
     <>
@@ -554,23 +551,24 @@ export default function HospitalsPage() {
 
           {/* Pagination buttons */}
           <div className="mt-4 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm">
-              <span>Trang {page + 1} / {totalPages}</span>
-              <button
-                className="rounded border px-2 py-1 disabled:opacity-50"
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                disabled={!hasPrev}
-              >
-                Prev
-              </button>
-              <button
-                className="rounded border px-2 py-1 disabled:opacity-50"
-                onClick={() => setPage(p => p + 1)}
-                disabled={!hasNext}
-              >
-                Next
-              </button>
-            </div>
+             <div className="flex items-center gap-2 text-sm">
+              <span>Trang:</span>
+              <button
+                className="rounded border px-2 py-1 disabled:opacity-50"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+              >
+                Trước
+              </button>
+              <span className="rounded border px-2 py-1">{page + 1}</span>
+              <button
+                className="rounded border px-2 py-1 disabled:opacity-50"
+                onClick={() => setPage((p) => p + 1)}
+                disabled={filtered.length < size}
+              >
+                Sau
+              </button>
+            </div>
 
             <div className="flex items-center gap-2 text-sm">
               <span>Hiển thị:</span>

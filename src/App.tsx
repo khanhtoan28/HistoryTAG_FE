@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import SignIn from "./pages/AuthPages/SignIn";
 import SignUp from "./pages/AuthPages/SignUp";
 import NotFound from "./pages/OtherPage/NotFound";
@@ -19,6 +19,7 @@ import Home from "./pages/Dashboard/Home";
 import ImplementationTasksPage from "./pages/PageClients/implementation-tasks";
 import Hospitals from "./pages/Page/Hospitals";
 import HisSystemPage from "./pages/Page/HisSystem";
+import PersonCharge from "./pages/Page/PersonCharge";
 
 export default function App() {
   return (
@@ -28,7 +29,7 @@ export default function App() {
         <Routes>
           {/* Dashboard Layout */}
           <Route element={<AppLayout />}>
-            <Route index path="/" element={<Home />} />
+            <Route index element={<Home />} />
 
             {/* Others Page */}
             <Route path="/profile" element={<UserProfiles />} />
@@ -41,6 +42,7 @@ export default function App() {
             {/* Tables */}
             <Route path="/hospitals" element={<Hospitals />} />
             <Route path="/his-sys" element={<HisSystemPage />} />
+            <Route path="/personCharge" element={<PersonCharge />} />
 
             {/* Ui Elements */}
             <Route path="/alerts" element={<Alerts />} />
