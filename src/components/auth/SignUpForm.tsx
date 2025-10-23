@@ -10,8 +10,8 @@ type FormState = {
   username: string;
   email: string;
   fullName: string;
-  address: string;
-  phoneNumber: string;
+  address: string;        // không bắt buộc
+  phoneNumber: string;    // BẮT BUỘC
   password: string;
   confirmPassword: string;
 };
@@ -24,7 +24,7 @@ export default function SignUpForm() {
   const navigate = useNavigate();
 
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false); // 👈 thêm state cho confirm password
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agree, setAgree] = useState(false);
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
@@ -46,35 +46,43 @@ export default function SignUpForm() {
       username: v.username.trim(),
       email: v.email.trim(),
       fullName: v.fullName.trim(),
-      address: v.address.trim(),
+      address: v.address.trim(),       // vẫn trim nhưng không bắt buộc
       phoneNumber: v.phoneNumber.trim(),
       password: v.password,
       confirmPassword: v.confirmPassword,
     };
 
-    if (!n.username) e.username = "Tên đăng nhập không được để trống";
+    // Username
+    if (!n.username) e.username = "Tên đăng nhập không được để trống.";
     else if (n.username.length < 6 || n.username.length > 100)
-      e.username = "Tên đăng nhập phải từ 6 đến 100 ký tự";
+      e.username = "Tên đăng nhập phải từ 6–100 ký tự.";
     else if (!RE_USERNAME.test(n.username))
-      e.username = "Tên đăng nhập chỉ được chứa chữ và số";
+      e.username = "Tên đăng nhập chỉ được chứa chữ và số.";
 
-    if (!n.email) e.email = "Email không được để trống";
-    else if (!RE_EMAIL.test(n.email)) e.email = "Email không hợp lệ";
+    // Email
+    if (!n.email) e.email = "Email không được để trống.";
+    else if (!RE_EMAIL.test(n.email)) e.email = "Email không hợp lệ.";
 
-    if (!n.fullName) e.fullName = "Họ và tên không được để trống";
-    if (!n.address) e.address = "Địa chỉ không được để trống";
+    // Full name
+    if (!n.fullName) e.fullName = "Họ và tên không được để trống.";
 
-    if (n.phoneNumber && !RE_PHONE.test(n.phoneNumber))
-      e.phoneNumber = "Số điện thoại phải có 10–11 chữ số";
+    // Address (KHÔNG bắt buộc) => không set lỗi nếu trống
 
-    if (!n.password) e.password = "Mật khẩu không được để trống";
+    // Phone (BẮT BUỘC)
+    if (!n.phoneNumber) e.phoneNumber = "Số điện thoại không được để trống.";
+    else if (!RE_PHONE.test(n.phoneNumber))
+      e.phoneNumber = "Số điện thoại phải có 10–11 chữ số.";
+
+    // Password
+    if (!n.password) e.password = "Mật khẩu không được để trống.";
     else if (n.password.length < 8)
-      e.password = "Mật khẩu phải có ít nhất 8 ký tự";
+      e.password = "Mật khẩu phải có ít nhất 8 ký tự.";
 
+    // Confirm password
     if (!n.confirmPassword)
-      e.confirmPassword = "Vui lòng nhập lại mật khẩu xác nhận";
+      e.confirmPassword = "Vui lòng nhập lại mật khẩu xác nhận.";
     else if (n.password !== n.confirmPassword)
-      e.confirmPassword = "Mật khẩu và xác nhận không khớp";
+      e.confirmPassword = "Mật khẩu và xác nhận không khớp.";
 
     return e;
   };
@@ -84,7 +92,7 @@ export default function SignUpForm() {
     (e: React.ChangeEvent<HTMLInputElement>) => {
       let val = e.target.value;
       if (k === "username") val = val.replace(/\s/g, "");
-      if (k === "phoneNumber") val = val.replace(/[^\d]/g, "");
+      if (k === "phoneNumber") val = val.replace(/[^\d]/g, ""); // chỉ cho số
       setForm((s) => ({ ...s, [k]: val }));
       if (fieldErr[k]) setFieldErr((fe) => ({ ...fe, [k]: "" }));
     };
@@ -114,7 +122,7 @@ export default function SignUpForm() {
         username: form.username.trim(),
         email: form.email.trim(),
         fullName: form.fullName.trim(),
-        address: form.address.trim(),
+        address: form.address.trim(),       // có thể rỗng
         phoneNumber: form.phoneNumber.trim(),
       });
       setBanner("Tạo tài khoản thành công! Đang chuyển đến trang đăng nhập...");
@@ -147,7 +155,7 @@ export default function SignUpForm() {
           <form noValidate onSubmit={onSubmit} className="space-y-6">
             <div className="grid grid-cols-12 gap-x-8 gap-y-6 items-start">
               {(banner || err) && (
-                <div className="col-span-12 space-y-3">
+                <div className="col-span-12 space-y-3" role="alert" aria-live="polite">
                   {banner && (
                     <div className="text-sm text-green-700 bg-green-100 border border-green-300 rounded p-2">
                       {banner}
@@ -210,15 +218,17 @@ export default function SignUpForm() {
               </div>
 
               <div className="col-span-12 lg:col-span-6 space-y-2 min-w-0">
-                <Label className="text-white">Số điện thoại</Label>
+                <Label className="text-white">
+                  Số điện thoại <span className="text-red-500">*</span>
+                </Label>
                 <Input
-                  placeholder="Nhập số điện thoại"
+                  placeholder="Nhập số điện thoại (10–11 số)"
                   value={form.phoneNumber}
                   onChange={on("phoneNumber")}
                   autoComplete="tel"
                   inputMode="numeric"
                   error={!!fieldErr.phoneNumber}
-                  hint={fieldErr.phoneNumber || "Có thể bỏ trống."}
+                  hint={fieldErr.phoneNumber}
                   className={FIELD_CLASS}
                 />
               </div>
@@ -226,7 +236,7 @@ export default function SignUpForm() {
               {/* Hàng 3 */}
               <div className="col-span-12 space-y-2 min-w-0">
                 <Label className="text-white">
-                  Địa chỉ <span className="text-red-500">*</span>
+                  Địa chỉ <span className="text-white/60">(không bắt buộc)</span>
                 </Label>
                 <Input
                   placeholder="Số nhà, đường, phường, quận..."
@@ -239,7 +249,7 @@ export default function SignUpForm() {
                 />
               </div>
 
-             {/* Mật khẩu */}
+              {/* Mật khẩu */}
               <div className="col-span-12 lg:col-span-6 space-y-2 min-w-0">
                 <Label className="text-white">
                   Mật khẩu <span className="text-red-500">*</span>
@@ -255,7 +265,6 @@ export default function SignUpForm() {
                     hint={fieldErr.password}
                     className={FIELD_CLASS}
                   />
-                  {/* 👇 icon màu xám nhạt */}
                   <span
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute z-30 -translate-y-1/2 cursor-pointer right-4 top-1/2"
@@ -285,7 +294,6 @@ export default function SignUpForm() {
                     hint={fieldErr.confirmPassword}
                     className={FIELD_CLASS}
                   />
-                  {/* 👇 thêm icon mắt riêng cho confirm password */}
                   <span
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute z-30 -translate-y-1/2 cursor-pointer right-4 top-1/2"

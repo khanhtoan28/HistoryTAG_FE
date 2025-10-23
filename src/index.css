@@ -168,6 +168,9 @@ layer(base);
   --z-index-99999: 99999;
   --z-index-999999: 999999;
 }
+[data-overlay-fix] {
+  pointer-events: none;
+}
 
 /*
   The default border color has changed to `currentColor` in Tailwind CSS v4,
