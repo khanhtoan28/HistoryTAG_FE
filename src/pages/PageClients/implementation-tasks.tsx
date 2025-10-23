@@ -83,17 +83,6 @@ function clsx(...arr: Array<string | false | undefined>) {
     return arr.filter(Boolean).join(" ");
 }
 
-// =====================
-// UI: Modal + Input primitive
-// =====================
-function Backdrop({ onClose }: { onClose: () => void }) {
-    return (
-        <div className="fixed inset-0 z-40" onClick={onClose}>
-            <div className="absolute inset-0 bg-black/40" />
-        </div>
-    );
-}
-
 function Field({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
     return (
         <label className="grid gap-1">
@@ -198,6 +187,16 @@ function TaskFormModal({
         }
     }, [open, initial]);
 
+    // Đóng bằng phím ESC
+    useEffect(() => {
+        if (!open) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") onClose();
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [open, onClose]);
+
     const [submitting, setSubmitting] = useState(false);
 
     if (!open) return null;
@@ -236,8 +235,14 @@ function TaskFormModal({
 
     return (
         <>
-            <Backdrop onClose={onClose} />
-            <div className="fixed inset-0 z-50 grid place-items-center p-4">
+            {/* Wrapper làm overlay + bắt click nền để đóng */}
+            <div
+                className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/40"
+                onMouseDown={(e) => {
+                    // chỉ đóng khi click đúng nền (không phải click vào con bên trong)
+                    if (e.target === e.currentTarget) onClose();
+                }}
+            >
                 <AnimatePresence initial={false}>
                     <motion.div
                         initial={{ y: 20, opacity: 0 }}
@@ -245,6 +250,9 @@ function TaskFormModal({
                         exit={{ y: 20, opacity: 0 }}
                         transition={{ type: "spring", stiffness: 260, damping: 22 }}
                         className="w-full max-w-3xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800"
+                        onMouseDown={(e) => e.stopPropagation()} // chặn đóng khi click trong modal
+                        role="dialog"
+                        aria-modal="true"
                     >
                         <form onSubmit={handleSubmit} className="p-6 grid gap-4">
                             <div className="flex items-center justify-between">
