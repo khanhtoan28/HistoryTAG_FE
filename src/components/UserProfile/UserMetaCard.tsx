@@ -33,8 +33,7 @@ export default function UserMetaCard() {
                 </p>
               </div>
             </div>
-           
-          </div>
+         </div>        
         </div>
       </div>
       <Modal isOpen={isOpen} onClose={closeModal} className="max-w-[700px] m-4">
