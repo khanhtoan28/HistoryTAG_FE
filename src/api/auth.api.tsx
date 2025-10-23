@@ -24,6 +24,54 @@ export type LoginResponse = {
   accessToken: string; 
   roles: RoleLike[];
 };
+export type UserResponseDTO = {
+  id: number;
+  username: string;
+  email?: string | null;
+  fullname?: string | null;
+  status?: boolean;
+  phone?: string | null;
+  avatar?: string | null;
+  address?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  department?: string | null;
+  team?: string | null;
+  roles?: { roleId: number; roleName: string }[];
+};
+
+export type UserUpdateRequestDTO = {
+  fullname?: string;
+  phone?: string;
+  address?: string;
+  email?: string;
+  avatar?: File | null;
+  assignedHospitalIds?: number[];
+  workStatus?: string | null;
+  department?: "IT" | "ACCOUNTING" | null;
+  team?: "DEV" | "DEPLOYMENT" | "MAINTENANCE" | null;
+};
+
+// Endpoint tùy controller của bạn, đổi path nếu khác
+export async function getUserAccount(userId: number) {
+  const { data } = await api.get<UserResponseDTO>(`/api/v1/auth/users/${userId}`);
+  return data;
+}
+
+export async function updateUserAccount(userId: number, payload: UserUpdateRequestDTO) {
+  const formData = new FormData();
+  if (payload.fullname) formData.append("fullname", payload.fullname);
+  if (payload.phone) formData.append("phone", payload.phone);
+  if (payload.address) formData.append("address", payload.address);
+  if (payload.email) formData.append("email", payload.email);
+  if (payload.workStatus) formData.append("workStatus", payload.workStatus);
+  if (payload.department) formData.append("department", payload.department);
+  if (payload.team) formData.append("team", payload.team);
+  if (payload.avatar) formData.append("avatar", payload.avatar);
+
+  const { data } = await api.put<UserResponseDTO>(`/api/v1/auth/users/${userId}`, formData);
+  return data;
+}
 
 function setCookie(
   name: string,
@@ -51,6 +99,11 @@ export const signIn = async (data: LoginPayload) => {
   if (token) {
     localStorage.setItem("access_token", token);
     setCookie("access_token", token, 7);
+  }
+
+  // 👉 LƯU userId
+  if (payload?.userId != null) {
+    localStorage.setItem("userId", String(payload.userId));
   }
 
   localStorage.setItem("username", payload?.username ?? "");

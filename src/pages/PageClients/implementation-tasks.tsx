@@ -134,6 +134,148 @@ function Button(
     return <button className={clsx(base, styles, className)} {...rest} />;
 }
 
+/** ===========================
+ *  RemoteSelect (autocomplete)
+ *  =========================== */
+function RemoteSelect({
+  label,
+  placeholder,
+  fetchOptions,
+  value,
+  onChange,
+  required,
+}: {
+  label: string;
+  placeholder?: string;
+  required?: boolean;
+  fetchOptions: (q: string) => Promise<Array<{ id: number; name: string }>>;
+  value: { id: number; name: string } | null;
+  onChange: (v: { id: number; name: string } | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [options, setOptions] = useState<Array<{ id: number; name: string }>>([]);
+  const [highlight, setHighlight] = useState<number>(-1);
+
+  // debounce search
+  useEffect(() => {
+    let alive = true;
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await fetchOptions(q.trim());
+        if (alive) setOptions(res);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [q, fetchOptions]);
+
+  useEffect(() => {
+    if (open) {
+      // preload lần đầu
+      if (!options.length && !q.trim()) {
+        (async () => {
+          setLoading(true);
+          try {
+            const res = await fetchOptions("");
+            setOptions(res);
+          } finally {
+            setLoading(false);
+          }
+        })();
+      }
+    }
+  }, [open]); // eslint-disable-line
+
+  return (
+    <Field label={label} required={required}>
+      <div className="relative">
+        <input
+          className={clsx(
+            "h-10 w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 outline-none",
+            "focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
+          )}
+          placeholder={placeholder || "Gõ để tìm..."}
+          value={open ? q : value?.name || ""}
+          onChange={(e) => {
+            setQ(e.target.value);
+            if (!open) setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (!open) return;
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setHighlight((h) => Math.min(h + 1, options.length - 1));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setHighlight((h) => Math.max(h - 1, 0));
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              if (highlight >= 0 && options[highlight]) {
+                onChange(options[highlight]);
+                setOpen(false);
+              }
+            } else if (e.key === "Escape") {
+              setOpen(false);
+            }
+          }}
+        />
+        {/* Nút xóa chọn */}
+        {value && !open && (
+          <button
+            type="button"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            onClick={() => onChange(null)}
+            aria-label="Clear"
+          >
+            ✕
+          </button>
+        )}
+
+        {open && (
+          <div
+            className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
+            onMouseLeave={() => setHighlight(-1)}
+          >
+            {loading && (
+              <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>
+            )}
+            {!loading && options.length === 0 && (
+              <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>
+            )}
+            {!loading &&
+              options.map((opt, idx) => (
+                <div
+                  key={opt.id}
+                  className={clsx(
+                    "px-3 py-2 text-sm cursor-pointer",
+                    idx === highlight ? "bg-gray-100 dark:bg-gray-800" : ""
+                  )}
+                  onMouseEnter={() => setHighlight(idx)}
+                  onMouseDown={(e) => {
+                    // dùng mousedown để chọn trước khi input blur
+                    e.preventDefault();
+                    onChange(opt);
+                    setOpen(false);
+                  }}
+                >
+                  {opt.name}
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
+    </Field>
+  );
+}
+
 function TaskFormModal({
     open,
     onClose,
@@ -142,9 +284,40 @@ function TaskFormModal({
 }: {
     open: boolean;
     onClose: () => void;
-    initial?: Partial<ImplementationTaskRequestDTO> & { id?: number };
+    initial?: Partial<ImplementationTaskRequestDTO> & { id?: number; hospitalName?: string | null; picDeploymentName?: string | null };
     onSubmit: (payload: ImplementationTaskRequestDTO, id?: number) => Promise<void>;
 }) {
+    // ===== Fetchers cho RemoteSelect =====
+    const searchHospitals = useMemo(
+        () => async (term: string) => {
+            // ĐỔI URL nếu API khác
+            const url = `/api/v1/admin/hospitals?keyword=${encodeURIComponent(term)}&page=0&size=10`;
+            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+            if (!res.ok) return [];
+            const json = await res.json();
+            const list = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
+            return list
+                .map((h: any) => ({ id: Number(h.id), name: String(h.name ?? h.hospitalName ?? h.code ?? h.id) }))
+                .filter((x: any) => Number.isFinite(x.id) && x.name);
+        },
+        []
+    );
+
+    const searchPICs = useMemo(
+        () => async (term: string) => {
+            // ĐỔI URL nếu API khác
+            const url = `/api/v1/admin/users?role=DEPLOYMENT&keyword=${encodeURIComponent(term)}&page=0&size=10`;
+            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+            if (!res.ok) return [];
+            const json = await res.json();
+            const list = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
+            return list
+                .map((u: any) => ({ id: Number(u.id), name: String(u.fullName ?? u.name ?? u.username ?? u.id) }))
+                .filter((x: any) => Number.isFinite(x.id) && x.name);
+        },
+        []
+    );
+
     const [model, setModel] = useState<ImplementationTaskRequestDTO>(() => ({
         name: initial?.name || "",
         hospitalId: (initial?.hospitalId as number) || 0,
@@ -163,6 +336,18 @@ function TaskFormModal({
         startDate: initial?.startDate ?? "",
         acceptanceDate: initial?.acceptanceDate ?? "",
     }));
+
+    // Lưu selection theo {id, name} để hiển thị tên
+    const [hospitalOpt, setHospitalOpt] = useState<{ id: number; name: string } | null>(() => {
+        const id = (initial?.hospitalId as number) || 0;
+        const nm = (initial?.hospitalName as string) || "";
+        return id ? { id, name: nm || String(id) } : null;
+    });
+    const [picOpt, setPicOpt] = useState<{ id: number; name: string } | null>(() => {
+        const id = (initial?.picDeploymentId as number) || 0;
+        const nm = (initial?.picDeploymentName as string) || "";
+        return id ? { id, name: nm || String(id) } : null;
+    });
 
     useEffect(() => {
         if (open) {
@@ -184,6 +369,14 @@ function TaskFormModal({
                 startDate: initial?.startDate ?? "",
                 acceptanceDate: initial?.acceptanceDate ?? "",
             });
+
+            const hid = (initial?.hospitalId as number) || 0;
+            const hnm = (initial?.hospitalName as string) || "";
+            setHospitalOpt(hid ? { id: hid, name: hnm || String(hid) } : null);
+
+            const pid = (initial?.picDeploymentId as number) || 0;
+            const pnm = (initial?.picDeploymentName as string) || "";
+            setPicOpt(pid ? { id: pid, name: pnm || String(pid) } : null);
         }
     }, [open, initial]);
 
@@ -207,17 +400,19 @@ function TaskFormModal({
             alert("Tên dự án không được để trống");
             return;
         }
-        if (!model.hospitalId) {
-            alert("ID Bệnh viện không được để trống");
+        if (!hospitalOpt?.id) {
+            alert("Bệnh viện không được để trống");
             return;
         }
-        if (!model.picDeploymentId) {
-            alert("ID người phụ trách không được để trống");
+        if (!picOpt?.id) {
+            alert("Người phụ trách không được để trống");
             return;
         }
 
         const payload: ImplementationTaskRequestDTO = {
             ...model,
+            hospitalId: hospitalOpt.id,
+            picDeploymentId: picOpt.id,
             deadline: toISOOrNull(model.deadline) || undefined,
             completionDate: toISOOrNull(model.completionDate) || undefined,
             startDate: toISOOrNull(model.startDate) || undefined,
@@ -254,8 +449,9 @@ function TaskFormModal({
                         role="dialog"
                         aria-modal="true"
                     >
-                        <form onSubmit={handleSubmit} className="p-6 grid gap-4">
-                            <div className="flex items-center justify-between">
+                        {/* Thêm max-h & overflow để có thanh cuộn */}
+                        <form onSubmit={handleSubmit} className="p-6 grid gap-4 max-h-[80vh] overflow-y-auto">
+                            <div className="flex items-center justify-between sticky top-0 bg-white dark:bg-gray-900 pb-2">
                                 <h3 className="text-lg font-semibold">{initial?.id ? "Cập nhật tác vụ triển khai" : "Tạo tác vụ triển khai"}</h3>
                                 <Button type="button" variant="ghost" onClick={onClose}>Đóng</Button>
                             </div>
@@ -268,20 +464,27 @@ function TaskFormModal({
                                         placeholder="Nhập tên dự án"
                                     />
                                 </Field>
-                                <Field label="ID Bệnh viện" required>
-                                    <TextInput
-                                        type="number"
-                                        value={model.hospitalId ?? 0}
-                                        onChange={(e) => setModel((s) => ({ ...s, hospitalId: Number(e.target.value) }))}
-                                    />
-                                </Field>
-                                <Field label="ID người phụ trách (PIC)" required>
-                                    <TextInput
-                                        type="number"
-                                        value={model.picDeploymentId ?? 0}
-                                        onChange={(e) => setModel((s) => ({ ...s, picDeploymentId: Number(e.target.value) }))}
-                                    />
-                                </Field>
+
+                                {/* Bệnh viện theo TÊN */}
+                                <RemoteSelect
+                                  label="Bệnh viện"
+                                  required
+                                  placeholder="Nhập tên bệnh viện để tìm…"
+                                  fetchOptions={searchHospitals}
+                                  value={hospitalOpt}
+                                  onChange={setHospitalOpt}
+                                />
+
+                                {/* PIC theo TÊN */}
+                                <RemoteSelect
+                                  label="Người phụ trách (PIC)"
+                                  required
+                                  placeholder="Nhập tên người phụ trách để tìm…"
+                                  fetchOptions={searchPICs}
+                                  value={picOpt}
+                                  onChange={setPicOpt}
+                                />
+
                                 <Field label="Số lượng">
                                     <TextInput
                                         type="number"
@@ -433,7 +636,7 @@ const ImplementationTasksPage: React.FC = () => {
     const handleSubmit = async (payload: ImplementationTaskRequestDTO, id?: number) => {
         const isUpdate = Boolean(id);
         const url = isUpdate ? `${apiBase}/${id}` : apiBase;
-        const method = isUpdate ? "PUT" : "POST";
+       const method = isUpdate ? "PUT" : "POST";
 
         const res = await fetch(url, {
             method,
@@ -557,7 +760,9 @@ const ImplementationTasksPage: React.FC = () => {
                             id: editing.id,
                             name: editing.name,
                             hospitalId: editing.hospitalId ?? 0,
+                            hospitalName: editing.hospitalName ?? null,          // <-- truyền tên để prefill
                             picDeploymentId: editing.picDeploymentId ?? 0,
+                            picDeploymentName: editing.picDeploymentName ?? null, // <-- truyền tên để prefill
                             agencyId: editing.agencyId ?? undefined,
                             hisSystemId: editing.hisSystemId ?? undefined,
                             hardwareId: editing.hardwareId ?? undefined,
