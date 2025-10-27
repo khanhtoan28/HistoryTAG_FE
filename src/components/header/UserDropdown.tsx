@@ -3,38 +3,14 @@ import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { useNavigate } from "react-router";
 import { getUserAccount, type UserResponseDTO } from "../../api/auth.api";
-const fallbackAvatar = "/images/user/owner.jpg";
 
+const fallbackAvatar = "/images/user/owner.jpg";
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const [user, setUser] = useState<UserResponseDTO | null>(null);
-  const navigate = useNavigate();
-  const [user, setUser] = useState<UserResponseDTO | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const userId = useMemo(() => {
-    const s = localStorage.getItem("userId");
-    return s ? Number(s) : undefined;
-  }, []);
-
-  useEffect(() => {
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
-    
-    (async () => {
-      try {
-        const userData = await getUserAccount(userId);
-        setUser(userData);
-      } catch (err) {
-        console.error("Failed to fetch user data:", err);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [userId]);
+  const navigate = useNavigate();
 
   const LOGOUT_URL = "http://localhost:8080/api/v1/auth/logout";
 
@@ -45,13 +21,19 @@ export default function UserDropdown() {
 
   // 🔹 Lấy thông tin user đang đăng nhập
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+
     (async () => {
       try {
-        const me = await getUserAccount(userId);
-        setUser(me);
+        const userData = await getUserAccount(userId);
+        setUser(userData);
       } catch (err) {
         console.error("Không lấy được thông tin user:", err);
+      } finally {
+        setLoading(false);
       }
     })();
 
@@ -64,6 +46,7 @@ export default function UserDropdown() {
         );
       }
     };
+
     window.addEventListener("userUpdated", handleUserUpdated);
     return () => window.removeEventListener("userUpdated", handleUserUpdated);
   }, [userId]);
@@ -72,6 +55,7 @@ export default function UserDropdown() {
   function toggleDropdown() {
     setIsOpen(!isOpen);
   }
+
   function closeDropdown() {
     setIsOpen(false);
   }
@@ -108,7 +92,7 @@ export default function UserDropdown() {
     (user?.fullname && user.fullname !== "Chưa cập nhật" && user.fullname) ||
     user?.username ||
     "Người dùng";
-  const email = user?.email || "Chưa cập nhật email";
+  const email = user?.email || "Chưa có email";
 
   return (
     <div className="relative">
@@ -116,21 +100,27 @@ export default function UserDropdown() {
         onClick={toggleDropdown}
         className="flex items-center text-gray-700 dropdown-toggle dark:text-gray-400"
       >
-        <span className="mr-3 overflow-hidden rounded-full h-11 w-11 flex-shrink-0">
-          <img 
-            src={user?.avatar || "/images/user/owner.jpg"} 
-            alt={user?.fullname || user?.username || "User"}
+        {/* Avatar */}
+        <span className="mr-3 overflow-hidden rounded-full h-11 w-11 flex-shrink-0 border border-gray-300 dark:border-gray-700">
+          <img
+            key={avatar}
+            src={avatar}
+            alt={fullname}
             className="w-full h-full object-cover"
             onError={(e) => {
-              e.currentTarget.src = "/images/user/owner.jpg";
+              e.currentTarget.src = fallbackAvatar;
             }}
           />
         </span>
 
-        <span className="block mr-1 font-medium text-theme-sm whitespace-nowrap">
-          {loading ? "Loading..." : (user?.fullname && user.fullname !== "Chưa cập nhật" ? user.fullname : user?.username || "User")}
+        {/* Họ tên */}
+        <span className="block mr-1 font-medium text-theme-sm whitespace-nowrap max-w-[120px] truncate">
+          {loading
+            ? "Đang tải..."
+            : fullname}
         </span>
 
+        {/* Icon mũi tên */}
         <svg
           className={`stroke-gray-500 dark:stroke-gray-400 transition-transform duration-200 ${
             isOpen ? "rotate-180" : ""
@@ -159,15 +149,14 @@ export default function UserDropdown() {
       >
         <div className="flex flex-col">
           <span className="block font-medium text-gray-700 text-theme-sm dark:text-gray-400">
-            {loading ? "Loading..." : (
-              (user?.fullname && user.fullname !== "Chưa cập nhật" ? user.fullname : user?.username) || "User"
-            )}
+            {loading ? "Đang tải..." : fullname}
           </span>
-          <span className="mt-0.5 block text-theme-xs text-gray-500 dark:text-gray-400">
-            {user?.email || "Chưa có email"}n
+          <span className="mt-0.5 block text-theme-xs text-gray-500 dark:text-gray-400 truncate">
+            {email}
           </span>
         </div>
 
+        {/* Chỉnh sửa hồ sơ */}
         <ul className="flex flex-col gap-1 pt-4 pb-3 border-b border-gray-200 dark:border-gray-800">
           <li>
             <DropdownItem
@@ -175,7 +164,7 @@ export default function UserDropdown() {
               tag="a"
               to="/profile"
               className="flex items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
-            
+            >
               <svg
                 width="18"
                 height="18"
@@ -202,7 +191,6 @@ export default function UserDropdown() {
             </DropdownItem>
           </li>
         </ul>
-
 
         {/* Nút Đăng xuất */}
         <button
@@ -238,7 +226,6 @@ export default function UserDropdown() {
               strokeLinejoin="round"
             />
           </svg>
-
           Đăng xuất
         </button>
       </Dropdown>
