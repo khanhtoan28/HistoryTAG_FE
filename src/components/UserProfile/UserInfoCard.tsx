@@ -34,14 +34,18 @@ export default function UserInfoCard() {
   const [user, setUser] = useState<UserResponseDTO | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // form state trong modal
   const [form, setForm] = useState<UserUpdateRequestDTO>({
     fullname: "",
     phone: "",
     address: "",
+    email: "",
+    workStatus: null,
     department: null,
     team: null,
+    avatar: null,
   });
 
   useEffect(() => {
@@ -58,8 +62,11 @@ export default function UserInfoCard() {
               : me.username || "",
           phone: me.phone ?? "",
           address: me.address ?? "",
+          email: me.email ?? "",
+          workStatus: (me as any).workStatus ?? null,
           department: (me.department as any) ?? null,
           team: (me.team as any) ?? null,
+          avatar: null,
         });
       } finally {
         setLoading(false);
@@ -84,10 +91,28 @@ export default function UserInfoCard() {
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       const v = e.target.value as any;
       setForm((s) => ({ ...s, [k]: v }));
+      if (error) setError(null); // Clear error on change
     };
 
   const handleSave = async () => {
     if (!userId) return;
+    
+    // Validate email (required field)
+    if (!form.email || !form.email.trim()) {
+      setError("Email không được để trống");
+      toast.error("Vui lòng nhập email");
+      return;
+    }
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(form.email)) {
+      setError("Email không hợp lệ");
+      toast.error("Vui lòng nhập email hợp lệ");
+      return;
+    }
+    
+    setError(null);
     setSaving(true);
     try {
       const updated = await updateUserAccount(userId, form);
@@ -95,7 +120,8 @@ export default function UserInfoCard() {
       toast.success("Cập nhật thông tin thành công!");
       closeModal();
     } catch (err) {
-      toast.error("Lỗi khi cập nhật thông tin");
+      const errorMsg = err instanceof Error ? err.message : "Lỗi khi cập nhật thông tin";
+      toast.error(errorMsg);
       console.error(err);
     } finally {
       setSaving(false);
@@ -198,18 +224,32 @@ export default function UserInfoCard() {
           </div>
 
           <form className="flex flex-col" onSubmit={(e) => e.preventDefault()}>
+            {error && (
+              <div className="mb-4 text-sm text-red-600 bg-red-100 border border-red-300 rounded p-2 mx-2">
+                {error}
+              </div>
+            )}
             <div className="custom-scrollbar h-[450px] overflow-y-auto px-2 pb-3">
               <div className="mt-7">
                 <h5 className="mb-5 text-lg font-medium text-gray-800 dark:text-white/90 lg:mb-6">
                   Thông tin cá nhân
                 </h5>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, avatar: e.target.files?.[0] ?? null }))
-                  }
-                />
+                <div className="mb-5">
+                  <Label>Ảnh đại diện</Label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) =>
+                      setForm((s) => ({ ...s, avatar: e.target.files?.[0] ?? null }))
+                    }
+                    className="mt-2 block w-full text-sm text-gray-600 file:mr-4 file:rounded-md file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                  {form.avatar && (
+                    <p className="mt-2 text-sm text-green-600">
+                      Đã chọn: {form.avatar.name}
+                    </p>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
                   <div className="col-span-2">
@@ -218,8 +258,25 @@ export default function UserInfoCard() {
                   </div>
 
                   <div className="col-span-2 lg:col-span-1">
-                    <Label>Email (không chỉnh sửa tại đây)</Label>
-                    <Input type="text" value={user?.email ?? ""} readOnly />
+                    <Label>
+                      Email <span className="text-red-500">*</span>
+                    </Label>
+                    <Input 
+                      type="email" 
+                      value={form.email ?? ""} 
+                      onChange={onChange("email")}
+                      placeholder="Nhập email"
+                    />
+                  </div>
+
+                  <div className="col-span-2 lg:col-span-1">
+                    <Label>Trạng thái làm việc</Label>
+                    <Input 
+                      type="text" 
+                      value={form.workStatus ?? ""} 
+                      onChange={onChange("workStatus")}
+                      placeholder="Trạng thái làm việc"
+                    />
                   </div>
 
                   <div className="col-span-2 lg:col-span-1">

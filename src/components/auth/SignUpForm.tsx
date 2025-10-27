@@ -5,6 +5,7 @@ import Label from "../form/Label";
 import Input from "../form/input/InputField";
 import Checkbox from "../form/input/Checkbox";
 import { signUp, pickErrMsg, pickFieldErrors } from "../../api/auth.api";
+import toast from "react-hot-toast";
 
 type FormState = {
   username: string;
@@ -125,12 +126,14 @@ export default function SignUpForm() {
         address: form.address.trim(),       // có thể rỗng
         phoneNumber: form.phoneNumber.trim(),
       });
-      setBanner("Tạo tài khoản thành công! Đang chuyển đến trang đăng nhập...");
+      toast.success("Đăng ký thành công! Đang chuyển đến trang đăng nhập...");
       setTimeout(() => navigate("/signin"), 800);
     } catch (ex: any) {
       const fe = pickFieldErrors(ex);
+      const errorMsg = pickErrMsg(ex);
       if (Object.keys(fe).length) setFieldErr(fe);
-      setErr(pickErrMsg(ex));
+      setErr(errorMsg);
+      toast.error(errorMsg || "Đăng ký thất bại!");
     } finally {
       setLoading(false);
     }

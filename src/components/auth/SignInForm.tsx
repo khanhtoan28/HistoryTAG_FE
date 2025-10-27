@@ -7,6 +7,7 @@ import Checkbox from "../form/input/Checkbox";
 import Button from "../ui/button/Button";
 import { signIn, normalizeRoles, pickErrMsg } from "../../api/auth.api";
 import api from "../../api/client";
+import toast from "react-hot-toast";
 
 type FormErrors = {
   username?: string | null;
@@ -81,12 +82,13 @@ export default function SignInForm() {
       storage.setItem("roles", JSON.stringify(normalizeRoles(data.roles)));
 
       api.defaults.headers.common.Authorization = `Bearer ${data.accessToken}`;
-      const roles = normalizeRoles(data.roles);
-      if (roles.includes("ADMIN")) navigate("/");
-      else navigate("/");
+      toast.success("Đăng nhập thành công!");
+      navigate("/home");
     } catch (e: any) {
       // lỗi từ BE (sai tài khoản/mật khẩu, v.v…)
-      setErr(pickErrMsg(e));
+      const errorMsg = pickErrMsg(e);
+      setErr(errorMsg);
+      toast.error(errorMsg || "Đăng nhập thất bại!");
     } finally {
       setLoading(false);
     }
@@ -201,7 +203,7 @@ export default function SignInForm() {
             </label>
 
             <Link
-              to="/reset-password"
+              to="/forgot-password"
               className="text-sm text-blue-300 hover:text-blue-200 underline"
             >
               Quên mật khẩu?

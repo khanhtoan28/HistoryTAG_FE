@@ -60,14 +60,24 @@ export async function getUserAccount(userId: number) {
 
 export async function updateUserAccount(userId: number, payload: UserUpdateRequestDTO) {
   const formData = new FormData();
-  if (payload.fullname) formData.append("fullname", payload.fullname);
-  if (payload.phone) formData.append("phone", payload.phone);
-  if (payload.address) formData.append("address", payload.address);
-  if (payload.email) formData.append("email", payload.email);
-  if (payload.workStatus) formData.append("workStatus", payload.workStatus);
+  
+  // Always append these fields (backend may need them as empty strings)
+  formData.append("fullname", payload.fullname ?? "");
+  formData.append("phone", payload.phone ?? "");
+  formData.append("address", payload.address ?? "");
+  formData.append("email", payload.email ?? "");
+  formData.append("workStatus", payload.workStatus ?? "");
+  
   if (payload.department) formData.append("department", payload.department);
   if (payload.team) formData.append("team", payload.team);
   if (payload.avatar) formData.append("avatar", payload.avatar);
+  
+  // Handle assignedHospitalIds if provided
+  if (payload.assignedHospitalIds && payload.assignedHospitalIds.length > 0) {
+    payload.assignedHospitalIds.forEach((id) => {
+      formData.append("assignedHospitalIds", id.toString());
+    });
+  }
 
   const { data } = await api.put<UserResponseDTO>(`/api/v1/auth/users/${userId}`, formData);
   return data;
@@ -115,6 +125,25 @@ export const signIn = async (data: LoginPayload) => {
 export const signUp = (data: RegisterPayload) =>
   api.post("/api/v1/public/sign-up", data);
 
+export type ForgotPasswordPayload = {
+  email: string;
+};
+
+export type ResetPasswordPayload = {
+  token: string;
+  newPassword: string;
+  confirmPassword: string;
+};
+
+export async function forgotPassword(data: ForgotPasswordPayload) {
+  const res = await api.post("/api/v1/public/forgot-password", data);
+  return res.data;
+}
+
+export async function resetPassword(data: ResetPasswordPayload) {
+  const res = await api.post("/api/v1/public/reset-password", data);
+  return res.data;
+}
 
 export const logout = async () => {
   try {
