@@ -42,6 +42,8 @@ export default function UserInfoCard() {
     fullname: "",
     phone: "",
     address: "",
+    email: "",
+    workStatus: null,
     department: null,
     team: null,
     avatar: null,
@@ -62,6 +64,8 @@ export default function UserInfoCard() {
               : me.username || "",
           phone: me.phone ?? "",
           address: me.address ?? "",
+          email: me.email ?? "",
+          workStatus: (me as any).workStatus ?? null,
           department: (me.department as any) ?? null,
           team: (me.team as any) ?? null,
           avatar: null,
@@ -141,7 +145,10 @@ export default function UserInfoCard() {
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 1500);
     } catch (err) {
-      toast.error("❌ Lỗi khi cập nhật thông tin");
+      const errorMsg = err instanceof Error ? err.message : "Lỗi khi cập nhật thông tin";
+      toast.error(errorMsg);
+
+
       console.error(err);
     } finally {
       setSaving(false);

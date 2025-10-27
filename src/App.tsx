@@ -1,6 +1,9 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
 import SignIn from "./pages/AuthPages/SignIn";
 import SignUp from "./pages/AuthPages/SignUp";
+import ForgotPassword from "./pages/AuthPages/ForgotPassword";
+import ResetPassword from "./pages/AuthPages/ResetPassword";
 import NotFound from "./pages/OtherPage/NotFound";
 import UserProfiles from "./pages/UserProfiles";
 import Videos from "./pages/UiElements/Videos";
@@ -17,24 +20,73 @@ import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
 import Home from "./pages/Dashboard/Home";
 import ImplementationTasksPage from "./pages/PageClients/implementation-tasks";
+import DevTasksPage from "./pages/PageClients/dev-tasks";
+import MaintenanceTasksPage from "./pages/PageClients/maintenance-tasks";
 import Hospitals from "./pages/Page/Hospitals";
 import HisSystemPage from "./pages/Page/HisSystem";
 import PersonCharge from "./pages/Page/PersonCharge";
 
+// Protected Route Component
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+  
+  if (!token) {
+    return <Navigate to="/signin" replace />;
+  }
+  
+  return <>{children}</>;
+};
+
 export default function App() {
+  // Check if user is authenticated
+  const isAuthenticated = () => {
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    return !!token;
+  };
+
   return (
     <div className="font-outfit">
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#fff',
+            color: '#363636',
+            padding: '16px',
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+          },
+          success: {
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#fff',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+          },
+        }}
+      />
       <Router>
         <ScrollToTop />
         <Routes>
-          {/* Dashboard Layout */}
-          <Route element={<AppLayout />}>
-            <Route index element={<Home />} />
+          {/* Default redirect to signin if not authenticated */}
+          <Route path="/" element={isAuthenticated() ? <Navigate to="/home" replace /> : <Navigate to="/signin" replace />} />
+
+          {/* Dashboard Layout - Protected */}
+          <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+            <Route path="/home" element={<Home />} />
 
             {/* Others Page */}
             <Route path="/profile" element={<UserProfiles />} />
             <Route path="/calendar" element={<Calendar />} />
             <Route path="/implementation-tasks" element={<ImplementationTasksPage />} />
+            <Route path="/dev-tasks" element={<DevTasksPage />} />
+            <Route path="/maintenance-tasks" element={<MaintenanceTasksPage />} />
 
             {/* Forms */}
             <Route path="/form-elements" element={<FormElements />} />
@@ -60,6 +112,8 @@ export default function App() {
           {/* Auth Layout */}
           <Route path="/signin" element={<SignIn />} />
           <Route path="/signup" element={<SignUp />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* Fallback Route */}
           <Route path="*" element={<NotFound />} />

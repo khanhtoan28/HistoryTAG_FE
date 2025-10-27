@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import toast from "react-hot-toast";
 
 // =====================
 // Types khớp với BE DTOs
@@ -51,7 +52,7 @@ export type ImplementationTaskRequestDTO = {
 
 export type ImplementationTaskUpdateDTO = Partial<ImplementationTaskRequestDTO>;
 
-const apiBase = "http://localhost:8080/api/v1/admin/implementation/tasks";
+const apiBase = "http://localhost:8080/api/v1/admin/dev/tasks";
 
 function authHeaders(extra?: Record<string, string>) {
     const token = localStorage.getItem("access_token");
@@ -646,11 +647,11 @@ const ImplementationTasksPage: React.FC = () => {
         });
         if (!res.ok) {
             const msg = await res.text();
-            alert(`${method} thất bại: ${msg || res.status}`);
+            toast.error(`${method} thất bại: ${msg || res.status}`);
             return;
         }
         await fetchList();
-        alert(isUpdate ? "Cập nhật thành công" : "Tạo mới thành công");
+        toast.success(isUpdate ? "Cập nhật thành công" : "Tạo mới thành công");
     };
 
     // DELETE
@@ -663,11 +664,11 @@ const ImplementationTasksPage: React.FC = () => {
         });
         if (!res.ok) {
             const msg = await res.text();
-            alert(`Xóa thất bại: ${msg || res.status}`);
+            toast.error(`Xóa thất bại: ${msg || res.status}`);
             return;
         }
         setData((s) => s.filter((x) => x.id !== id));
-        alert("Đã xóa");
+        toast.success("Đã xóa thành công");
     };
 
     return (
@@ -728,26 +729,8 @@ const ImplementationTasksPage: React.FC = () => {
                                     <td className="px-4 py-3 font-medium">{row.name}</td>
                                     <td className="px-4 py-3">{row.hospitalName || row.hospitalId}</td>
                                     <td className="px-4 py-3">{row.picDeploymentName || row.picDeploymentId}</td>
-                                    <td className="px-4 py-3">
-                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                            row.status === "NEW" ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" :
-                                            row.status === "IN_PROGRESS" ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" :
-                                            row.status === "DONE" ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" :
-                                            "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"
-                                        }`}>
-                                            {row.status}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                            row.apiTestStatus === "PASSED" ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" :
-                                            row.apiTestStatus === "FAILED" ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" :
-                                            row.apiTestStatus === "PENDING" ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" :
-                                            "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"
-                                        }`}>
-                                            {row.apiTestStatus}
-                                        </span>
-                                    </td>
+                                    <td className="px-4 py-3">{row.status}</td>
+                                    <td className="px-4 py-3">{row.apiTestStatus}</td>
                                     <td className="px-4 py-3">
                                         {row.apiUrl ? (
                                             <a
