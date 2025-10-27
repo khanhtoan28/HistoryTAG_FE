@@ -11,13 +11,32 @@ export default function UserMetaCard() {
     return stored ? Number(stored) : undefined;
   }, []);
 
+
   useEffect(() => {
     if (!userId) return;
-    (async () => {
+
+    const fetchData = async () => {
       const me = await getUserAccount(userId);
       setUser(me);
-    })();
+    };
+    fetchData();
+
+    // ✅ Lắng nghe sự kiện userUpdated để cập nhật avatar mới
+    const handleUserUpdated = (e: Event) => {
+      const customEvent = e as CustomEvent<{ avatar?: string }>;
+      if (customEvent.detail?.avatar) {
+        setUser((prev) =>
+          prev ? { ...prev, avatar: customEvent.detail.avatar } : { avatar: customEvent.detail.avatar } as any
+        );
+      }
+    };
+
+    window.addEventListener("userUpdated", handleUserUpdated);
+    return () => window.removeEventListener("userUpdated", handleUserUpdated);
   }, [userId]);
+
+
+
 
   // === BẢNG DỊCH TIẾNG VIỆT ===
   const departmentMap: Record<string, string> = {
@@ -52,11 +71,14 @@ export default function UserMetaCard() {
           {/* Ảnh đại diện */}
           <div className="w-20 h-20 overflow-hidden border border-gray-200 rounded-full dark:border-gray-800">
             <img
+              key={user?.avatar}
               src={user?.avatar || fallbackAvatar}
               alt={name}
               className="object-cover w-full h-full"
               onError={(e) => (e.currentTarget.src = fallbackAvatar)}
             />
+
+
           </div>
 
           {/* Thông tin */}
