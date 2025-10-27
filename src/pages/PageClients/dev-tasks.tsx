@@ -52,7 +52,7 @@ export type ImplementationTaskRequestDTO = {
 
 export type ImplementationTaskUpdateDTO = Partial<ImplementationTaskRequestDTO>;
 
-const apiBase = "http://localhost:8080/api/v1/admin/implementation/tasks";
+const apiBase = "http://localhost:8080/api/v1/admin/dev/tasks";
 
 function authHeaders(extra?: Record<string, string>) {
     const token = localStorage.getItem("access_token");
@@ -701,6 +701,7 @@ const ImplementationTasksPage: React.FC = () => {
                                 <th className="px-4 py-3 text-left">PIC</th>
                                 <th className="px-4 py-3 text-left">Trạng thái</th>
                                 <th className="px-4 py-3 text-left">API Test</th>
+                                <th className="px-4 py-3 text-left">API URL</th>
                                 <th className="px-4 py-3 text-left">Deadline</th>
                                 <th className="px-4 py-3 text-left">Tạo lúc</th>
                                 <th className="px-4 py-3 text-right">Hành động</th>
@@ -709,17 +710,17 @@ const ImplementationTasksPage: React.FC = () => {
                         <tbody>
                             {loading && (
                                 <tr>
-                                    <td colSpan={9} className="px-4 py-6 text-center text-gray-500">Đang tải...</td>
+                                    <td colSpan={10} className="px-4 py-6 text-center text-gray-500">Đang tải...</td>
                                 </tr>
                             )}
                             {error && !loading && (
                                 <tr>
-                                    <td colSpan={9} className="px-4 py-6 text-center text-red-600">{error}</td>
+                                    <td colSpan={10} className="px-4 py-6 text-center text-red-600">{error}</td>
                                 </tr>
                             )}
                             {!loading && !error && filtered.length === 0 && (
                                 <tr>
-                                    <td colSpan={9} className="px-4 py-6 text-center text-gray-500">Không có dữ liệu</td>
+                                    <td colSpan={10} className="px-4 py-6 text-center text-gray-500">Không có dữ liệu</td>
                                 </tr>
                             )}
                             {!loading && !error && filtered.map((row) => (
@@ -730,6 +731,21 @@ const ImplementationTasksPage: React.FC = () => {
                                     <td className="px-4 py-3">{row.picDeploymentName || row.picDeploymentId}</td>
                                     <td className="px-4 py-3">{row.status}</td>
                                     <td className="px-4 py-3">{row.apiTestStatus}</td>
+                                    <td className="px-4 py-3">
+                                        {row.apiUrl ? (
+                                            <a
+                                                href={row.apiUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline decoration-2 underline-offset-2 font-medium hover:decoration-blue-800 dark:hover:decoration-blue-300 transition-colors"
+                                                title={row.apiUrl}
+                                            >
+                                                {row.apiUrl.length > 30 ? `${row.apiUrl.substring(0, 30)}...` : row.apiUrl}
+                                            </a>
+                                        ) : (
+                                            <span className="text-gray-400 italic">Chưa có URL</span>
+                                        )}
+                                    </td>
                                     <td className="px-4 py-3">{fmt(row.deadline)}</td>
                                     <td className="px-4 py-3">{fmt(row.createdAt)}</td>
                                     <td className="px-4 py-3 text-right">

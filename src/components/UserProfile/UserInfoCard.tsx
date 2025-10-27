@@ -291,29 +291,38 @@ export default function UserInfoCard() {
 
                   <div className="col-span-2 lg:col-span-1">
                     <Label>Phòng ban</Label>
-                    <select
-                      className="w-full rounded-lg border px-3 py-2"
-                      value={form.department ?? ""}
-                      onChange={onChange("department")}
-                    >
-                      <option value="">-- Chọn phòng ban --</option>
-                      <option value="IT">Phòng Kỹ Thuật</option>
-                      <option value="ACCOUNTING">Phòng Kế Toán</option>
-                    </select>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 px-3 py-2 cursor-not-allowed"
+                      value={
+                        user?.department
+                          ? (user.department === "IT" ? "Phòng Kỹ Thuật" : "Phòng Kế Toán")
+                          : "Chưa cập nhật"
+                      }
+                      readOnly
+                      disabled
+                    />
                   </div>
 
                   <div className="col-span-2 lg:col-span-1">
                     <Label>Team</Label>
-                    <select
-                      className="w-full rounded-lg border px-3 py-2"
-                      value={form.team ?? ""}
-                      onChange={onChange("team")}
-                    >
-                      <option value="">-- Chọn team --</option>
-                      <option value="DEV">Team Lập Trình Viên</option>
-                      <option value="DEPLOYMENT">Team Triển Khai</option>
-                      <option value="MAINTENANCE">Team Bảo Hành, Bảo Trì</option>
-                    </select>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 px-3 py-2 cursor-not-allowed"
+                      value={
+                        user?.team
+                          ? (user.team === "DEV"
+                              ? "Team Lập Trình Viên"
+                              : user.team === "DEPLOYMENT"
+                              ? "Team Triển Khai"
+                              : user.team === "MAINTENANCE"
+                              ? "Team Bảo Hành, Bảo Trì"
+                              : user.team)
+                          : "Chưa cập nhật"
+                      }
+                      readOnly
+                      disabled
+                    />
                   </div>
                 </div>
               </div>

@@ -68,8 +68,10 @@ export async function updateUserAccount(userId: number, payload: UserUpdateReque
   formData.append("email", payload.email ?? "");
   formData.append("workStatus", payload.workStatus ?? "");
   
-  if (payload.department) formData.append("department", payload.department);
-  if (payload.team) formData.append("team", payload.team);
+  // KHÔNG gửi department và team - chỉ admin/superadmin mới được thay đổi
+  // if (payload.department) formData.append("department", payload.department);
+  // if (payload.team) formData.append("team", payload.team);
+  
   if (payload.avatar) formData.append("avatar", payload.avatar);
   
   // Handle assignedHospitalIds if provided

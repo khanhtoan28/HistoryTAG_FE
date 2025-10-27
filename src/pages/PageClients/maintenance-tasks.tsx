@@ -52,7 +52,7 @@ export type ImplementationTaskRequestDTO = {
 
 export type ImplementationTaskUpdateDTO = Partial<ImplementationTaskRequestDTO>;
 
-const apiBase = "http://localhost:8080/api/v1/admin/implementation/tasks";
+const apiBase = "http://localhost:8080/api/v1/admin/maintenance/tasks";
 
 function authHeaders(extra?: Record<string, string>) {
     const token = localStorage.getItem("access_token");
