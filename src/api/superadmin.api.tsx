@@ -132,6 +132,19 @@ export async function unlockUser(id: number) {
   return data;
 }
 
+export type SuperAdminSummaryDTO = {
+  totalUsers: number;
+  totalHospitals: number;
+  totalHisSystems: number;
+  totalHardware: number;
+  totalAgencies: number;
+};
+
+export async function getSummaryReport() {
+  const { data } = await api.get<SuperAdminSummaryDTO>(`/api/v1/superadmin/reports/summary`);
+  return data;
+}
+
 // Export all as default
 export default {
   getAllUsers,
