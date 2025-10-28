@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
+import Pagination from "../../components/common/Pagination";
 
 // ===================== Types ===================== //
 export type SortDir = "asc" | "desc";
@@ -97,6 +98,7 @@ const HisSystemPage: React.FC = () => {
   // table state
   const [items, setItems] = useState<HisResponseDTO[]>([]);
   const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -137,10 +139,12 @@ const HisSystemPage: React.FC = () => {
       if (Array.isArray(data)) {
         setItems(data);
         setTotalElements(data.length);
+        setTotalPages(Math.ceil(data.length / size));
       } else {
         const pageRes = data as SpringPage<HisResponseDTO>;
         setItems(pageRes.content ?? []);
         setTotalElements(pageRes.totalElements ?? pageRes.content?.length ?? 0);
+        setTotalPages(pageRes.totalPages ?? Math.ceil((pageRes.totalElements ?? pageRes.content?.length ?? 0) / size));
       }
     } catch (error: unknown) {
       const msg = errMsg(error, "Lỗi tải dữ liệu");
@@ -203,6 +207,7 @@ const HisSystemPage: React.FC = () => {
     if (!confirm("Xóa HIS này?")) return;
     setLoading(true);
     try {
+      // @ts-ignore
       const res = await fetchWithFallback((base) => `${base}/${id}`, { method: "DELETE", headers: { ...authHeader() } });
       // adjust page when last item removed
       if (items.length === 1 && page > 0) setPage((p) => p - 1);
@@ -226,6 +231,7 @@ const HisSystemPage: React.FC = () => {
     setError(null);
     try {
       const method = isEditing ? "PUT" : "POST";
+      // @ts-ignore
       const res = await fetchWithFallback((base) => (isEditing ? `${base}/${editing!.id}` : base), {
         method,
         headers: { ...authHeader() },
@@ -354,37 +360,18 @@ const HisSystemPage: React.FC = () => {
           </div>
 
           {/* Pagination */}
-          <div className="mt-4 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm">
-              <span>Trang:</span>
-              <button
-                className="rounded border px-2 py-1 disabled:opacity-50"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-              >
-                Trước
-              </button>
-              <span className="rounded border px-2 py-1">{page + 1}</span>
-              <button
-                className="rounded border px-2 py-1 disabled:opacity-50"
-                onClick={() => setPage((p) => p + 1)}
-                disabled={filtered.length < size}
-              >
-                Sau
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2 text-sm">
-              <span>Kích thước:</span>
-              <select className="rounded border px-2 py-1" value={size} onChange={(e) => setSize(Number(e.target.value))}>
-                {[10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={totalElements}
+            itemsPerPage={size}
+            onPageChange={setPage}
+            onItemsPerPageChange={(newSize) => {
+              setSize(newSize);
+              setPage(0); // Reset to first page when changing page size
+            }}
+            itemsPerPageOptions={[10, 20, 50]}
+          />
 
           {loading && <div className="mt-3 text-sm text-gray-500">Đang tải...</div>}
           {error && (

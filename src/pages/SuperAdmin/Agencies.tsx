@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
+import Pagination from "../../components/common/Pagination";
 
 type Agency = {
   id: number;
@@ -44,6 +45,7 @@ export default function AgenciesPage() {
   const [sortBy, setSortBy] = useState("id");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   // Filters (client-side placeholders for now)
   const [qName, setQName] = useState("");
@@ -118,6 +120,7 @@ export default function AgenciesPage() {
       const data = await res.json();
       setItems(data.content ?? data);
       setTotalElements(data.totalElements ?? data.length ?? 0);
+      setTotalPages(data.totalPages ?? Math.ceil((data.totalElements ?? data.length ?? 0) / size));
     } catch (e: any) {
       setError(e.message || "Lỗi tải danh sách");
     } finally {
@@ -331,22 +334,19 @@ export default function AgenciesPage() {
             </table>
           </div>
 
-          <div className="mt-4 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm">
-              <span>Trang:</span>
-              <button className="rounded border px-2 py-1 disabled:opacity-50" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>Trước</button>
-              <span className="rounded border px-2 py-1">{page + 1}</span>
-              <button className="rounded border px-2 py-1 disabled:opacity-50" onClick={() => setPage((p) => p + 1)} disabled={filtered.length < size}>Sau</button>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <span>Hiển thị:</span>
-              <select className="rounded border px-2 py-1" value={size} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }}>
-                {[10, 20, 50].map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+          {/* Pagination */}
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={totalElements}
+            itemsPerPage={size}
+            onPageChange={setPage}
+            onItemsPerPageChange={(newSize) => {
+              setSize(newSize);
+              setPage(0); // Reset to first page when changing page size
+            }}
+            itemsPerPageOptions={[10, 20, 50]}
+          />
 
           {loading && <div className="mt-3 text-sm text-gray-500">Đang tải...</div>}
           {error && <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}

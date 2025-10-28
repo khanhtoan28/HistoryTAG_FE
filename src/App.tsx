@@ -45,6 +45,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 export default function App() {
   // Check if user is authenticated
+  // @ts-ignore
   const isAuthenticated = () => {
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
     return !!token;
@@ -64,6 +65,7 @@ export default function App() {
   };
 
   // Check if user is super admin
+  // @ts-ignore
   const isSuperAdmin = () => {
     const roles = getUserRoles();
     return roles.some((role: string) => role === "SUPERADMIN" || role === "SUPER_ADMIN" || role === "Super Admin");
