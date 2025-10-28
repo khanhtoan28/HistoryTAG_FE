@@ -11,6 +11,17 @@ export default function UserDropdown() {
   const [user, setUser] = useState<UserResponseDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const roles = useMemo(() => {
+    try {
+      const raw = localStorage.getItem("roles") || sessionStorage.getItem("roles");
+      if (!raw) return [] as string[];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [] as string[];
+    }
+  }, []);
+  const isSuperAdmin = roles.includes("SUPERADMIN") || roles.includes("SUPER_ADMIN") || roles.includes("Super Admin");
 
   const LOGOUT_URL = "http://localhost:8080/api/v1/auth/logout";
 
@@ -92,18 +103,6 @@ export default function UserDropdown() {
     (user?.fullname && user.fullname !== "Chưa cập nhật" && user.fullname) ||
     user?.username 
   const email = user?.email || "Chưa có email";
-
-  const roles = useMemo(() => {
-    try {
-      const raw = localStorage.getItem("roles") || sessionStorage.getItem("roles");
-      if (!raw) return [] as string[];
-      return raw.trim().startsWith("[") ? JSON.parse(raw) : raw.split(",").map((s) => s.trim());
-    } catch {
-      return [] as string[];
-    }
-  }, []);
-
-  const isSuperAdmin = roles.some((r) => (r || "").toString().toUpperCase().includes("SUPERADMIN"));
 
   return (
     <div className="relative">
