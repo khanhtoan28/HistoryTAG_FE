@@ -74,36 +74,26 @@ export async function createUser(payload: SuperAdminUserCreateDTO) {
 
 export async function updateUser(id: number, payload: UserUpdateRequestDTO) {
   const url = `/api/v1/superadmin/users/${id}`;
-  const hasFile = payload.avatar instanceof File;
+  // Backend update endpoint requires multipart/form-data always
+  const formData = new FormData();
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === null || value === undefined) return;
 
-  if (hasFile) {
-    const formData = new FormData();
-    Object.entries(payload).forEach(([key, value]) => {
-      if (value === null || value === undefined) return;
+    if (Array.isArray(value)) {
+      value.forEach((v) => formData.append(key, String(v)));
+      return;
+    }
 
-      if (Array.isArray(value)) {
-        value.forEach((v) => formData.append(key, String(v)));
-        return;
-      }
+    if (value instanceof File) {
+      formData.append(key, value as File);
+      return;
+    }
 
-      // File
-      if (value instanceof File) {
-        formData.append(key, value as File);
-        return;
-      }
+    formData.append(key, String(value));
+  });
 
-      // primitives
-      formData.append(key, String(value));
-    });
-
-    const { data } = await api.put<UserResponseDTO>(url, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-    return data;
-  }
-
-  const { data } = await api.put<UserResponseDTO>(url, payload, {
-    headers: { "Content-Type": "application/json" },
+  const { data } = await api.put<UserResponseDTO>(url, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
   });
   return data;
 }

@@ -56,6 +56,7 @@ export default function SuperAdminUsers() {
   const [viewing, setViewing] = useState<UserResponseDTO | null>(null);
   const [isModalLoading, setIsModalLoading] = useState(false);
 
+
   const [form, setForm] = useState<UserForm>({
     username: "",
     email: "",
@@ -113,6 +114,14 @@ export default function SuperAdminUsers() {
   }
 
   function fillForm(user: UserResponseDTO) {
+    // Debug current roles from BE
+    console.log("[Users] fillForm roles raw:", user.roles);
+    const normalizedRoles =
+      user.roles?.map((r: any) => {
+        const name = (r.roleName ?? r.roleType ?? "").toString();
+        return name.replace(/^ROLE_/i, "").toUpperCase();
+      }) || [];
+    console.log("[Users] fillForm roles normalized:", normalizedRoles);
     setForm({
       username: user.username || "",
       email: user.email || "",
@@ -123,7 +132,7 @@ export default function SuperAdminUsers() {
       address: user.address || "",
       avatarFile: null,
       avatar: user.avatar || null,
-      roles: user.roles?.map((r: { roleId: number; roleName: string }) => r.roleName) || [],
+      roles: normalizedRoles,
       department: (user.department ?? "") as UserForm["department"],
       team: (user.team ?? "") as UserForm["team"],
       workStatus: "",
@@ -314,6 +323,7 @@ export default function SuperAdminUsers() {
           department: form.department || undefined,
           team: form.team || undefined,
           workStatus: form.workStatus || undefined,
+          roles: form.roles && form.roles.length ? form.roles : undefined,
         };
         await updateUser(editing!.id, payload);
         toast.success("Cập nhật thành công");
@@ -461,7 +471,9 @@ export default function SuperAdminUsers() {
                         </span>
                       </td>
                       <td className="px-3 py-2">
-                        {user.roles?.map((r: { roleId: number; roleName: string }) => r.roleName)?.join(", ") || "—"}
+                        {user.roles
+                          ?.map((r: any) => (r.roleName ?? r.roleType ?? "").toString().replace(/^ROLE_/i, "").toUpperCase())
+                          ?.join(", ") || "—"}
                       </td>
                       <td className="px-3 py-2">{user.department || "—"}</td>
                       <td className="px-3 py-2">{user.team || "—"}</td>
@@ -569,7 +581,9 @@ export default function SuperAdminUsers() {
                       minLength={6}
                       maxLength={100}
                     />
-                    <p className="mt-1 text-xs text-gray-500">Từ 6-100 ký tự, chỉ chữ và số</p>
+                    {!isViewing && (
+                      <p className="mt-1 text-xs text-gray-500">Từ 6-100 ký tự, chỉ chữ và số</p>
+                    )}
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium">
@@ -584,7 +598,7 @@ export default function SuperAdminUsers() {
                       disabled={isViewing}
                     />
                   </div>
-                  {!isEditing && (
+                  {!isEditing && !isViewing && (
                     <>
                       <div>
                         <label className="mb-1 block text-sm font-medium">
@@ -670,7 +684,9 @@ export default function SuperAdminUsers() {
                             (e.target as HTMLImageElement).style.display = "none";
                           }}
                         />
-                        <p className="mt-1 text-xs text-gray-500">Avatar hiện tại</p>
+                        {!isViewing && (
+                          <p className="mt-1 text-xs text-gray-500">Avatar hiện tại</p>
+                        )}
                       </div>
                     )}
                     <input
@@ -683,26 +699,39 @@ export default function SuperAdminUsers() {
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium">
-                      Vai trò <span className="text-red-500">*</span> {!isEditing && "(Có thể chọn nhiều)"}
+                      Vai trò <span className="text-red-500">*</span> {!isEditing && !isViewing && "(Có thể chọn nhiều)"}
                     </label>
-                    <select
-                      multiple={!isEditing}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                      value={form.roles}
-                      onChange={(e) => {
-                        const selected = Array.from(e.target.selectedOptions, (option) => option.value);
-                        setForm((s) => ({ ...s, roles: selected }));
-                      }}
-                      disabled={isViewing || isEditing}
-                      required={!isEditing}
-                    >
-                      {ROLE_OPTIONS.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </select>
-                    {!isEditing && <p className="mt-1 text-xs text-gray-500">Giữ Ctrl/Cmd để chọn nhiều</p>}
+                    <div className="rounded-lg border border-gray-300 p-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {ROLE_OPTIONS.map((role) => {
+                          const checked = form.roles.includes(role);
+                          return (
+                            <label key={role} className={`flex items-center gap-2 text-sm ${isViewing || isEditing ? "opacity-60" : ""}`}>
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4"
+                                checked={checked}
+                                onChange={(e) => {
+                                  const isChecked = e.target.checked;
+                                  setForm((s) => {
+                                    const next = new Set(s.roles);
+                                    if (isChecked) {
+                                      next.add(role);
+                                    } else {
+                                      next.delete(role);
+                                    }
+                                    return { ...s, roles: Array.from(next) };
+                                  });
+                                }}
+                                disabled={isViewing}
+                              />
+                              <span>{role}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {!isEditing && !isViewing && <p className="mt-1 text-xs text-gray-500">Chọn một hoặc nhiều vai trò</p>}
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium">
