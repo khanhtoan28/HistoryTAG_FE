@@ -66,38 +66,26 @@ export async function getUserAccount(userId: number) {
 // =====================================
 export async function updateUserAccount(userId: number, payload: UserUpdateRequestDTO) {
   const url = `/api/v1/auth/users/${userId}`;
-  const hasFile = payload.avatar instanceof File;
+  const formData = new FormData();
 
-  // Nếu có file → gửi multipart/form-data
-  if (hasFile) {
-    const formData = new FormData();
-
-    Object.entries(payload).forEach(([key, value]) => {
-      if (value !== null && value !== undefined) {
-        if (Array.isArray(value)) {
-          value.forEach((v) => formData.append(key, v.toString()));
-        } else {
-          formData.append(key, value as any);
-        }
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value !== null && value !== undefined) {
+      if (Array.isArray(value)) {
+        value.forEach((v) => formData.append(key, v.toString()));
+      } else {
+        formData.append(key, value as any);
       }
-    });
-
-    const { data } = await api.put<UserResponseDTO>(url, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-    return data;
-  }
-
-  // Nếu không có file → gửi JSON thông thường
-  const { data } = await api.put<UserResponseDTO>(url, payload, {
-    headers: { "Content-Type": "application/json" },
+    }
   });
+
+  const { data } = await api.put<UserResponseDTO>(url, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+
   return data;
 }
 
-// ==========================
-// Cookie helpers
-// ==========================
+
 function setCookie(
   name: string,
   value: string,
