@@ -1,7 +1,40 @@
 import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
+import { useEffect, useState } from "react";
+import Chart from "react-apexcharts";
+import { ApexOptions } from "apexcharts";
+import { getSummaryReport, type SuperAdminSummaryDTO } from "../../api/superadmin.api";
+import toast from "react-hot-toast";
 
 export default function SuperAdminHome() {
+  const [summary, setSummary] = useState<SuperAdminSummaryDTO | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const res = await getSummaryReport();
+        if (mounted) setSummary(res);
+      } catch (err: unknown) {
+        console.error("Failed to load summary:", err);
+        const msg = err instanceof Error ? err.message : String(err);
+        toast.error(msg || "Không thể tải báo cáo");
+      } finally {
+        /* no-op */
+      }
+    };
+    void load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const donutOptions: ApexOptions = {
+    labels: ["Người dùng", "Bệnh viện", "HIS" , "Phần cứng", "Đại lý"],
+    legend: { position: "bottom" },
+    chart: { toolbar: { show: false } },
+    dataLabels: { enabled: false },
+    colors: ["#465fff", "#10b981", "#f59e0b", "#ef4444", "#6366f1"],
+  };
   return (
     <>
       <PageMeta title="Super Admin Dashboard | TAGTECH" description="" />
@@ -90,18 +123,28 @@ export default function SuperAdminHome() {
             <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
               Thống kê nhanh
             </h3>
+            {/* Donut chart */}
+            <div className="mb-4">
+              <Chart
+                options={donutOptions}
+                series={summary ? [summary.totalUsers, summary.totalHospitals, summary.totalHisSystems, summary.totalHardware, summary.totalAgencies] : [0,0,0,0,0]}
+                type="donut"
+                width={320}
+              />
+            </div>
+
             <div className="space-y-4">
               <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Tổng người dùng</span>
-                <span className="text-lg font-semibold text-gray-900 dark:text-white">--</span>
+                <span className="text-lg font-semibold text-gray-900 dark:text-white">{summary ? summary.totalUsers : "--"}</span>
               </div>
               <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Tổng bệnh viện</span>
-                <span className="text-lg font-semibold text-gray-900 dark:text-white">--</span>
+                <span className="text-lg font-semibold text-gray-900 dark:text-white">{summary ? summary.totalHospitals : "--"}</span>
               </div>
               <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Tổng hệ thống HIS</span>
-                <span className="text-lg font-semibold text-gray-900 dark:text-white">--</span>
+                <span className="text-lg font-semibold text-gray-900 dark:text-white">{summary ? summary.totalHisSystems : "--"}</span>
               </div>
               <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Tổng đại lý</span>
