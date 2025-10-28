@@ -83,7 +83,17 @@ export default function SignInForm() {
 
       api.defaults.headers.common.Authorization = `Bearer ${data.accessToken}`;
       toast.success("Đăng nhập thành công!");
-      navigate("/home");
+      
+      // Redirect based on user role
+      // Backend enum: SUPERADMIN, ADMIN, USER
+      const roles = normalizeRoles(data.roles);
+      const isSuperAdmin = roles.some((role: string) => role === "SUPERADMIN" || role === "SUPER_ADMIN" || role === "Super Admin");
+      
+      if (isSuperAdmin) {
+        navigate("/superadmin/home");
+      } else {
+        navigate("/home");
+      }
     } catch (e: any) {
       // lỗi từ BE (sai tài khoản/mật khẩu, v.v…)
       const errorMsg = pickErrMsg(e);

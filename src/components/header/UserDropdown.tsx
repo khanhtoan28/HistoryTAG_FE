@@ -11,6 +11,17 @@ export default function UserDropdown() {
   const [user, setUser] = useState<UserResponseDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const roles = useMemo(() => {
+    try {
+      const raw = localStorage.getItem("roles") || sessionStorage.getItem("roles");
+      if (!raw) return [] as string[];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [] as string[];
+    }
+  }, []);
+  const isSuperAdmin = roles.includes("SUPERADMIN") || roles.includes("SUPER_ADMIN") || roles.includes("Super Admin");
 
   const LOGOUT_URL = "http://localhost:8080/api/v1/auth/logout";
 
@@ -90,8 +101,7 @@ export default function UserDropdown() {
   const avatar = user?.avatar || fallbackAvatar;
   const fullname =
     (user?.fullname && user.fullname !== "Chưa cập nhật" && user.fullname) ||
-    user?.username ||
-    "Người dùng";
+    user?.username 
   const email = user?.email || "Chưa có email";
 
   return (
@@ -162,7 +172,7 @@ export default function UserDropdown() {
             <DropdownItem
               onItemClick={closeDropdown}
               tag="a"
-              to="/profile"
+              to={isSuperAdmin ? "/superadmin/profile" : "/profile"}
               className="flex items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
             >
               <svg
