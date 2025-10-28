@@ -29,10 +29,52 @@ export default function SuperAdminHome() {
   }, []);
 
   const donutOptions: ApexOptions = {
+  // Local type for formatter options to avoid using `any` and satisfy eslint
+  // Apex provides a `w` object in opts with globals.series and globals.seriesTotals
+  // We only declare the bits we need here.
+  // Note: Keep this local and narrow to avoid depending on internal 'any' shapes.
+    // TIP: If ApexCharts publishes types for `opts.w.globals`, we can replace this later.
+    // Define the shape inline below.
     labels: ["Người dùng", "Bệnh viện", "HIS" , "Phần cứng", "Đại lý"],
-    legend: { position: "bottom" },
+    legend: {
+      position: "bottom",
+      // Keep default legend labels (color + label). Percent is shown on slices.
+    },
     chart: { toolbar: { show: false } },
-    dataLabels: { enabled: false },
+    plotOptions: {
+      pie: {
+        donut: {
+          size: '65%',
+        },
+      },
+    },
+    dataLabels: {
+      enabled: true,
+      // Show percentage on slices
+      formatter: (val: number, opts?: { seriesIndex?: number; w?: { globals?: { series?: number[] } } }) => {
+        const w = opts?.w;
+        const series = w?.globals?.series ?? [];
+        const idx = opts?.seriesIndex ?? 0;
+        const value = series?.[idx] ?? val ?? 0;
+        const total = (series.reduce((a: number, b: number) => a + b, 0) as number) || 1;
+        const pct = Math.round((value / total) * 100);
+        return `${pct}%`;
+      },
+      style: { fontSize: '12px', colors: ['#fff'] },
+    },
+    tooltip: {
+      y: {
+        formatter: (val: number, opts?: { seriesIndex?: number; w?: { globals?: { series?: number[] } } }) => {
+          const w = opts?.w;
+          const series = w?.globals?.series ?? [];
+          const idx = opts?.seriesIndex ?? 0;
+          const value = series?.[idx] ?? val ?? 0;
+          const total = (series.reduce((a: number, b: number) => a + b, 0) as number) || 1;
+          const pct = Math.round((value / total) * 100);
+          return `${value} (${pct}%)`;
+        }
+      }
+    },
     colors: ["#465fff", "#10b981", "#f59e0b", "#ef4444", "#6366f1"],
   };
   return (
@@ -125,12 +167,14 @@ export default function SuperAdminHome() {
             </h3>
             {/* Donut chart */}
             <div className="mb-4">
-              <Chart
-                options={donutOptions}
-                series={summary ? [summary.totalUsers, summary.totalHospitals, summary.totalHisSystems, summary.totalHardware, summary.totalAgencies] : [0,0,0,0,0]}
-                type="donut"
-                width={320}
-              />
+              <div className="flex justify-center">
+                <Chart
+                  options={donutOptions}
+                  series={summary ? [summary.totalUsers, summary.totalHospitals, summary.totalHisSystems, summary.totalHardware, summary.totalAgencies] : [0,0,0,0,0]}
+                  type="donut"
+                  width={320}
+                />
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -148,11 +192,11 @@ export default function SuperAdminHome() {
               </div>
               <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Tổng đại lý</span>
-                <span className="text-lg font-semibold text-gray-900 dark:text-white">--</span>
+                <span className="text-lg font-semibold text-gray-900 dark:text-white">{summary ? summary.totalAgencies : "--"}</span>
               </div>
               <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Tổng phần cứng</span>
-                <span className="text-lg font-semibold text-gray-900 dark:text-white">--</span>
+                <span className="text-lg font-semibold text-gray-900 dark:text-white">{summary ? summary.totalHardware : "--"}</span>
               </div>
             </div>
           </div>
