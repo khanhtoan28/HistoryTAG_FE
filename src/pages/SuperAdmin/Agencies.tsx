@@ -4,29 +4,27 @@ import PageMeta from "../../components/common/PageMeta";
 
 type Agency = {
   id: number;
-  code?: string | null;
   name: string;
   address?: string | null;
   contactPerson?: string | null;
-  contactEmail?: string | null;
-  contactNumber?: string | null;
+  email?: string | null;
+  phoneNumber?: string | null;
   notes?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 };
 
 type AgencyForm = {
-  code?: string;
   name: string;
   address?: string;
   contactPerson?: string;
-  contactEmail?: string;
-  contactNumber?: string;
+  email?: string;
+  phoneNumber?: string;
   notes?: string;
 };
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
-const BASE = `${API_BASE}/api/v1/auth/agencies`;
+const BASE = `${API_BASE}/api/v1/superadmin/agencies`;
 
 function authHeader(): Record<string, string> {
   const token = localStorage.getItem("access_token");
@@ -57,12 +55,11 @@ export default function AgenciesPage() {
   const [isModalLoading, setIsModalLoading] = useState(false);
 
   const [form, setForm] = useState<AgencyForm>({
-    code: "",
     name: "",
     address: "",
     contactPerson: "",
-    contactEmail: "",
-    contactNumber: "",
+    email: "",
+    phoneNumber: "",
     notes: "",
   });
 
@@ -79,12 +76,11 @@ export default function AgenciesPage() {
 
   function fillForm(a: Agency) {
     setForm({
-      code: a.code ?? "",
       name: a.name ?? "",
       address: a.address ?? "",
       contactPerson: a.contactPerson ?? "",
-      contactEmail: a.contactEmail ?? "",
-      contactNumber: a.contactNumber ?? "",
+      email: a.email ?? "",
+      phoneNumber: a.phoneNumber ?? "",
       notes: a.notes ?? "",
     });
   }
@@ -115,6 +111,8 @@ export default function AgenciesPage() {
       url.searchParams.set("size", String(size));
       url.searchParams.set("sortBy", sortBy);
       url.searchParams.set("sortDir", sortDir);
+      const search = [qName, qContact].filter(Boolean).join(" ").trim();
+      if (search) url.searchParams.set("search", search);
       const res = await fetch(url.toString(), { headers: { ...authHeader() } });
       if (!res.ok) throw new Error(`GET failed ${res.status}`);
       const data = await res.json();
@@ -136,7 +134,7 @@ export default function AgenciesPage() {
       (qName ? it.name.toLowerCase().includes(qName.toLowerCase()) : true) &&
       (qContact
         ? (it.contactPerson || "").toLowerCase().includes(qContact.toLowerCase()) ||
-          (it.contactNumber || "").toLowerCase().includes(qContact.toLowerCase())
+          (it.phoneNumber || "").toLowerCase().includes(qContact.toLowerCase())
         : true)
     );
   }, [items, qName, qContact]);
@@ -144,7 +142,7 @@ export default function AgenciesPage() {
   function onCreate() {
     setEditing(null);
     setViewing(null);
-    setForm({ code: "", name: "", address: "", contactPerson: "", contactEmail: "", contactNumber: "", notes: "" });
+    setForm({ name: "", address: "", contactPerson: "", email: "", phoneNumber: "", notes: "" });
     setOpen(true);
   }
 
@@ -200,12 +198,11 @@ export default function AgenciesPage() {
     setError(null);
     try {
       const payload: Record<string, any> = {
-        code: form.code?.trim() || undefined,
         name: form.name.trim(),
         address: form.address?.trim() || undefined,
         contactPerson: form.contactPerson?.trim() || undefined,
-        contactEmail: form.contactEmail?.trim() || undefined,
-        contactNumber: form.contactNumber?.trim() || undefined,
+        email: form.email?.trim() || undefined,
+        phoneNumber: form.phoneNumber?.trim() || undefined,
         notes: form.notes?.trim() || undefined,
       };
 
@@ -255,7 +252,7 @@ export default function AgenciesPage() {
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
             >
-              {["id", "name", "code"].map((k) => (
+              {["id", "name"].map((k) => (
                 <option key={k} value={k}>Sắp xếp theo: {k}</option>
               ))}
             </select>
@@ -295,7 +292,6 @@ export default function AgenciesPage() {
               <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                 <tr>
                   <th className="px-3 py-2 w-14 text-center">STT</th>
-                  <th className="px-3 py-2">Mã</th>
                   <th className="px-3 py-2">Tên</th>
                   <th className="px-3 py-2">Liên hệ</th>
                   <th className="px-3 py-2">Điện thoại</th>
@@ -310,11 +306,10 @@ export default function AgenciesPage() {
                   return (
                     <tr key={a.id} className="border-b last:border-b-0">
                       <td className="px-3 py-2 text-center">{rowNo}</td>
-                      <td className="px-3 py-2 font-mono">{a.code || "—"}</td>
                       <td className="px-3 py-2 font-medium">{a.name}</td>
                       <td className="px-3 py-2">{a.contactPerson || "—"}</td>
-                      <td className="px-3 py-2">{a.contactNumber || "—"}</td>
-                      <td className="px-3 py-2">{a.contactEmail || "—"}</td>
+                      <td className="px-3 py-2">{a.phoneNumber || "—"}</td>
+                      <td className="px-3 py-2">{a.email || "—"}</td>
                       <td className="px-3 py-2">{a.address || "—"}</td>
                       <td className="px-3 py-2 text-right">
                         <div className="flex justify-end gap-2">
@@ -373,10 +368,6 @@ export default function AgenciesPage() {
               <form onSubmit={onSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-3">
                   <div>
-                    <label className="mb-1 block text-sm">Mã</label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.code || ""} onChange={(e) => setForm((s) => ({ ...s, code: e.target.value }))} disabled={isViewing} />
-                  </div>
-                  <div>
                     <label className="mb-1 block text-sm font-medium">Tên đại lý*</label>
                     <input required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} disabled={isViewing} />
                   </div>
@@ -393,12 +384,12 @@ export default function AgenciesPage() {
                     </div>
                     <div>
                       <label className="mb-1 block text-sm">Điện thoại</label>
-                      <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.contactNumber || ""} onChange={(e) => setForm((s) => ({ ...s, contactNumber: e.target.value }))} disabled={isViewing} />
+                        <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.phoneNumber || ""} onChange={(e) => setForm((s) => ({ ...s, phoneNumber: e.target.value }))} disabled={isViewing} />
                     </div>
                   </div>
                   <div>
                     <label className="mb-1 block text-sm">Email</label>
-                    <input type="email" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.contactEmail || ""} onChange={(e) => setForm((s) => ({ ...s, contactEmail: e.target.value }))} disabled={isViewing} />
+                      <input type="email" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.email || ""} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} disabled={isViewing} />
                   </div>
                   <div>
                     <label className="mb-1 block text-sm">Ghi chú</label>
