@@ -38,13 +38,32 @@ interface SpringPage<T> {
 // ===================== Config & helpers ===================== //
 // ⚠️ Fix env access for Vite-based projects
 const API_BASE = import.meta.env.VITE_API_URL ?? ""; // same-origin if not set
-const BASE = `${API_BASE}/api/v1/admin/his`;
+const BASES = [
+  `${API_BASE}/api/v1/superadmin/his`,
+  `${API_BASE}/api/v1/admin/his`,
+] as const;
 
 function authHeader(): Record<string, string> {
   const token = localStorage.getItem("access_token");
   return token
     ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" }
     : { "Content-Type": "application/json", Accept: "application/json" };
+}
+
+async function fetchWithFallback(inputFactory: (base: string) => string, init?: RequestInit) {
+  let lastError: unknown = null;
+  for (const base of BASES) {
+    try {
+      const url = inputFactory(base);
+      const res = await fetch(url, init);
+      if (!res.ok) throw new Error(`${init?.method ?? "GET"} ${res.status}`);
+      return res;
+    } catch (e) {
+      lastError = e;
+      continue;
+    }
+  }
+  throw lastError ?? new Error("All endpoints failed");
 }
 
 function validate(values: HisRequestDTO) {
@@ -105,14 +124,15 @@ const HisSystemPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const url = new URL(BASE);
-      url.searchParams.set("search", "");
-      url.searchParams.set("page", String(page));
-      url.searchParams.set("size", String(size));
-      url.searchParams.set("sortBy", String(sortBy));
-      url.searchParams.set("sortDir", sortDir);
-      const res = await fetch(url.toString(), { headers: { ...authHeader() } });
-      if (!res.ok) throw new Error(`GET ${res.status}`);
+      const res = await fetchWithFallback((base) => {
+        const url = new URL(base);
+        url.searchParams.set("search", "");
+        url.searchParams.set("page", String(page));
+        url.searchParams.set("size", String(size));
+        url.searchParams.set("sortBy", String(sortBy));
+        url.searchParams.set("sortDir", sortDir);
+        return url.toString();
+      }, { headers: { ...authHeader() } });
       const data = await res.json();
       if (Array.isArray(data)) {
         setItems(data);
@@ -159,8 +179,7 @@ const HisSystemPage: React.FC = () => {
 
   async function onEdit(h: HisResponseDTO) {
     try {
-      const res = await fetch(`${BASE}/${h.id}`, { headers: { ...authHeader() } });
-      if (!res.ok) throw new Error(`GET ${res.status}`);
+      const res = await fetchWithFallback((base) => `${base}/${h.id}`, { headers: { ...authHeader() } });
       const detail = (await res.json()) as HisResponseDTO;
       setEditing(detail);
       setForm({
@@ -184,8 +203,7 @@ const HisSystemPage: React.FC = () => {
     if (!confirm("Xóa HIS này?")) return;
     setLoading(true);
     try {
-      const res = await fetch(`${BASE}/${id}`, { method: "DELETE", headers: { ...authHeader() } });
-      if (!res.ok) throw new Error(`DELETE ${res.status}`);
+      const res = await fetchWithFallback((base) => `${base}/${id}`, { method: "DELETE", headers: { ...authHeader() } });
       // adjust page when last item removed
       if (items.length === 1 && page > 0) setPage((p) => p - 1);
       await fetchList();
@@ -208,16 +226,12 @@ const HisSystemPage: React.FC = () => {
     setError(null);
     try {
       const method = isEditing ? "PUT" : "POST";
-      const url = isEditing ? `${BASE}/${editing!.id}` : BASE;
-      const res = await fetch(url, {
+      const res = await fetchWithFallback((base) => (isEditing ? `${base}/${editing!.id}` : base), {
         method,
         headers: { ...authHeader() },
         body: JSON.stringify(form),
       });
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(`${method} ${res.status}: ${txt}`);
-      }
+      // if not thrown, res.ok already ensured by fetchWithFallback
       setOpen(false);
       setEditing(null);
       await fetchList();

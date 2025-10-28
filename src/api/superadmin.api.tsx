@@ -43,6 +43,7 @@ export type UserUpdateRequestDTO = {
   workStatus?: string;
   department?: "IT" | "ACCOUNTING" | null;
   team?: "DEV" | "DEPLOYMENT" | "MAINTENANCE" | null;
+  roles?: string[];
 };
 
 // User Management APIs
