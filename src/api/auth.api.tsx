@@ -86,9 +86,6 @@ export async function updateUserAccount(userId: number, payload: UserUpdateReque
 }
 
 
-// ==========================
-// Cookie helpers
-// ==========================
 function setCookie(
   name: string,
   value: string,
