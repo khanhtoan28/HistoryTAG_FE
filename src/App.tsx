@@ -113,6 +113,8 @@ export default function App() {
             <Route path="/superadmin/his-systems" element={<HisSystemPage />} />
             <Route path="/superadmin/agencies" element={<Agencies />} />
             <Route path="/superadmin/hardware" element={<Hardware />} />
+            {/* SuperAdmin Profile uses the same Profile page inside SuperAdmin layout */}
+            <Route path="/superadmin/profile" element={<UserProfiles />} />
           </Route>
 
           {/* Dashboard Layout - Protected */}

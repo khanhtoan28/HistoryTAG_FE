@@ -93,6 +93,18 @@ export default function UserDropdown() {
     user?.username 
   const email = user?.email || "Chưa có email";
 
+  const roles = useMemo(() => {
+    try {
+      const raw = localStorage.getItem("roles") || sessionStorage.getItem("roles");
+      if (!raw) return [] as string[];
+      return raw.trim().startsWith("[") ? JSON.parse(raw) : raw.split(",").map((s) => s.trim());
+    } catch {
+      return [] as string[];
+    }
+  }, []);
+
+  const isSuperAdmin = roles.some((r) => (r || "").toString().toUpperCase().includes("SUPERADMIN"));
+
   return (
     <div className="relative">
       <button
@@ -161,7 +173,7 @@ export default function UserDropdown() {
             <DropdownItem
               onItemClick={closeDropdown}
               tag="a"
-              to="/profile"
+              to={isSuperAdmin ? "/superadmin/profile" : "/profile"}
               className="flex items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
             >
               <svg
