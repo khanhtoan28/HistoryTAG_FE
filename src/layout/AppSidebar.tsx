@@ -30,7 +30,7 @@ const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
     name: "Bảng điều khiển",
-    subItems: [{ name: "Thương mại điện tử", path: "/", pro: false }],
+    subItems: [{ name: "Thương mại điện tử", path: "/home", pro: false }],
   },
   {
     icon: <CalenderIcon />,
@@ -308,7 +308,7 @@ const AppSidebar: React.FC = () => {
           !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
         }`}
       >
-        <Link to="/">
+        <Link to="/home">
           {isExpanded || isHovered || isMobileOpen ? (
             <>
               <img

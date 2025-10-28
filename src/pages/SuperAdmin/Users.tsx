@@ -15,6 +15,14 @@ import {
   type UserUpdateRequestDTO,
 } from "../../api/superadmin.api";
 import toast from "react-hot-toast";
+// Use react-icons for consistent icon rendering across themes
+import {
+  AiOutlineEye,
+  AiOutlineEdit,
+  AiOutlineDelete,
+  AiOutlineLock,
+  AiOutlineUser,
+} from "react-icons/ai";
 
 type UserForm = {
   username: string;
@@ -455,7 +463,22 @@ export default function SuperAdminUsers() {
                   return (
                     <tr key={user.id} className="border-b last:border-b-0">
                       <td className="px-3 py-2 text-center">{rowNo}</td>
-                      <td className="px-3 py-2 font-medium">{user.username}</td>
+                      <td className="px-3 py-2 font-medium">
+                        <div className="flex items-center gap-3">
+                          {user.avatar ? (
+                            <img
+                              src={user.avatar}
+                              alt={user.username}
+                              className="w-8 h-8 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+                              <AiOutlineUser className="w-5 h-5 text-gray-500" />
+                            </div>
+                          )}
+                          <span>{user.username}</span>
+                        </div>
+                      </td>
                       <td className="px-3 py-2">{user.email || "—"}</td>
                       <td className="px-3 py-2">{user.fullname || "—"}</td>
                       <td className="px-3 py-2">{user.phone || "—"}</td>
@@ -480,28 +503,36 @@ export default function SuperAdminUsers() {
                       <td className="px-3 py-2 text-right">
                         <div className="flex justify-end gap-2">
                           <button
-                            className="rounded-md border px-2 py-1 text-xs hover:bg-gray-50 text-gray-600"
+                            title="Xem"
+                            aria-label={`Xem ${user.username}`}
+                            className="rounded-md border p-2 text-xs hover:bg-gray-50 text-gray-600 dark:text-gray-300 dark:hover:bg-white/5"
                             onClick={() => onView(user)}
                           >
-                            Xem
+                            <AiOutlineEye className="w-4 h-4" />
                           </button>
                           <button
-                            className="rounded-md border px-2 py-1 text-xs hover:bg-gray-50"
+                            title="Sửa"
+                            aria-label={`Sửa ${user.username}`}
+                            className="rounded-md border p-2 text-xs hover:bg-gray-50 text-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
                             onClick={() => onEdit(user)}
                           >
-                            Sửa
+                            <AiOutlineEdit className="w-4 h-4" />
                           </button>
                           <button
-                            className={`rounded-md border px-2 py-1 text-xs ${user.status ? "hover:bg-yellow-50 text-yellow-700" : "hover:bg-green-50 text-green-700"}`}
+                            title={user.status ? "Khoá tài khoản" : "Mở khoá tài khoản"}
+                            aria-label={`${user.status ? "Khoá" : "Mở khóa"} ${user.username}`}
+                            className={`rounded-md border p-2 text-xs ${user.status ? "text-yellow-700 hover:bg-yellow-50" : "text-green-700 hover:bg-green-50"}`}
                             onClick={() => onToggleLock(user.id, user.status)}
                           >
-                            {user.status ? "Khoá" : "Mở khóa"}
+                            <AiOutlineLock className="w-4 h-4" />
                           </button>
                           <button
-                            className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100"
+                            title="Xóa"
+                            aria-label={`Xóa ${user.username}`}
+                            className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700 hover:bg-red-100"
                             onClick={() => onDelete(user.id)}
                           >
-                            Xóa
+                            <AiOutlineDelete className="w-4 h-4" />
                           </button>
                         </div>
                       </td>

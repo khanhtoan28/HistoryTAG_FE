@@ -399,6 +399,94 @@ layer(base);
   @apply static! mt-0 h-8 w-9 rounded-full border dark:hover:bg-white/[0.05] border-gray-200 !text-gray-700 transition hover:bg-gray-100 dark:border-white/[0.03] dark:bg-gray-800 dark:!text-gray-400  dark:hover:!text-white/90;
 }
 
+/* =======================
+   Softer global dark-mode overrides
+   These rules scope common Tailwind utility classes under
+   the `.dark` root class (used by ThemeContext) and map
+   them to gentler, less-contrasty colors so the dark theme
+   is easier on the eyes.
+   ======================= */
+
+/* Page background & base text */
+.dark html,
+.dark body {
+  background-color: #071022 !important; /* deep navy, softer than pure black */
+  color: #cbd5e1 !important; /* gentle off-white text */
+}
+
+/* Common surface / card backgrounds */
+.dark .bg-white {
+  background-color: #0f1724 !important; /* main surface for cards/panels */
+}
+.dark .bg-gray-50 {
+  background-color: #081021 !important; /* page / container background */
+}
+.dark .bg-gray-100 {
+  background-color: #0b1724 !important;
+}
+.dark .bg-gray-200 {
+  background-color: #0f2130 !important;
+}
+.dark .bg-gray-800,
+.dark .bg-gray-900 {
+  background-color: #0d1622 !important; /* slightly lighter than pure black */
+}
+
+/* Text color tuning */
+.dark .text-gray-700,
+.dark .text-gray-800 {
+  color: #cbd5e1 !important; /* primary text in dark mode */
+}
+.dark .text-gray-400,
+.dark .text-gray-300 {
+  color: #9aa5b3 !important; /* secondary/muted text */
+}
+
+/* Border colours should be subtle in dark mode */
+.dark .border-gray-200,
+.dark .border-gray-300 {
+  border-color: rgba(255,255,255,0.04) !important;
+}
+.dark .border-gray-800,
+.dark .border-gray-900 {
+  border-color: rgba(255,255,255,0.06) !important;
+}
+
+/* Make input / table stripes softer */
+.dark tr:nth-child(even) {
+  background-color: rgba(255,255,255,0.01) !important;
+}
+
+/* Slightly lower the intensity of shadows on dark */
+.dark .shadow-theme-md,
+.dark .shadow-theme-lg,
+.dark .shadow-theme-sm {
+  box-shadow: 0 2px 6px rgba(2,6,23,0.5) !important;
+}
+
+/* Apexcharts / third-party tweaks (so tooltips & legends don't feel harsh) */
+.dark .apexcharts-tooltip.apexcharts-theme-light {
+  background-color: #0b1724 !important;
+  border-color: rgba(255,255,255,0.04) !important;
+}
+
+/* Custom scrollbar thumb for dark mode */
+.dark ::-webkit-scrollbar-thumb {
+  background-color: #344054 !important;
+}
+
+/* Ensure inline SVG icons inherit color so small icons (eye/pencil/lock/trash) render visibly
+   even when SVG paths use fill or stroke. This makes icon color consistent with text color. */
+button svg,
+.menu-item-icon-size svg,
+.menu-dropdown-item svg,
+.menu-dropdown-badge svg,
+.rounded-md svg,
+.table-auto svg {
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
 .stocks-slider-outer .swiper-button-next.swiper-button-disabled,
 .stocks-slider-outer .swiper-button-prev.swiper-button-disabled {
   @apply bg-white opacity-50 dark:bg-gray-900;

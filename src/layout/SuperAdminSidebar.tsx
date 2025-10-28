@@ -5,6 +5,7 @@ import {
   GridIcon,
   HorizontaLDots,
   TableIcon,
+  GroupIcon,
   UserCircleIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
@@ -26,7 +27,7 @@ const navItems: NavItem[] = [
   },
   {
     name: "Quản lý người dùng",
-    icon: <UserCircleIcon />,
+    icon: <GroupIcon />,
     subItems: [
       { name: "Danh sách người dùng", path: "/superadmin/users", pro: false },
     ],
@@ -176,6 +177,10 @@ const SuperAdminSidebar: React.FC = () => {
                           : "menu-dropdown-item-inactive"
                       }`}
                     >
+                      {/* Add a small icon for the users list submenu */}
+                      {subItem.path === "/superadmin/users" && (
+                        <UserCircleIcon className="w-4 h-4 mr-2 text-gray-500" />
+                      )}
                       {subItem.name}
                       <span className="flex items-center gap-1 ml-auto">
                         {subItem.new && (
