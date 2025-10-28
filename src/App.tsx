@@ -99,12 +99,8 @@ export default function App() {
       <Router>
         <ScrollToTop />
         <Routes>
-          {/* Default redirect based on role */}
-          <Route path="/" element={
-            isAuthenticated() 
-              ? (isSuperAdmin() ? <Navigate to="/superadmin/home" replace /> : <Navigate to="/home" replace />)
-              : <Navigate to="/signin" replace />} 
-          />
+          {/* Default redirect to Sign In */}
+          <Route path="/" element={<Navigate to="/signin" replace />} />
 
           {/* Super Admin Layout - Protected */}
           <Route element={<ProtectedRoute><SuperAdminLayout /></ProtectedRoute>}>
