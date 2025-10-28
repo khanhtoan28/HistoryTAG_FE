@@ -839,14 +839,21 @@ const ImplementationTasksPage: React.FC = () => {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <Button
-            onClick={() => {
-              setEditing(null);
-              setModalOpen(true);
-            }}
-          >
-            + Thêm mới
-          </Button>
+          {isSuperAdmin || userTeam === "DEPLOYMENT" ? (
+            <Button
+              onClick={() => {
+                setEditing(null);
+                setModalOpen(true);
+              }}
+            >
+              + Thêm mới
+            </Button>
+          ) : (
+            <Button disabled className="opacity-50 cursor-not-allowed">
+              + Thêm mới
+            </Button>
+          )}
+
         </div>
       </div>
 
