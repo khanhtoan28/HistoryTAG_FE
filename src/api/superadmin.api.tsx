@@ -157,3 +157,92 @@ export default {
   unlockUser,
 };
 
+// =======================================================
+// HARDWARE MANAGEMENT (SUPER ADMIN)
+// =======================================================
+
+export type HardwareResponseDTO = {
+  id: number;
+  name: string;
+  type?: string | null;
+  imageUrl?: string | null;
+  notes?: string | null;
+  supplier?: string | null;
+  warrantyPeriod?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export type HardwareRequestDTO = {
+  name: string;
+  type?: string | null;
+  imageFile?: File | null;
+  notes?: string | null;
+  supplier?: string | null;
+  warrantyPeriod?: string | null;
+};
+
+export type HardwareUpdateRequestDTO = Partial<HardwareRequestDTO>;
+
+export async function getAllHardware(params: {
+  search?: string;
+  type?: string;
+  page?: number;
+  size?: number;
+  sortBy?: string;
+  sortDir?: "asc" | "desc";
+}) {
+  const { data } = await api.get("/api/v1/superadmin/hardware", { params });
+  return data as { content: HardwareResponseDTO[]; totalElements: number } | HardwareResponseDTO[];
+}
+
+export async function getHardwareById(id: number) {
+  const { data } = await api.get<HardwareResponseDTO>(`/api/v1/superadmin/hardware/${id}`);
+  return data;
+}
+
+export async function createHardware(payload: HardwareRequestDTO) {
+  const form = new FormData();
+  Object.entries(payload).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === "") return;
+    if (v instanceof File) {
+      form.append(k, v);
+    } else {
+      form.append(k, String(v));
+    }
+  });
+  const { data } = await api.post<HardwareResponseDTO>("/api/v1/superadmin/hardware", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
+
+export async function updateHardware(id: number, payload: HardwareUpdateRequestDTO) {
+  const form = new FormData();
+  Object.entries(payload).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === "") return;
+    if (v instanceof File) {
+      form.append(k, v);
+    } else {
+      form.append(k, String(v));
+    }
+  });
+  const { data } = await api.put<HardwareResponseDTO>(`/api/v1/superadmin/hardware/${id}`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
+
+export async function deleteHardware(id: number) {
+  const { data } = await api.delete(`/api/v1/superadmin/hardware/${id}`);
+  return data;
+}
+
+export const HardwareAPI = {
+  getAllHardware,
+  getHardwareById,
+  createHardware,
+  updateHardware,
+  deleteHardware,
+};
+
