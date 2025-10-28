@@ -161,7 +161,7 @@ export default function UserInfoCard() {
       {showSuccess && (
         <div className="fixed inset-0 flex items-start justify-center mt-16 z-[100] pointer-events-none">
           <div className="bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg text-sm font-medium animate-fade-in">
-            ✅ Cập nhật thông tin thành công!
+             Cập nhật thông tin thành công!
           </div>
         </div>
       )}

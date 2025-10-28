@@ -17,6 +17,7 @@ import BarChart from "./pages/Charts/BarChart";
 import Calendar from "./pages/Calendar";
 import FormElements from "./pages/Forms/FormElements";
 import AppLayout from "./layout/AppLayout";
+import SuperAdminLayout from "./layout/SuperAdminLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
 import Home from "./pages/Dashboard/Home";
 import ImplementationTasksPage from "./pages/PageClients/implementation-tasks";
@@ -25,6 +26,11 @@ import MaintenanceTasksPage from "./pages/PageClients/maintenance-tasks";
 import Hospitals from "./pages/Page/Hospitals";
 import HisSystemPage from "./pages/Page/HisSystem";
 import PersonCharge from "./pages/Page/PersonCharge";
+import SuperAdminHome from "./pages/SuperAdmin/Home";
+import SuperAdminUsers from "./pages/SuperAdmin/Users";
+import Agencies from "./pages/SuperAdmin/Agencies";
+import Hardware from "./pages/SuperAdmin/Hardware";
+import SuperAdminProfile from "./pages/SuperAdmin/Profile";
 
 // Protected Route Component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -42,6 +48,25 @@ export default function App() {
   const isAuthenticated = () => {
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
     return !!token;
+  };
+
+  // Get user roles
+  const getUserRoles = () => {
+    try {
+      const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
+      if (rolesStr) {
+        return JSON.parse(rolesStr);
+      }
+    } catch (e) {
+      console.error("Error parsing roles:", e);
+    }
+    return [];
+  };
+
+  // Check if user is super admin
+  const isSuperAdmin = () => {
+    const roles = getUserRoles();
+    return roles.some((role: string) => role === "SUPERADMIN" || role === "SUPER_ADMIN" || role === "Super Admin");
   };
 
   return (
@@ -74,8 +99,19 @@ export default function App() {
       <Router>
         <ScrollToTop />
         <Routes>
-          {/* Default redirect to signin if not authenticated */}
-          <Route path="/" element={isAuthenticated() ? <Navigate to="/home" replace /> : <Navigate to="/signin" replace />} />
+          {/* Default redirect to Sign In */}
+          <Route path="/" element={<Navigate to="/signin" replace />} />
+
+          {/* Super Admin Layout - Protected */}
+          <Route element={<ProtectedRoute><SuperAdminLayout /></ProtectedRoute>}>
+            <Route path="/superadmin/home" element={<SuperAdminHome />} />
+            <Route path="/superadmin/users" element={<SuperAdminUsers />} />
+            <Route path="/superadmin/hospitals" element={<Hospitals />} />
+            <Route path="/superadmin/his-systems" element={<HisSystemPage />} />
+            <Route path="/superadmin/agencies" element={<Agencies />} />
+            <Route path="/superadmin/hardware" element={<Hardware />} />
+            <Route path="/superadmin/profile" element={<SuperAdminProfile />} />
+          </Route>
 
           {/* Dashboard Layout - Protected */}
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>

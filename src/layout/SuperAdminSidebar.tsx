@@ -1,23 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
-
-// Giả sử các icon này được import từ một thư viện icon
 import {
-  BoxCubeIcon,
-  CalenderIcon,
   ChevronDownIcon,
   GridIcon,
   HorizontaLDots,
-  ListIcon,
-  PageIcon,
-  PieChartIcon,
-  PlugInIcon,
-  TableIcon
+  TableIcon,
+  GroupIcon,
+  UserCircleIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 import SidebarWidget from "./SidebarWidget";
 
-// Kiểu dữ liệu cho mục điều hướng
 type NavItem = {
   name: string;
   icon: React.ReactNode;
@@ -25,111 +18,59 @@ type NavItem = {
   subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
 };
 
-// Danh sách mục điều hướng chính
+// Super Admin Menu Items
 const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
-    name: "Bảng điều khiển",
-    subItems: [{ name: "Thương mại điện tử", path: "/home", pro: false }],
+    name: "Dashboard",
+    path: "/superadmin/home",
   },
   {
-    icon: <CalenderIcon />,
-    name: "Lịch",
-    path: "/calendar",
+    name: "Quản lý người dùng",
+    icon: <GroupIcon />,
+    subItems: [
+      { name: "Danh sách người dùng", path: "/superadmin/users", pro: false },
+    ],
   },
   {
-    name: "Biểu mẫu",
-    icon: <ListIcon />,
-    subItems: [{ name: "Thành phần biểu mẫu", path: "/form-elements", pro: false }],
-  },
-  {
-    name: "Bảng dữ liệu",
+    name: "Dữ liệu",
     icon: <TableIcon />,
     subItems: [
-      { name: "Bệnh viện", path: "/hospitals", pro: false },
-      { name: "Đơn vị HIS", path: "/his-sys", pro: false },
-      { name: "Người phụ trách", path: "/personCharge", pro: false }
-    ],
-  },
-  {
-    name: "Trang",
-    icon: <PageIcon />,
-    subItems: [
-      { name: "Công việc triển khai", path: "/implementation-tasks", pro: false },
-      { name: "Công việc DEV", path: "/dev-tasks", pro: false },
-      { name: "Công việc bảo trì", path: "/maintenance-tasks", pro: false },
-      { name: "Lỗi 404", path: "/error-404", pro: false },
+      { name: "Bệnh viện", path: "/superadmin/hospitals", pro: false },
+      { name: "Đơn vị HIS", path: "/superadmin/his-systems", pro: false },
+      { name: "Đại lý", path: "/superadmin/agencies", pro: false },
+      { name: "Phần cứng", path: "/superadmin/hardware", pro: false },
     ],
   },
 ];
 
-// Danh sách mục điều hướng “Khác”
-const othersItems: NavItem[] = [
-  {
-    icon: <PieChartIcon />,
-    name: "Biểu đồ",
-    subItems: [
-      { name: "Biểu đồ đường", path: "/line-chart", pro: false },
-      { name: "Biểu đồ cột", path: "/bar-chart", pro: false },
-    ],
-  },
-  {
-    icon: <BoxCubeIcon />,
-    name: "Thành phần giao diện",
-    subItems: [
-      { name: "Cảnh báo", path: "/alerts", pro: false },
-      { name: "Ảnh đại diện", path: "/avatars", pro: false },
-      { name: "Huy hiệu", path: "/badge", pro: false },
-      { name: "Nút bấm", path: "/buttons", pro: false },
-      { name: "Hình ảnh", path: "/images", pro: false },
-      { name: "Video", path: "/videos", pro: false },
-    ],
-  },
-  {
-    icon: <PlugInIcon />,
-    name: "Xác thực",
-    subItems: [
-      { name: "Đăng nhập", path: "/signin", pro: false },
-      { name: "Đăng ký", path: "/signup", pro: false },
-    ],
-  },
-];
-
-const AppSidebar: React.FC = () => {
+const SuperAdminSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const location = useLocation();
 
   const [openSubmenu, setOpenSubmenu] = useState<{
-    type: "main" | "others";
+    type: "main";
     index: number;
   } | null>(null);
   const [subMenuHeight, setSubMenuHeight] = useState<Record<string, number>>({});
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // Kiểm tra xem đường dẫn hiện tại có trùng khớp hay không
   const isActive = useCallback(
     (path: string) => location.pathname === path,
     [location.pathname]
   );
 
-  // Tự động mở submenu nếu trùng đường dẫn hiện tại
   useEffect(() => {
     let submenuMatched = false;
-    ["main", "others"].forEach((menuType) => {
-      const items = menuType === "main" ? navItems : othersItems;
-      items.forEach((nav, index) => {
-        if (nav.subItems) {
-          nav.subItems.forEach((subItem) => {
-            if (isActive(subItem.path)) {
-              setOpenSubmenu({
-                type: menuType as "main" | "others",
-                index,
-              });
-              submenuMatched = true;
-            }
-          });
-        }
-      });
+    navItems.forEach((nav, index) => {
+      if (nav.subItems) {
+        nav.subItems.forEach((subItem) => {
+          if (isActive(subItem.path)) {
+            setOpenSubmenu({ type: "main", index });
+            submenuMatched = true;
+          }
+        });
+      }
     });
 
     if (!submenuMatched) {
@@ -137,10 +78,9 @@ const AppSidebar: React.FC = () => {
     }
   }, [location, isActive]);
 
-  // Tính chiều cao submenu để làm hiệu ứng mở/đóng
   useEffect(() => {
     if (openSubmenu !== null) {
-      const key = `${openSubmenu.type}-${openSubmenu.index}`;
+      const key = `main-${openSubmenu.index}`;
       if (subMenuRefs.current[key]) {
         setSubMenuHeight((prevHeights) => ({
           ...prevHeights,
@@ -150,41 +90,33 @@ const AppSidebar: React.FC = () => {
     }
   }, [openSubmenu]);
 
-  // Xử lý bật/tắt submenu
-  const handleSubmenuToggle = (index: number, menuType: "main" | "others") => {
+  const handleSubmenuToggle = (index: number) => {
     setOpenSubmenu((prevOpenSubmenu) => {
-      if (
-        prevOpenSubmenu &&
-        prevOpenSubmenu.type === menuType &&
-        prevOpenSubmenu.index === index
-      ) {
+      if (prevOpenSubmenu && prevOpenSubmenu.index === index) {
         return null;
       }
-      return { type: menuType, index };
+      return { type: "main", index };
     });
   };
 
-  // Hàm render danh sách menu
-  const renderMenuItems = (items: NavItem[], menuType: "main" | "others") => (
+  const renderMenuItems = (items: NavItem[]) => (
     <ul className="flex flex-col gap-4">
       {items.map((nav, index) => (
         <li key={nav.name}>
           {nav.subItems ? (
             <button
-              onClick={() => handleSubmenuToggle(index, menuType)}
+              onClick={() => handleSubmenuToggle(index)}
               className={`menu-item group ${
-                openSubmenu?.type === menuType && openSubmenu?.index === index
+                openSubmenu?.index === index
                   ? "menu-item-active"
                   : "menu-item-inactive"
               } cursor-pointer ${
-                !isExpanded && !isHovered
-                  ? "lg:justify-center"
-                  : "lg:justify-start"
+                !isExpanded && !isHovered ? "lg:justify-center" : "lg:justify-start"
               }`}
             >
               <span
                 className={`menu-item-icon-size  ${
-                  openSubmenu?.type === menuType && openSubmenu?.index === index
+                  openSubmenu?.index === index
                     ? "menu-item-icon-active"
                     : "menu-item-icon-inactive"
                 }`}
@@ -197,10 +129,7 @@ const AppSidebar: React.FC = () => {
               {(isExpanded || isHovered || isMobileOpen) && (
                 <ChevronDownIcon
                   className={`ml-auto w-5 h-5 transition-transform duration-200 ${
-                    openSubmenu?.type === menuType &&
-                    openSubmenu?.index === index
-                      ? "rotate-180 text-brand-500"
-                      : ""
+                    openSubmenu?.index === index ? "rotate-180 text-brand-500" : ""
                   }`}
                 />
               )}
@@ -215,9 +144,7 @@ const AppSidebar: React.FC = () => {
               >
                 <span
                   className={`menu-item-icon-size ${
-                    isActive(nav.path)
-                      ? "menu-item-icon-active"
-                      : "menu-item-icon-inactive"
+                    isActive(nav.path) ? "menu-item-icon-active" : "menu-item-icon-inactive"
                   }`}
                 >
                   {nav.icon}
@@ -231,14 +158,12 @@ const AppSidebar: React.FC = () => {
           {nav.subItems && (isExpanded || isHovered || isMobileOpen) && (
             <div
               ref={(el) => {
-                subMenuRefs.current[`${menuType}-${index}`] = el;
+                subMenuRefs.current[`main-${index}`] = el;
               }}
               className="overflow-hidden transition-all duration-300"
               style={{
                 height:
-                  openSubmenu?.type === menuType && openSubmenu?.index === index
-                    ? `${subMenuHeight[`${menuType}-${index}`]}px`
-                    : "0px",
+                  openSubmenu?.index === index ? `${subMenuHeight[`main-${index}`]}px` : "0px",
               }}
             >
               <ul className="mt-2 space-y-1 ml-9">
@@ -252,6 +177,10 @@ const AppSidebar: React.FC = () => {
                           : "menu-dropdown-item-inactive"
                       }`}
                     >
+                      {/* Add a small icon for the users list submenu */}
+                      {subItem.path === "/superadmin/users" && (
+                        <UserCircleIcon className="w-4 h-4 mr-2 text-gray-500" />
+                      )}
                       {subItem.name}
                       <span className="flex items-center gap-1 ml-auto">
                         {subItem.new && (
@@ -308,7 +237,7 @@ const AppSidebar: React.FC = () => {
           !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
         }`}
       >
-        <Link to="/home">
+        <Link to="/superadmin/home">
           {isExpanded || isHovered || isMobileOpen ? (
             <>
               <img
@@ -327,12 +256,7 @@ const AppSidebar: React.FC = () => {
               />
             </>
           ) : (
-            <img
-              src="/images/logo/logo.png"
-              alt="Logo"
-              width={32}
-              height={32}
-            />
+            <img src="/images/logo/logo-icon.svg" alt="Logo" width={32} height={32} />
           )}
         </Link>
       </div>
@@ -342,34 +266,16 @@ const AppSidebar: React.FC = () => {
             <div>
               <h2
                 className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
-                  !isExpanded && !isHovered
-                    ? "lg:justify-center"
-                    : "justify-start"
+                  !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
                 }`}
               >
                 {isExpanded || isHovered || isMobileOpen ? (
-                  "Menu"
+                  "Super Admin"
                 ) : (
                   <HorizontaLDots className="size-6" />
                 )}
               </h2>
-              {renderMenuItems(navItems, "main")}
-            </div>
-            <div className="">
-              <h2
-                className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
-                  !isExpanded && !isHovered
-                    ? "lg:justify-center"
-                    : "justify-start"
-                }`}
-              >
-                {isExpanded || isHovered || isMobileOpen ? (
-                  "Khác"
-                ) : (
-                  <HorizontaLDots />
-                )}
-              </h2>
-              {renderMenuItems(othersItems, "others")}
+              {renderMenuItems(navItems)}
             </div>
           </div>
         </nav>
@@ -379,4 +285,5 @@ const AppSidebar: React.FC = () => {
   );
 };
 
-export default AppSidebar;
+export default SuperAdminSidebar;
+
