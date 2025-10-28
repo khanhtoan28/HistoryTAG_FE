@@ -67,6 +67,12 @@ function validate(values: HisRequestDTO) {
   return e;
 }
 
+function errMsg(err: unknown, fallback = "Lỗi xảy ra") {
+  if (err instanceof Error) return err.message || fallback;
+  if (typeof err === "string") return err;
+  return fallback;
+}
+
 // ===================== Page ===================== //
 const HisSystemPage: React.FC = () => {
   // table state
@@ -84,7 +90,7 @@ const HisSystemPage: React.FC = () => {
   // filters (client-side like your Hospitals page)
   const [qName, setQName] = useState("");
   const [qContact, setQContact] = useState("");
-  const [qEmail, setQEmail] = useState("");
+  const [qEmail] = useState("");
 
   // modal/form
   const [open, setOpen] = useState(false);
@@ -116,8 +122,10 @@ const HisSystemPage: React.FC = () => {
         setItems(pageRes.content ?? []);
         setTotalElements(pageRes.totalElements ?? pageRes.content?.length ?? 0);
       }
-    } catch (e: any) {
-      setError(e.message || "Lỗi tải dữ liệu");
+    } catch (error: unknown) {
+      const msg = errMsg(error, "Lỗi tải dữ liệu");
+      console.error("fetchList error:", error);
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -165,8 +173,10 @@ const HisSystemPage: React.FC = () => {
       });
       setFormErrors({});
       setOpen(true);
-    } catch (e: any) {
-      setError(e.message || "Không thể tải chi tiết HIS");
+    } catch (error: unknown) {
+      const msg = errMsg(error, "Không thể tải chi tiết HIS");
+      console.error("onEdit error:", error);
+      setError(msg);
     }
   }
 
@@ -179,8 +189,10 @@ const HisSystemPage: React.FC = () => {
       // adjust page when last item removed
       if (items.length === 1 && page > 0) setPage((p) => p - 1);
       await fetchList();
-    } catch (e: any) {
-      setError(e.message || "Xóa thất bại");
+    } catch (error: unknown) {
+      const msg = errMsg(error, "Xóa thất bại");
+      console.error("onDelete error:", error);
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -209,8 +221,10 @@ const HisSystemPage: React.FC = () => {
       setOpen(false);
       setEditing(null);
       await fetchList();
-    } catch (e: any) {
-      setError(e.message || "Lưu thất bại");
+    } catch (error: unknown) {
+      const msg = errMsg(error, "Lưu thất bại");
+      console.error("onSubmit error:", error);
+      setError(msg);
     } finally {
       setLoading(false);
     }

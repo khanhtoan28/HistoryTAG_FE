@@ -7,9 +7,12 @@ function getCookie(name: string) {
   return m ? decodeURIComponent(m[2]) : null;
 }
 
-/** Ưu tiên đọc token từ cookie rồi tới localStorage */
+/** Ưu tiên đọc token từ cookie rồi tới localStorage, cuối cùng là sessionStorage */
 export function getAuthToken(): string | null {
-  return getCookie("access_token") || localStorage.getItem("access_token") || localStorage.getItem("token");
+  return getCookie("access_token") 
+    || localStorage.getItem("access_token") 
+    || sessionStorage.getItem("access_token")
+    || localStorage.getItem("token");
 }
 
 const api = axios.create({
