@@ -100,8 +100,40 @@ const STATUS_FALLBACK: EnumOption[] = [
 ];
 
 function disp(map: Record<string, string>, key?: string | null) {
-  if (!key) return "—";
-  return map[key] ?? key;
+  if (!key) return "—";
+  return map[key] ?? key;
+}
+
+// Hàm lấy màu cho trạng thái
+function getStatusColor(status?: string | null): string {
+  switch (status) {
+    case "IN_PROGRESS":
+      return "text-orange-600";
+    case "COMPLETED":
+      return "text-green-600";
+    case "ISSUE":
+      return "text-red-600";
+    default:
+      return "text-gray-600";
+  }
+}
+
+// Hàm lấy màu cho độ ưu tiên
+function getPriorityColor(priority?: string | null): string {
+  switch (priority) {
+    case "P0": // Rất Khẩn cấp
+      return "text-red-700 ";
+    case "P1": // Khẩn cấp
+      return "text-orange-700 ";
+    case "P2": // Quan trọng
+      return "text-yellow-700 ";
+    case "P3": // Thường xuyên
+      return "text-blue-700 ";
+    case "P4": // Thấp
+      return "text-gray-700 ";
+    default:
+      return "text-gray-600 ";
+  }
 }
 
 function formatDateTimeLocal(value?: string | null) {
@@ -501,12 +533,16 @@ export default function HospitalsPage() {
                       <td className="px-3 py-2 font-medium">{h.name}</td>
                       <td className="px-3 py-2">{h.province || "—"}</td>
                       <td className="px-3 py-2">{h.hisSystemName || h.hisSystemId || "—"}</td>
-                      <td className="px-3 py-2">
-                        <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs">
-                          {disp(statusMap, h.projectStatus)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">{disp(priorityMap, h.priority)}</td>
+                    <td className="px-3 py-2">
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getStatusColor(h.projectStatus)}`}>
+                        {disp(statusMap, h.projectStatus)}
+                      </span>
+                    </td>
+                      <td className="px-3 py-2">
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getPriorityColor(h.priority)}`}>
+                        {disp(priorityMap, h.priority)}
+                      </span>
+                    </td>
                       <td className="px-3 py-2">{h.startDate ? new Date(h.startDate).toLocaleString() : "—"}</td>
                       <td className="px-3 py-2">{h.deadline ? new Date(h.deadline).toLocaleString() : "—"}</td>
                       <td className="px-3 py-2 text-right">

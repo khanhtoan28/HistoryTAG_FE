@@ -28,6 +28,8 @@ import HisSystemPage from "./pages/Page/HisSystem";
 import PersonCharge from "./pages/Page/PersonCharge";
 import SuperAdminHome from "./pages/SuperAdmin/Home";
 import SuperAdminUsers from "./pages/SuperAdmin/Users";
+import Agencies from "./pages/SuperAdmin/Agencies";
+import Hardware from "./pages/SuperAdmin/Hardware";
 
 // Protected Route Component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -109,6 +111,8 @@ export default function App() {
             <Route path="/superadmin/users" element={<SuperAdminUsers />} />
             <Route path="/superadmin/hospitals" element={<Hospitals />} />
             <Route path="/superadmin/his-systems" element={<HisSystemPage />} />
+            <Route path="/superadmin/agencies" element={<Agencies />} />
+            <Route path="/superadmin/hardware" element={<Hardware />} />
           </Route>
 
           {/* Dashboard Layout - Protected */}

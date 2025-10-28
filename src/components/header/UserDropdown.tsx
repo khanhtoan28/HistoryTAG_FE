@@ -90,8 +90,7 @@ export default function UserDropdown() {
   const avatar = user?.avatar || fallbackAvatar;
   const fullname =
     (user?.fullname && user.fullname !== "Chưa cập nhật" && user.fullname) ||
-    user?.username ||
-    "Người dùng";
+    user?.username 
   const email = user?.email || "Chưa có email";
 
   return (

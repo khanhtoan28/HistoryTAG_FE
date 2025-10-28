@@ -57,6 +57,30 @@ export default function SuperAdminHome() {
                   <p className="text-xs text-gray-500">Quản lý hệ thống HIS</p>
                 </div>
               </Link>
+              <Link
+                to="/superadmin/agencies"
+                className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:bg-white/[0.05]"
+              >
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-orange-100 text-orange-600">
+                  🏢
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">Đại lý</p>
+                  <p className="text-xs text-gray-500">Quản lý đại lý</p>
+                </div>
+              </Link>
+              <Link
+                to="/superadmin/hardware"
+                className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:bg-white/[0.05]"
+              >
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-teal-100 text-teal-600">
+                  💻
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">Phần cứng</p>
+                  <p className="text-xs text-gray-500">Quản lý phần cứng</p>
+                </div>
+              </Link>
             </div>
           </div>
         </div>
@@ -77,6 +101,14 @@ export default function SuperAdminHome() {
               </div>
               <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Tổng hệ thống HIS</span>
+                <span className="text-lg font-semibold text-gray-900 dark:text-white">--</span>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Tổng đại lý</span>
+                <span className="text-lg font-semibold text-gray-900 dark:text-white">--</span>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Tổng phần cứng</span>
                 <span className="text-lg font-semibold text-gray-900 dark:text-white">--</span>
               </div>
             </div>
