@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
+import { EyeIcon, PencilIcon, TrashBinIcon, PlusIcon, ArrowRightIcon } from "../../icons";
 
 export type Hospital = {
   id: number;
@@ -493,16 +494,18 @@ export default function HospitalsPage() {
             </p>
             <div className="flex items-center gap-3">
               <button
-                className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100"
+                              className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100 transition-colors"
                 onClick={onCreate}
               >
-                + Thêm bệnh viện
+                              <PlusIcon className="h-4 w-4" />
+              Thêm bệnh viện
               </button>
               <button
-                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+                              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 transition-colors"
                 onClick={fetchList}
               >
-                Làm mới
+                              <ArrowRightIcon className="h-4 w-4" />
+              Làm mới
               </button>
             </div>
           </div>
@@ -530,7 +533,7 @@ export default function HospitalsPage() {
                 {filtered.map((h, idx) => {
                   const rowNo = page * size + idx + 1;
                   return (
-                    <tr key={h.id} className="border-b last:border-b-0">
+                                        <tr key={h.id} className="border-b last:border-b-0 hover:bg-gray-50 transition-colors">
                       <td className="px-3 py-2 text-center">{rowNo}</td>
                       <td className="px-3 py-2 font-mono">{h.hospitalCode || "—"}</td>
                       <td className="px-3 py-2 font-medium">{h.name}</td>
@@ -552,7 +555,7 @@ export default function HospitalsPage() {
                         <div className="flex justify-end gap-2">
                             {/* Nút 1: Xem chi tiết (Gọi API GET /hospitals/{id}) */}
                             <button
-                            className="rounded-md border px-2 py-1 text-xs hover:bg-gray-50 text-gray-600"
+                                                      className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-gray-50 text-gray-600 transition-colors"
                             onClick={() => onView(h)}
                           >
                             Xem
