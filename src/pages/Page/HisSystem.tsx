@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
+import Pagination from "../../components/common/Pagination";
+import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
 
 // ===================== Types ===================== //
 export type SortDir = "asc" | "desc";
@@ -97,6 +99,7 @@ const HisSystemPage: React.FC = () => {
   // table state
   const [items, setItems] = useState<HisResponseDTO[]>([]);
   const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -114,6 +117,7 @@ const HisSystemPage: React.FC = () => {
   // modal/form
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<HisResponseDTO | null>(null);
+  const [viewing, setViewing] = useState<HisResponseDTO | null>(null);
   const [form, setForm] = useState<HisRequestDTO>({ name: "" });
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof HisRequestDTO, string>>>({});
 
@@ -137,10 +141,12 @@ const HisSystemPage: React.FC = () => {
       if (Array.isArray(data)) {
         setItems(data);
         setTotalElements(data.length);
+        setTotalPages(Math.ceil(data.length / size));
       } else {
         const pageRes = data as SpringPage<HisResponseDTO>;
         setItems(pageRes.content ?? []);
         setTotalElements(pageRes.totalElements ?? pageRes.content?.length ?? 0);
+        setTotalPages(pageRes.totalPages ?? Math.ceil((pageRes.totalElements ?? pageRes.content?.length ?? 0) / size));
       }
     } catch (error: unknown) {
       const msg = errMsg(error, "Lỗi tải dữ liệu");
@@ -199,11 +205,36 @@ const HisSystemPage: React.FC = () => {
     }
   }
 
+  // view details (read-only)
+  async function onView(h: HisResponseDTO) {
+    try {
+      setViewing(null);
+      setOpen(true);
+      const res = await fetchWithFallback((base) => `${base}/${h.id}`, { headers: { ...authHeader() } });
+      const detail = (await res.json()) as HisResponseDTO;
+      setViewing(detail);
+      // also fill form for consistency so the modal shows data if user switches to edit
+      setForm({
+        name: detail.name ?? "",
+        address: detail.address ?? "",
+        contactPerson: detail.contactPerson ?? "",
+        email: detail.email ?? "",
+        phoneNumber: detail.phoneNumber ?? "",
+        apiUrl: detail.apiUrl ?? "",
+      });
+    } catch (error: unknown) {
+      const msg = errMsg(error, "Không thể tải chi tiết HIS");
+      console.error("onView error:", error);
+      setError(msg);
+      setOpen(false);
+    }
+  }
+
   async function onDelete(id: number) {
     if (!confirm("Xóa HIS này?")) return;
     setLoading(true);
     try {
-      const res = await fetchWithFallback((base) => `${base}/${id}`, { method: "DELETE", headers: { ...authHeader() } });
+      await fetchWithFallback((base) => `${base}/${id}`, { method: "DELETE", headers: { ...authHeader() } });
       // adjust page when last item removed
       if (items.length === 1 && page > 0) setPage((p) => p - 1);
       await fetchList();
@@ -226,7 +257,7 @@ const HisSystemPage: React.FC = () => {
     setError(null);
     try {
       const method = isEditing ? "PUT" : "POST";
-      const res = await fetchWithFallback((base) => (isEditing ? `${base}/${editing!.id}` : base), {
+      await fetchWithFallback((base) => (isEditing ? `${base}/${editing!.id}` : base), {
         method,
         headers: { ...authHeader() },
         body: JSON.stringify(form),
@@ -249,142 +280,118 @@ const HisSystemPage: React.FC = () => {
     <>
       <PageMeta title="HIS System – CRUD" description="Quản lý hệ thống HIS: danh sách, lọc, tạo/sửa/xóa" />
 
-      <div className="space-y-6">
+      <div className="space-y-10">
         {/* Filters & Actions */}
         <ComponentCard title="Tìm kiếm & Thao tác">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-            <input
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring focus:ring-primary/30"
-              placeholder="Tìm theo tên HIS"
-              value={qName}
-              onChange={(e) => setQName(e.target.value)}
-            />
-            <input
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring focus:ring-primary/30"
-              placeholder="Người liên hệ"
-              value={qContact}
-              onChange={(e) => setQContact(e.target.value)}
-            />
-            <select
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-              value={String(sortBy)}
-              onChange={(e) => setSortBy(e.target.value as keyof HisResponseDTO)}
-            >
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-6">
+            <input className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" placeholder="Tìm theo tên HIS" value={qName} onChange={(e) => setQName(e.target.value)} />
+            <input className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" placeholder="Người liên hệ" value={qContact} onChange={(e) => setQContact(e.target.value)} />
+            <span className="hidden md:block col-span-2" />
+            <select className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" value={String(sortBy)} onChange={(e) => setSortBy(e.target.value as keyof HisResponseDTO)}>
               {["id", "name", "createdAt"].map((k) => (
                 <option key={k} value={k}>
                   Sắp xếp theo: {k}
                 </option>
               ))}
             </select>
-            <select
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-              value={sortDir}
-              onChange={(e) => setSortDir(e.target.value as SortDir)}
-            >
+            <select className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" value={sortDir} onChange={(e) => setSortDir(e.target.value as SortDir)}>
               <option value="asc">Tăng dần</option>
               <option value="desc">Giảm dần</option>
             </select>
           </div>
-          <div className="mt-4 flex items-center justify-between">
-            <p className="text-sm text-gray-500">
-              Tổng: <span className="font-medium text-gray-700">{totalElements}</span>
-            </p>
+          <div className="mt-6 flex items-center justify-between">
+            <p className="text-sm text-gray-600">Tổng: <span className="font-semibold text-gray-900">{totalElements}</span></p>
             <div className="flex items-center gap-3">
-              <button
-                className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100"
-                onClick={onCreate}
-              >
-                + Thêm HIS
-              </button>
-              <button className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50" onClick={fetchList}>
+              <button className="rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md" onClick={onCreate}> + Thêm HIS</button>
+              <button className="rounded-xl border-2 border-gray-300 px-5 py-3 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400 flex items-center gap-2" onClick={fetchList}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
                 Làm mới
               </button>
             </div>
           </div>
         </ComponentCard>
 
-        {/* Table */}
+        {/* Card list */}
         <ComponentCard title="Danh sách HIS">
-          <div className="overflow-x-auto">
-            <table className="w-full table-auto text-left text-sm">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                <tr>
-                  <th className="px-3 py-2 w-14 text-center">STT</th>
-                  <th className="px-3 py-2">Tên</th>
-                  <th className="px-3 py-2">Người liên hệ</th>
-                  <th className="px-3 py-2">SĐT</th>
-                  <th className="px-3 py-2 text-right">Hành động</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((h, idx) => {
-                  const rowNo = page * size + idx + 1;
-                  return (
-                    <tr key={h.id} className="border-b last:border-b-0">
-                      <td className="px-3 py-2 text-center">{rowNo}</td>
-                      <td className="px-3 py-2 font-medium">{h.name}</td>
-                      <td className="px-3 py-2">{h.contactPerson || "—"}</td>
-                      <td className="px-3 py-2">{h.phoneNumber || "—"}</td>
-                      <td className="px-3 py-2 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button className="rounded-md border px-2 py-1 text-xs hover:bg-gray-50" onClick={() => onEdit(h)}>
-                            Sửa
-                          </button>
-                          <button
-                            className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100"
-                            onClick={() => onDelete(h.id)}
-                          >
-                            Xóa
-                          </button>
+          <div className="overflow-x-auto -mx-1">
+            <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
+              <div className="p-4 space-y-4">
+                {filtered.length === 0 && !loading ? (
+                  <div className="py-12 text-center text-gray-400">
+                    <div className="flex flex-col items-center">
+                      <svg className="mb-3 h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                      </svg>
+                      <span className="text-sm">Không có dữ liệu</span>
+                    </div>
+                  </div>
+                ) : (
+                  filtered.map((h, idx) => {
+                    const delay = `${(idx * 1600) / Math.max(1, filtered.length)}ms`;
+                    const start = h.createdAt ? new Date(h.createdAt) : null;
+                    return (
+                      <div
+                        key={h.id}
+                        className="w-full grid grid-cols-3 gap-4 items-center bg-white rounded-xl p-4 border transition-all hover:shadow-lg hover:border-blue-200 row-anim"
+                        style={{ animationDelay: delay }}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-12 w-12 rounded-lg bg-indigo-50 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9-4 9 4" />
+                            </svg>
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{h.name}</div>
+                            <div className="text-sm text-gray-500">{h.address || '—'}</div>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
 
-                {!loading && filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="px-3 py-8 text-center text-gray-500">
-                      Không có dữ liệu
-                    </td>
-                  </tr>
+                        <div className="col-span-1 px-2">
+                          <div className="text-sm text-gray-600">Người liên hệ: <span className="text-gray-900 font-medium">{h.contactPerson || '—'}</span></div>
+                          <div className="text-sm text-gray-500">Email: {h.email || '—'}</div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-2">
+                          <div className="text-sm text-gray-500">{start ? start.toLocaleDateString() : '—'}</div>
+                          <div className="flex items-center gap-2 mt-2">
+                            <button title="Xem" onClick={() => onView(h)} className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors duration-300 text-xs font-medium">
+                              <AiOutlineEye className="w-3 h-3" />
+                              Xem
+                            </button>
+                            <button title="Chỉnh sửa" onClick={() => onEdit(h)} className="flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100 transition-colors duration-300 text-xs font-medium">
+                              <AiOutlineEdit className="w-3 h-3" />
+                              Sửa
+                            </button>
+                            <button title="Xóa" onClick={() => onDelete(h.id)} className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors duration-300 text-xs font-medium">
+                              <AiOutlineDelete className="w-3 h-3" />
+                              Xóa
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
-              </tbody>
-            </table>
+              </div>
+            </div>
           </div>
 
           {/* Pagination */}
-          <div className="mt-4 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm">
-              <span>Trang:</span>
-              <button
-                className="rounded border px-2 py-1 disabled:opacity-50"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-              >
-                Trước
-              </button>
-              <span className="rounded border px-2 py-1">{page + 1}</span>
-              <button
-                className="rounded border px-2 py-1 disabled:opacity-50"
-                onClick={() => setPage((p) => p + 1)}
-                disabled={filtered.length < size}
-              >
-                Sau
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2 text-sm">
-              <span>Kích thước:</span>
-              <select className="rounded border px-2 py-1" value={size} onChange={(e) => setSize(Number(e.target.value))}>
-                {[10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={totalElements}
+            itemsPerPage={size}
+            onPageChange={setPage}
+            onItemsPerPageChange={(newSize) => {
+              setSize(newSize);
+              setPage(0); // Reset to first page when changing page size
+            }}
+            itemsPerPageOptions={[10, 20, 50]}
+          />
 
           {loading && <div className="mt-3 text-sm text-gray-500">Đang tải...</div>}
           {error && (
@@ -395,93 +402,129 @@ const HisSystemPage: React.FC = () => {
 
       {/* Modal */}
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
-          <div className="relative z-10 m-4 w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">{isEditing ? "Cập nhật HIS" : "Thêm HIS"}</h3>
-              <button className="rounded-md p-1 hover:bg-gray-100" onClick={() => setOpen(false)}>
-                ✕
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setOpen(false)} />
+          <div className="relative z-10 w-full max-w-4xl rounded-3xl bg-white p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="mb-6 flex items-center justify-between">
+              <h3 className="text-2xl font-bold text-gray-900">{isEditing ? "Cập nhật HIS" : "Thêm HIS"}</h3>
+              <button className="rounded-xl p-2 transition-all hover:bg-gray-100 hover:scale-105" onClick={() => setOpen(false)}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
 
-            <form onSubmit={onSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="space-y-3">
+            {viewing ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="mb-1 block text-sm font-medium">Tên HIS*</label>
-                  <input
-                    required
-                    className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] ${
-                      formErrors.name ? "border-red-400" : "border-gray-300"
-                    }`}
-                    value={form.name}
-                    onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
-                  />
-                  {formErrors.name && <p className="mt-1 text-xs text-red-600">{formErrors.name}</p>}
+                  <div className="mb-3 text-sm text-gray-500">Tên</div>
+                  <div className="font-semibold text-gray-900">{viewing.name}</div>
+                  <div className="mt-4 text-sm text-gray-500">Địa chỉ</div>
+                  <div className="text-gray-700">{viewing.address || '—'}</div>
+                  <div className="mt-4 text-sm text-gray-500">API URL</div>
+                  <div className="text-gray-700">{viewing.apiUrl || '—'}</div>
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm">Người liên hệ</label>
-                  <input
-                    className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] ${
-                      formErrors.contactPerson ? "border-red-400" : "border-gray-300"
-                    }`}
-                    value={form.contactPerson || ""}
-                    onChange={(e) => setForm((s) => ({ ...s, contactPerson: e.target.value }))}
-                  />
+                  <div className="mb-3 text-sm text-gray-500">Người liên hệ</div>
+                  <div className="font-medium text-gray-800">{viewing.contactPerson || '—'}</div>
+                  <div className="mt-4 text-sm text-gray-500">Email</div>
+                  <div className="font-medium text-gray-800">{viewing.email || '—'}</div>
+                  <div className="mt-4 text-sm text-gray-500">Số điện thoại</div>
+                  <div className="text-gray-700">{viewing.phoneNumber || '—'}</div>
                 </div>
-              </div>
 
-              <div className="space-y-3">
-                <div>
-                  <label className="mb-1 block text-sm">Email</label>
-                  <input
-                    type="email"
-                    className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] ${
-                      formErrors.email ? "border-red-400" : "border-gray-300"
-                    }`}
-                    value={form.email || ""}
-                    onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
-                  />
-                  {formErrors.email && <p className="mt-1 text-xs text-red-600">{formErrors.email}</p>}
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm">Số điện thoại</label>
-                  <input
-                    className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] ${
-                      formErrors.phoneNumber ? "border-red-400" : "border-gray-300"
-                    }`}
-                    value={form.phoneNumber || ""}
-                    onChange={(e) => setForm((s) => ({ ...s, phoneNumber: e.target.value }))}
-                  />
-                  {formErrors.phoneNumber && (
-                    <p className="mt-1 text-xs text-red-600">{formErrors.phoneNumber}</p>
+                <div className="col-span-1 md:col-span-2 mt-4 flex items-center justify-between border-t border-gray-200 pt-6">
+                  {error && (
+                    <div className="rounded-xl border-2 border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>
                   )}
+                  <div className="ml-auto flex items-center gap-3">
+                    <button type="button" className="rounded-xl border-2 border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400" onClick={() => setOpen(false)}>Đóng</button>
+                    <button type="button" className="rounded-xl border-2 border-amber-500 bg-amber-500 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-amber-600 hover:shadow-lg" onClick={() => { setEditing(viewing); setOpen(true); }}>
+                      Chỉnh sửa
+                    </button>
+                  </div>
                 </div>
               </div>
-
-              <div className="col-span-1 md:col-span-2 mt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 hover:bg-red-100"
-                  onClick={() => setOpen(false)}
-                >
-                  Huỷ
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100"
-                  disabled={loading}
-                >
-                  {isEditing ? "Cập nhật" : "Tạo mới"}
-                </button>
-              </div>
-
-              {error && (
-                <div className="col-span-1 md:col-span-2 mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {error}
+            ) : (
+              <form onSubmit={onSubmit} className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="space-y-5">
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">Tên HIS*</label>
+                    <input
+                      required
+                      className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
+                        formErrors.name ? "border-red-400" : "border-gray-300"
+                      }`}
+                      value={form.name}
+                      onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
+                    />
+                    {formErrors.name && <p className="mt-1 text-xs text-red-600">{formErrors.name}</p>}
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">Người liên hệ</label>
+                    <input
+                      className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
+                        formErrors.contactPerson ? "border-red-400" : "border-gray-300"
+                      }`}
+                      value={form.contactPerson || ""}
+                      onChange={(e) => setForm((s) => ({ ...s, contactPerson: e.target.value }))}
+                    />
+                  </div>
                 </div>
-              )}
-            </form>
+
+                <div className="space-y-5">
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">Email</label>
+                    <input
+                      type="email"
+                      className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
+                        formErrors.email ? "border-red-400" : "border-gray-300"
+                      }`}
+                      value={form.email || ""}
+                      onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
+                    />
+                    {formErrors.email && <p className="mt-1 text-xs text-red-600">{formErrors.email}</p>}
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">Số điện thoại</label>
+                    <input
+                      className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
+                        formErrors.phoneNumber ? "border-red-400" : "border-gray-300"
+                      }`}
+                      value={form.phoneNumber || ""}
+                      onChange={(e) => setForm((s) => ({ ...s, phoneNumber: e.target.value }))}
+                    />
+                    {formErrors.phoneNumber && (
+                      <p className="mt-1 text-xs text-red-600">{formErrors.phoneNumber}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="col-span-1 md:col-span-2 mt-4 flex items-center justify-between border-t border-gray-200 pt-6">
+                  {error && (
+                    <div className="rounded-xl border-2 border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                      {error}
+                    </div>
+                  )}
+                  <div className="ml-auto flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="rounded-xl border-2 border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400"
+                      onClick={() => setOpen(false)}
+                    >
+                      Huỷ
+                    </button>
+                    <button
+                      type="submit"
+                      className="rounded-xl border-2 border-blue-500 bg-blue-500 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-blue-600 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={loading}
+                    >
+                      {loading ? "Đang lưu..." : (isEditing ? "Cập nhật" : "Tạo mới")}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

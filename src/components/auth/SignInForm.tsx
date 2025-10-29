@@ -5,7 +5,7 @@ import Label from "../form/Label";
 import Input from "../form/input/InputField";
 import Checkbox from "../form/input/Checkbox";
 import Button from "../ui/button/Button";
-import { signIn, normalizeRoles, pickErrMsg } from "../../api/auth.api";
+import { signIn, normalizeRoles, pickErrMsg, getUserAccount } from "../../api/auth.api";
 import api from "../../api/client";
 import toast from "react-hot-toast";
 
@@ -76,10 +76,28 @@ export default function SignInForm() {
       });
 
 
-      const storage = remember ? localStorage : sessionStorage;
-      storage.setItem("access_token", data.accessToken);
-      storage.setItem("username", data.username);
-      storage.setItem("roles", JSON.stringify(normalizeRoles(data.roles)));
+  const storage = remember ? localStorage : sessionStorage;
+  storage.setItem("access_token", data.accessToken);
+  storage.setItem("username", data.username);
+  storage.setItem("roles", JSON.stringify(normalizeRoles(data.roles)));
+  if (data.userId != null) storage.setItem("userId", String(data.userId));
+
+      // 🔹 Fetch and persist full user profile so other pages can read `user.team`
+      (async () => {
+        try {
+          if (data.userId != null) {
+            const profile = await getUserAccount(Number(data.userId));
+            try {
+              storage.setItem("user", JSON.stringify(profile));
+            } catch {
+              // ignore storage errors
+            }
+          }
+        } catch (err) {
+          // If fetching profile fails, don't block sign in — some pages will fetch on demand.
+          console.warn("Could not fetch user profile after sign-in:", err);
+        }
+      })();
 
       api.defaults.headers.common.Authorization = `Bearer ${data.accessToken}`;
       toast.success("Đăng nhập thành công!");
@@ -94,9 +112,9 @@ export default function SignInForm() {
       } else {
         navigate("/home");
       }
-    } catch (e: any) {
+    } catch (err: unknown) {
       // lỗi từ BE (sai tài khoản/mật khẩu, v.v…)
-      const errorMsg = pickErrMsg(e);
+      const errorMsg = pickErrMsg(err);
       setErr(errorMsg);
       toast.error(errorMsg || "Đăng nhập thất bại!");
     } finally {
@@ -136,7 +154,7 @@ export default function SignInForm() {
               placeholder="Nhập tên đăng nhập"
               value={form.username}
               onChange={onChange("username")}
-              onBlur={(_e: React.FocusEvent<HTMLInputElement>) => {
+              onBlur={() => {
                 setErrors((prev: FormErrors) => ({
                   ...prev,
                   username: validateField("username", form.username),
@@ -164,7 +182,7 @@ export default function SignInForm() {
                 placeholder="Nhập mật khẩu"
                 value={form.password}
                 onChange={onChange("password")}
-                onBlur={(_e: React.FocusEvent<HTMLInputElement>) => {
+                onBlur={() => {
                   setErrors((prev: FormErrors) => ({
                     ...prev,
                     // ✅ set đúng vào errors.password (trước đây gán nhầm username)

@@ -7,6 +7,10 @@ import {
   TableIcon,
   GroupIcon,
   UserCircleIcon,
+  BoxCubeIcon,
+  PlugInIcon,
+  BoxIcon,
+  PageIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 import SidebarWidget from "./SidebarWidget";
@@ -40,6 +44,15 @@ const navItems: NavItem[] = [
       { name: "Đơn vị HIS", path: "/superadmin/his-systems", pro: false },
       { name: "Đại lý", path: "/superadmin/agencies", pro: false },
       { name: "Phần cứng", path: "/superadmin/hardware", pro: false },
+    ],
+  },
+  {
+    name: "Tasks",
+    icon: <TableIcon />,
+    subItems: [
+      { name: "Triển khai (Implementation)", path: "/superadmin/implementation-tasks", pro: false },
+      { name: "Dev Tasks", path: "/superadmin/dev-tasks", pro: false },
+      { name: "Maintenance Tasks", path: "/superadmin/maintenance-tasks", pro: false },
     ],
   },
 ];
@@ -177,10 +190,24 @@ const SuperAdminSidebar: React.FC = () => {
                           : "menu-dropdown-item-inactive"
                       }`}
                     >
-                      {/* Add a small icon for the users list submenu */}
-                      {subItem.path === "/superadmin/users" && (
-                        <UserCircleIcon className="w-4 h-4 mr-2 text-gray-500" />
-                      )}
+                      {/* small icon per submenu (hospital / his / agency / hardware / users) */}
+                      <span className="flex items-center">
+                        {subItem.path === "/superadmin/users" && (
+                          <UserCircleIcon className="w-4 h-4 mr-2 text-gray-500" />
+                        )}
+                        {subItem.path.includes("hospitals") && (
+                          <BoxCubeIcon className="w-4 h-4 mr-2 text-gray-500" />
+                        )}
+                        {subItem.path.includes("his") && (
+                          <PlugInIcon className="w-4 h-4 mr-2 text-gray-500" />
+                        )}
+                        {subItem.path.includes("agencies") && (
+                          <BoxIcon className="w-4 h-4 mr-2 text-gray-500" />
+                        )}
+                        {subItem.path.includes("hardware") && (
+                          <PageIcon className="w-4 h-4 mr-2 text-gray-500" />
+                        )}
+                      </span>
                       {subItem.name}
                       <span className="flex items-center gap-1 ml-auto">
                         {subItem.new && (

@@ -83,15 +83,10 @@ function statusLabel(status?: string | null) {
   }
 }
 
-const API_ROOT = import.meta.env.VITE_API_URL;
-const userRoles = JSON.parse(localStorage.getItem("roles") || "[]");
-const isSuperAdmin = userRoles.some((r: any) =>
-  (typeof r === "string" ? r : r.roleName)?.toUpperCase() === "SUPERADMIN"
-);
+const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
 
-const apiBase = isSuperAdmin
-  ? `${API_ROOT}/api/v1/superadmin/implementation/tasks`
-  : `${API_ROOT}/api/v1/admin/implementation/tasks`;
+// PageClients folder is admin-facing: always use admin API root for tasks
+const apiBase = `${API_ROOT}/api/v1/admin/implementation/tasks`;
 
 
 function authHeaders(extra?: Record<string, string>) {
@@ -352,7 +347,7 @@ function TaskFormModal({
         sortBy: "fullname",
         sortDir: "asc",
       });
-      const url = `${API_ROOT}/api/v1/superadmin/users?${qs.toString()}`;
+  const url = `${API_ROOT}/api/v1/admin/users?${qs.toString()}`;
       const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
       if (!res.ok) return [];
       const json = await res.json();
@@ -459,7 +454,7 @@ function TaskFormModal({
       setPicOpt({ id: Number(initial.picDeploymentId), name: initial.picDeploymentName });
     } else if (initial.picDeploymentId) {
       // 🔁 Fetch lại tên người phụ trách theo ID
-      fetch(`${API_ROOT}/api/v1/superadmin/users/${initial.picDeploymentId}`, {
+      fetch(`${API_ROOT}/api/v1/admin/users/${initial.picDeploymentId}`, {
         headers: authHeaders(),
         credentials: "include",
       })
@@ -755,8 +750,19 @@ const ImplementationTasksPage: React.FC = () => {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<ImplementationTaskResponseDTO | null>(null);
   const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const userRoles = user?.roles || [];
-  const userTeam = user?.team?.toUpperCase?.() || "";
+    const readStored = <T = unknown>(key: string): T | null => {
+      try {
+        const raw = localStorage.getItem(key) || sessionStorage.getItem(key);
+        if (!raw) return null;
+        return JSON.parse(raw) as T;
+      } catch {
+        return null;
+      }
+    };
+
+    const currentUser = readStored<{ id?: number; username?: string; team?: string; roles?: unknown[] }>("user") || null;
+    const userRoles = (readStored<string[]>("roles") || (currentUser?.roles as string[] | undefined)) || [];
+    const userTeam = (currentUser?.team || "").toString().toUpperCase();
   const isSuperAdmin = userRoles.some(
     (r: any) => (typeof r === "string" ? r : r.roleName)?.toUpperCase() === "SUPERADMIN"
   );

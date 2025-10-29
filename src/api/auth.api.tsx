@@ -177,7 +177,11 @@ export const logout = async () => {
     localStorage.removeItem("token");
     localStorage.removeItem("username");
     localStorage.removeItem("roles");
+  localStorage.removeItem("user");
+  localStorage.removeItem("userId");
     sessionStorage.removeItem("access_token");
+  sessionStorage.removeItem("user");
+  sessionStorage.removeItem("userId");
     console.log("Cookies sau khi logout:", document.cookie);
   }
 };

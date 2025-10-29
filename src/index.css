@@ -1,3 +1,22 @@
+/* Added animations for hospitals table rows and name nowrap */
+.row-anim {
+  opacity: 0;
+  transform: translateY(6px) scale(.995);
+  animation: rowIn 1000ms ease-out forwards;
+}
+
+@keyframes rowIn {
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.table-name-nowrap {
+  display: inline-block;
+  white-space: nowrap;
+  /* allow the name to take horizontal space and avoid wrapping */
+}
 @import url("https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap")
 layer(base);
 
@@ -200,7 +219,12 @@ layer(base);
 
   html, body {
     font-family: var(--default-font-family);
-    @apply relative font-normal z-1 bg-gray-50;
+    /* Avoid @apply for utilities that may not be available to PostCSS/Tailwind in this context.
+       Use direct CSS equivalents to ensure the dev build works reliably. */
+    position: relative;
+    font-weight: 400; /* font-normal */
+    z-index: var(--z-index-1);
+    background-color: var(--color-gray-50);
   }
 
   input, textarea, select, button {
@@ -740,7 +764,12 @@ span.flatpickr-weekday,
   @apply rounded-lg py-2.5 pl-4 pr-3;
 }
 .event-fc-color .fc-event-title {
-  @apply p-0 text-sm font-normal text-gray-700;
+  /* Replace @apply with explicit properties to avoid unknown-utility errors */
+  padding: 0;
+  font-size: 0.875rem; /* text-sm */
+  line-height: 1.25rem;
+  font-weight: 400; /* font-normal */
+  color: var(--color-gray-700);
 }
 .fc-daygrid-event-dot {
   @apply w-1 h-5 ml-0 mr-3 border-none rounded-sm;
@@ -882,4 +911,18 @@ span.flatpickr-weekday,
 
 .simplebar-scrollbar.simplebar-visible:before {
   @apply opacity-100;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fadeIn {
+  animation: fadeIn 0.3s ease-out forwards;
 }

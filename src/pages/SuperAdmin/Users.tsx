@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import axios from "axios";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
+import Pagination from "../../components/common/Pagination";
+import UserCard from "../../components/UserProfile/UserCard";
+import UserCardSkeleton from "../../components/UserProfile/UserCardSkeleton";
 import {
   getAllUsers,
   getUserById,
@@ -15,14 +18,6 @@ import {
   type UserUpdateRequestDTO,
 } from "../../api/superadmin.api";
 import toast from "react-hot-toast";
-// Use react-icons for consistent icon rendering across themes
-import {
-  AiOutlineEye,
-  AiOutlineEdit,
-  AiOutlineDelete,
-  AiOutlineLock,
-  AiOutlineUser,
-} from "react-icons/ai";
 
 type UserForm = {
   username: string;
@@ -53,6 +48,8 @@ export default function SuperAdminUsers() {
   // Pagination
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [sortBy, setSortBy] = useState("id");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -169,6 +166,8 @@ export default function SuperAdminUsers() {
     try {
       const data = await getAllUsers({ page, size, sortBy, sortDir });
       setItems(data.content || data);
+      setTotalItems(data.totalElements || data.length || 0);
+      setTotalPages(data.totalPages || Math.ceil((data.totalElements || data.length || 0) / size));
     } catch (error: unknown) {
       const msg = getErrorMessage(error, "Lỗi tải danh sách");
       setError(msg);
@@ -439,143 +438,54 @@ export default function SuperAdminUsers() {
           </div>
         </ComponentCard>
 
-        {/* Table */}
+        {/* User Cards */}
         <ComponentCard title="Danh sách người dùng">
-          <div className="overflow-x-auto">
-            <table className="w-full table-auto text-left text-sm">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                <tr>
-                  <th className="px-3 py-2 w-14 text-center">STT</th>
-                  <th className="px-3 py-2">Username</th>
-                  <th className="px-3 py-2">Email</th>
-                  <th className="px-3 py-2">Tên đầy đủ</th>
-                  <th className="px-3 py-2">Phone</th>
-                  <th className="px-3 py-2">Trạng thái</th>
-                  <th className="px-3 py-2">Vai trò</th>
-                  <th className="px-3 py-2">Phòng ban</th>
-                  <th className="px-3 py-2">Team</th>
-                  <th className="px-3 py-2 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((user, idx) => {
-                  const rowNo = idx + 1;
-                  return (
-                    <tr key={user.id} className="border-b last:border-b-0">
-                      <td className="px-3 py-2 text-center">{rowNo}</td>
-                      <td className="px-3 py-2 font-medium">
-                        <div className="flex items-center gap-3">
-                          {user.avatar ? (
-                            <img
-                              src={user.avatar}
-                              alt={user.username}
-                              className="w-8 h-8 rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-                              <AiOutlineUser className="w-5 h-5 text-gray-500" />
-                            </div>
-                          )}
-                          <span>{user.username}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2">{user.email || "—"}</td>
-                      <td className="px-3 py-2">{user.fullname || "—"}</td>
-                      <td className="px-3 py-2">{user.phone || "—"}</td>
-                      <td className="px-3 py-2">
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
-                            user.status
-                              ? "border-green-200 bg-green-50 text-green-700"
-                              : "border-red-200 bg-red-50 text-red-700"
-                          }`}
-                        >
-                          {user.status ? "Hoạt động" : "Không hoạt động"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">
-                        {user.roles
-                          ?.map((r: any) => (r.roleName ?? r.roleType ?? "").toString().replace(/^ROLE_/i, "").toUpperCase())
-                          ?.join(", ") || "—"}
-                      </td>
-                      <td className="px-3 py-2">{user.department || "—"}</td>
-                      <td className="px-3 py-2">{user.team || "—"}</td>
-                      <td className="px-3 py-2 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            title="Xem"
-                            aria-label={`Xem ${user.username}`}
-                            className="rounded-md border p-2 text-xs hover:bg-gray-50 text-gray-600 dark:text-gray-300 dark:hover:bg-white/5"
-                            onClick={() => onView(user)}
-                          >
-                            <AiOutlineEye className="w-4 h-4" />
-                          </button>
-                          <button
-                            title="Sửa"
-                            aria-label={`Sửa ${user.username}`}
-                            className="rounded-md border p-2 text-xs hover:bg-gray-50 text-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
-                            onClick={() => onEdit(user)}
-                          >
-                            <AiOutlineEdit className="w-4 h-4" />
-                          </button>
-                          <button
-                            title={user.status ? "Khoá tài khoản" : "Mở khoá tài khoản"}
-                            aria-label={`${user.status ? "Khoá" : "Mở khóa"} ${user.username}`}
-                            className={`rounded-md border p-2 text-xs ${user.status ? "text-yellow-700 hover:bg-yellow-50" : "text-green-700 hover:bg-green-50"}`}
-                            onClick={() => onToggleLock(user.id, user.status)}
-                          >
-                            <AiOutlineLock className="w-4 h-4" />
-                          </button>
-                          <button
-                            title="Xóa"
-                            aria-label={`Xóa ${user.username}`}
-                            className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700 hover:bg-red-100"
-                            onClick={() => onDelete(user.id)}
-                          >
-                            <AiOutlineDelete className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {loading ? (
+              Array.from({ length: 6 }).map((_, idx) => (
+                <div key={`skeleton-${idx}`} className="opacity-0 fadeIn" style={{ animationDelay: `${idx * 0.1}s` }}>
+                  <UserCardSkeleton />
+                </div>
+              ))
+            ) : (
+              <>
+                {filtered.map((user, idx) => (
+                  <div key={user.id} className="opacity-0 fadeIn" style={{ animationDelay: `${idx * 0.1}s` }}>
+                    <UserCard
+                      user={user}
+                      onView={onView}
+                      onEdit={onEdit}
+                      onToggleLock={onToggleLock}
+                      onDelete={onDelete}
+                    />
+                  </div>
+                ))}
 
-                {!loading && filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className="px-3 py-8 text-center text-gray-500">
-                      Không có dữ liệu
-                    </td>
-                  </tr>
+                {filtered.length === 0 && (
+                  <div className="col-span-full text-center py-12">
+                    <p className="text-gray-500">Không có dữ liệu</p>
+                  </div>
                 )}
-              </tbody>
-            </table>
+              </>
+            )}
           </div>
-
-          {loading && <div className="mt-3 text-sm text-gray-500">Đang tải...</div>}
           {error && (
             <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
               {error}
             </div>
           )}
-          {/* Pagination controls */}
-          <div className="mt-4 flex items-center justify-between">
-            <div className="text-sm text-gray-600">Trang: <span className="font-medium">{page + 1}</span></div>
-            <div className="flex items-center gap-2">
-              <button
-                className="rounded-md border px-3 py-1 text-sm disabled:opacity-50"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page <= 0}
-              >
-                Trước
-              </button>
-              <button
-                className="rounded-md border px-3 py-1 text-sm"
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Sau
-              </button>
-            </div>
-          </div>
+          {/* Pagination */}
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            itemsPerPage={size}
+            onPageChange={setPage}
+            onItemsPerPageChange={(newSize) => {
+              setSize(newSize);
+              setPage(0); // Reset to first page when changing page size
+            }}
+          />
         </ComponentCard>
       </div>
 
