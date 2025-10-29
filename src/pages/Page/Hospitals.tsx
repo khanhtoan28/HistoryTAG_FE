@@ -3,6 +3,7 @@ import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
 import { EyeIcon, PencilIcon, TrashBinIcon, PlusIcon, ArrowRightIcon } from "../../icons";
+import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
 
 export type Hospital = {
   id: number;
@@ -448,148 +449,115 @@ export default function HospitalsPage() {
         description="Quản lý bệnh viện: danh sách, tìm kiếm, tạo, sửa, xóa"
       />
 
-      <div className="space-y-6">
-        {/* Filters & Actions */}
-        <ComponentCard title="Tìm kiếm & Thao tác">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-            <input
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring focus:ring-primary/30"
-              placeholder="Tìm theo tên"
-              value={qName}
-              onChange={(e) => setQName(e.target.value)}
-            />
-            <input
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring focus:ring-primary/30"
-              placeholder="Tỉnh/Thành"
-              value={qProvince}
-              onChange={(e) => setQProvince(e.target.value)}
-            />
-            <input
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring focus:ring-primary/30"
-              placeholder="Trạng thái"
-              value={qStatus}
-              onChange={(e) => setQStatus(e.target.value)}
-            />
-            <select
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-            >
-              {["id", "name", "priority", "startDate", "deadline"].map((k) => (
-                <option key={k} value={k}>Sắp xếp theo: {k}</option>
-              ))}
-            </select>
-            <select
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-              value={sortDir}
-              onChange={(e) => setSortDir(e.target.value as any)}
-            >
-              <option value="asc">Tăng dần</option>
-              <option value="desc">Giảm dần</option>
-            </select>
-          </div>
-          <div className="mt-4 flex items-center justify-between">
-            <p className="text-sm text-gray-500">
-              Tổng: <span className="font-medium text-gray-700">{totalElements}</span>
-            </p>
-            <div className="flex items-center gap-3">
-              <button
-                              className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100 transition-colors"
-                onClick={onCreate}
-              >
-                              <PlusIcon className="h-4 w-4" />
-              Thêm bệnh viện
-              </button>
-              <button
-                              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 transition-colors"
-                onClick={fetchList}
-              >
-                              <ArrowRightIcon className="h-4 w-4" />
-              Làm mới
-              </button>
-            </div>
-          </div>
-        </ComponentCard>
+      <div className="space-y-10">
+        {/* Filters & Actions */}
+        <ComponentCard title="Tìm kiếm & Thao tác">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-6">
+            <input className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" placeholder="Tìm theo tên" value={qName} onChange={(e) => setQName(e.target.value)} />
+            <input className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" placeholder="Tỉnh/Thành" value={qProvince} onChange={(e) => setQProvince(e.target.value)} />
+            <input className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" placeholder="Trạng thái" value={qStatus} onChange={(e) => setQStatus(e.target.value)} />
+            <span className="hidden md:block col-span-1" />
+            <select className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+              {["id", "name", "priority", "startDate", "deadline"].map((k) => (
+                <option key={k} value={k}>Sắp xếp theo: {k}</option>
+              ))}
+            </select>
+            <select className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" value={sortDir} onChange={(e) => setSortDir(e.target.value as any)}>
+              <option value="asc">Tăng dần</option>
+              <option value="desc">Giảm dần</option>
+            </select>
+          </div>
+          <div className="mt-6 flex items-center justify-between">
+            <p className="text-sm text-gray-600">Tổng: <span className="font-semibold text-gray-900">{totalElements}</span></p>
+            <div className="flex items-center gap-3">
+              <button className="rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md" onClick={onCreate}> + Thêm bệnh viện</button>
+              <button className="rounded-xl border-2 border-gray-300 px-5 py-3 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400 flex items-center gap-2" onClick={fetchList}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Làm mới
+              </button>
+            </div>
+          </div>
+        </ComponentCard>
 
-        {/* Table */}
-        <ComponentCard title="Danh sách bệnh viện">
-          <div className="overflow-x-auto">
-            <table className="w-full table-auto text-left text-sm">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                <tr>
-                  <th className="px-3 py-2 w-14 text-center">STT</th>
-                  <th className="px-3 py-2">Mã</th>
-                  <th className="px-3 py-2">Tên</th>
-                  <th className="px-3 py-2">Tỉnh/TP</th>
-                  <th className="px-3 py-2">HIS</th>
-                  <th className="px-3 py-2">Trạng thái</th>
-                  <th className="px-3 py-2">Ưu tiên</th>
-                  <th className="px-3 py-2">Bắt đầu</th>
-                  <th className="px-3 py-2">Deadline</th>
-                  <th className="px-3 py-2 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((h, idx) => {
-                  const rowNo = page * size + idx + 1;
-                  return (
-                                        <tr key={h.id} className="border-b last:border-b-0 hover:bg-gray-50 transition-colors">
-                      <td className="px-3 py-2 text-center">{rowNo}</td>
-                      <td className="px-3 py-2 font-mono">{h.hospitalCode || "—"}</td>
-                      <td className="px-3 py-2 font-medium">{h.name}</td>
-                      <td className="px-3 py-2">{h.province || "—"}</td>
-                      <td className="px-3 py-2">{h.hisSystemName || h.hisSystemId || "—"}</td>
-                    <td className="px-3 py-2">
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getStatusColor(h.projectStatus)}`}>
-                        {disp(statusMap, h.projectStatus)}
-                      </span>
-                    </td>
-                      <td className="px-3 py-2">
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getPriorityColor(h.priority)}`}>
-                        {disp(priorityMap, h.priority)}
-                      </span>
-                    </td>
-                      <td className="px-3 py-2">{h.startDate ? new Date(h.startDate).toLocaleString() : "—"}</td>
-                      <td className="px-3 py-2">{h.deadline ? new Date(h.deadline).toLocaleString() : "—"}</td>
-                      <td className="px-3 py-2 text-right">
-                        <div className="flex justify-end gap-2">
-                            {/* Nút 1: Xem chi tiết (Gọi API GET /hospitals/{id}) */}
-                            <button
-                                                      className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-gray-50 text-gray-600 transition-colors"
-                            onClick={() => onView(h)}
-                          >
-                            Xem
-                          </button>
-                            {/* Nút 2: Sửa (Gọi API GET /hospitals/{id} và sau đó dùng PUT) */}
-                          <button
-                            className="rounded-md border px-2 py-1 text-xs hover:bg-gray-50"
-                            onClick={() => onEdit(h)}
-                          >
-                            Sửa
-                          </button>
-                            {/* Nút 3: Xóa (Gọi API DELETE /hospitals/{id}) */}
-                          <button
-                            className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100"
-                            onClick={() => onDelete(h.id)}
-                          >
-                            Xóa
-                          </button>
-                        </div>
-                      </td>
-                  </tr>
-                  );
-                })}
+        {/* Table */}
+        <ComponentCard title="Danh sách bệnh viện">
+          <div className="overflow-x-auto -mx-1">
+            <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="bg-gradient-to-r from-gray-50 to-gray-100/50">
+                    <th className="px-6 py-4 text-center text-xs font-semibold uppercase tracking-wider text-gray-700">STT</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Mã</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Tên</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Tỉnh/TP</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">HIS</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Trạng thái</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Ưu tiên</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Bắt đầu</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Deadline</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-gray-700">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                {filtered.map((h, idx) => {
+                  const rowNo = page * size + idx + 1;
+                  return (
+                    <tr key={h.id} className="hover:bg-blue-50/30 transition-colors">
+                      <td className="px-6 py-5 text-center font-medium text-gray-600">{rowNo}</td>
+                      <td className="px-6 py-5"><span className="font-mono text-gray-700">{h.hospitalCode || "—"}</span></td>
+                      <td className="px-6 py-5"><span className="font-semibold text-gray-900">{h.name}</span></td>
+                      <td className="px-6 py-5"><span className="text-gray-700">{h.province || "—"}</span></td>
+                      <td className="px-6 py-5"><span className="text-gray-700">{h.hisSystemName || h.hisSystemId || "—"}</span></td>
+                      <td className="px-6 py-5">
+                        <span className={`text-sm font-semibold ${getStatusColor(h.projectStatus)}`}>
+                          {disp(statusMap, h.projectStatus)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-5">
+                        <span className={`text-sm font-semibold ${getPriorityColor(h.priority)}`}>
+                          {disp(priorityMap, h.priority)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-5"><span className="text-gray-700">{h.startDate ? new Date(h.startDate).toLocaleString() : "—"}</span></td>
+                      <td className="px-6 py-5"><span className="text-gray-700">{h.deadline ? new Date(h.deadline).toLocaleString() : "—"}</span></td>
+                      <td className="px-6 py-5 text-right">
+                        <div className="flex justify-end items-center gap-2">
+                          <button title="Xem chi tiết" onClick={() => onView(h)} className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors duration-200 text-xs font-medium">
+                            <AiOutlineEye className="w-3 h-3" />
+                            Xem
+                          </button>
+                          <button title="Chỉnh sửa" onClick={() => onEdit(h)} className="flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100 transition-colors duration-200 text-xs font-medium">
+                            <AiOutlineEdit className="w-3 h-3" />
+                            Sửa
+                          </button>
+                          <button title="Xóa" onClick={() => onDelete(h.id)} className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors duration-200 text-xs font-medium">
+                            <AiOutlineDelete className="w-3 h-3" />
+                            Xóa
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
 
-                {!loading && filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className="px-3 py-8 text-center text-gray-500">
-                      Không có dữ liệu
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-              </table>
-            </div>
+                {!loading && filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={10} className="px-6 py-12 text-center text-gray-400">
+                      <div className="flex flex-col items-center">
+                        <svg className="mb-3 h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                        </svg>
+                        <span className="text-sm">Không có dữ liệu</span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+              </table>
+            </div>
+          </div>
 
           {/* Pagination */}
           <Pagination
@@ -616,56 +584,62 @@ export default function HospitalsPage() {
         </ComponentCard>
       </div>
 
-      {/* MODAL */}
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={closeModal} />
-          <div className="relative z-10 m-4 w-full max-w-4xl rounded-2xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">
-                {isViewing ? "Chi tiết bệnh viện" : (isEditing ? "Cập nhật bệnh viện" : "Thêm bệnh viện")}
-              </h3>
-              <button className="rounded-md p-1 hover:bg-gray-100" onClick={closeModal}>
-                ✕
-              </button>
-            </div>
+      {/* MODAL */}
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeModal} />
+          <div className="relative z-10 w-full max-w-4xl rounded-3xl bg-white p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="mb-6 flex items-center justify-between">
+              <h3 className="text-2xl font-bold text-gray-900">
+                {isViewing ? "Chi tiết bệnh viện" : (isEditing ? "Cập nhật bệnh viện" : "Thêm bệnh viện")}
+              </h3>
+              <button className="rounded-xl p-2 transition-all hover:bg-gray-100 hover:scale-105" onClick={closeModal}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
             
             {isModalLoading ? (
-                <div className="text-center py-12 text-gray-500">
-                    Đang tải chi tiết...
-                </div>
+              <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+                <svg className="mb-4 h-12 w-12 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                <span>Đang tải chi tiết...</span>
+              </div>
             ) : (
-            <form onSubmit={onSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {/* LEFT */}
-              <div className="space-y-3">
-                <div>
-                  <label className="mb-1 block text-sm">Mã bệnh viện</label>
-                  <input 
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" 
-                    value={form.hospitalCode || ""} 
-                    onChange={(e) => setForm((s) => ({ ...s, hospitalCode: e.target.value }))} 
+              <form onSubmit={onSubmit} className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              {/* LEFT */}
+              <div className="space-y-5">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-gray-700">Mã bệnh viện</label>
+                  <input 
+                    className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 disabled:cursor-not-allowed" 
+                    value={form.hospitalCode || ""} 
+                    onChange={(e) => setForm((s) => ({ ...s, hospitalCode: e.target.value }))} 
                     disabled={isViewing}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium">Tên bệnh viện*</label>
-                  <input 
-                    required 
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" 
-                    value={form.name} 
-                    onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} 
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-gray-700">Tên bệnh viện*</label>
+                  <input 
+                    required 
+                    className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 disabled:cursor-not-allowed" 
+                    value={form.name} 
+                    onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} 
                     disabled={isViewing}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm">Địa chỉ</label>
-                  <input 
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" 
-                    value={form.address || ""} 
-                    onChange={(e) => setForm((s) => ({ ...s, address: e.target.value }))} 
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-gray-700">Địa chỉ</label>
+                  <input 
+                    className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 disabled:cursor-not-allowed" 
+                    value={form.address || ""} 
+                    onChange={(e) => setForm((s) => ({ ...s, address: e.target.value }))} 
                     disabled={isViewing}
-                  />
-                </div>
+                  />
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="mb-1 block text-sm">Tỉnh/Thành</label>
@@ -872,32 +846,32 @@ export default function HospitalsPage() {
                 </div>
               </div>
 
-              {/* Footer */}
-              <div className="col-span-1 md:col-span-2 mt-2 flex items-center justify-between">
-                {error && (
-                  <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {error}
-                  </div>
-                )}
-                <div className="ml-auto flex items-center gap-2">
-                  <button 
-                    type="button" 
-                    className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 hover:bg-red-100" 
-                    onClick={closeModal}
-                  >
-                    {isViewing ? "Đóng" : "Huỷ"}
-                  </button>
-                  {!isViewing && ( // Chỉ hiện nút Lưu/Cập nhật khi không ở chế độ xem
-                    <button
-                      type="submit"
-                      className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-                      disabled={loading}
-                    >
-                      {loading ? "Đang lưu..." : (isEditing ? "Cập nhật" : "Tạo mới")}
-                    </button>
-                  )}
-                </div>
-              </div>
+              {/* Footer */}
+              <div className="col-span-1 md:col-span-2 mt-4 flex items-center justify-between border-t border-gray-200 pt-6">
+                {error && (
+                  <div className="rounded-xl border-2 border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                    {error}
+                  </div>
+                )}
+                <div className="ml-auto flex items-center gap-3">
+                  <button 
+                    type="button" 
+                    className="rounded-xl border-2 border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400" 
+                    onClick={closeModal}
+                  >
+                    {isViewing ? "Đóng" : "Huỷ"}
+                  </button>
+                  {!isViewing && ( // Chỉ hiện nút Lưu/Cập nhật khi không ở chế độ xem
+                    <button
+                      type="submit"
+                      className="rounded-xl border-2 border-blue-500 bg-blue-500 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-blue-600 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={loading}
+                    >
+                      {loading ? "Đang lưu..." : (isEditing ? "Cập nhật" : "Tạo mới")}
+                    </button>
+                  )}
+                </div>
+              </div>
             </form>
             )}
           </div>
