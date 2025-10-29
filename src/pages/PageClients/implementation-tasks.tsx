@@ -12,6 +12,7 @@ export type ImplementationTaskResponseDTO = {
   quantity?: number | null;
   agencyId?: number | null;
   hisSystemId?: number | null;
+  hisSystemName?: string | null;
   hardwareId?: number | null;
   endDate?: string | null;
   additionalRequest?: string | null;
@@ -34,6 +35,7 @@ export type ImplementationTaskRequestDTO = {
   picDeploymentId: number;
   agencyId?: number | null;
   hisSystemId?: number | null;
+  hisSystemName?: string | null;
   hardwareId?: number | null;
   quantity?: number | null;
   apiTestStatus?: string | null;
@@ -50,9 +52,12 @@ export type ImplementationTaskRequestDTO = {
 export type ImplementationTaskUpdateDTO = Partial<ImplementationTaskRequestDTO>;
 
 export const DEPLOYMENT_STATUS_OPTIONS = [
-  { value: "NOT_STARTED", label: "Chưa bắt đầu" },
-  { value: "IN_PROGRESS", label: "Đang thực hiện" },
-  { value: "COMPLETED", label: "Hoàn thành" },
+  { value: "NOT_STARTED", label: "Chưa triển khai" },
+  { value: "IN_PROGRESS", label: "Đang triển khai" },
+  { value: "API_TESTING", label: "Test thông api" },
+  { value: "INTEGRATING", label: "Tích hợp với viện" },
+  { value: "WAITING_FOR_DEV", label: "Chờ dev build update" },
+  { value: "ACCEPTED", label: "Nghiệm thu" },
 ] as const;
 
 export type DeploymentStatusFE = typeof DEPLOYMENT_STATUS_OPTIONS[number]["value"];
@@ -60,11 +65,29 @@ export type DeploymentStatusFE = typeof DEPLOYMENT_STATUS_OPTIONS[number]["value
 function statusBadgeClasses(status?: string | null) {
   switch (status) {
     case "NOT_STARTED":
+      // Chưa bắt đầu → xám
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
+
     case "IN_PROGRESS":
+      // Đang thực hiện → vàng
       return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
-    case "COMPLETED":
+
+    case "WAITING_FOR_DEV":
+      // Đang chờ dev → cam
+      return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
+
+    case "API_TESTING":
+      // Đang test API → xanh dương
+      return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+
+    case "INTEGRATING":
+      // Đang tích hợp → tím
+      return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
+
+    case "ACCEPTED":
+      // Đã nghiệm thu → xanh lá
       return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+
     default:
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
   }
@@ -75,9 +98,15 @@ function statusLabel(status?: string | null) {
     case "NOT_STARTED":
       return "Chưa bắt đầu";
     case "IN_PROGRESS":
-      return "Đang thực hiện";
-    case "COMPLETED":
-      return "Hoàn thành";
+      return "Đang triển khai";
+    case "API_TESTING":
+      return "Test thông api";
+    case "INTEGRATING":
+      return "Tích hợp với viện";
+    case "WAITING_FOR_DEV":
+      return "Chờ dev build update";
+    case "ACCEPTED":
+      return "Nghiệm thu";
     default:
       return status || "";
   }
@@ -189,6 +218,7 @@ function RemoteSelect({
   const [loading, setLoading] = useState(false);
   const [options, setOptions] = useState<Array<{ id: number; name: string }>>([]);
   const [highlight, setHighlight] = useState<number>(-1);
+
 
   useEffect(() => {
     if (!q.trim()) return;
@@ -343,22 +373,38 @@ function TaskFormModal({
     () => async (term: string) => {
       const qs = new URLSearchParams({
         page: "0",
-        size: "10",
+        size: "20",
         sortBy: "fullname",
         sortDir: "asc",
       });
-  const url = `${API_ROOT}/api/v1/admin/users?${qs.toString()}`;
+
+      const url = `${API_ROOT}/api/v1/admin/users/search-deployment?name=${term}`;
       const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
       if (!res.ok) return [];
+
       const json = await res.json();
-      const raw = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
-      const onlyDeployment = raw.filter((u: any) =>
-        String(u.team ?? u.role ?? "").toUpperCase().includes("DEPLOYMENT")
-      );
-      return onlyDeployment
-        .filter((u: any) =>
-          term ? (u.fullname ?? u.fullName ?? u.name ?? "").toLowerCase().includes(term.toLowerCase()) : true
-        )
+      const users = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
+
+      // ✅ Lọc ra user có role SUPERADMIN hoặc team DEPLOYMENT
+      const filtered = users.filter((u: any) => {
+        const team = String(u.team || "").toUpperCase();
+        const roles = Array.isArray(u.roles)
+          ? u.roles.map((r: any) =>
+            typeof r === "string"
+              ? r.toUpperCase()
+              : (r.roleName || r.role || "").toUpperCase()
+          )
+          : [];
+
+        return team === "DEPLOYMENT" || roles.includes("SUPERADMIN");
+      });
+
+      // ✅ Lọc thêm theo từ khóa tìm kiếm
+      return filtered
+        .filter((u: any) => {
+          const name = (u.fullname ?? u.fullName ?? u.name ?? u.username ?? "").toLowerCase();
+          return !term || name.includes(term.toLowerCase());
+        })
         .map((u: any) => ({
           id: u.id,
           name: u.fullname ?? u.fullName ?? u.username ?? `User ${u.id}`,
@@ -366,6 +412,38 @@ function TaskFormModal({
     },
     []
   );
+ const searchHIS = useMemo(
+  () => async (term: string) => {
+    const qs = new URLSearchParams({
+      search: term || "",
+      page: "0",
+      size: "20",
+      sortBy: "name",
+      sortDir: "asc",
+    });
+
+    const url = `${API_ROOT}/api/v1/admin/his?search=${encodeURIComponent(term)}&page=0&size=20&sortBy=id&sortDir=asc`;
+    const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+    if (!res.ok) return [];
+
+    const json = await res.json();
+    const list = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
+
+    const lower = term.trim().toLowerCase();
+    return list
+      .map((h: any) => ({
+        id: Number(h.id),
+        name: String(h.name ?? h.hisName ?? h.code ?? `HIS-${h.id}`),
+      }))
+      .filter((x: any) =>
+        Number.isFinite(x.id) &&
+        x.name &&
+        (!lower || x.name.toLowerCase().includes(lower))
+      );
+  },
+  []
+);
+
 
   const [model, setModel] = useState<ImplementationTaskRequestDTO>(() => ({
     name: initial?.name || "",
@@ -373,6 +451,7 @@ function TaskFormModal({
     picDeploymentId: (initial?.picDeploymentId as number) || 0,
     agencyId: initial?.agencyId ?? null,
     hisSystemId: initial?.hisSystemId ?? null,
+    hisSystemName: initial?.hisSystemName ?? null,
     hardwareId: initial?.hardwareId ?? null,
     quantity: initial?.quantity ?? null,
     apiTestStatus: initial?.apiTestStatus ?? "",
@@ -398,6 +477,7 @@ function TaskFormModal({
     return id ? { id, name: nm || String(id) } : null;
   });
 
+
   useEffect(() => {
     if (open) {
       setModel({
@@ -406,6 +486,33 @@ function TaskFormModal({
       });
     }
   }, [open, initial]);
+
+  // ✅ RESET FORM khi mở modal tạo mới
+  useEffect(() => {
+    if (open && (!initial || !initial.id)) {
+      setModel({
+        name: "",
+        hospitalId: 0,
+        picDeploymentId: 0,
+        agencyId: null,
+        hisSystemId: null,
+        hisSystemName: null,
+        hardwareId: null,
+        quantity: null,
+        apiTestStatus: "",
+        bhytPortCheckInfo: "",
+        additionalRequest: "",
+        apiUrl: "",
+        deadline: "",
+        completionDate: "",
+        status: "NOT_STARTED",
+        startDate: "",
+        acceptanceDate: "",
+      });
+      setHospitalOpt(null);
+      setPicOpt(null);
+    }
+  }, [open, initial?.id]);
 
   useEffect(() => {
     if (!open || !initial) return;
@@ -416,6 +523,7 @@ function TaskFormModal({
       name: initial?.name || "",
       hospitalId: Number(initial?.hospitalId) || 0,
       picDeploymentId: Number(initial?.picDeploymentId) || 0,
+      hisSystemName: initial?.hisSystemName ?? null,
       quantity: initial?.quantity ?? null,
       apiTestStatus: initial?.apiTestStatus ?? "",
       bhytPortCheckInfo: initial?.bhytPortCheckInfo ?? "",
@@ -470,6 +578,26 @@ function TaskFormModal({
         })
         .catch(() => { });
     }
+   if (initial.hisSystemId) {
+  fetch(`${API_ROOT}/api/v1/admin/his/${initial.hisSystemId}`, {
+    headers: authHeaders(),
+    credentials: "include",
+  })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((data) => {
+      const h = Array.isArray(data?.content) ? data.content[0] : data;
+      if (h && h.id) {
+        setModel((s) => ({
+          ...s,
+          hisSystemId: Number(h.id),
+          hisSystemName: h.name ?? h.hisName ?? h.code ?? `HIS-${h.id}`,
+        }));
+      }
+    })
+    .catch(() => {});
+}
+
+
   }, [open, initial]);
 
   const [submitting, setSubmitting] = useState(false);
@@ -583,15 +711,26 @@ function TaskFormModal({
                   onChange={(e) => setModel((s) => ({ ...s, agencyId: e.target.value ? Number(e.target.value) : null }))}
                 />
               </Field>
-              <Field label="HIS System ID">
-                <TextInput
-                  type="number"
-                  value={model.hisSystemId ?? ""}
-                  onChange={(e) =>
-                    setModel((s) => ({ ...s, hisSystemId: e.target.value ? Number(e.target.value) : null }))
-                  }
-                />
-              </Field>
+              <RemoteSelect
+  label="Hệ thống HIS"
+  required={false}
+  placeholder="Nhập tên HIS để tìm…"
+  fetchOptions={searchHIS}
+  value={
+    model.hisSystemId
+      ? { id: model.hisSystemId, name: model.hisSystemName ?? `HIS-${model.hisSystemId}` }
+      : null
+  }
+  onChange={(opt) =>
+    setModel((s) => ({
+      ...s,
+      hisSystemId: opt ? opt.id : null,
+      hisSystemName: opt ? opt.name : undefined,
+    }))
+  }
+/>
+
+
               <Field label="Hardware ID">
                 <TextInput
                   type="number"
@@ -719,8 +858,20 @@ function DetailModal({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
           <p><b>Tên:</b> {item.name}</p>
           <p><b>Bệnh viện:</b> {item.hospitalName}</p>
+          <p><b>Hệ thống HIS:</b> {item.hisSystemName || `#${item.hisSystemId ?? "—"}`}</p>
           <p><b>Người phụ trách:</b> {item.picDeploymentName}</p>
-          <p><b>Trạng thái:</b> {statusLabel(item.status)}</p>
+          <p className="flex items-center gap-2">
+            <b>Trạng thái:</b>
+            <span
+              className={clsx(
+                "px-2 py-1 rounded-full text-xs font-medium",
+                statusBadgeClasses(item.status)
+              )}
+            >
+              {statusLabel(item.status)}
+            </span>
+          </p>
+
           <p><b>API URL:</b> {item.apiUrl || "—"}</p>
           <p><b>API Test:</b> {item.apiTestStatus || "—"}</p>
           <p><b>Số lượng:</b> {item.quantity ?? "—"}</p>
@@ -739,6 +890,46 @@ function DetailModal({
     </div>
   );
 }
+function ConfirmDialog({
+  open,
+  title,
+  message,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title?: string;
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onMouseDown={(e) => e.target === e.currentTarget && onCancel()}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 20 }}
+        className="w-full max-w-sm bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-6"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-lg font-semibold mb-2">{title || "Xác nhận"}</h3>
+        <p className="text-sm text-gray-700 dark:text-gray-300 mb-6">{message}</p>
+        <div className="flex justify-end gap-3">
+          <Button variant="ghost" onClick={onCancel}>
+            Hủy
+          </Button>
+          <Button variant="danger" onClick={onConfirm}>
+            Xóa
+          </Button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
 
 const ImplementationTasksPage: React.FC = () => {
   const [data, setData] = useState<ImplementationTaskResponseDTO[]>([]);
@@ -750,19 +941,22 @@ const ImplementationTasksPage: React.FC = () => {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<ImplementationTaskResponseDTO | null>(null);
   const user = JSON.parse(localStorage.getItem("user") || "{}");
-    const readStored = <T = unknown>(key: string): T | null => {
-      try {
-        const raw = localStorage.getItem(key) || sessionStorage.getItem(key);
-        if (!raw) return null;
-        return JSON.parse(raw) as T;
-      } catch {
-        return null;
-      }
-    };
+  const readStored = <T = unknown>(key: string): T | null => {
+    try {
+      const raw = localStorage.getItem(key) || sessionStorage.getItem(key);
+      if (!raw) return null;
+      return JSON.parse(raw) as T;
+    } catch {
+      return null;
+    }
+  };
 
-    const currentUser = readStored<{ id?: number; username?: string; team?: string; roles?: unknown[] }>("user") || null;
-    const userRoles = (readStored<string[]>("roles") || (currentUser?.roles as string[] | undefined)) || [];
-    const userTeam = (currentUser?.team || "").toString().toUpperCase();
+  const currentUser = readStored<{ id?: number; username?: string; team?: string; roles?: unknown[] }>("user") || null;
+  const userRoles = (readStored<string[]>("roles") || (currentUser?.roles as string[] | undefined)) || [];
+  const userTeam = (currentUser?.team || "").toString().toUpperCase();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+
   const isSuperAdmin = userRoles.some(
     (r: any) => (typeof r === "string" ? r : r.roleName)?.toUpperCase() === "SUPERADMIN"
   );
@@ -819,7 +1013,6 @@ const ImplementationTasksPage: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Xóa bản ghi này?")) return;
     const res = await fetch(`${apiBase}/${id}`, {
       method: "DELETE",
       headers: authHeaders(),
@@ -831,8 +1024,9 @@ const ImplementationTasksPage: React.FC = () => {
       return;
     }
     setData((s) => s.filter((x) => x.id !== id));
-    toast.success("Đã xóa");
+    toast.success("Đã xóa thành công");
   };
+
 
   return (
     <div className="p-6 xl:p-10">
@@ -848,12 +1042,14 @@ const ImplementationTasksPage: React.FC = () => {
           {isSuperAdmin || userTeam === "DEPLOYMENT" ? (
             <Button
               onClick={() => {
-                setEditing(null);
+                setEditing(null); // ép new object, tránh reference cũ
                 setModalOpen(true);
               }}
             >
               + Thêm mới
             </Button>
+
+
           ) : (
             <Button disabled className="opacity-50 cursor-not-allowed">
               + Thêm mới
@@ -866,16 +1062,16 @@ const ImplementationTasksPage: React.FC = () => {
       <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-300">
+            <thead className="bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-300 align-middle">
               <tr>
                 <th className="px-4 py-3 text-left">ID</th>
                 <th className="px-4 py-3 text-left">Tên</th>
                 <th className="px-4 py-3 text-left">Bệnh viện</th>
                 <th className="px-4 py-3 text-left">PIC</th>
                 <th className="px-4 py-3 text-left">Trạng thái</th>
-                <th className="px-4 py-3 text-left">API Test</th>
                 <th className="px-4 py-3 text-left">Deadline</th>
-                <th className="px-4 py-3 text-right">Hành động</th>
+                <th className="px-4 py-3 text-left">Hành động</th>
+
               </tr>
             </thead>
             <tbody>
@@ -906,12 +1102,12 @@ const ImplementationTasksPage: React.FC = () => {
                         {statusLabel(row.status)}
                       </span>
                     </td>
-                    <td className="px-4 py-3">{row.apiTestStatus || "—"}</td>
                     <td className="px-4 py-3">{fmt(row.deadline)}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-2">
                         <Button
                           variant="ghost"
+                          className="h-8 px-3 text-xs rounded-lg"
                           onClick={() => {
                             setDetailItem(row);
                             setDetailOpen(true);
@@ -924,28 +1120,48 @@ const ImplementationTasksPage: React.FC = () => {
                           <>
                             <Button
                               variant="ghost"
+                              className="h-8 px-3 text-xs rounded-lg"
                               onClick={() => {
-                                setEditing(row);
+                                setEditing({ ...row }); // ✅ clone object, đảm bảo reference mới
                                 setModalOpen(true);
                               }}
                             >
                               Sửa
                             </Button>
-                            <Button variant="danger" onClick={() => handleDelete(row.id)}>
+
+                            <Button
+                              variant="danger"
+                              className="h-8 px-3 text-xs rounded-lg"
+                              onClick={() => {
+                                setDeleteId(row.id);
+                                setConfirmOpen(true);
+                              }}
+
+                            >
                               Xóa
                             </Button>
                           </>
                         ) : (
                           <>
-                            <Button variant="ghost" disabled className="opacity-50 cursor-not-allowed">
+                            <Button variant="ghost" disabled className="px-3 py-2 text-sm opacity-50 cursor-not-allowed">
                               Sửa
                             </Button>
-                            <Button variant="danger" disabled className="opacity-50 cursor-not-allowed">
+                            <Button
+                              variant="danger"
+                              className="h-8 px-3 text-xs rounded-lg"
+                              onClick={() => {
+                                setDeleteId(row.id);
+                                setConfirmOpen(true);
+                              }}
+                            >
                               Xóa
                             </Button>
+
                           </>
                         )}
+
                       </div>
+
                     </td>
 
                   </tr>
@@ -954,12 +1170,27 @@ const ImplementationTasksPage: React.FC = () => {
           </table>
         </div>
       </div>
-
       <TaskFormModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        initial={editing as any || undefined}
+        onClose={() => {
+          setModalOpen(false);
+          setEditing(null);
+        }}
+        initial={editing ?? undefined as any}
+
         onSubmit={handleSubmit}
+      />
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Xóa tác vụ"
+        message="Bạn có chắc chắn muốn xóa tác vụ này không? Hành động này không thể hoàn tác."
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => {
+          if (deleteId) handleDelete(deleteId);
+          setConfirmOpen(false);
+          setDeleteId(null);
+        }}
       />
 
       <DetailModal open={detailOpen} onClose={() => setDetailOpen(false)} item={detailItem} />
