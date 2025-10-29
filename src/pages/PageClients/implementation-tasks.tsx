@@ -412,37 +412,37 @@ function TaskFormModal({
     },
     []
   );
- const searchHIS = useMemo(
-  () => async (term: string) => {
-    const qs = new URLSearchParams({
-      search: term || "",
-      page: "0",
-      size: "20",
-      sortBy: "name",
-      sortDir: "asc",
-    });
+  const searchHIS = useMemo(
+    () => async (term: string) => {
+      const qs = new URLSearchParams({
+        search: term || "",
+        page: "0",
+        size: "20",
+        sortBy: "name",
+        sortDir: "asc",
+      });
 
-    const url = `${API_ROOT}/api/v1/admin/his?search=${encodeURIComponent(term)}&page=0&size=20&sortBy=id&sortDir=asc`;
-    const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
-    if (!res.ok) return [];
+      const url = `${API_ROOT}/api/v1/admin/his?search=${encodeURIComponent(term)}&page=0&size=20&sortBy=id&sortDir=asc`;
+      const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+      if (!res.ok) return [];
 
-    const json = await res.json();
-    const list = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
+      const json = await res.json();
+      const list = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
 
-    const lower = term.trim().toLowerCase();
-    return list
-      .map((h: any) => ({
-        id: Number(h.id),
-        name: String(h.name ?? h.hisName ?? h.code ?? `HIS-${h.id}`),
-      }))
-      .filter((x: any) =>
-        Number.isFinite(x.id) &&
-        x.name &&
-        (!lower || x.name.toLowerCase().includes(lower))
-      );
-  },
-  []
-);
+      const lower = term.trim().toLowerCase();
+      return list
+        .map((h: any) => ({
+          id: Number(h.id),
+          name: String(h.name ?? h.hisName ?? h.code ?? `HIS-${h.id}`),
+        }))
+        .filter((x: any) =>
+          Number.isFinite(x.id) &&
+          x.name &&
+          (!lower || x.name.toLowerCase().includes(lower))
+        );
+    },
+    []
+  );
 
 
   const [model, setModel] = useState<ImplementationTaskRequestDTO>(() => ({
@@ -578,25 +578,24 @@ function TaskFormModal({
         })
         .catch(() => { });
     }
-   if (initial.hisSystemId) {
-  fetch(`${API_ROOT}/api/v1/admin/his/${initial.hisSystemId}`, {
-    headers: authHeaders(),
-    credentials: "include",
-  })
-    .then((r) => (r.ok ? r.json() : null))
-    .then((data) => {
-      const h = Array.isArray(data?.content) ? data.content[0] : data;
-      if (h && h.id) {
-        setModel((s) => ({
-          ...s,
-          hisSystemId: Number(h.id),
-          hisSystemName: h.name ?? h.hisName ?? h.code ?? `HIS-${h.id}`,
-        }));
-      }
-    })
-    .catch(() => {});
-}
-
+    if (initial.hisSystemId) {
+      fetch(`${API_ROOT}/api/v1/admin/his/${initial.hisSystemId}`, {
+        headers: authHeaders(),
+        credentials: "include",
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          const h = Array.isArray(data?.content) ? data.content[0] : data;
+          if (h && h.id) {
+            setModel((s) => ({
+              ...s,
+              hisSystemId: Number(h.id),
+              hisSystemName: h.name ?? h.hisName ?? h.code ?? `HIS-${h.id}`,
+            }));
+          }
+        })
+        .catch(() => { });
+    }
 
   }, [open, initial]);
 
@@ -712,23 +711,23 @@ function TaskFormModal({
                 />
               </Field>
               <RemoteSelect
-  label="Hệ thống HIS"
-  required={false}
-  placeholder="Nhập tên HIS để tìm…"
-  fetchOptions={searchHIS}
-  value={
-    model.hisSystemId
-      ? { id: model.hisSystemId, name: model.hisSystemName ?? `HIS-${model.hisSystemId}` }
-      : null
-  }
-  onChange={(opt) =>
-    setModel((s) => ({
-      ...s,
-      hisSystemId: opt ? opt.id : null,
-      hisSystemName: opt ? opt.name : undefined,
-    }))
-  }
-/>
+                label="Hệ thống HIS"
+                required={false}
+                placeholder="Nhập tên HIS để tìm…"
+                fetchOptions={searchHIS}
+                value={
+                  model.hisSystemId
+                    ? { id: model.hisSystemId, name: model.hisSystemName ?? `HIS-${model.hisSystemId}` }
+                    : null
+                }
+                onChange={(opt) =>
+                  setModel((s) => ({
+                    ...s,
+                    hisSystemId: opt ? opt.id : null,
+                    hisSystemName: opt ? opt.name : undefined,
+                  }))
+                }
+              />
 
 
               <Field label="Hardware ID">
