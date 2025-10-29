@@ -173,6 +173,7 @@ export default function HospitalsPage() {
   const [statusOptions] = useState<EnumOption[]>(STATUS_FALLBACK);
 
   const [open, setOpen] = useState(false);
+  const [modalAnimate, setModalAnimate] = useState(false);
   const [editing, setEditing] = useState<Hospital | null>(null);
   const [viewing, setViewing] = useState<Hospital | null>(null);
   const [isModalLoading, setIsModalLoading] = useState(false); // Thêm state loading cho modal
@@ -298,6 +299,16 @@ export default function HospitalsPage() {
   useEffect(() => {
     fetchList();
   }, [page, size, sortBy, sortDir]);
+
+  // control modal open animation (scale in) so we can have a 2s animation
+  useEffect(() => {
+    if (open) {
+      // enable animation on next tick
+      const t = setTimeout(() => setModalAnimate(true), 5);
+      return () => clearTimeout(t);
+    }
+    setModalAnimate(false);
+  }, [open]);
 
   // ✅ Bỏ client-side filter, dùng server pagination
   const filtered = useMemo(() => items, [items]);
@@ -485,77 +496,75 @@ export default function HospitalsPage() {
         <ComponentCard title="Danh sách bệnh viện">
           <div className="overflow-x-auto -mx-1">
             <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="bg-gradient-to-r from-gray-50 to-gray-100/50">
-                    <th className="px-6 py-4 text-center text-xs font-semibold uppercase tracking-wider text-gray-700">STT</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Mã</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Tên</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Tỉnh/TP</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">HIS</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Trạng thái</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Ưu tiên</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Bắt đầu</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Deadline</th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-gray-700">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                {filtered.map((h, idx) => {
-                  const rowNo = page * size + idx + 1;
-                  return (
-                    <tr key={h.id} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="px-6 py-5 text-center font-medium text-gray-600">{rowNo}</td>
-                      <td className="px-6 py-5"><span className="font-mono text-gray-700">{h.hospitalCode || "—"}</span></td>
-                      <td className="px-6 py-5"><span className="font-semibold text-gray-900">{h.name}</span></td>
-                      <td className="px-6 py-5"><span className="text-gray-700">{h.province || "—"}</span></td>
-                      <td className="px-6 py-5"><span className="text-gray-700">{h.hisSystemName || h.hisSystemId || "—"}</span></td>
-                      <td className="px-6 py-5">
-                        <span className={`text-sm font-semibold ${getStatusColor(h.projectStatus)}`}>
-                          {disp(statusMap, h.projectStatus)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-5">
-                        <span className={`text-sm font-semibold ${getPriorityColor(h.priority)}`}>
-                          {disp(priorityMap, h.priority)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-5"><span className="text-gray-700">{h.startDate ? new Date(h.startDate).toLocaleString() : "—"}</span></td>
-                      <td className="px-6 py-5"><span className="text-gray-700">{h.deadline ? new Date(h.deadline).toLocaleString() : "—"}</span></td>
-                      <td className="px-6 py-5 text-right">
-                        <div className="flex justify-end items-center gap-2">
-                          <button title="Xem chi tiết" onClick={() => onView(h)} className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors duration-200 text-xs font-medium">
-                            <AiOutlineEye className="w-3 h-3" />
-                            Xem
-                          </button>
-                          <button title="Chỉnh sửa" onClick={() => onEdit(h)} className="flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100 transition-colors duration-200 text-xs font-medium">
-                            <AiOutlineEdit className="w-3 h-3" />
-                            Sửa
-                          </button>
-                          <button title="Xóa" onClick={() => onDelete(h.id)} className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors duration-200 text-xs font-medium">
-                            <AiOutlineDelete className="w-3 h-3" />
-                            Xóa
-                          </button>
+              <div className="p-4 space-y-4">
+                {filtered.length === 0 && !loading ? (
+                  <div className="py-12 text-center text-gray-400">
+                    <div className="flex flex-col items-center">
+                      <svg className="mb-3 h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                      </svg>
+                      <span className="text-sm">Không có dữ liệu</span>
+                    </div>
+                  </div>
+                ) : (
+                  filtered.map((h, idx) => {
+                    const delay = `${(idx * 2000) / Math.max(1, filtered.length)}ms`;
+                    const start = h.startDate ? new Date(h.startDate) : null;
+                    const end = h.deadline ? new Date(h.deadline) : null;
+                    return (
+                      <div
+                        key={h.id}
+                        className="w-full grid grid-cols-3 gap-4 items-center bg-white rounded-xl p-4 border transition-all hover:shadow-lg hover:border-blue-200 row-anim"
+                        style={{ animationDelay: delay }}
+                      >
+                        <div className="flex items-center gap-4 min-w-0">
+                          <div className="flex flex-col items-start text-xs text-gray-400">
+                            <span className="text-[11px] font-mono text-gray-500">{h.hospitalCode || '—'}</span>
+                          </div>
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="h-12 w-12 rounded-lg bg-blue-50 flex items-center justify-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 2a5 5 0 00-5 5v3H6a2 2 0 00-2 2v5h16v-5a2 2 0 00-2-2h-1V7a5 5 0 00-5-5z" />
+                              </svg>
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-semibold text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{h.name}</div>
+                              <div className="text-sm text-gray-500">{h.province || '—'}</div>
+                            </div>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
 
-                {!loading && filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className="px-6 py-12 text-center text-gray-400">
-                      <div className="flex flex-col items-center">
-                        <svg className="mb-3 h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                        </svg>
-                        <span className="text-sm">Không có dữ liệu</span>
+                        <div className="col-span-1 px-2">
+                          <div className="text-sm text-gray-600">Đơn vị HIS: <span className="text-gray-900 font-medium">{h.hisSystemName || h.hisSystemId || '—'}</span></div>
+                          <div className="mt-2 flex items-center gap-4">
+                            <div className={`text-sm font-semibold ${getStatusColor(h.projectStatus)}`}>{disp(statusMap, h.projectStatus)}</div>
+                            <div className={`text-sm font-semibold ${getPriorityColor(h.priority)}`}>{disp(priorityMap, h.priority)}</div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-2">
+                          <div className="text-sm text-gray-500">{start ? start.toLocaleDateString() : '—'}</div>
+                          <div className="text-sm text-gray-500">{end ? end.toLocaleDateString() : '—'}</div>
+                          <div className="flex items-center gap-2 mt-2">
+                            <button title="Xem chi tiết" onClick={() => onView(h)} className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors duration-300 text-xs font-medium">
+                              <AiOutlineEye className="w-3 h-3" />
+                              Xem
+                            </button>
+                            <button title="Chỉnh sửa" onClick={() => onEdit(h)} className="flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100 transition-colors duration-300 text-xs font-medium">
+                              <AiOutlineEdit className="w-3 h-3" />
+                              Sửa
+                            </button>
+                            <button title="Xóa" onClick={() => onDelete(h.id)} className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors duration-300 text-xs font-medium">
+                              <AiOutlineDelete className="w-3 h-3" />
+                              Xóa
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </td>
-                  </tr>
+                    );
+                  })
                 )}
-              </tbody>
-              </table>
+              </div>
             </div>
           </div>
 
@@ -588,7 +597,7 @@ export default function HospitalsPage() {
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeModal} />
-          <div className="relative z-10 w-full max-w-4xl rounded-3xl bg-white p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className={`relative z-10 w-full max-w-4xl rounded-3xl bg-white p-8 shadow-2xl max-h-[90vh] overflow-y-auto transform ${modalAnimate ? 'scale-100' : 'scale-95'} transition-transform duration-[2000ms] ease-out`}>
             <div className="mb-6 flex items-center justify-between">
               <h3 className="text-2xl font-bold text-gray-900">
                 {isViewing ? "Chi tiết bệnh viện" : (isEditing ? "Cập nhật bệnh viện" : "Thêm bệnh viện")}
@@ -623,13 +632,19 @@ export default function HospitalsPage() {
                 </div>
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-gray-700">Tên bệnh viện*</label>
-                  <input 
-                    required 
-                    className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 disabled:cursor-not-allowed" 
-                    value={form.name} 
-                    onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} 
-                    disabled={isViewing}
-                  />
+                  <div className="relative">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 2a5 5 0 00-5 5v3H6a2 2 0 00-2 2v5h16v-5a2 2 0 00-2-2h-1V7a5 5 0 00-5-5z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 21v-2a4 4 0 018 0v2" />
+                    </svg>
+                    <input 
+                      required 
+                      className="w-full rounded-xl border-2 border-gray-300 pl-11 pr-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 disabled:cursor-not-allowed" 
+                      value={form.name} 
+                      onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} 
+                      disabled={isViewing}
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-gray-700">Địa chỉ</label>
