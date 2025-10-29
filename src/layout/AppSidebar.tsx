@@ -14,6 +14,7 @@ import {
   PlugInIcon,
   TableIcon
 } from "../icons";
+import { UserIcon } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 import SidebarWidget from "./SidebarWidget";
 
@@ -251,7 +252,23 @@ const AppSidebar: React.FC = () => {
                           : "menu-dropdown-item-inactive"
                       }`}
                     >
-                      {subItem.name}
+                      <div className="flex items-center gap-3">
+                        <span className="w-4 h-4 flex items-center justify-center text-gray-400">
+                          {(() => {
+                            switch (subItem.name) {
+                              case "Bệnh viện":
+                                return <TableIcon className="w-4 h-4" />;
+                              case "Đơn vị HIS":
+                                return <PlugInIcon className="w-4 h-4" />;
+                              case "Người phụ trách":
+                                return <UserIcon className="w-4 h-4" />;
+                              default:
+                                return <PageIcon className="w-4 h-4" />;
+                            }
+                          })()}
+                        </span>
+                        <span>{subItem.name}</span>
+                      </div>
                       <span className="flex items-center gap-1 ml-auto">
                         {subItem.new && (
                           <span

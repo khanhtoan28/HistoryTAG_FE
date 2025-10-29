@@ -4,6 +4,7 @@ import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
 import { EyeIcon, PencilIcon, TrashBinIcon, PlusIcon, ArrowRightIcon } from "../../icons";
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
+import { FaBuilding } from "react-icons/fa";
 
 export type Hospital = {
   id: number;
@@ -139,11 +140,41 @@ function getPriorityColor(priority?: string | null): string {
   }
 }
 
+function getPriorityBg(priority?: string | null): string {
+  switch (priority) {
+    case "P0":
+      return "bg-red-50";
+    case "P1":
+      return "bg-amber-50";
+    case "P2":
+      return "bg-yellow-50";
+    case "P3":
+      return "bg-blue-50";
+    case "P4":
+      return "bg-gray-50";
+    default:
+      return "bg-white";
+  }
+}
+
 function formatDateTimeLocal(value?: string | null) {
   if (!value) return "";
   const d = new Date(value);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function formatDateShort(value?: string | null) {
+  if (!value) return "—";
+  try {
+    const d = new Date(value);
+    const dd = d.getDate();
+    const mm = d.getMonth() + 1;
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  } catch {
+    return "—";
+  }
 }
 
 function toLocalDateTime(value?: string) {
@@ -481,84 +512,119 @@ export default function HospitalsPage() {
           </div>
         </ComponentCard>
 
-        {/* Table */}
+        {/* Card list (replaces table) */}
         <ComponentCard title="Danh sách bệnh viện">
-          <div className="overflow-x-auto -mx-1">
-            <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="bg-gradient-to-r from-gray-50 to-gray-100/50">
-                    <th className="px-6 py-4 text-center text-xs font-semibold uppercase tracking-wider text-gray-700">STT</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Mã</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Tên</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Tỉnh/TP</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">HIS</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Trạng thái</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Ưu tiên</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Bắt đầu</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Deadline</th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-gray-700">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                {filtered.map((h, idx) => {
-                  const rowNo = page * size + idx + 1;
-                  return (
-                    <tr key={h.id} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="px-6 py-5 text-center font-medium text-gray-600">{rowNo}</td>
-                      <td className="px-6 py-5"><span className="font-mono text-gray-700">{h.hospitalCode || "—"}</span></td>
-                      <td className="px-6 py-5"><span className="font-semibold text-gray-900">{h.name}</span></td>
-                      <td className="px-6 py-5"><span className="text-gray-700">{h.province || "—"}</span></td>
-                      <td className="px-6 py-5"><span className="text-gray-700">{h.hisSystemName || h.hisSystemId || "—"}</span></td>
-                      <td className="px-6 py-5">
-                        <span className={`text-sm font-semibold ${getStatusColor(h.projectStatus)}`}>
-                          {disp(statusMap, h.projectStatus)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-5">
-                        <span className={`text-sm font-semibold ${getPriorityColor(h.priority)}`}>
-                          {disp(priorityMap, h.priority)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-5"><span className="text-gray-700">{h.startDate ? new Date(h.startDate).toLocaleString() : "—"}</span></td>
-                      <td className="px-6 py-5"><span className="text-gray-700">{h.deadline ? new Date(h.deadline).toLocaleString() : "—"}</span></td>
-                      <td className="px-6 py-5 text-right">
-                        <div className="flex justify-end items-center gap-2">
-                          <button title="Xem chi tiết" onClick={() => onView(h)} className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors duration-200 text-xs font-medium">
-                            <AiOutlineEye className="w-3 h-3" />
-                            Xem
-                          </button>
-                          <button title="Chỉnh sửa" onClick={() => onEdit(h)} className="flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100 transition-colors duration-200 text-xs font-medium">
-                            <AiOutlineEdit className="w-3 h-3" />
-                            Sửa
-                          </button>
-                          <button title="Xóa" onClick={() => onDelete(h.id)} className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors duration-200 text-xs font-medium">
-                            <AiOutlineDelete className="w-3 h-3" />
-                            Xóa
-                          </button>
+          {/* inline keyframes for fade-in-up used by cards */}
+          <style>{`
+            @keyframes fadeInUp {
+              from { opacity: 0; transform: translateY(8px); }
+              to { opacity: 1; transform: translateY(0); }
+            }
+          `}</style>
+          <div className="space-y-4">
+            {filtered.map((h, idx) => {
+              const delayMs = Math.round(idx * (2000 / Math.max(1, filtered.length)));
+              return (
+                <div
+                  key={h.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onView(h)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onView(h);
+                    }
+                  }}
+                  className="group bg-white rounded-2xl border border-gray-200 p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-1 group-hover:bg-blue-50 hover:ring-1 hover:ring-blue-200 cursor-pointer"
+                  style={{ animation: `fadeInUp 600ms ease ${delayMs}ms both` }}
+                >
+                  <div className="flex items-center gap-4 w-full md:w-2/3">
+                      {/* left: hospital code badge */}
+                      <div className="flex-shrink-0">
+                        <div className="h-10 min-w-[48px] max-w-[96px] rounded-md border bg-gray-50 flex items-center justify-center text-xs font-semibold text-gray-600 px-1">
+                          <span className="truncate block w-full text-center">{h.hospitalCode || "—"}</span>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-
-                {!loading && filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className="px-6 py-12 text-center text-gray-400">
-                      <div className="flex flex-col items-center">
-                        <svg className="mb-3 h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                        </svg>
-                        <span className="text-sm">Không có dữ liệu</span>
                       </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-              </table>
-            </div>
-          </div>
 
+                      <div className="flex-shrink-0">
+                        <div className={`${getPriorityBg(h.priority)} h-12 w-12 rounded-lg flex items-center justify-center text-indigo-600 font-semibold text-sm border border-gray-100 transition-colors duration-200 group-hover:border-blue-200 group-hover:bg-blue-50`}> 
+                          <FaBuilding className="h-6 w-6 text-blue-600" />
+                        </div>
+                      </div>
+
+                      {/* vertical divider between icon and content on md+ */}
+                      <div className="hidden md:block w-px h-10 bg-gray-100 rounded mx-2" />
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3">
+                          <h4 title={h.name} className="font-semibold text-gray-900 truncate group-hover:text-blue-800">{h.name}</h4>
+                          <span className="text-xs text-gray-400">•</span>
+                          <span className="text-xs text-gray-500">{h.province || "—"}</span>
+                          <span className="ml-2">
+                            <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${getStatusColor(h.projectStatus)} bg-gray-50`}>{disp(statusMap, h.projectStatus)}</span>
+                            <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${getPriorityColor(h.priority)} bg-gray-50 ml-2`}>{disp(priorityMap, h.priority)}</span>
+                          </span>
+                        </div>
+
+                        {/* address and HIS unit (shown under title like screenshot) */}
+                        <div title={h.address || ""} className="mt-1 text-sm text-gray-500 truncate">{h.address || "—"}</div>
+                        <div className="mt-2 text-sm text-gray-600 flex items-center gap-3">
+                          <div className="truncate">
+                            <span className="text-xs text-gray-400">Người liên hệ: </span>
+                            <span title={h.contactPerson || ""} className="font-medium text-gray-800">{h.contactPerson || "—"}</span>
+                            {h.contactNumber && <span className="ml-2 text-xs text-gray-500">• {h.contactNumber}</span>}
+                          </div>
+                          {h.contactEmail && (
+                            <div className="truncate">
+                              <span className="text-xs text-gray-400">Email: </span>
+                              <span title={h.contactEmail} className="text-gray-700 truncate">{h.contactEmail}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="mt-2 text-sm text-orange-600">Đơn vị HIS: <span className="font-medium text-orange-600">{h.hisSystemName || "—"}</span></div>
+                      </div>
+                  </div>
+
+                  <div className="flex items-center justify-between w-full md:w-1/3">
+                    <div className="hidden md:flex flex-col text-right text-sm text-gray-600">
+                      <span className="text-xs text-gray-400">Bắt đầu</span>
+                      <span className="font-medium">{formatDateShort(h.startDate)}</span>
+                      <span className="text-xs text-gray-400 mt-2">Deadline</span>
+                      <span className="font-medium">{formatDateShort(h.deadline)}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button onClick={(e) => { e.stopPropagation(); onView(h); }} title="Xem" aria-label={`Xem ${h.name}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition transform group-hover:scale-105 text-xs font-medium">
+                        <AiOutlineEye className="w-4 h-4" />
+                        <span className="hidden sm:inline">Xem</span>
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); onEdit(h); }} title="Sửa" aria-label={`Sửa ${h.name}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition transform group-hover:scale-105 text-xs font-medium">
+                        <AiOutlineEdit className="w-4 h-4" />
+                        <span className="hidden sm:inline">Sửa</span>
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); onDelete(h.id); }} title="Xóa" aria-label={`Xóa ${h.name}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 transition transform group-hover:scale-105 text-xs font-medium">
+                        <AiOutlineDelete className="w-4 h-4" />
+                        <span className="hidden sm:inline">Xóa</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {!loading && filtered.length === 0 && (
+              <div className="py-12 text-center text-gray-400">
+                <div className="flex flex-col items-center">
+                  <svg className="mb-3 h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                  </svg>
+                  <span className="text-sm">Không có dữ liệu</span>
+                </div>
+              </div>
+            )}
+          </div>
           {/* Pagination */}
           <Pagination
             currentPage={page}

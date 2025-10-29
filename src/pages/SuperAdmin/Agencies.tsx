@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
+import { BoxCubeIcon } from "../../icons";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
@@ -266,59 +267,78 @@ export default function AgenciesPage() {
         </ComponentCard>
 
         <ComponentCard title="Danh sách đại lý">
-          <div className="overflow-x-auto -mx-1">
-            <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="bg-gradient-to-r from-gray-50 to-gray-100/50">
-                    <th className="px-6 py-4 text-center text-xs font-semibold uppercase tracking-wider text-gray-700">STT</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Tên</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Liên hệ</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Điện thoại</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Email</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Địa chỉ</th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-gray-700">Thao tác</th>
-                </tr>
-              </thead>
-                <tbody className="divide-y divide-gray-100">
-                {filtered.map((a, idx) => {
-                  const rowNo = page * size + idx + 1;
-                  return (
-                    <tr key={a.id} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="px-6 py-5 text-center font-medium text-gray-600">{rowNo}</td>
-                      <td className="px-6 py-5"><span className="font-semibold text-gray-900">{a.name}</span></td>
-                      <td className="px-6 py-5"><span className="text-gray-700">{a.contactPerson || "—"}</span></td>
-                      <td className="px-6 py-5"><span className="text-gray-700">{a.phoneNumber || "—"}</span></td>
-                      <td className="px-6 py-5"><span className="text-gray-700">{a.email || "—"}</span></td>
-                      <td className="px-6 py-5"><span className="text-gray-700">{a.address || "—"}</span></td>
-                      <td className="px-6 py-5 text-right">
-                        <div className="flex justify-end items-center gap-2">
-                          <button title="Xem chi tiết" onClick={() => onView(a)} className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors duration-200 text-xs font-medium">
-                            <AiOutlineEye className="w-3 h-3" />
-                            Xem
-                          </button>
-                          <button title="Chỉnh sửa" onClick={() => onEdit(a)} className="flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100 transition-colors duration-200 text-xs font-medium">
-                            <AiOutlineEdit className="w-3 h-3" />
-                            Sửa
-                          </button>
-                          <button title="Xóa" onClick={() => onDelete(a.id)} className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors duration-200 text-xs font-medium">
-                            <AiOutlineDelete className="w-3 h-3" />
-                            Xóa
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+          <style>{`
+            @keyframes fadeInUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+          `}</style>
+          <div className="space-y-4">
+            {filtered.map((a, idx) => {
+              const delayMs = Math.round(idx * (2000 / Math.max(1, filtered.length)));
+              return (
+                <div
+                  key={a.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onView(a)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onView(a); } }}
+                  className="group bg-white rounded-2xl border border-gray-200 p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-1 group-hover:bg-blue-50 hover:ring-1 hover:ring-blue-200 cursor-pointer"
+                  style={{ animation: `fadeInUp 600ms ease ${delayMs}ms both` }}
+                >
+                  <div className="flex items-center gap-4 w-full md:w-2/3">
+                    <div className="flex-shrink-0">
+                      <div className="h-12 w-12 rounded-lg bg-white flex items-center justify-center text-indigo-600 font-semibold text-sm border border-gray-100 transition-colors duration-200 group-hover:border-blue-200 group-hover:bg-blue-50">
+                        <BoxCubeIcon className="h-6 w-6 text-blue-600" />
+                      </div>
+                    </div>
 
-                {!loading && filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="px-3 py-8 text-center text-gray-500">Không có dữ liệu</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-            </div>
+                    <div className="hidden md:block w-px h-10 bg-gray-100 rounded mx-2" />
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3">
+                        <h4 title={a.name} className="font-semibold text-gray-900 truncate group-hover:text-blue-800">{a.name}</h4>
+                      </div>
+                      <div className="mt-2 text-sm text-gray-600">
+                        <div className="truncate"><span className="text-xs text-gray-400">Người liên hệ: </span><span title={a.contactPerson || ""} className="font-medium text-gray-800">{a.contactPerson || "—"}</span>{a.phoneNumber && <span className="ml-2 text-xs text-gray-500">• {a.phoneNumber}</span>}</div>
+                        <div className="truncate mt-1"><span className="text-xs text-gray-400">Email: </span><span title={a.email || ""} className="text-gray-700">{a.email || "—"}</span></div>
+                        <div className="truncate mt-1"><span className="text-xs text-gray-400">Địa chỉ: </span><span title={a.address || ""} className="text-gray-700">{a.address || "—"}</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between w-full md:w-1/3">
+                    <div className="hidden md:flex flex-col text-right text-sm text-gray-600">
+                      <span className="text-xs text-gray-400">Ngày tạo</span>
+                      <span className="font-medium">{a.createdAt ? new Date(a.createdAt).toLocaleDateString() : "—"}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button onClick={(e) => { e.stopPropagation(); onView(a); }} title="Xem" aria-label={`Xem ${a.name}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition transform group-hover:scale-105 text-xs font-medium">
+                        <AiOutlineEye className="w-4 h-4" />
+                        <span className="hidden sm:inline">Xem</span>
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); onEdit(a); }} title="Sửa" aria-label={`Sửa ${a.name}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition transform group-hover:scale-105 text-xs font-medium">
+                        <AiOutlineEdit className="w-4 h-4" />
+                        <span className="hidden sm:inline">Sửa</span>
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); onDelete(a.id); }} title="Xóa" aria-label={`Xóa ${a.name}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 transition transform group-hover:scale-105 text-xs font-medium">
+                        <AiOutlineDelete className="w-4 h-4" />
+                        <span className="hidden sm:inline">Xóa</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {!loading && filtered.length === 0 && (
+              <div className="py-12 text-center text-gray-400">
+                <div className="flex flex-col items-center">
+                  <svg className="mb-3 h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                  </svg>
+                  <span className="text-sm">Không có dữ liệu</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Pagination */}

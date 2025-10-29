@@ -5,6 +5,9 @@ import {
   GridIcon,
   HorizontaLDots,
   TableIcon,
+  BoxCubeIcon,
+  PlugInIcon,
+  PageIcon,
   GroupIcon,
   UserCircleIcon,
 } from "../icons";
@@ -186,11 +189,25 @@ const SuperAdminSidebar: React.FC = () => {
                           : "menu-dropdown-item-inactive"
                       }`}
                     >
-                      {/* Add a small icon for the users list submenu */}
-                      {subItem.path === "/superadmin/users" && (
-                        <UserCircleIcon className="w-4 h-4 mr-2 text-gray-500" />
-                      )}
-                      {subItem.name}
+                      <div className="flex items-center gap-3">
+                        <span className="w-4 h-4 flex items-center justify-center text-gray-400">
+                          {(() => {
+                            switch (subItem.name) {
+                              case "Bệnh viện":
+                                return <TableIcon className="w-4 h-4" />;
+                              case "Đơn vị HIS":
+                                return <PlugInIcon className="w-4 h-4" />;
+                              case "Đại lý":
+                                return <BoxCubeIcon className="w-4 h-4" />;
+                              case "Danh sách người dùng":
+                                return <UserCircleIcon className="w-4 h-4" />;
+                              default:
+                                return <PageIcon className="w-4 h-4" />;
+                            }
+                          })()}
+                        </span>
+                        <span>{subItem.name}</span>
+                      </div>
                       <span className="flex items-center gap-1 ml-auto">
                         {subItem.new && (
                           <span
