@@ -52,7 +52,10 @@ export type ImplementationTaskRequestDTO = {
 
 export type ImplementationTaskUpdateDTO = Partial<ImplementationTaskRequestDTO>;
 
-const apiBase = "http://localhost:8080/api/v1/admin/dev/tasks";
+const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
+
+// PageClients: admin area — always use admin endpoints
+const apiBase = `${API_ROOT}/api/v1/admin/dev/tasks`;
 
 function authHeaders(extra?: Record<string, string>) {
     const token = localStorage.getItem("access_token");
@@ -595,6 +598,18 @@ const ImplementationTasksPage: React.FC = () => {
     const [data, setData] = useState<ImplementationTaskResponseDTO[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // current user info (used to enforce per-team permissions in UI)
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const userRoles = user?.roles || [];
+    const userTeam = (user?.team || "").toString().toUpperCase();
+    const isSuperAdmin = userRoles.some((r: unknown) => {
+        if (typeof r === "string") return r.toUpperCase() === "SUPERADMIN";
+        if (r && typeof r === "object") {
+            const rn = (r as Record<string, unknown>).roleName;
+            return typeof rn === "string" && rn.toUpperCase() === "SUPERADMIN";
+        }
+        return false;
+    });
 
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState<ImplementationTaskResponseDTO | null>(null);
@@ -685,7 +700,11 @@ const ImplementationTasksPage: React.FC = () => {
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                     />
-                    <Button onClick={() => { setEditing(null); setModalOpen(true); }}>+ Thêm mới</Button>
+                    {isSuperAdmin || userTeam === "DEV" ? (
+                        <Button onClick={() => { setEditing(null); setModalOpen(true); }}>+ Thêm mới</Button>
+                    ) : (
+                        <Button disabled className="opacity-50 cursor-not-allowed">+ Thêm mới</Button>
+                    )}
                 </div>
             </div>
 
@@ -750,14 +769,27 @@ const ImplementationTasksPage: React.FC = () => {
                                     <td className="px-4 py-3">{fmt(row.createdAt)}</td>
                                     <td className="px-4 py-3 text-right">
                                         <div className="flex justify-end gap-2">
-                                            <Button
-                                                variant="ghost"
-                                                onClick={() => {
-                                                    setEditing(row);
-                                                    setModalOpen(true);
-                                                }}
-                                            >Sửa</Button>
-                                            <Button variant="danger" onClick={() => handleDelete(row.id)}>Xóa</Button>
+                                            {(() => {
+                                                const rowTeam = String((row as Record<string, unknown>).team || "").toUpperCase();
+                                                const canEdit = isSuperAdmin || (userTeam && rowTeam && userTeam === rowTeam) || (!rowTeam && userTeam === "DEV");
+                                                if (canEdit) {
+                                                    return (
+                                                        <>
+                                                            <Button
+                                                                variant="ghost"
+                                                                onClick={() => { setEditing(row); setModalOpen(true); }}
+                                                            >Sửa</Button>
+                                                            <Button variant="danger" onClick={() => handleDelete(row.id)}>Xóa</Button>
+                                                        </>
+                                                    );
+                                                }
+                                                return (
+                                                    <>
+                                                        <Button variant="ghost" disabled className="opacity-50 cursor-not-allowed">Sửa</Button>
+                                                        <Button variant="danger" disabled className="opacity-50 cursor-not-allowed">Xóa</Button>
+                                                    </>
+                                                );
+                                            })()}
                                         </div>
                                     </td>
                                 </tr>

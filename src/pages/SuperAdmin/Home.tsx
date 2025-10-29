@@ -29,12 +29,6 @@ export default function SuperAdminHome() {
   }, []);
 
   const donutOptions: ApexOptions = {
-  // Local type for formatter options to avoid using `any` and satisfy eslint
-  // Apex provides a `w` object in opts with globals.series and globals.seriesTotals
-  // We only declare the bits we need here.
-  // Note: Keep this local and narrow to avoid depending on internal 'any' shapes.
-    // TIP: If ApexCharts publishes types for `opts.w.globals`, we can replace this later.
-    // Define the shape inline below.
     labels: ["Người dùng", "Bệnh viện", "HIS" , "Phần cứng", "Đại lý"],
     legend: {
       position: "bottom",

@@ -31,6 +31,9 @@ import SuperAdminUsers from "./pages/SuperAdmin/Users";
 import Agencies from "./pages/SuperAdmin/Agencies";
 import Hardware from "./pages/SuperAdmin/Hardware";
 import SuperAdminProfile from "./pages/SuperAdmin/Profile";
+import ImplementSuperTaskPage from "./pages/SuperAdmin/implementsuper-task";
+import DevSuperTaskPage from "./pages/SuperAdmin/devsupertask";
+import MaintenanceSuperTaskPage from "./pages/SuperAdmin/maintenacesuper-task";
 
 // Protected Route Component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -112,6 +115,10 @@ export default function App() {
             <Route path="/superadmin/his-systems" element={<HisSystemPage />} />
             <Route path="/superadmin/agencies" element={<Agencies />} />
             <Route path="/superadmin/hardware" element={<Hardware />} />
+            {/* SuperAdmin-specific task pages */}
+            <Route path="/superadmin/implementation-tasks" element={<ImplementSuperTaskPage />} />
+            <Route path="/superadmin/dev-tasks" element={<DevSuperTaskPage />} />
+            <Route path="/superadmin/maintenance-tasks" element={<MaintenanceSuperTaskPage />} />
             <Route path="/superadmin/profile" element={<SuperAdminProfile />} />
           </Route>
 

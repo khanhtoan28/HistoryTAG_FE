@@ -52,7 +52,12 @@ export type ImplementationTaskRequestDTO = {
 
 export type ImplementationTaskUpdateDTO = Partial<ImplementationTaskRequestDTO>;
 
-const apiBase = "http://localhost:8080/api/v1/admin/maintenance/tasks";
+type UserInfo = { id?: number; username?: string; team?: string; roles?: string[] } | null;
+
+const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
+
+// PageClients: admin area — always use admin endpoints
+const apiBase = `${API_ROOT}/api/v1/admin/maintenance/tasks`;
 
 function authHeaders(extra?: Record<string, string>) {
     const token = localStorage.getItem("access_token");
@@ -298,8 +303,13 @@ function TaskFormModal({
             const json = await res.json();
             const list = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
             return list
-                .map((h: any) => ({ id: Number(h.id), name: String(h.name ?? h.hospitalName ?? h.code ?? h.id) }))
-                .filter((x: any) => Number.isFinite(x.id) && x.name);
+                .map((h: unknown) => {
+                    const obj = h as Record<string, unknown>;
+                    const id = Number(obj.id as unknown);
+                    const name = String(obj.name ?? obj.hospitalName ?? obj.code ?? obj.id ?? "");
+                    return { id, name };
+                })
+                .filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
         },
         []
     );
@@ -313,8 +323,13 @@ function TaskFormModal({
             const json = await res.json();
             const list = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
             return list
-                .map((u: any) => ({ id: Number(u.id), name: String(u.fullName ?? u.name ?? u.username ?? u.id) }))
-                .filter((x: any) => Number.isFinite(x.id) && x.name);
+                .map((u: unknown) => {
+                    const obj = u as Record<string, unknown>;
+                    const id = Number(obj.id as unknown);
+                    const name = String(obj.fullName ?? obj.name ?? obj.username ?? obj.id ?? "");
+                    return { id, name };
+                })
+                .filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
         },
         []
     );
@@ -418,11 +433,11 @@ function TaskFormModal({
             completionDate: toISOOrNull(model.completionDate) || undefined,
             startDate: toISOOrNull(model.startDate) || undefined,
             acceptanceDate: toISOOrNull(model.acceptanceDate) || undefined,
-        } as any;
+        };
 
         try {
             setSubmitting(true);
-            await onSubmit(payload, (initial as any)?.id);
+            await onSubmit(payload, initial?.id);
             onClose();
         } finally {
             setSubmitting(false);
@@ -601,6 +616,30 @@ const ImplementationTasksPage: React.FC = () => {
 
     const [query, setQuery] = useState("");
 
+    // current user and roles (from localStorage) used to control UI permissions
+    const currentUser = useMemo<UserInfo>(() => {
+        const raw = localStorage.getItem("user");
+        if (!raw) return null;
+        try {
+            return JSON.parse(raw) as UserInfo;
+        } catch {
+            return null;
+        }
+    }, []);
+
+    const roles = useMemo<string[]>(() => {
+        const raw = localStorage.getItem("roles");
+        if (!raw) return [];
+        try {
+            return JSON.parse(raw) as string[];
+        } catch {
+            return [];
+        }
+    }, []);
+
+    const isSuperAdmin = roles.includes("SUPERADMIN");
+    const userTeam = currentUser?.team ?? null;
+
     const filtered = useMemo(() => {
         if (!query.trim()) return data;
         const q = query.toLowerCase();
@@ -623,8 +662,9 @@ const ImplementationTasksPage: React.FC = () => {
             if (!res.ok) throw new Error(`GET ${apiBase} failed: ${res.status}`);
             const page = await res.json(); 
             setData(Array.isArray(page?.content) ? page.content : []);
-        } catch (e: any) {
-            setError(e.message || "Lỗi tải dữ liệu");
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setError(msg || "Lỗi tải dữ liệu");
         } finally {
             setLoading(false);
         }
@@ -685,7 +725,16 @@ const ImplementationTasksPage: React.FC = () => {
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                     />
-                    <Button onClick={() => { setEditing(null); setModalOpen(true); }}>+ Thêm mới</Button>
+                    {/* Only SUPERADMIN or members of MAINTENANCE team can create */}
+                    <Button
+                        onClick={() => {
+                            setEditing(null);
+                            setModalOpen(true);
+                        }}
+                        disabled={!(isSuperAdmin || userTeam === "MAINTENANCE")}
+                    >
+                        + Thêm mới
+                    </Button>
                 </div>
             </div>
 
@@ -740,8 +789,17 @@ const ImplementationTasksPage: React.FC = () => {
                                                     setEditing(row);
                                                     setModalOpen(true);
                                                 }}
-                                            >Sửa</Button>
-                                            <Button variant="danger" onClick={() => handleDelete(row.id)}>Xóa</Button>
+                                                disabled={!(isSuperAdmin || userTeam === "MAINTENANCE")}
+                                            >
+                                                Sửa
+                                            </Button>
+                                            <Button
+                                                variant="danger"
+                                                onClick={() => handleDelete(row.id)}
+                                                disabled={!(isSuperAdmin || userTeam === "MAINTENANCE")}
+                                            >
+                                                Xóa
+                                            </Button>
                                         </div>
                                     </td>
                                 </tr>

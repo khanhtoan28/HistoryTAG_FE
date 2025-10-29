@@ -112,11 +112,11 @@ const UserCard: React.FC<UserCardProps> = ({ user, onView, onEdit, onToggleLock,
       </div>
 
       {/* Actions */}
-      <div className="flex justify-center gap-2 pt-3 border-t border-gray-100">
+      <div className="flex flex-wrap items-center justify-center gap-2 pt-3 pb-2 border-t border-gray-100">
         <button
           title="Xem chi tiết"
           aria-label={`Xem ${user.username}`}
-          className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors duration-200 text-xs font-medium"
+          className="flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors duration-200 text-xs font-medium whitespace-nowrap"
           onClick={() => onView(user)}
         >
           <AiOutlineEye className="w-3 h-3" />
@@ -125,7 +125,7 @@ const UserCard: React.FC<UserCardProps> = ({ user, onView, onEdit, onToggleLock,
         <button
           title="Chỉnh sửa"
           aria-label={`Sửa ${user.username}`}
-          className="flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100 transition-colors duration-200 text-xs font-medium"
+          className="flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100 transition-colors duration-200 text-xs font-medium whitespace-nowrap"
           onClick={() => onEdit(user)}
         >
           <AiOutlineEdit className="w-3 h-3" />
@@ -134,11 +134,11 @@ const UserCard: React.FC<UserCardProps> = ({ user, onView, onEdit, onToggleLock,
         <button
           title={user.status ? "Khóa tài khoản" : "Mở khóa tài khoản"}
           aria-label={`${user.status ? "Khóa" : "Mở khóa"} ${user.username}`}
-          className={`flex items-center gap-1 px-3 py-1.5 rounded-md transition-colors duration-200 text-xs font-medium ${
+          className={`flex items-center gap-1 px-2.5 py-1 rounded-md transition-colors duration-200 text-xs font-medium ${
             user.status
               ? "bg-red-50 text-red-700 hover:bg-red-100"
               : "bg-green-50 text-green-700 hover:bg-green-100"
-          }`}
+          } whitespace-nowrap`}
           onClick={() => onToggleLock(user.id, user.status)}
         >
           <AiOutlineLock className="w-3 h-3" />
@@ -147,7 +147,7 @@ const UserCard: React.FC<UserCardProps> = ({ user, onView, onEdit, onToggleLock,
         <button
           title="Xóa tài khoản"
           aria-label={`Xóa ${user.username}`}
-          className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors duration-200 text-xs font-medium"
+          className="flex items-center gap-1 px-2.5 py-1 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors duration-200 text-xs font-medium whitespace-nowrap"
           onClick={() => onDelete(user.id)}
         >
           <AiOutlineDelete className="w-3 h-3" />
