@@ -750,8 +750,19 @@ const ImplementationTasksPage: React.FC = () => {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<ImplementationTaskResponseDTO | null>(null);
   const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const userRoles = user?.roles || [];
-  const userTeam = user?.team?.toUpperCase?.() || "";
+    const readStored = <T = unknown>(key: string): T | null => {
+      try {
+        const raw = localStorage.getItem(key) || sessionStorage.getItem(key);
+        if (!raw) return null;
+        return JSON.parse(raw) as T;
+      } catch {
+        return null;
+      }
+    };
+
+    const currentUser = readStored<{ id?: number; username?: string; team?: string; roles?: unknown[] }>("user") || null;
+    const userRoles = (readStored<string[]>("roles") || (currentUser?.roles as string[] | undefined)) || [];
+    const userTeam = (currentUser?.team || "").toString().toUpperCase();
   const isSuperAdmin = userRoles.some(
     (r: any) => (typeof r === "string" ? r : r.roleName)?.toUpperCase() === "SUPERADMIN"
   );

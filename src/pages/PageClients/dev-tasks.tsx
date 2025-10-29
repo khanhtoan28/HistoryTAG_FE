@@ -310,14 +310,77 @@ function TaskFormModal({
     const searchPICs = useMemo(
         () => async (term: string) => {
             // ĐỔI URL nếu API khác
-            const url = `/api/v1/admin/users?role=DEPLOYMENT&keyword=${encodeURIComponent(term)}&page=0&size=10`;
+            // For DEV tasks we want users in DEV role/team
+            const url = `/api/v1/admin/users?role=DEV&keyword=${encodeURIComponent(term)}&page=0&size=10`;
             const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
             if (!res.ok) return [];
             const json = await res.json();
             const list = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
             return list
-                .map((u: any) => ({ id: Number(u.id), name: String(u.fullName ?? u.name ?? u.username ?? u.id) }))
-                .filter((x: any) => Number.isFinite(x.id) && x.name);
+                .map((u: unknown) => {
+                    const obj = u as Record<string, unknown>;
+                    const id = Number(obj.id as unknown);
+                    const name = String(obj.fullName ?? obj.name ?? obj.username ?? obj.id ?? "");
+                    return { id, name };
+                })
+                .filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
+        },
+        []
+    );
+
+    const searchAgencies = useMemo(
+        () => async (term: string) => {
+            const url = `/api/v1/admin/agencies?keyword=${encodeURIComponent(term)}&page=0&size=10`;
+            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+            if (!res.ok) return [];
+            const json = await res.json();
+            const list = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
+            return list
+                .map((a: unknown) => {
+                    const obj = a as Record<string, unknown>;
+                    const id = Number(obj.id as unknown);
+                    const name = String(obj.name ?? obj.agencyName ?? obj.id ?? "");
+                    return { id, name };
+                })
+                .filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
+        },
+        []
+    );
+
+    const searchHisSystems = useMemo(
+        () => async (term: string) => {
+            const url = `/api/v1/admin/his?keyword=${encodeURIComponent(term)}&page=0&size=10`;
+            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+            if (!res.ok) return [];
+            const json = await res.json();
+            const list = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
+            return list
+                .map((h: unknown) => {
+                    const obj = h as Record<string, unknown>;
+                    const id = Number(obj.id as unknown);
+                    const name = String(obj.name ?? obj.hisName ?? obj.id ?? "");
+                    return { id, name };
+                })
+                .filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
+        },
+        []
+    );
+
+    const searchHardwares = useMemo(
+        () => async (term: string) => {
+            const url = `/api/v1/admin/hardware?keyword=${encodeURIComponent(term)}&page=0&size=10`;
+            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+            if (!res.ok) return [];
+            const json = await res.json();
+            const list = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
+            return list
+                .map((h: unknown) => {
+                    const obj = h as Record<string, unknown>;
+                    const id = Number(obj.id as unknown);
+                    const name = String(obj.name ?? obj.hardwareName ?? obj.id ?? "");
+                    return { id, name };
+                })
+                .filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
         },
         []
     );
@@ -352,6 +415,18 @@ function TaskFormModal({
         const nm = (initial?.picDeploymentName as string) || "";
         return id ? { id, name: nm || String(id) } : null;
     });
+    const [agencyOpt, setAgencyOpt] = useState<{ id: number; name: string } | null>(() => {
+        const id = (initial?.agencyId as number) || 0;
+        return id ? { id, name: String(id) } : null;
+    });
+    const [hisOpt, setHisOpt] = useState<{ id: number; name: string } | null>(() => {
+        const id = (initial?.hisSystemId as number) || 0;
+        return id ? { id, name: String(id) } : null;
+    });
+    const [hardwareOpt, setHardwareOpt] = useState<{ id: number; name: string } | null>(() => {
+        const id = (initial?.hardwareId as number) || 0;
+        return id ? { id, name: String(id) } : null;
+    });
 
     useEffect(() => {
         if (open) {
@@ -381,6 +456,14 @@ function TaskFormModal({
             const pid = (initial?.picDeploymentId as number) || 0;
             const pnm = (initial?.picDeploymentName as string) || "";
             setPicOpt(pid ? { id: pid, name: pnm || String(pid) } : null);
+            const aid = (initial?.agencyId as number) || 0;
+            setAgencyOpt(aid ? { id: aid, name: String(aid) } : null);
+
+            const hid2 = (initial?.hisSystemId as number) || 0;
+            setHisOpt(hid2 ? { id: hid2, name: String(hid2) } : null);
+
+            const hwid = (initial?.hardwareId as number) || 0;
+            setHardwareOpt(hwid ? { id: hwid, name: String(hwid) } : null);
         }
     }, [open, initial]);
 
@@ -421,11 +504,11 @@ function TaskFormModal({
             completionDate: toISOOrNull(model.completionDate) || undefined,
             startDate: toISOOrNull(model.startDate) || undefined,
             acceptanceDate: toISOOrNull(model.acceptanceDate) || undefined,
-        } as any;
+    };
 
         try {
             setSubmitting(true);
-            await onSubmit(payload, (initial as any)?.id);
+            await onSubmit(payload, initial?.id);
             onClose();
         } finally {
             setSubmitting(false);
@@ -496,27 +579,27 @@ function TaskFormModal({
                                         onChange={(e) => setModel((s) => ({ ...s, quantity: e.target.value ? Number(e.target.value) : null }))}
                                     />
                                 </Field>
-                                <Field label="Agency ID">
-                                    <TextInput
-                                        type="number"
-                                        value={model.agencyId ?? ""}
-                                        onChange={(e) => setModel((s) => ({ ...s, agencyId: e.target.value ? Number(e.target.value) : null }))}
-                                    />
-                                </Field>
-                                <Field label="HIS System ID">
-                                    <TextInput
-                                        type="number"
-                                        value={model.hisSystemId ?? ""}
-                                        onChange={(e) => setModel((s) => ({ ...s, hisSystemId: e.target.value ? Number(e.target.value) : null }))}
-                                    />
-                                </Field>
-                                <Field label="Hardware ID">
-                                    <TextInput
-                                        type="number"
-                                        value={model.hardwareId ?? ""}
-                                        onChange={(e) => setModel((s) => ({ ...s, hardwareId: e.target.value ? Number(e.target.value) : null }))}
-                                    />
-                                </Field>
+                                                                <RemoteSelect
+                                                                    label="Agency"
+                                                                    placeholder="Nhập tên agency để tìm…"
+                                                                    fetchOptions={searchAgencies}
+                                                                    value={agencyOpt}
+                                                                    onChange={(v) => { setAgencyOpt(v); setModel((s) => ({ ...s, agencyId: v ? v.id : null })); }}
+                                                                />
+                                                                <RemoteSelect
+                                                                    label="HIS System"
+                                                                    placeholder="Nhập tên HIS để tìm…"
+                                                                    fetchOptions={searchHisSystems}
+                                                                    value={hisOpt}
+                                                                    onChange={(v) => { setHisOpt(v); setModel((s) => ({ ...s, hisSystemId: v ? v.id : null })); }}
+                                                                />
+                                                                <RemoteSelect
+                                                                    label="Hardware"
+                                                                    placeholder="Nhập tên hardware để tìm…"
+                                                                    fetchOptions={searchHardwares}
+                                                                    value={hardwareOpt}
+                                                                    onChange={(v) => { setHardwareOpt(v); setModel((s) => ({ ...s, hardwareId: v ? v.id : null })); }}
+                                                                />
                                 <Field label="API URL">
                                     <TextInput
                                         value={model.apiUrl ?? ""}
@@ -599,8 +682,18 @@ const ImplementationTasksPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     // current user info (used to enforce per-team permissions in UI)
-    const user = JSON.parse(localStorage.getItem("user") || "{}");
-    const userRoles = user?.roles || [];
+    const readStored = <T = unknown>(key: string): T | null => {
+        try {
+            const raw = localStorage.getItem(key) || sessionStorage.getItem(key);
+            if (!raw) return null;
+            return JSON.parse(raw) as T;
+        } catch {
+            return null;
+        }
+    };
+
+    const user = readStored<{ id?: number; username?: string; team?: string; roles?: unknown[] }>("user") || {};
+    const userRoles = (readStored<unknown[]>("roles") || (user?.roles as unknown[]) ) || [];
     const userTeam = (user?.team || "").toString().toUpperCase();
     const isSuperAdmin = userRoles.some((r: unknown) => {
         if (typeof r === "string") return r.toUpperCase() === "SUPERADMIN";
@@ -638,8 +731,9 @@ const ImplementationTasksPage: React.FC = () => {
             if (!res.ok) throw new Error(`GET ${apiBase} failed: ${res.status}`);
             const page = await res.json(); 
             setData(Array.isArray(page?.content) ? page.content : []);
-        } catch (e: any) {
-            setError(e.message || "Lỗi tải dữ liệu");
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            setError(msg || "Lỗi tải dữ liệu");
         } finally {
             setLoading(false);
         }

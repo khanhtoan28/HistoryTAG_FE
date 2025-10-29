@@ -78,6 +78,17 @@ function toISOOrNull(v?: string | Date | null) {
     }
 }
 
+// Read from localStorage then sessionStorage (some flows store in session)
+function readStored<T = unknown>(key: string): T | null {
+    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key);
+    if (!raw) return null;
+    try {
+        return JSON.parse(raw) as T;
+    } catch {
+        return null;
+    }
+}
+
 function fmt(dt?: string | null) {
     if (!dt) return "";
     const d = new Date(dt);
@@ -616,25 +627,12 @@ const ImplementationTasksPage: React.FC = () => {
 
     const [query, setQuery] = useState("");
 
-    // current user and roles (from localStorage) used to control UI permissions
-    const currentUser = useMemo<UserInfo>(() => {
-        const raw = localStorage.getItem("user");
-        if (!raw) return null;
-        try {
-            return JSON.parse(raw) as UserInfo;
-        } catch {
-            return null;
-        }
-    }, []);
+    // current user and roles (from localStorage or sessionStorage) used to control UI permissions
+    const currentUser = useMemo<UserInfo>(() => readStored<UserInfo>("user"), []);
 
     const roles = useMemo<string[]>(() => {
-        const raw = localStorage.getItem("roles");
-        if (!raw) return [];
-        try {
-            return JSON.parse(raw) as string[];
-        } catch {
-            return [];
-        }
+        const r = readStored<string[]>("roles");
+        return Array.isArray(r) ? r : [];
     }, []);
 
     const isSuperAdmin = roles.includes("SUPERADMIN");
