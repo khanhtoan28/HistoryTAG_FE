@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
@@ -37,6 +38,7 @@ export default function HardwarePage() {
   const [viewing, setViewing] = useState<Hardware | null>(null);
   const [isModalLoading, setIsModalLoading] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [showImageModal, setShowImageModal] = useState(false);
 
   const [form, setForm] = useState<HardwareForm>({
     name: "",
@@ -58,6 +60,7 @@ export default function HardwarePage() {
     setIsModalLoading(false);
     setForm({ name: "", type: "", supplier: "", warrantyPeriod: "", notes: "", imageFile: null });
     setImagePreview(null);
+    setShowImageModal(false);
   }
 
   function fillForm(h: Hardware) {
@@ -219,87 +222,138 @@ export default function HardwarePage() {
     <>
       <PageMeta title="Quản lý Phần cứng – CRUD" description="Quản lý phần cứng: danh sách, tìm kiếm, tạo, sửa, xóa" />
 
-      <div className="space-y-6">
+      <div className="space-y-10">
         <ComponentCard title="Tìm kiếm & Thao tác">
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-            <input className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring focus:ring-primary/30" placeholder="Tìm theo tên" value={search} onChange={(e) => setSearch(e.target.value)} />
-            <select className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-6">
+            <input className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" placeholder="Tìm theo tên" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <select className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
               <option value="">Tất cả loại</option>
               {Array.from(new Set(items.map((i) => i.type).filter(Boolean))).map((t) => (
                 <option key={t as string} value={t as string}>{t as string}</option>
               ))}
             </select>
             <span className="hidden md:block col-span-2" />
-            <select className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+            <select className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
               {["id", "name", "type"].map((k) => (
                 <option key={k} value={k}>Sắp xếp theo: {k}</option>
               ))}
             </select>
-            <select className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" value={sortDir} onChange={(e) => setSortDir(e.target.value as any)}>
+            <select className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" value={sortDir} onChange={(e) => setSortDir(e.target.value as any)}>
               <option value="asc">Tăng dần</option>
               <option value="desc">Giảm dần</option>
             </select>
           </div>
-          <div className="mt-4 flex items-center justify-between">
-            <p className="text-sm text-gray-500">Tổng: <span className="font-medium text-gray-700">{totalElements}</span></p>
+          <div className="mt-6 flex items-center justify-between">
+            <p className="text-sm text-gray-600">Tổng: <span className="font-semibold text-gray-900">{totalElements}</span></p>
             <div className="flex items-center gap-3">
-              <button className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100" onClick={onCreate}>+ Thêm phần cứng</button>
-              <button className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50" onClick={fetchList}>Làm mới</button>
+              <button className="rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md" onClick={onCreate}> + Thêm phần cứng</button>
+              <button className="rounded-xl border-2 border-gray-300 px-5 py-3 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400 flex items-center gap-2" onClick={fetchList}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Làm mới
+              </button>
             </div>
           </div>
         </ComponentCard>
 
         <ComponentCard title="Danh sách phần cứng">
-          <div className="overflow-x-auto">
-            <table className="w-full table-auto text-left text-sm">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                <tr>
-                  <th className="px-3 py-2 w-14 text-center">STT</th>
-                  <th className="px-3 py-2">Ảnh</th>
-                  <th className="px-3 py-2">Tên</th>
-                  <th className="px-3 py-2">Loại</th>
-                  <th className="px-3 py-2">Nhà cung cấp</th>
-                  <th className="px-3 py-2">Bảo hành</th>
-                  <th className="px-3 py-2">Ghi chú</th>
-                  <th className="px-3 py-2 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((h, idx) => {
-                  const rowNo = page * size + idx + 1;
-                  return (
-                    <tr key={h.id} className="border-b last:border-b-0">
-                      <td className="px-3 py-2 text-center">{rowNo}</td>
-                      <td className="px-3 py-2">
-                        {h.imageUrl ? (
-                          <img src={h.imageUrl} alt={h.name} className="h-10 w-10 rounded object-cover border" />
-                        ) : (
-                          <div className="h-10 w-10 rounded border bg-gray-50" />
-                        )}
-                      </td>
-                      <td className="px-3 py-2 font-medium">{h.name}</td>
-                      <td className="px-3 py-2">{h.type || "—"}</td>
-                      <td className="px-3 py-2">{h.supplier || "—"}</td>
-                      <td className="px-3 py-2">{h.warrantyPeriod || "—"}</td>
-                      <td className="px-3 py-2">{h.notes || "—"}</td>
-                      <td className="px-3 py-2 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button className="rounded-md border px-2 py-1 text-xs hover:bg-gray-50 text-gray-600" onClick={() => onView(h)}>Xem</button>
-                          <button className="rounded-md border px-2 py-1 text-xs hover:bg-gray-50" onClick={() => onEdit(h)}>Sửa</button>
-                          <button className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100" onClick={() => onDelete(h.id)}>Xóa</button>
+          <div className="overflow-x-auto -mx-1">
+            <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="bg-gradient-to-r from-gray-50 to-gray-100/50">
+                    <th className="px-6 py-4 text-center text-xs font-semibold uppercase tracking-wider text-gray-700">STT</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Ảnh</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Tên</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Loại</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Nhà cung cấp</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Bảo hành</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Ghi chú</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-gray-700">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filtered.map((h, idx) => {
+                    const rowNo = page * size + idx + 1;
+                    return (
+                      <tr key={h.id} className="hover:bg-blue-50/30 transition-colors">
+                        <td className="px-6 py-5 text-center font-medium text-gray-600">{rowNo}</td>
+                        <td className="px-6 py-5">
+                          {h.imageUrl ? (
+                            <img src={h.imageUrl} alt={h.name} className="h-12 w-12 rounded-xl object-cover ring-2 ring-gray-100" />
+                          ) : (
+                            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 ring-2 ring-gray-100" />
+                          )}
+                        </td>
+                        <td className="px-6 py-5">
+                          <span className="font-semibold text-gray-900">{h.name}</span>
+                        </td>
+                        <td className="px-6 py-5">
+                          <span className="inline-flex items-center rounded-full bg-gradient-to-r from-indigo-500 to-indigo-600 px-4 py-1.5 text-xs font-semibold text-white shadow-sm">{h.type || "—"}</span>
+                        </td>
+                        <td className="px-6 py-5">
+                          <span className="text-gray-700">{h.supplier || "—"}</span>
+                        </td>
+                        <td className="px-6 py-5">
+                          {h.warrantyPeriod ? (
+                            <span className="inline-flex items-center rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 py-1.5 text-xs font-semibold text-white shadow-sm">{h.warrantyPeriod}</span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-gray-100 px-4 py-1.5 text-xs font-semibold text-gray-500">—</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-5">
+                          <span className="text-gray-600 text-sm">{h.notes || "—"}</span>
+                        </td>
+                        <td className="px-6 py-5 text-right">
+                          <div className="flex justify-end items-center gap-2">
+                            <button
+                              title="Xem chi tiết"
+                              onClick={() => onView(h)}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors duration-200 text-xs font-medium"
+                            >
+                              <AiOutlineEye className="w-3 h-3" />
+                              Xem
+                            </button>
+
+                            <button
+                              title="Chỉnh sửa"
+                              onClick={() => onEdit(h)}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100 transition-colors duration-200 text-xs font-medium"
+                            >
+                              <AiOutlineEdit className="w-3 h-3" />
+                              Sửa
+                            </button>
+
+                            <button
+                              title="Xóa"
+                              onClick={() => onDelete(h.id)}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors duration-200 text-xs font-medium"
+                            >
+                              <AiOutlineDelete className="w-3 h-3" />
+                              Xóa
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {!loading && filtered.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-12 text-center text-gray-400">
+                        <div className="flex flex-col items-center">
+                          <svg className="mb-3 h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                          </svg>
+                          <span className="text-sm">Không có dữ liệu</span>
                         </div>
                       </td>
                     </tr>
-                  );
-                })}
-
-                {!loading && filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="px-3 py-8 text-center text-gray-500">Không có dữ liệu</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Pagination */}
@@ -322,65 +376,179 @@ export default function HardwarePage() {
       </div>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={closeModal} />
-          <div className="relative z-10 m-4 w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">{isViewing ? "Chi tiết phần cứng" : (isEditing ? "Cập nhật phần cứng" : "Thêm phần cứng")}</h3>
-              <button className="rounded-md p-1 hover:bg-gray-100" onClick={closeModal}>✕</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeModal} />
+          <div className="relative z-10 w-full max-w-4xl rounded-3xl bg-white p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="mb-6 flex items-center justify-between">
+              <h3 className="text-2xl font-bold text-gray-900">{isViewing ? "Chi tiết phần cứng" : (isEditing ? "Cập nhật phần cứng" : "Thêm phần cứng")}</h3>
+              <button className="rounded-xl p-2 transition-all hover:bg-gray-100 hover:scale-105" onClick={closeModal}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
 
             {isModalLoading ? (
-              <div className="text-center py-12 text-gray-500">Đang tải chi tiết...</div>
+              <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+                <svg className="mb-4 h-12 w-12 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                <span>Đang tải chi tiết...</span>
+              </div>
+            ) : isViewing ? (
+              // Layout cho chế độ xem chi tiết - ảnh bên trái, nội dung bên phải
+              <div className="flex flex-col lg:flex-row gap-8">
+                {/* Phần ảnh bên trái */}
+                <div className="lg:w-1/3 flex flex-col items-center">
+                  <div className="w-full max-w-sm">
+                    {imagePreview ? (
+                      <div className="relative cursor-pointer group" onClick={() => setShowImageModal(true)}>
+                        <img 
+                          src={imagePreview} 
+                          alt={form.name} 
+                          className="w-full h-80 rounded-3xl object-cover shadow-2xl ring-4 ring-gray-100 transition-transform group-hover:scale-105" 
+                        />
+                        <div className="absolute inset-0 rounded-3xl bg-gradient-to-t from-black/20 to-transparent group-hover:from-black/30 transition-colors"></div>
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="bg-white/90 backdrop-blur-sm rounded-full p-3 shadow-lg">
+                            <svg className="h-8 w-8 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="w-full h-80 rounded-3xl bg-gradient-to-br from-gray-100 to-gray-200 shadow-2xl ring-4 ring-gray-100 flex items-center justify-center">
+                        <div className="text-center text-gray-400">
+                          <svg className="mx-auto h-16 w-16 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <p className="text-sm">Không có ảnh</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <h2 className="mt-6 text-2xl font-bold text-gray-900 text-center">{form.name}</h2>
+                </div>
+
+                {/* Phần nội dung bên phải */}
+                <div className="lg:w-2/3 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6">
+                      <label className="block text-sm font-semibold text-blue-800 mb-2">Loại phần cứng</label>
+                      <p className="text-lg font-medium text-blue-900">{form.type || "—"}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6">
+                      <label className="block text-sm font-semibold text-green-800 mb-2">Nhà cung cấp</label>
+                      <p className="text-lg font-medium text-green-900">{form.supplier || "—"}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-6">
+                      <label className="block text-sm font-semibold text-purple-800 mb-2">Thời gian bảo hành</label>
+                      <p className="text-lg font-medium text-purple-900">{form.warrantyPeriod || "—"}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-2xl p-6">
+                      <label className="block text-sm font-semibold text-orange-800 mb-2">ID</label>
+                      <p className="text-lg font-medium text-orange-900">#{viewing?.id}</p>
+                    </div>
+                  </div>
+                  
+                  {form.notes && (
+                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-6">
+                      <label className="block text-sm font-semibold text-gray-800 mb-3">Ghi chú</label>
+                      <p className="text-gray-700 leading-relaxed">{form.notes}</p>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end pt-6 border-t border-gray-200">
+                    <button 
+                      type="button" 
+                      className="rounded-xl border-2 border-gray-300 bg-white px-8 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400 hover:shadow-md" 
+                      onClick={closeModal}
+                    >
+                      Đóng
+                    </button>
+                  </div>
+                </div>
+              </div>
             ) : (
-              <form onSubmit={onSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="space-y-3">
+              // Layout cho chế độ chỉnh sửa/tạo mới
+              <form onSubmit={onSubmit} className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="space-y-5">
                   <div>
-                    <label className="mb-1 block text-sm font-medium">Tên phần cứng*</label>
-                    <input required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} disabled={isViewing} />
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">Tên phần cứng*</label>
+                    <input required className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 disabled:cursor-not-allowed" value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} disabled={isViewing} />
                   </div>
                   <div>
-                    <label className="mb-1 block text-sm">Loại</label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.type || ""} onChange={(e) => setForm((s) => ({ ...s, type: e.target.value }))} disabled={isViewing} />
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">Loại</label>
+                    <input className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 disabled:cursor-not-allowed" value={form.type || ""} onChange={(e) => setForm((s) => ({ ...s, type: e.target.value }))} disabled={isViewing} />
                   </div>
                   <div>
-                    <label className="mb-1 block text-sm">Hình ảnh</label>
-                    <input type="file" accept="image/*" disabled={isViewing} onChange={(e) => onFileChange(e.target.files?.[0] || null)} />
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">Hình ảnh</label>
+                    <input type="file" accept="image/*" disabled={isViewing} className="block w-full text-sm text-gray-500 file:mr-4 file:rounded-xl file:border-0 file:bg-blue-500 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed" onChange={(e) => onFileChange(e.target.files?.[0] || null)} />
                     {imagePreview && (
-                      <div className="mt-2">
-                        <img src={imagePreview} className="h-24 w-24 rounded object-cover border" />
+                      <div className="mt-3">
+                        <img src={imagePreview} className="h-32 w-32 rounded-2xl object-cover shadow-md ring-2 ring-gray-200" />
                       </div>
                     )}
                   </div>
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-5">
                   <div>
-                    <label className="mb-1 block text-sm">Nhà cung cấp</label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.supplier || ""} onChange={(e) => setForm((s) => ({ ...s, supplier: e.target.value }))} disabled={isViewing} />
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">Nhà cung cấp</label>
+                    <input className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 disabled:cursor-not-allowed" value={form.supplier || ""} onChange={(e) => setForm((s) => ({ ...s, supplier: e.target.value }))} disabled={isViewing} />
                   </div>
                   <div>
-                    <label className="mb-1 block text-sm">Thời gian bảo hành</label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.warrantyPeriod || ""} onChange={(e) => setForm((s) => ({ ...s, warrantyPeriod: e.target.value }))} disabled={isViewing} />
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">Thời gian bảo hành</label>
+                    <input className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 disabled:cursor-not-allowed" value={form.warrantyPeriod || ""} onChange={(e) => setForm((s) => ({ ...s, warrantyPeriod: e.target.value }))} disabled={isViewing} />
                   </div>
                   <div>
-                    <label className="mb-1 block text-sm">Ghi chú</label>
-                    <textarea className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" rows={3} value={form.notes || ""} onChange={(e) => setForm((s) => ({ ...s, notes: e.target.value }))} disabled={isViewing} />
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">Ghi chú</label>
+                    <textarea className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 disabled:cursor-not-allowed" rows={3} value={form.notes || ""} onChange={(e) => setForm((s) => ({ ...s, notes: e.target.value }))} disabled={isViewing} />
                   </div>
                 </div>
 
-                <div className="col-span-1 md:col-span-2 mt-2 flex items-center justify-between">
-                  {error && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
-                  <div className="ml-auto flex items-center gap-2">
-                    <button type="button" className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 hover:bg-red-100" onClick={closeModal}>{isViewing ? "Đóng" : "Huỷ"}</button>
-                    {!isViewing && (
-                      <button type="submit" className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100 disabled:opacity-50" disabled={loading}>
+                <div className="col-span-1 md:col-span-2 mt-4 flex items-center justify-between border-t border-gray-200 pt-6">
+                  {error && <div className="rounded-xl border-2 border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>}
+                  <div className="ml-auto flex items-center gap-3">
+                    <button type="button" className="rounded-xl border-2 border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400" onClick={closeModal}>Huỷ</button>
+                      <button type="submit" className="rounded-xl border-2 border-blue-500 bg-blue-500 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-blue-600 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled={loading}>
                         {loading ? "Đang lưu..." : (isEditing ? "Cập nhật" : "Tạo mới")}
                       </button>
-                    )}
                   </div>
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal xem ảnh phóng to */}
+      {showImageModal && imagePreview && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowImageModal(false)} />
+          <div className="relative z-10 max-w-6xl max-h-[90vh] flex flex-col items-center">
+            <div className="mb-4 flex items-center justify-between w-full">
+              <h3 className="text-xl font-semibold text-white">{form.name}</h3>
+              <button 
+                className="rounded-full bg-white/20 backdrop-blur-sm p-2 text-white transition-all hover:bg-white/30 hover:scale-105" 
+                onClick={() => setShowImageModal(false)}
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="relative max-w-5xl max-h-[80vh] overflow-hidden rounded-2xl shadow-2xl">
+              <img 
+                src={imagePreview} 
+                alt={form.name} 
+                className="max-w-full max-h-full object-contain"
+              />
+            </div>
+            <div className="mt-4 text-center text-white/80 text-sm">
+              Click vào vùng tối để đóng
+            </div>
           </div>
         </div>
       )}
