@@ -117,6 +117,7 @@ const HisSystemPage: React.FC = () => {
   // modal/form
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<HisResponseDTO | null>(null);
+  const [viewing, setViewing] = useState<HisResponseDTO | null>(null);
   const [form, setForm] = useState<HisRequestDTO>({ name: "" });
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof HisRequestDTO, string>>>({});
 
@@ -204,12 +205,36 @@ const HisSystemPage: React.FC = () => {
     }
   }
 
+  // view details (read-only)
+  async function onView(h: HisResponseDTO) {
+    try {
+      setViewing(null);
+      setOpen(true);
+      const res = await fetchWithFallback((base) => `${base}/${h.id}`, { headers: { ...authHeader() } });
+      const detail = (await res.json()) as HisResponseDTO;
+      setViewing(detail);
+      // also fill form for consistency so the modal shows data if user switches to edit
+      setForm({
+        name: detail.name ?? "",
+        address: detail.address ?? "",
+        contactPerson: detail.contactPerson ?? "",
+        email: detail.email ?? "",
+        phoneNumber: detail.phoneNumber ?? "",
+        apiUrl: detail.apiUrl ?? "",
+      });
+    } catch (error: unknown) {
+      const msg = errMsg(error, "Không thể tải chi tiết HIS");
+      console.error("onView error:", error);
+      setError(msg);
+      setOpen(false);
+    }
+  }
+
   async function onDelete(id: number) {
     if (!confirm("Xóa HIS này?")) return;
     setLoading(true);
     try {
-      // @ts-ignore
-      const res = await fetchWithFallback((base) => `${base}/${id}`, { method: "DELETE", headers: { ...authHeader() } });
+      await fetchWithFallback((base) => `${base}/${id}`, { method: "DELETE", headers: { ...authHeader() } });
       // adjust page when last item removed
       if (items.length === 1 && page > 0) setPage((p) => p - 1);
       await fetchList();
@@ -232,8 +257,7 @@ const HisSystemPage: React.FC = () => {
     setError(null);
     try {
       const method = isEditing ? "PUT" : "POST";
-      // @ts-ignore
-      const res = await fetchWithFallback((base) => (isEditing ? `${base}/${editing!.id}` : base), {
+      await fetchWithFallback((base) => (isEditing ? `${base}/${editing!.id}` : base), {
         method,
         headers: { ...authHeader() },
         body: JSON.stringify(form),
@@ -289,59 +313,69 @@ const HisSystemPage: React.FC = () => {
           </div>
         </ComponentCard>
 
-        {/* Table */}
+        {/* Card list */}
         <ComponentCard title="Danh sách HIS">
           <div className="overflow-x-auto -mx-1">
             <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="bg-gradient-to-r from-gray-50 to-gray-100/50">
-                    <th className="px-6 py-4 text-center text-xs font-semibold uppercase tracking-wider text-gray-700">STT</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Tên</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">Người liên hệ</th>
-                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-700">SĐT</th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-gray-700">Hành động</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                {filtered.map((h, idx) => {
-                  const rowNo = page * size + idx + 1;
-                  return (
-                    <tr key={h.id} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="px-6 py-5 text-center font-medium text-gray-600">{rowNo}</td>
-                      <td className="px-6 py-5"><span className="font-semibold text-gray-900">{h.name}</span></td>
-                      <td className="px-6 py-5"><span className="text-gray-700">{h.contactPerson || "—"}</span></td>
-                      <td className="px-6 py-5"><span className="text-gray-700">{h.phoneNumber || "—"}</span></td>
-                      <td className="px-6 py-5 text-right">
-                        <div className="flex justify-end items-center gap-2">
-                          <button title="Chỉnh sửa" onClick={() => onEdit(h)} className="flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100 transition-colors duration-200 text-xs font-medium">
-                            <AiOutlineEdit className="w-3 h-3" />
-                            Sửa
-                          </button>
-                          <button title="Xóa" onClick={() => onDelete(h.id)} className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors duration-200 text-xs font-medium">
-                            <AiOutlineDelete className="w-3 h-3" />
-                            Xóa
-                          </button>
+              <div className="p-4 space-y-4">
+                {filtered.length === 0 && !loading ? (
+                  <div className="py-12 text-center text-gray-400">
+                    <div className="flex flex-col items-center">
+                      <svg className="mb-3 h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                      </svg>
+                      <span className="text-sm">Không có dữ liệu</span>
+                    </div>
+                  </div>
+                ) : (
+                  filtered.map((h, idx) => {
+                    const delay = `${(idx * 1600) / Math.max(1, filtered.length)}ms`;
+                    const start = h.createdAt ? new Date(h.createdAt) : null;
+                    return (
+                      <div
+                        key={h.id}
+                        className="w-full grid grid-cols-3 gap-4 items-center bg-white rounded-xl p-4 border transition-all hover:shadow-lg hover:border-blue-200 row-anim"
+                        style={{ animationDelay: delay }}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-12 w-12 rounded-lg bg-indigo-50 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9-4 9 4" />
+                            </svg>
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{h.name}</div>
+                            <div className="text-sm text-gray-500">{h.address || '—'}</div>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
 
-                {!loading && filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-gray-400">
-                      <div className="flex flex-col items-center">
-                        <svg className="mb-3 h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                        </svg>
-                        <span className="text-sm">Không có dữ liệu</span>
+                        <div className="col-span-1 px-2">
+                          <div className="text-sm text-gray-600">Người liên hệ: <span className="text-gray-900 font-medium">{h.contactPerson || '—'}</span></div>
+                          <div className="text-sm text-gray-500">Email: {h.email || '—'}</div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-2">
+                          <div className="text-sm text-gray-500">{start ? start.toLocaleDateString() : '—'}</div>
+                          <div className="flex items-center gap-2 mt-2">
+                            <button title="Xem" onClick={() => onView(h)} className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors duration-300 text-xs font-medium">
+                              <AiOutlineEye className="w-3 h-3" />
+                              Xem
+                            </button>
+                            <button title="Chỉnh sửa" onClick={() => onEdit(h)} className="flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100 transition-colors duration-300 text-xs font-medium">
+                              <AiOutlineEdit className="w-3 h-3" />
+                              Sửa
+                            </button>
+                            <button title="Xóa" onClick={() => onDelete(h.id)} className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors duration-300 text-xs font-medium">
+                              <AiOutlineDelete className="w-3 h-3" />
+                              Xóa
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </td>
-                  </tr>
+                    );
+                  })
                 )}
-              </tbody>
-              </table>
+              </div>
             </div>
           </div>
 
@@ -380,84 +414,117 @@ const HisSystemPage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={onSubmit} className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div className="space-y-5">
+            {viewing ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">Tên HIS*</label>
-                  <input
-                    required
-                    className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
-                      formErrors.name ? "border-red-400" : "border-gray-300"
-                    }`}
-                    value={form.name}
-                    onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
-                  />
-                  {formErrors.name && <p className="mt-1 text-xs text-red-600">{formErrors.name}</p>}
+                  <div className="mb-3 text-sm text-gray-500">Tên</div>
+                  <div className="font-semibold text-gray-900">{viewing.name}</div>
+                  <div className="mt-4 text-sm text-gray-500">Địa chỉ</div>
+                  <div className="text-gray-700">{viewing.address || '—'}</div>
+                  <div className="mt-4 text-sm text-gray-500">API URL</div>
+                  <div className="text-gray-700">{viewing.apiUrl || '—'}</div>
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">Người liên hệ</label>
-                  <input
-                    className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
-                      formErrors.contactPerson ? "border-red-400" : "border-gray-300"
-                    }`}
-                    value={form.contactPerson || ""}
-                    onChange={(e) => setForm((s) => ({ ...s, contactPerson: e.target.value }))}
-                  />
+                  <div className="mb-3 text-sm text-gray-500">Người liên hệ</div>
+                  <div className="font-medium text-gray-800">{viewing.contactPerson || '—'}</div>
+                  <div className="mt-4 text-sm text-gray-500">Email</div>
+                  <div className="font-medium text-gray-800">{viewing.email || '—'}</div>
+                  <div className="mt-4 text-sm text-gray-500">Số điện thoại</div>
+                  <div className="text-gray-700">{viewing.phoneNumber || '—'}</div>
                 </div>
-              </div>
 
-              <div className="space-y-5">
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">Email</label>
-                  <input
-                    type="email"
-                    className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
-                      formErrors.email ? "border-red-400" : "border-gray-300"
-                    }`}
-                    value={form.email || ""}
-                    onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
-                  />
-                  {formErrors.email && <p className="mt-1 text-xs text-red-600">{formErrors.email}</p>}
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">Số điện thoại</label>
-                  <input
-                    className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
-                      formErrors.phoneNumber ? "border-red-400" : "border-gray-300"
-                    }`}
-                    value={form.phoneNumber || ""}
-                    onChange={(e) => setForm((s) => ({ ...s, phoneNumber: e.target.value }))}
-                  />
-                  {formErrors.phoneNumber && (
-                    <p className="mt-1 text-xs text-red-600">{formErrors.phoneNumber}</p>
+                <div className="col-span-1 md:col-span-2 mt-4 flex items-center justify-between border-t border-gray-200 pt-6">
+                  {error && (
+                    <div className="rounded-xl border-2 border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>
                   )}
-                </div>
-              </div>
-
-              <div className="col-span-1 md:col-span-2 mt-4 flex items-center justify-between border-t border-gray-200 pt-6">
-                {error && (
-                  <div className="rounded-xl border-2 border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-                    {error}
+                  <div className="ml-auto flex items-center gap-3">
+                    <button type="button" className="rounded-xl border-2 border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400" onClick={() => setOpen(false)}>Đóng</button>
+                    <button type="button" className="rounded-xl border-2 border-amber-500 bg-amber-500 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-amber-600 hover:shadow-lg" onClick={() => { setEditing(viewing); setOpen(true); }}>
+                      Chỉnh sửa
+                    </button>
                   </div>
-                )}
-                <div className="ml-auto flex items-center gap-3">
-                  <button
-                    type="button"
-                    className="rounded-xl border-2 border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400"
-                    onClick={() => setOpen(false)}
-                  >
-                    Huỷ
-                  </button>
-                  <button
-                    type="submit"
-                    className="rounded-xl border-2 border-blue-500 bg-blue-500 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-blue-600 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={loading}
-                  >
-                    {loading ? "Đang lưu..." : (isEditing ? "Cập nhật" : "Tạo mới")}
-                  </button>
                 </div>
               </div>
-            </form>
+            ) : (
+              <form onSubmit={onSubmit} className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="space-y-5">
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">Tên HIS*</label>
+                    <input
+                      required
+                      className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
+                        formErrors.name ? "border-red-400" : "border-gray-300"
+                      }`}
+                      value={form.name}
+                      onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
+                    />
+                    {formErrors.name && <p className="mt-1 text-xs text-red-600">{formErrors.name}</p>}
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">Người liên hệ</label>
+                    <input
+                      className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
+                        formErrors.contactPerson ? "border-red-400" : "border-gray-300"
+                      }`}
+                      value={form.contactPerson || ""}
+                      onChange={(e) => setForm((s) => ({ ...s, contactPerson: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-5">
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">Email</label>
+                    <input
+                      type="email"
+                      className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
+                        formErrors.email ? "border-red-400" : "border-gray-300"
+                      }`}
+                      value={form.email || ""}
+                      onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
+                    />
+                    {formErrors.email && <p className="mt-1 text-xs text-red-600">{formErrors.email}</p>}
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">Số điện thoại</label>
+                    <input
+                      className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
+                        formErrors.phoneNumber ? "border-red-400" : "border-gray-300"
+                      }`}
+                      value={form.phoneNumber || ""}
+                      onChange={(e) => setForm((s) => ({ ...s, phoneNumber: e.target.value }))}
+                    />
+                    {formErrors.phoneNumber && (
+                      <p className="mt-1 text-xs text-red-600">{formErrors.phoneNumber}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="col-span-1 md:col-span-2 mt-4 flex items-center justify-between border-t border-gray-200 pt-6">
+                  {error && (
+                    <div className="rounded-xl border-2 border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                      {error}
+                    </div>
+                  )}
+                  <div className="ml-auto flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="rounded-xl border-2 border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400"
+                      onClick={() => setOpen(false)}
+                    >
+                      Huỷ
+                    </button>
+                    <button
+                      type="submit"
+                      className="rounded-xl border-2 border-blue-500 bg-blue-500 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-blue-600 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={loading}
+                    >
+                      {loading ? "Đang lưu..." : (isEditing ? "Cập nhật" : "Tạo mới")}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
