@@ -70,6 +70,28 @@ function Button(
     return <button className={clsx(base, styles, className)} {...rest} />;
 }
 
+function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+    return (
+        <select
+            {...props}
+            className={clsx(
+                "h-10 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 outline-none",
+                "focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500",
+                props.className || ""
+            )}
+        />
+    );
+}
+
+const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
+    { value: "NOT_STARTED", label: "Chưa triển khai" },
+    { value: "IN_PROGRESS", label: "Đang triển khai" },
+    { value: "API_TESTING", label: "Test thông api" },
+    { value: "INTEGRATING", label: "Tích hợp với viện" },
+    { value: "WAITING_FOR_DEV", label: "Chờ dev build update" },
+    { value: "ACCEPTED", label: "Nghiệm thu" },
+];
+
 export default function TaskFormModal({
     open,
     onClose,
@@ -84,12 +106,13 @@ export default function TaskFormModal({
     // Fetchers for RemoteSelect (minimal: hospitals and PICs)
     const searchHospitals = useMemo(
         () => async (term: string) => {
-            const url = `${API_ROOT}/api/v1/admin/hospitals?keyword=${encodeURIComponent(term)}&page=0&size=10`;
+            const url = `${API_ROOT}/api/v1/superadmin/hospitals/search?name=${encodeURIComponent(term)}`;
             const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
             if (!res.ok) return [];
-            const json = await res.json();
-            const list = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
-            const mapped = list.map((h: { id?: number; name?: string; hospitalName?: string; code?: string }) => ({ id: Number(h.id), name: String(h.name ?? h.hospitalName ?? h.code ?? h.id) }));
+            const list = await res.json();
+            const mapped = Array.isArray(list)
+                ? list.map((h: { id?: number; label?: string }) => ({ id: Number(h.id), name: String(h.label ?? h.id) }))
+                : [];
             return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name) as Array<{ id: number; name: string }>;
         },
         []
@@ -97,12 +120,56 @@ export default function TaskFormModal({
 
     const searchPICs = useMemo(
         () => async (term: string) => {
-            const url = `${API_ROOT}/api/v1/admin/users?role=DEPLOYMENT&keyword=${encodeURIComponent(term)}&page=0&size=10`;
+            // Backend doesn't filter by role in /users/search; filter client-side by name
+            const url = `${API_ROOT}/api/v1/superadmin/users/search?name=${encodeURIComponent(term)}`;
             const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
             if (!res.ok) return [];
-            const json = await res.json();
-            const list = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
-            const mapped = list.map((u: { id?: number; fullName?: string; name?: string; username?: string }) => ({ id: Number(u.id), name: String(u.fullName ?? u.name ?? u.username ?? u.id) }));
+            const list = await res.json();
+            const mapped = Array.isArray(list)
+                ? list.map((u: { id?: number; label?: string }) => ({ id: Number(u.id), name: String(u.label ?? u.id) }))
+                : [];
+            return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name) as Array<{ id: number; name: string }>;
+        },
+        []
+    );
+
+    const searchAgencies = useMemo(
+        () => async (term: string) => {
+            const url = `${API_ROOT}/api/v1/superadmin/agencies/search?search=${encodeURIComponent(term)}`;
+            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+            if (!res.ok) return [];
+            const list = await res.json();
+            const mapped = Array.isArray(list)
+                ? list.map((a: { id?: number; label?: string }) => ({ id: Number(a.id), name: String(a.label ?? a.id) }))
+                : [];
+            return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name) as Array<{ id: number; name: string }>;
+        },
+        []
+    );
+
+    const searchHisSystems = useMemo(
+        () => async (term: string) => {
+            const url = `${API_ROOT}/api/v1/superadmin/his/search?search=${encodeURIComponent(term)}`;
+            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+            if (!res.ok) return [];
+            const list = await res.json();
+            const mapped = Array.isArray(list)
+                ? list.map((h: { id?: number; label?: string }) => ({ id: Number(h.id), name: String(h.label ?? h.id) }))
+                : [];
+            return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name) as Array<{ id: number; name: string }>;
+        },
+        []
+    );
+
+    const searchHardwares = useMemo(
+        () => async (term: string) => {
+            const url = `${API_ROOT}/api/v1/superadmin/hardware/search?search=${encodeURIComponent(term)}`;
+            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+            if (!res.ok) return [];
+            const list = await res.json();
+            const mapped = Array.isArray(list)
+                ? list.map((h: { id?: number; label?: string }) => ({ id: Number(h.id), name: String(h.label ?? h.id) }))
+                : [];
             return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name) as Array<{ id: number; name: string }>;
         },
         []
@@ -137,6 +204,18 @@ export default function TaskFormModal({
         const nm = initial?.picDeploymentName || "";
         return id ? { id, name: nm || String(id) } : null;
     });
+    const [agencyOpt, setAgencyOpt] = useState<{ id: number; name: string } | null>(() => {
+        const id = (initial?.agencyId as number) || 0;
+        return id ? { id, name: String(id) } : null;
+    });
+    const [hisOpt, setHisOpt] = useState<{ id: number; name: string } | null>(() => {
+        const id = (initial?.hisSystemId as number) || 0;
+        return id ? { id, name: String(id) } : null;
+    });
+    const [hardwareOpt, setHardwareOpt] = useState<{ id: number; name: string } | null>(() => {
+        const id = (initial?.hardwareId as number) || 0;
+        return id ? { id, name: String(id) } : null;
+    });
 
     useEffect(() => {
         if (open) {
@@ -166,8 +245,102 @@ export default function TaskFormModal({
             const pid = initial?.picDeploymentId || 0;
             const pnm = initial?.picDeploymentName || "";
             setPicOpt(pid ? { id: pid, name: pnm || String(pid) } : null);
+
+            const aid = (initial?.agencyId as number) || 0;
+            setAgencyOpt(aid ? { id: aid, name: String(aid) } : null);
+
+            const hisId = (initial?.hisSystemId as number) || 0;
+            setHisOpt(hisId ? { id: hisId, name: String(hisId) } : null);
+
+            const hwid = (initial?.hardwareId as number) || 0;
+            setHardwareOpt(hwid ? { id: hwid, name: String(hwid) } : null);
         }
     }, [open, initial]);
+
+    // When editing: resolve names for Agency/HIS/Hardware if we only have IDs
+    useEffect(() => {
+        if (!open) return;
+        async function resolveById(
+            id: number | null | undefined,
+            setOpt: (v: { id: number; name: string } | null) => void,
+            detailPath: string,
+            nameKeys: string[]
+        ) {
+            if (!id || id <= 0) return;
+            const current = ((): { id: number; name: string } | null => {
+                if (setOpt === setAgencyOpt) return agencyOpt;
+                if (setOpt === setHisOpt) return hisOpt;
+                if (setOpt === setHardwareOpt) return hardwareOpt;
+                return null;
+            })();
+            // If already resolved to a non-numeric name, skip
+            if (current && current.name && current.name !== String(id)) return;
+
+            // Helper to extract name from possible wrapped payloads
+            const extractName = (payload: unknown): string | null => {
+                const candidates: any[] = [];
+                if (payload && typeof payload === "object") {
+                    candidates.push(payload);
+                    // Common wrappers: data, result
+                    // @ts-ignore
+                    if (payload.data) candidates.push((payload as any).data);
+                    // @ts-ignore
+                    if (payload.result) candidates.push((payload as any).result);
+                }
+                for (const obj of candidates) {
+                    for (const k of nameKeys) {
+                        const v = obj?.[k];
+                        if (typeof v === "string" && v.trim()) return String(v);
+                    }
+                }
+                return null;
+            };
+
+            // 1) Try detail endpoint
+            try {
+                const res = await fetch(`${API_ROOT}${detailPath}/${id}`, { headers: authHeaders(), credentials: "include" });
+                if (res.ok) {
+                    const obj = await res.json();
+                    const name = extractName(obj);
+                    if (name) {
+                        setOpt({ id, name });
+                        return;
+                    }
+                }
+            } catch { /* ignore */ }
+
+            // 2) Fallback: query list with keyword and pick exact id
+            try {
+                const res = await fetch(`${API_ROOT}${detailPath}?search=${encodeURIComponent(String(id))}&page=0&size=50`, { headers: authHeaders(), credentials: "include" });
+                if (res.ok) {
+                    const obj = await res.json();
+                    const list = Array.isArray(obj?.content) ? obj.content : Array.isArray(obj) ? obj : [];
+                    const found = list.find((it: any) => Number(it?.id) === Number(id));
+                    if (found) {
+                        const name = extractName(found) || String(found.name ?? found[id]);
+                        if (name) {
+                            setOpt({ id, name });
+                            return;
+                        }
+                    }
+                }
+            } catch { /* ignore */ }
+
+            // 3) Last resort: use search loaders
+            try {
+                const fetcher = setOpt === setAgencyOpt ? searchAgencies : setOpt === setHisOpt ? searchHisSystems : searchHardwares;
+                const opts = await fetcher("");
+                const found = opts.find((o) => o.id === id);
+                if (found) setOpt(found);
+            } catch { /* ignore */ }
+        }
+
+        resolveById((initial?.agencyId as number) || null, setAgencyOpt, "/api/v1/superadmin/agencies", ["name", "agencyName", "label"]);
+        resolveById((initial?.hisSystemId as number) || null, setHisOpt, "/api/v1/superadmin/his", ["name", "hisName", "label"]);
+        resolveById((initial?.hardwareId as number) || null, setHardwareOpt, "/api/v1/superadmin/hardware", ["name", "hardwareName", "label"]);
+        // also react when current option states change from numeric → name
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, agencyOpt?.name, hisOpt?.name, hardwareOpt?.name]);
 
     useEffect(() => {
         if (!open) return;
@@ -370,17 +543,11 @@ export default function TaskFormModal({
                                     <TextInput type="number" value={model.quantity ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, quantity: e.target.value ? Number(e.target.value) : null }))} />
                                 </Field>
 
-                                <Field label="Agency ID">
-                                    <TextInput type="number" value={model.agencyId ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, agencyId: e.target.value ? Number(e.target.value) : null }))} />
-                                </Field>
+                                <RemoteSelect label="Agency" placeholder="Nhập tên agency để tìm…" fetchOptions={searchAgencies} value={agencyOpt} onChange={(v) => { setAgencyOpt(v); setModel((s) => ({ ...s, agencyId: v ? v.id : null })); }} />
 
-                                <Field label="HIS System ID">
-                                    <TextInput type="number" value={model.hisSystemId ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, hisSystemId: e.target.value ? Number(e.target.value) : null }))} />
-                                </Field>
+                                <RemoteSelect label="HIS System" placeholder="Nhập tên HIS để tìm…" fetchOptions={searchHisSystems} value={hisOpt} onChange={(v) => { setHisOpt(v); setModel((s) => ({ ...s, hisSystemId: v ? v.id : null })); }} />
 
-                                <Field label="Hardware ID">
-                                    <TextInput type="number" value={model.hardwareId ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, hardwareId: e.target.value ? Number(e.target.value) : null }))} />
-                                </Field>
+                                <RemoteSelect label="Hardware" placeholder="Nhập tên hardware để tìm…" fetchOptions={searchHardwares} value={hardwareOpt} onChange={(v) => { setHardwareOpt(v); setModel((s) => ({ ...s, hardwareId: v ? v.id : null })); }} />
 
                                 <Field label="API URL">
                                     <TextInput value={model.apiUrl ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, apiUrl: e.target.value }))} placeholder="https://..." />
@@ -395,7 +562,15 @@ export default function TaskFormModal({
                                 </Field>
 
                                 <Field label="Trạng thái">
-                                    <TextInput value={model.status ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, status: e.target.value }))} placeholder="NEW / IN_PROGRESS / DONE..." />
+                                    <Select
+                                        value={model.status ?? ""}
+                                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setModel((s) => ({ ...s, status: e.target.value || null }))}
+                                    >
+                                        <option value="">— Chọn trạng thái —</option>
+                                        {STATUS_OPTIONS.map((opt) => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                    </Select>
                                 </Field>
 
                                 <Field label="Deadline (ngày)">
