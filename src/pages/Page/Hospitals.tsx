@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
-import { EyeIcon, PencilIcon, TrashBinIcon, PlusIcon, ArrowRightIcon } from "../../icons";
+import { PlusIcon, ArrowRightIcon } from "../../icons";
 
 export type Hospital = {
   id: number;
