@@ -131,7 +131,7 @@ const ImplementSuperTaskPage: React.FC = () => {
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Implementation Tasks (SuperAdmin)</h1>
+        <h1 className="text-2xl font-semibold">Danh sách công việc triển khai (SuperAdmin)</h1>
         <div>
           <button className="h-10 rounded-xl bg-gray-900 text-white px-3" onClick={() => { setEditing(null); setModalOpen(true); }}>+ Thêm mới</button>
         </div>
