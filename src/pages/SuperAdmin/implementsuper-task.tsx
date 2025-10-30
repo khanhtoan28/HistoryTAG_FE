@@ -52,7 +52,7 @@ const ImplementSuperTaskPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [picFilter, setPicFilter] = useState<string>("");
+  const [picFilter] = useState<string>("");
   const [hospitalQuery, setHospitalQuery] = useState<string>("");
   const [hospitalOptions, setHospitalOptions] = useState<Array<{ id: number; label: string }>>([]);
   const [selectedHospital, setSelectedHospital] = useState<string | null>(null);
@@ -60,6 +60,8 @@ const ImplementSuperTaskPage: React.FC = () => {
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<string>("id");
   const [sortDir, setSortDir] = useState<string>("asc");
+  const [page, setPage] = useState<number>(0);
+  const [size, setSize] = useState<number>(10);
   const [enableItemAnimation, setEnableItemAnimation] = useState<boolean>(true);
   const [userOptions, setUserOptions] = useState<Array<{ id: number; label: string }>>([]);
 
@@ -67,6 +69,7 @@ const ImplementSuperTaskPage: React.FC = () => {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ImplTask | null>(null);
+  const [viewOnly, setViewOnly] = useState<boolean>(false);
 
   async function fetchList() {
     const start = Date.now();
@@ -74,8 +77,8 @@ const ImplementSuperTaskPage: React.FC = () => {
     setError(null);
     try {
       const params = new URLSearchParams({
-        page: "0",
-        size: "50",
+        page: String(page),
+        size: String(size),
         sortBy: sortBy,
         sortDir: sortDir,
       });
@@ -99,13 +102,13 @@ const ImplementSuperTaskPage: React.FC = () => {
         credentials: "include",
       });
       if (!res.ok) throw new Error(`GET ${url} failed: ${res.status}`);
-  const page = await res.json();
-      const items = Array.isArray(page?.content) ? page.content : Array.isArray(page) ? page : [];
+  const resp = await res.json();
+  const items = Array.isArray(resp?.content) ? resp.content : Array.isArray(resp) ? resp : [];
       setData(items);
       // try to read total count from paged response
-      if (page && typeof page.totalElements === 'number') setTotalCount(page.totalElements);
-      else setTotalCount(Array.isArray(page) ? page.length : null);
-      // disable entrance animation after all staggered animations have started
+  if (resp && typeof resp.totalElements === 'number') setTotalCount(resp.totalElements);
+  else setTotalCount(Array.isArray(resp) ? resp.length : null);
+  // disable entrance animation after all staggered animations have started
       if (enableItemAnimation) {
         const itemCount = items.length;
         // base delay 2000ms for first visible row, +80ms per subsequent row (as in TaskCardNew)
@@ -129,6 +132,12 @@ const ImplementSuperTaskPage: React.FC = () => {
       if (isInitialLoad) setIsInitialLoad(false);
     }
   }
+
+  // when page or size changes, refetch
+  useEffect(() => {
+    fetchList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, size]);
 
   async function fetchUserOptions() {
     try {
@@ -179,6 +188,9 @@ const ImplementSuperTaskPage: React.FC = () => {
     fetchUserOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // reset page when filters/sort/search change
+  useEffect(() => { setPage(0); }, [searchTerm, statusFilter, sortBy, sortDir]);
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -312,7 +324,7 @@ const ImplementSuperTaskPage: React.FC = () => {
 
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <select className="rounded-lg border px-3 py-2 text-sm" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+              <select className="rounded-lg border px-3 py-2 text-sm" value={sortBy} onChange={(e) => { setSortBy(e.target.value); setPage(0); }}>
                 <option value="id">Sắp xếp theo: id</option>
                 <option value="hospitalName">Sắp xếp theo: bệnh viện</option>
                 <option value="deadline">Sắp xếp theo: deadline</option>
@@ -324,7 +336,17 @@ const ImplementSuperTaskPage: React.FC = () => {
             </div>
 
             <button className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700" onClick={() => { setEditing(null); setModalOpen(true); }}>+ Thêm mới</button>
-            <button className="rounded-full border px-4 py-2 text-sm shadow-sm" onClick={() => { setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc'); fetchList(); }}>Làm mới</button>
+            <button className="rounded-full border px-4 py-2 text-sm shadow-sm" onClick={async () => {
+              setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc'); setPage(0);
+              // show loading indicator for at least a short duration for UX
+              setLoading(true);
+              const start = Date.now();
+              await fetchList();
+              const minMs = 800;
+              const elapsed = Date.now() - start;
+              if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
+              setLoading(false);
+            }}>Làm mới</button>
           </div>
         </div>
       </div>
@@ -349,8 +371,8 @@ const ImplementSuperTaskPage: React.FC = () => {
                   task={row}
                   idx={idx}
                   animate={enableItemAnimation}
-                  onOpen={(t) => { setEditing(t); setModalOpen(true); }}
-                  onEdit={(t) => { setEditing(t); setModalOpen(true); }}
+                  onOpen={(t) => { setEditing(t); setViewOnly(true); setModalOpen(true); }}
+                  onEdit={(t) => { setEditing(t); setViewOnly(false); setModalOpen(true); }}
                   onDelete={(id) => handleDelete(id)}
                 />
               ))
@@ -359,7 +381,25 @@ const ImplementSuperTaskPage: React.FC = () => {
         </div>
       </div>
 
-      <TaskFormModal open={modalOpen} onClose={() => setModalOpen(false)} initial={editing ?? undefined} onSubmit={handleSubmit} />
+        {/* Pagination controls */}
+        <div className="mt-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button className="px-3 py-1 border rounded" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0}>Prev</button>
+            <span>Trang {page + 1}{totalCount ? ` / ${Math.max(1, Math.ceil(totalCount / size))}` : ""}</span>
+            <button className="px-3 py-1 border rounded" onClick={() => setPage((p) => p + 1)} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)}>Next</button>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm">Số hàng:</label>
+            <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1">
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+            </select>
+          </div>
+        </div>
+
+  <TaskFormModal open={modalOpen} onClose={() => setModalOpen(false)} initial={editing ?? undefined} onSubmit={handleSubmit} readOnly={viewOnly} />
     </div>
   );
 };

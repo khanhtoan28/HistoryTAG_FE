@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
-import { EyeIcon, PencilIcon, TrashBinIcon, PlusIcon, ArrowRightIcon } from "../../icons";
+// removed unused icons import (use react-icons instead)
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
 import { FaBuilding } from "react-icons/fa";
 

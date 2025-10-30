@@ -41,7 +41,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [picFilter, setPicFilter] = useState<string>("");
+  const [picFilter] = useState<string>("");
   const [hospitalQuery, setHospitalQuery] = useState<string>("");
   const [hospitalOptions, setHospitalOptions] = useState<Array<{ id: number; label: string }>>([]);
   const [selectedHospital, setSelectedHospital] = useState<string | null>(null);
@@ -49,6 +49,8 @@ const MaintenanceSuperTaskPage: React.FC = () => {
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<string>("id");
   const [sortDir, setSortDir] = useState<string>("asc");
+  const [page, setPage] = useState<number>(0);
+  const [size, setSize] = useState<number>(10);
   const [enableItemAnimation, setEnableItemAnimation] = useState<boolean>(true);
   const [userOptions, setUserOptions] = useState<Array<{ id: number; label: string }>>([]);
 
@@ -56,13 +58,14 @@ const MaintenanceSuperTaskPage: React.FC = () => {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<MaintTask | null>(null);
+  const [viewOnly, setViewOnly] = useState<boolean>(false);
 
   async function fetchList() {
     const start = Date.now();
     setLoading(true);
     setError(null);
       try {
-    const params = new URLSearchParams({ page: "0", size: "50", sortBy, sortDir });
+  const params = new URLSearchParams({ page: String(page), size: String(size), sortBy, sortDir });
     let combinedSearch = (searchTerm || "").trim();
     if (picFilter) {
       const found = userOptions.find((u) => String(u.id) === String(picFilter));
@@ -78,11 +81,11 @@ const MaintenanceSuperTaskPage: React.FC = () => {
         credentials: "include",
       });
       if (!res.ok) throw new Error(`GET ${url} failed: ${res.status}`);
-      const page = await res.json();
-      const items = Array.isArray(page?.content) ? page.content : Array.isArray(page) ? page : [];
+  const resp = await res.json();
+  const items = Array.isArray(resp?.content) ? resp.content : Array.isArray(resp) ? resp : [];
       setData(items);
-      if (page && typeof page.totalElements === 'number') setTotalCount(page.totalElements);
-      else setTotalCount(Array.isArray(page) ? page.length : null);
+  if (resp && typeof resp.totalElements === 'number') setTotalCount(resp.totalElements);
+  else setTotalCount(Array.isArray(resp) ? resp.length : null);
       if (enableItemAnimation) {
         const itemCount = items.length;
         const maxDelay = itemCount > 1 ? 2000 + ((itemCount - 2) * 80) : 0;
@@ -103,6 +106,8 @@ const MaintenanceSuperTaskPage: React.FC = () => {
         if (isInitialLoad) setIsInitialLoad(false);
     }
   }
+
+  useEffect(() => { fetchList(); }, [page, size]);
 
     async function fetchUserOptions() {
       try {
@@ -286,7 +291,16 @@ const MaintenanceSuperTaskPage: React.FC = () => {
             </div>
 
             <button className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700" onClick={() => { setEditing(null); setModalOpen(true); }}>+ Thêm mới</button>
-            <button className="rounded-full border px-4 py-2 text-sm shadow-sm" onClick={() => { setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc'); fetchList(); }}>Làm mới</button>
+            <button className="rounded-full border px-4 py-2 text-sm shadow-sm" onClick={async () => {
+              setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc');
+              setLoading(true);
+              const start = Date.now();
+              await fetchList();
+              const minMs = 800;
+              const elapsed = Date.now() - start;
+              if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
+              setLoading(false);
+            }}>Làm mới</button>
           </div>
         </div>
       </div>
@@ -307,15 +321,32 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                 task={row}
                 idx={idx}
                 animate={enableItemAnimation}
-                onOpen={(t) => { setEditing(t as MaintTask); setModalOpen(true); }}
-                onEdit={(t) => { setEditing(t as MaintTask); setModalOpen(true); }}
+                onOpen={(t) => { setEditing(t as MaintTask); setViewOnly(true); setModalOpen(true); }}
+                onEdit={(t) => { setEditing(t as MaintTask); setViewOnly(false); setModalOpen(true); }}
                 onDelete={(id) => handleDelete(id)}
               />
             ))
           )
         )}
       </div>
-      <TaskFormModal open={modalOpen} onClose={() => setModalOpen(false)} initial={editing ?? undefined} onSubmit={handleSubmit} />
+      
+      <div className="mt-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button className="px-3 py-1 border rounded" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0}>Prev</button>
+          <span>Trang {page + 1}{totalCount ? ` / ${Math.max(1, Math.ceil(totalCount / size))}` : ""}</span>
+          <button className="px-3 py-1 border rounded" onClick={() => setPage((p) => p + 1)} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)}>Next</button>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm">Số hàng:</label>
+          <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1">
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+          </select>
+        </div>
+      </div>
+  <TaskFormModal open={modalOpen} onClose={() => setModalOpen(false)} initial={editing ?? undefined} onSubmit={handleSubmit} readOnly={viewOnly} />
     </div>
   );
 };

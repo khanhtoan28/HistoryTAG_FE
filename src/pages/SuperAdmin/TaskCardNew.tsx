@@ -1,4 +1,7 @@
-import { AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
+﻿// This file contains the TaskCardNew component
+// It is responsible for displaying task information in a card format
+
+import { AiOutlineEdit, AiOutlineDelete, AiOutlineEye } from "react-icons/ai";
 import { FaTasks } from "react-icons/fa";
 
 type ImplTask = {
@@ -10,6 +13,8 @@ type ImplTask = {
   deadline?: string | null;
   hisSystemName?: string | null;
   acceptanceDate?: string | null;
+  startDate?: string | null;
+  apiUrl?: string | null;
 };
 
 function statusBadgeClass(status?: string) {
@@ -34,7 +39,6 @@ function getDisplayStatus(status?: string) {
   if (!status) return "-";
   const s = status.toLowerCase();
   const norm = s.replace(/[-\s]/g, "_");
-  // translate known status codes to Vietnamese
   const map: Record<string, string> = {
     not_started: "Chưa triển khai",
     in_progress: "Đang triển khai",
@@ -50,16 +54,12 @@ function getDisplayStatus(status?: string) {
     cancelled: "Đã hủy",
     failed: "Thất bại",
   };
-
-  const key = norm;
-  if (map[key]) return map[key];
-  // try more relaxed matching
+  if (map[norm]) return map[norm];
   if (norm.includes("in_progress") || norm.includes("progress")) return "Đang triển khai";
   if (norm.includes("api") && (norm.includes("test") || norm.includes("testing"))) return "Kiểm tra API";
   if (norm.includes("integrat")) return "Đang tích hợp";
   if (norm.includes("wait") || norm.includes("waiting")) return "Đang chờ";
   if (norm.includes("accept") || norm.includes("nghiem")) return "Nghiệm thu";
-
   return status;
 }
 
@@ -83,77 +83,49 @@ export default function TaskCardNew({
   const style = animate ? { animation: "fadeInUp 220ms both", animationDelay: `${delayMs}ms` } : undefined;
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onOpen(task)}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onOpen(task); }}
-      className="group flex items-center justify-between w-full rounded-2xl bg-white px-6 py-5 shadow-sm transition-all hover:shadow-lg hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
-      style={style}
-    >
-      <div className="flex items-center gap-6 w-full">
-  <div className="flex items-center gap-4 min-w-0" onClick={(e) => { e.stopPropagation(); }}>
-          <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-blue-50 text-blue-600 shadow-sm">
+    <div className="group w-full rounded-2xl bg-white px-6 py-5 shadow-sm transition-all hover:shadow-lg" style={style}>
+      <div className="flex gap-4 items-start">
+        {/* Left badge + icon */}
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col items-center">
+            <div className="w-12 h-12 rounded-md bg-gray-50 border flex items-center justify-center text-sm font-semibold text-gray-700">{String(task.id).padStart(3, '0')}</div>
+          </div>
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 text-blue-600 shadow-sm">
             <FaTasks className="text-xl" />
           </div>
-          <div className="min-w-0 flex flex-col justify-center">
-            <div className="text-sm text-gray-500">Bệnh viện</div>
-            {/* prevent clicks on the hospital name from triggering the card onClick (open/edit) */}
-            <div
-              onClick={(e) => { e.stopPropagation(); }}
-              className="text-base md:text-lg font-semibold text-gray-900 truncate max-w-xl hover:underline"
-              title={task.hospitalName ?? task.name}
-            >
-              {task.hospitalName ?? task.name}
-            </div>
-          </div>
         </div>
 
-        <div className="hidden sm:flex items-center gap-6 flex-1 justify-center">
-          <div className="flex flex-col items-center justify-center min-w-[120px]">
-            <div className="text-sm text-gray-400 text-center">Deadline</div>
-            <div className="text-sm font-semibold text-gray-900 text-center">{task.deadline ? new Date(task.deadline).toLocaleDateString('vi-VN') : "-"}</div>
-          </div>
-          <div className="flex flex-col items-center justify-center min-w-[160px]">
-            <div className="text-sm text-gray-400 text-center">Người phụ trách</div>
-            <div className="text-sm font-semibold text-gray-900 text-center">{task.picDeploymentName ?? "-"}</div>
-          </div>
-          <div className="flex flex-col items-center justify-center min-w-[100px]">
-            <div className="text-sm text-gray-400 text-center">HIS</div>
-            <div className="text-sm font-semibold text-gray-900 text-center">{task.hisSystemName ?? "-"}</div>
-          </div>
-          <div className="flex flex-col items-center justify-center min-w-[140px]">
-            <div className="text-sm text-gray-400 text-center">Ngày nghiệm thu</div>
-            <div className="text-sm font-semibold text-gray-900 text-center">{task.acceptanceDate ? new Date(task.acceptanceDate).toLocaleDateString('vi-VN') : "-"}</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="ml-4 flex items-center gap-3">
-        <div className="flex items-center gap-3">
-          {task.status && (
-            <div className={`inline-flex items-center justify-center whitespace-nowrap min-w-[96px] px-3 py-1 rounded-full text-sm font-medium ${statusBadgeClass(task.status ?? undefined)} ${isNot ? 'animate-pulse' : ''}`} title={task.status}>
-              {getDisplayStatus(task.status ?? undefined)}
+        {/* Main content */}
+        <div className="flex-1">
+          <div className="flex items-start justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-3">
+                <h3 className="text-lg font-semibold text-gray-900 truncate">{task.hospitalName ?? task.name}</h3>
+                {task.status && (
+                  <span className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${statusBadgeClass(task.status ?? undefined)} ${isNot ? 'animate-pulse' : ''}`}>{getDisplayStatus(task.status ?? undefined)}</span>
+                )}
+              </div>
+              <div className="text-sm text-gray-500 mt-1 truncate">{task.hisSystemName ? `Đơn vị HIS: ${task.hisSystemName}` : ''}</div>
+              <div className="text-sm text-gray-500 mt-2">Người liên hệ: <span className="font-medium text-gray-800">{task.picDeploymentName ?? '-'}</span></div>
             </div>
-          )}
 
-          {/* Note: 'Xem' action removed per design request (main card click opens item) */}
+            {/* Right column: dates */}
+            <div className="flex flex-col items-end ml-4 gap-1">
+              <div className="text-sm text-gray-400">Bắt đầu</div>
+              <div className="text-sm font-semibold text-gray-900">{task.startDate ? new Date(task.startDate).toLocaleDateString('vi-VN') : '-'}</div>
+              <div className="text-sm text-gray-400 mt-2">Deadline</div>
+              <div className="text-sm font-semibold text-gray-900">{task.deadline ? new Date(task.deadline).toLocaleDateString('vi-VN') : '-'}</div>
+            </div>
+          </div>
 
-          <button
-            onClick={(e) => { e.stopPropagation(); onEdit(task); }}
-            className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold bg-white border shadow-sm"
-          >
-            <AiOutlineEdit className="text-orange-500" /> <span className="hidden sm:inline text-orange-500">Sửa</span>
-          </button>
-
-          {/* 'Khóa' action removed per request — only Sửa and Xóa remain */}
-
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
-            className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold bg-white border shadow-sm"
-          >
-            <AiOutlineDelete className="text-red-600" /> <span className="hidden sm:inline text-red-600">Xóa</span>
-          </button>
+          <div className="flex items-center justify-between mt-4">
+            <div className="text-sm text-orange-500">{task.apiUrl ? <span>API: <a className="underline text-orange-500" href={task.apiUrl} target="_blank" rel="noreferrer">{task.apiUrl}</a></span> : ''}</div>
+            <div className="flex items-center gap-3">
+              <button onClick={(e) => { e.stopPropagation(); onOpen(task); }} className="inline-flex items-center gap-2 bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-sm"> <AiOutlineEye /> <span className="hidden md:inline">Xem</span></button>
+              <button onClick={(e) => { e.stopPropagation(); onEdit(task); }} className="inline-flex items-center gap-2 bg-white border border-orange-100 text-orange-500 px-3 py-1 rounded-lg text-sm"> <AiOutlineEdit /> <span className="hidden md:inline">Sửa</span></button>
+              <button onClick={(e) => { e.stopPropagation(); onDelete(task.id); }} className="inline-flex items-center gap-2 bg-white border border-red-100 text-red-600 px-3 py-1 rounded-lg text-sm"> <AiOutlineDelete /> <span className="hidden md:inline">Xóa</span></button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

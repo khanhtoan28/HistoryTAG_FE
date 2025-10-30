@@ -97,11 +97,13 @@ export default function TaskFormModal({
     onClose,
     initial,
     onSubmit,
+    readOnly,
 }: {
     open: boolean;
     onClose: () => void;
     initial?: Partial<ImplementationTaskRequestDTO> & { id?: number; hospitalName?: string | null; picDeploymentName?: string | null };
     onSubmit: (payload: ImplementationTaskRequestDTO, id?: number) => Promise<void>;
+    readOnly?: boolean;
 }) {
     // Fetchers for RemoteSelect (minimal: hospitals and PICs)
     const searchHospitals = useMemo(
@@ -415,13 +417,14 @@ export default function TaskFormModal({
     };
 
     // Minimal RemoteSelect UI (inline simple dropdown)
-    function RemoteSelect({ label, placeholder, fetchOptions, value, onChange, required }: {
+    function RemoteSelect({ label, placeholder, fetchOptions, value, onChange, required, disabled }: {
         label: string;
         placeholder?: string;
         fetchOptions: (q: string) => Promise<Array<{ id: number; name: string }>>;
         value: { id: number; name: string } | null;
         onChange: (v: { id: number; name: string } | null) => void;
         required?: boolean;
+        disabled?: boolean;
     }) {
         const [open, setOpen] = useState(false);
         const [q, setQ] = useState("");
@@ -461,6 +464,16 @@ export default function TaskFormModal({
                 }
             }
         }, [open, options.length, q, fetchOptions]);
+
+        if (disabled) {
+            return (
+                <Field label={label} required={required}>
+                    <div className="h-10 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 flex items-center">
+                        {value?.name || "-"}
+                    </div>
+                </Field>
+            );
+        }
 
         return (
             <Field label={label} required={required}>
@@ -527,46 +540,44 @@ export default function TaskFormModal({
         <>
             <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/40" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
                 <AnimatePresence initial={false}>
-                    <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} transition={{ type: "spring", stiffness: 260, damping: 22 }} className="w-full max-w-3xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-                        <form onSubmit={handleSubmit} className="px-6 pt-0 pb-6 grid gap-4 max-h-[80vh] overflow-y-auto">
-                            <div className="sticky top-0 z-[100] -mx-10 px-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
-                                <div className="flex items-center justify-between py-3">
-                                    <h3 className="text-lg font-semibold">{initial?.id ? "Cập nhật tác vụ" : "Tạo tác vụ"}</h3>
-                                    <Button type="button" variant="ghost" onClick={onClose}>Đóng</Button>
-                                </div>
-                            </div>
+                    <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} transition={{ type: "spring", stiffness: 260, damping: 22 }} className="relative w-full max-w-3xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+                        {/* Header placed outside the scrollable form so buttons don't overlap content while scrolling */}
 
+                        
+
+                        {/* form content starts near top; header removed - only floating close button remains */}
+                        <form onSubmit={handleSubmit} className="pt-6 px-6 pb-6 grid gap-4 max-h-[72vh] overflow-y-auto">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <Field label="Tên dự án" required>
-                                    <TextInput value={model.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, name: e.target.value }))} placeholder="Nhập tên dự án" />
+                                    <TextInput disabled={readOnly} value={model.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, name: e.target.value }))} placeholder="Nhập tên dự án" />
                                 </Field>
 
-                                <RemoteSelect label="Bệnh viện" required placeholder="Nhập tên bệnh viện để tìm…" fetchOptions={searchHospitals} value={hospitalOpt} onChange={setHospitalOpt} />
+                                <RemoteSelect label="Bệnh viện" required placeholder="Nhập tên bệnh viện để tìm…" fetchOptions={searchHospitals} value={hospitalOpt} onChange={setHospitalOpt} disabled={readOnly} />
 
-                                <RemoteSelect label="Người phụ trách (PIC)" required placeholder="Nhập tên người phụ trách để tìm…" fetchOptions={searchPICs} value={picOpt} onChange={setPicOpt} />
+                                <RemoteSelect label="Người phụ trách (PIC)" required placeholder="Nhập tên người phụ trách để tìm…" fetchOptions={searchPICs} value={picOpt} onChange={setPicOpt} disabled={readOnly} />
 
                                 <Field label="Số lượng">
-                                    <TextInput type="number" value={model.quantity ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, quantity: e.target.value ? Number(e.target.value) : null }))} />
+                                    <TextInput disabled={readOnly} type="number" value={model.quantity ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, quantity: e.target.value ? Number(e.target.value) : null }))} />
                                 </Field>
 
-                                <RemoteSelect label="Agency" placeholder="Nhập tên agency để tìm…" fetchOptions={searchAgencies} value={agencyOpt} onChange={(v) => { setAgencyOpt(v); setModel((s) => ({ ...s, agencyId: v ? v.id : null })); }} />
+                                <RemoteSelect label="Agency" placeholder="Nhập tên agency để tìm…" fetchOptions={searchAgencies} value={agencyOpt} onChange={(v) => { setAgencyOpt(v); setModel((s) => ({ ...s, agencyId: v ? v.id : null })); }} disabled={readOnly} />
 
-                                <RemoteSelect label="HIS System" placeholder="Nhập tên HIS để tìm…" fetchOptions={searchHisSystems} value={hisOpt} onChange={(v) => { setHisOpt(v); setModel((s) => ({ ...s, hisSystemId: v ? v.id : null })); }} />
+                                <RemoteSelect label="HIS System" placeholder="Nhập tên HIS để tìm…" fetchOptions={searchHisSystems} value={hisOpt} onChange={(v) => { setHisOpt(v); setModel((s) => ({ ...s, hisSystemId: v ? v.id : null })); }} disabled={readOnly} />
 
-                                <RemoteSelect label="Hardware" placeholder="Nhập tên hardware để tìm…" fetchOptions={searchHardwares} value={hardwareOpt} onChange={(v) => { setHardwareOpt(v); setModel((s) => ({ ...s, hardwareId: v ? v.id : null })); }} />
+                                <RemoteSelect label="Hardware" placeholder="Nhập tên hardware để tìm…" fetchOptions={searchHardwares} value={hardwareOpt} onChange={(v) => { setHardwareOpt(v); setModel((s) => ({ ...s, hardwareId: v ? v.id : null })); }} disabled={readOnly} />
 
                                 <Field label="API URL">
-                                    <TextInput value={model.apiUrl ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, apiUrl: e.target.value }))} placeholder="https://..." />
+                                    <TextInput disabled={readOnly} value={model.apiUrl ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, apiUrl: e.target.value }))} placeholder="https://..." />
                                 </Field>
 
 
 
                                 <Field label="BHYT Port Check Info">
-                                    <TextInput value={model.bhytPortCheckInfo ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, bhytPortCheckInfo: e.target.value }))} />
+                                    <TextInput disabled={readOnly} value={model.bhytPortCheckInfo ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, bhytPortCheckInfo: e.target.value }))} />
                                 </Field>
 
                                 <Field label="Trạng thái" required>
-                                    <Select
+                                    <Select disabled={readOnly}
                                         value={model.status ?? ""}
                                         onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setModel((s) => ({ ...s, status: e.target.value || null }))}
                                     >
@@ -578,29 +589,35 @@ export default function TaskFormModal({
                                 </Field>
 
                                 <Field label="Deadline (ngày)">
-                                    <TextInput type="datetime-local" value={model.deadline ? new Date(model.deadline).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, deadline: e.target.value }))} />
+                                    <TextInput disabled={readOnly} type="datetime-local" value={model.deadline ? new Date(model.deadline).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, deadline: e.target.value }))} />
                                 </Field>
 
                                 <Field label="Ngày bắt đầu">
-                                    <TextInput type="datetime-local" value={model.startDate ? new Date(model.startDate).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, startDate: e.target.value }))} />
+                                    <TextInput disabled={readOnly} type="datetime-local" value={model.startDate ? new Date(model.startDate).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, startDate: e.target.value }))} />
                                 </Field>
 
                                 <Field label="Ngày nghiệm thu">
-                                    <TextInput type="datetime-local" value={model.acceptanceDate ? new Date(model.acceptanceDate).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, acceptanceDate: e.target.value }))} />
+                                    <TextInput disabled={readOnly} type="datetime-local" value={model.acceptanceDate ? new Date(model.acceptanceDate).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, acceptanceDate: e.target.value }))} />
                                 </Field>
 
                                 <Field label="Ngày hoàn thành">
-                                    <TextInput type="datetime-local" value={model.completionDate ? new Date(model.completionDate).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, completionDate: e.target.value }))} />
+                                    <TextInput disabled={readOnly} type="datetime-local" value={model.completionDate ? new Date(model.completionDate).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, completionDate: e.target.value }))} />
                                 </Field>
                             </div>
 
                             <Field label="Yêu cầu bổ sung">
-                                <TextArea value={model.additionalRequest ?? ""} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setModel((s) => ({ ...s, additionalRequest: e.target.value }))} placeholder="Mô tả chi tiết yêu cầu" />
+                                <TextArea disabled={readOnly} value={model.additionalRequest ?? ""} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setModel((s) => ({ ...s, additionalRequest: e.target.value }))} placeholder="Mô tả chi tiết yêu cầu" />
                             </Field>
 
                             <div className="flex items-center justify-end gap-3 pt-2">
-                                <Button type="button" variant="ghost" onClick={onClose}>Hủy</Button>
-                                <Button type="submit" disabled={submitting}>{submitting ? "Đang lưu..." : initial?.id ? "Cập nhật" : "Tạo mới"}</Button>
+                                {readOnly ? (
+                                    <Button type="button" variant="ghost" onClick={onClose}>Đóng</Button>
+                                ) : (
+                                    <>
+                                        <Button type="button" variant="ghost" onClick={onClose}>Hủy</Button>
+                                        <Button type="submit" disabled={submitting}>{submitting ? "Đang lưu..." : initial?.id ? "Cập nhật" : "Tạo mới"}</Button>
+                                    </>
+                                )}
                             </div>
                         </form>
                     </motion.div>
