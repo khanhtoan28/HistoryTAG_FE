@@ -260,11 +260,13 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
-                <option value="">Trạng thái</option>
+                <option value="">— Chọn trạng thái —</option>
                 <option value="NOT_STARTED">Chưa triển khai</option>
                 <option value="IN_PROGRESS">Đang triển khai</option>
-                <option value="COMPLETED">Hoàn thành</option>
-                <option value="CANCELLED">Đã hủy</option>
+                <option value="API_TESTING">Test thông api</option>
+                <option value="INTEGRATING">Tích hợp với viện</option>
+                <option value="WAITING_FOR_DEV">Chờ dev build update</option>
+                <option value="ACCEPTED">Nghiệm thu</option>
               </select>
             </div>
             <div className="mt-3 text-sm text-gray-600">Tổng: <span className="font-semibold text-gray-800">{loading ? '...' : (totalCount ?? data.length)}</span></div>

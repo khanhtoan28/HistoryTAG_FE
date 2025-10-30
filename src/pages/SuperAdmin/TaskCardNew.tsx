@@ -67,13 +67,20 @@ export default function TaskCardNew({
       style={style}
     >
       <div className="flex items-center gap-6 w-full">
-        <div className="flex items-center gap-4 min-w-0">
+  <div className="flex items-center gap-4 min-w-0" onClick={(e) => { e.stopPropagation(); }}>
           <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-blue-50 text-blue-600 shadow-sm">
             <FaTasks className="text-xl" />
           </div>
           <div className="min-w-0 flex flex-col justify-center">
             <div className="text-sm text-gray-500">Bệnh viện</div>
-            <div className="text-base md:text-lg font-semibold text-gray-900 truncate max-w-xl" title={task.hospitalName ?? task.name}>{task.hospitalName ?? task.name}</div>
+            {/* prevent clicks on the hospital name from triggering the card onClick (open/edit) */}
+            <div
+              onClick={(e) => { e.stopPropagation(); }}
+              className="text-base md:text-lg font-semibold text-gray-900 truncate max-w-xl hover:underline"
+              title={task.hospitalName ?? task.name}
+            >
+              {task.hospitalName ?? task.name}
+            </div>
           </div>
         </div>
 

@@ -41,16 +41,16 @@ const DevSuperTaskPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [picFilter, setPicFilter] = useState<string>("");
+  // removed person-in-charge (PIC) filter — search uses the input text only
   const [hospitalQuery, setHospitalQuery] = useState<string>("");
   const [hospitalOptions, setHospitalOptions] = useState<Array<{ id: number; label: string }>>([]);
-  const [selectedHospital, setSelectedHospital] = useState<string | null>(null);
+  // selectedHospital removed; we keep hospitalQuery and hospitalOptions for suggestions
   const searchDebounce = useRef<number | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<string>("id");
   const [sortDir, setSortDir] = useState<string>("asc");
   const [enableItemAnimation, setEnableItemAnimation] = useState<boolean>(true);
-  const [userOptions, setUserOptions] = useState<Array<{ id: number; label: string }>>([]);
+  // userOptions removed
 
   const apiBase = `${API_ROOT}/api/v1/superadmin/dev/tasks`;
 
@@ -63,11 +63,7 @@ const DevSuperTaskPage: React.FC = () => {
     setError(null);
     try {
       const params = new URLSearchParams({ page: "0", size: "50", sortBy, sortDir });
-      let combinedSearch = (searchTerm || "").trim();
-      if (picFilter) {
-        const found = userOptions.find((u) => String(u.id) === String(picFilter));
-        if (found && found.label) combinedSearch = [combinedSearch, found.label].filter(Boolean).join(" ");
-      }
+      const combinedSearch = (searchTerm || "").trim();
       if (combinedSearch) params.set("search", combinedSearch);
       if (statusFilter) params.set("status", statusFilter);
 
@@ -104,24 +100,6 @@ const DevSuperTaskPage: React.FC = () => {
     }
   }
 
-    async function fetchUserOptions() {
-      try {
-        // if a hospital is selected, fetch users assigned to that hospital
-        if (selectedHospital) {
-          await fetchUsersByHospital(selectedHospital);
-          return;
-        }
-        const res = await fetch(`${API_ROOT}/api/v1/superadmin/users/search?name=`, { headers: authHeaders() });
-        if (!res.ok) return;
-        const list = await res.json();
-        if (Array.isArray(list)) {
-          setUserOptions(list.map((u: Record<string, unknown>) => ({ id: Number(u['id'] as unknown as number), label: String((u['label'] ?? u['fullname'] ?? u['id']) as unknown) })));
-        }
-      } catch {
-        // ignore
-      }
-    }
-
     async function fetchHospitalOptions(query: string) {
       try {
         const res = await fetch(`${API_ROOT}/api/v1/superadmin/hospitals/search?name=${encodeURIComponent(query || "")}`, { headers: authHeaders() });
@@ -135,24 +113,9 @@ const DevSuperTaskPage: React.FC = () => {
       }
     }
 
-    async function fetchUsersByHospital(hospitalName: string) {
-      try {
-        const res = await fetch(`${API_ROOT}/api/v1/superadmin/users/by-hospital?hospitalName=${encodeURIComponent(hospitalName)}`, { headers: authHeaders() });
-        if (!res.ok) return;
-        const list = await res.json();
-        if (Array.isArray(list)) {
-          setUserOptions(list.map((u: Record<string, unknown>) => ({ id: Number(u['id'] as unknown as number), label: String(u['fullname'] ?? u['label'] ?? '') })));
-        }
-      } catch {
-        // ignore
-      }
-    }
+    // fetchUsersByHospital removed — we no longer load user options per hospital
 
-  useEffect(() => {
-    fetchList();
-    fetchUserOptions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => { fetchList(); }, []); /* eslint-disable-line react-hooks/exhaustive-deps */
 
   // debounce hospitalQuery -> fetch hospital suggestions
   useEffect(() => {
@@ -164,18 +127,16 @@ const DevSuperTaskPage: React.FC = () => {
       }
     }, 300);
     return () => window.clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hospitalQuery]);
 
-  // debounce searchTerm and picFilter
+  // debounce searchTerm
   useEffect(() => {
     if (searchDebounce.current) window.clearTimeout(searchDebounce.current);
     searchDebounce.current = window.setTimeout(() => {
       fetchList();
     }, 600);
     return () => { if (searchDebounce.current) window.clearTimeout(searchDebounce.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm, picFilter]);
+  }, [searchTerm]); /* eslint-disable-line react-hooks/exhaustive-deps */
 
   // refetch when status or sort changes
   useEffect(() => { fetchList(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [statusFilter]);
@@ -239,16 +200,14 @@ const DevSuperTaskPage: React.FC = () => {
                   className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px]"
                   placeholder="Tìm theo tên (gõ để gợi ý bệnh viện)"
                   value={searchTerm}
-                  onChange={(e) => { setSearchTerm(e.target.value); setHospitalQuery(e.target.value); setSelectedHospital(null); }}
+                  onChange={(e) => { setSearchTerm(e.target.value); setHospitalQuery(e.target.value); }}
                   onKeyDown={(e) => { if (e.key === 'Enter') { fetchList(); } }}
                   onBlur={(e) => {
+                    // if the user picked a suggestion, keep the text (searchTerm already updated)
+                    // previously we fetched users by hospital here; that behavior is removed
                     const val = e.currentTarget.value?.trim() || '';
-                    if (val.length > 0 && hospitalOptions.some((h) => h.label === val)) {
-                      setSelectedHospital(val);
-                      fetchUsersByHospital(val);
-                    } else {
-                      // clear selected hospital when user typed free text that is not in suggestions
-                      setSelectedHospital(null);
+                    if (val.length === 0 || !hospitalOptions.some((h) => h.label === val)) {
+                      // do nothing special — free text search is allowed
                     }
                   }}
                 />
@@ -259,27 +218,20 @@ const DevSuperTaskPage: React.FC = () => {
                 </datalist>
               </div>
 
-              <select
-                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[160px]"
-                value={picFilter}
-                onChange={(e) => setPicFilter(e.target.value)}
-              >
-                <option value="">Người phụ trách</option>
-                {userOptions.map((u) => (
-                  <option key={u.id} value={String(u.id)}>{u.label}</option>
-                ))}
-              </select>
+              {/* person-in-charge filter removed; search uses the input box only */}
 
               <select
                 className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[160px]"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
-                <option value="">Trạng thái</option>
+                <option value="">— Chọn trạng thái —</option>
                 <option value="NOT_STARTED">Chưa triển khai</option>
                 <option value="IN_PROGRESS">Đang triển khai</option>
-                <option value="COMPLETED">Hoàn thành</option>
-                <option value="CANCELLED">Đã hủy</option>
+                <option value="API_TESTING">Test thông api</option>
+                <option value="INTEGRATING">Tích hợp với viện</option>
+                <option value="WAITING_FOR_DEV">Chờ dev build update</option>
+                <option value="ACCEPTED">Nghiệm thu</option>
               </select>
             </div>
             <div className="mt-3 text-sm text-gray-600">Tổng: <span className="font-semibold text-gray-800">{loading ? '...' : (totalCount ?? data.length)}</span></div>

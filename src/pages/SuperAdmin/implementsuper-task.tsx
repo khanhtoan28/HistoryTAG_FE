@@ -258,9 +258,6 @@ const ImplementSuperTaskPage: React.FC = () => {
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Danh sách công việc triển khai (SuperAdmin)</h1>
-        <div>
-          <button className="h-10 rounded-xl bg-gray-900 text-white px-3" onClick={() => { setEditing(null); setModalOpen(true); }}>+ Thêm mới</button>
-        </div>
       </div>
 
       {error && <div className="text-red-600">{error}</div>}
@@ -301,11 +298,13 @@ const ImplementSuperTaskPage: React.FC = () => {
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
-                <option value="">Trạng thái</option>
+                <option value="">— Chọn trạng thái —</option>
                 <option value="NOT_STARTED">Chưa triển khai</option>
                 <option value="IN_PROGRESS">Đang triển khai</option>
-                <option value="COMPLETED">Hoàn thành</option>
-                <option value="CANCELLED">Đã hủy</option>
+                <option value="API_TESTING">Test thông api</option>
+                <option value="INTEGRATING">Tích hợp với viện</option>
+                <option value="WAITING_FOR_DEV">Chờ dev build update</option>
+                <option value="ACCEPTED">Nghiệm thu</option>
               </select>
             </div>
             <div className="mt-3 text-sm text-gray-600">Tổng: <span className="font-semibold text-gray-800">{loading ? '...' : (totalCount ?? data.length)}</span></div>
