@@ -378,6 +378,10 @@ export default function TaskFormModal({
             alert("Người phụ trách không được để trống");
             return;
         }
+        if (!model.status) {
+            alert("Trạng thái không được để trống");
+            return;
+        }
 
         const payload: ImplementationTaskRequestDTO = {
             name: model.name!.trim(),
@@ -440,7 +444,7 @@ export default function TaskFormModal({
                 alive = false;
                 clearTimeout(t);
             };
-    }, [q, fetchOptions]);
+        }, [q, fetchOptions]);
 
         useEffect(() => {
             if (open) {
@@ -524,10 +528,12 @@ export default function TaskFormModal({
             <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/40" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
                 <AnimatePresence initial={false}>
                     <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} transition={{ type: "spring", stiffness: 260, damping: 22 }} className="w-full max-w-3xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-                        <form onSubmit={handleSubmit} className="p-6 grid gap-4 max-h-[80vh] overflow-y-auto">
-                            <div className="flex items-center justify-between sticky top-0 bg-white dark:bg-gray-900 pb-2">
-                                <h3 className="text-lg font-semibold">{initial?.id ? "Cập nhật tác vụ" : "Tạo tác vụ"}</h3>
-                                <Button type="button" variant="ghost" onClick={onClose}>Đóng</Button>
+                        <form onSubmit={handleSubmit} className="px-6 pt-0 pb-6 grid gap-4 max-h-[80vh] overflow-y-auto">
+                            <div className="sticky top-0 z-[100] -mx-10 px-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+                                <div className="flex items-center justify-between py-3">
+                                    <h3 className="text-lg font-semibold">{initial?.id ? "Cập nhật tác vụ" : "Tạo tác vụ"}</h3>
+                                    <Button type="button" variant="ghost" onClick={onClose}>Đóng</Button>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -553,15 +559,13 @@ export default function TaskFormModal({
                                     <TextInput value={model.apiUrl ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, apiUrl: e.target.value }))} placeholder="https://..." />
                                 </Field>
 
-                                <Field label="Trạng thái API Test">
-                                    <TextInput value={model.apiTestStatus ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, apiTestStatus: e.target.value }))} placeholder="PASSED / FAILED / PENDING..." />
-                                </Field>
+
 
                                 <Field label="BHYT Port Check Info">
                                     <TextInput value={model.bhytPortCheckInfo ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, bhytPortCheckInfo: e.target.value }))} />
                                 </Field>
 
-                                <Field label="Trạng thái">
+                                <Field label="Trạng thái" required>
                                     <Select
                                         value={model.status ?? ""}
                                         onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setModel((s) => ({ ...s, status: e.target.value || null }))}

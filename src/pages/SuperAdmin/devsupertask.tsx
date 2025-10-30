@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import TaskFormModal from "./TaskFormModal";
+import TaskCard from "./TaskCardNew";
 import toast from "react-hot-toast";
 
 const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
+const MIN_LOADING_MS = 2000;
 
 type DevTask = {
   id: number;
@@ -35,7 +37,20 @@ const DevSuperTaskPage: React.FC = () => {
 
   const [data, setData] = useState<DevTask[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  // removed person-in-charge (PIC) filter — search uses the input text only
+  const [hospitalQuery, setHospitalQuery] = useState<string>("");
+  const [hospitalOptions, setHospitalOptions] = useState<Array<{ id: number; label: string }>>([]);
+  // selectedHospital removed; we keep hospitalQuery and hospitalOptions for suggestions
+  const searchDebounce = useRef<number | null>(null);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [sortBy, setSortBy] = useState<string>("id");
+  const [sortDir, setSortDir] = useState<string>("asc");
+  const [enableItemAnimation, setEnableItemAnimation] = useState<boolean>(true);
+  // userOptions removed
 
   const apiBase = `${API_ROOT}/api/v1/superadmin/dev/tasks`;
 
@@ -43,29 +58,89 @@ const DevSuperTaskPage: React.FC = () => {
   const [editing, setEditing] = useState<DevTask | null>(null);
 
   async function fetchList() {
+    const start = Date.now();
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${apiBase}?page=0&size=50&sortBy=id&sortDir=asc`, {
+      const params = new URLSearchParams({ page: "0", size: "50", sortBy, sortDir });
+      const combinedSearch = (searchTerm || "").trim();
+      if (combinedSearch) params.set("search", combinedSearch);
+      if (statusFilter) params.set("status", statusFilter);
+
+      const url = `${apiBase}?${params.toString()}`;
+      const res = await fetch(url, {
         method: "GET",
         headers: authHeaders(),
         credentials: "include",
       });
-      if (!res.ok) throw new Error(`GET ${apiBase} failed: ${res.status}`);
+      if (!res.ok) throw new Error(`GET ${url} failed: ${res.status}`);
       const page = await res.json();
-      setData(Array.isArray(page?.content) ? page.content : Array.isArray(page) ? page : []);
+      const items = Array.isArray(page?.content) ? page.content : Array.isArray(page) ? page : [];
+      setData(items);
+      if (page && typeof page.totalElements === 'number') setTotalCount(page.totalElements);
+      else setTotalCount(Array.isArray(page) ? page.length : null);
+      if (enableItemAnimation) {
+        const itemCount = items.length;
+        const maxDelay = itemCount > 1 ? 2000 + ((itemCount - 2) * 80) : 0;
+        const animationDuration = 220;
+        const buffer = 120;
+        window.setTimeout(() => setEnableItemAnimation(false), maxDelay + animationDuration + buffer);
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg || "Lỗi tải dữ liệu");
     } finally {
-      setLoading(false);
+        const elapsed = Date.now() - start;
+        if (isInitialLoad) {
+          const remaining = Math.max(0, MIN_LOADING_MS - elapsed);
+          await new Promise((res) => setTimeout(res, remaining));
+        }
+        setLoading(false);
+        if (isInitialLoad) setIsInitialLoad(false);
     }
   }
 
+    async function fetchHospitalOptions(query: string) {
+      try {
+        const res = await fetch(`${API_ROOT}/api/v1/superadmin/hospitals/search?name=${encodeURIComponent(query || "")}`, { headers: authHeaders() });
+        if (!res.ok) return;
+        const list = await res.json();
+        if (Array.isArray(list)) {
+          setHospitalOptions(list.map((h: Record<string, unknown>) => ({ id: Number(h['id'] as unknown as number), label: String(h['label'] ?? h['name'] ?? '') })));
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // fetchUsersByHospital removed — we no longer load user options per hospital
+
+  useEffect(() => { fetchList(); }, []); /* eslint-disable-line react-hooks/exhaustive-deps */
+
+  // debounce hospitalQuery -> fetch hospital suggestions
   useEffect(() => {
-    fetchList();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const id = window.setTimeout(() => {
+      if (hospitalQuery && hospitalQuery.trim().length > 0) {
+        fetchHospitalOptions(hospitalQuery.trim());
+      } else {
+        setHospitalOptions([]);
+      }
+    }, 300);
+    return () => window.clearTimeout(id);
+  }, [hospitalQuery]);
+
+  // debounce searchTerm
+  useEffect(() => {
+    if (searchDebounce.current) window.clearTimeout(searchDebounce.current);
+    searchDebounce.current = window.setTimeout(() => {
+      fetchList();
+    }, 600);
+    return () => { if (searchDebounce.current) window.clearTimeout(searchDebounce.current); };
+  }, [searchTerm]); /* eslint-disable-line react-hooks/exhaustive-deps */
+
+  // refetch when status or sort changes
+  useEffect(() => { fetchList(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [statusFilter]);
+  useEffect(() => { fetchList(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [sortBy, sortDir]);
 
   const handleDelete = async (id: number) => {
     if (!confirm("Xóa bản ghi này?")) return;
@@ -107,49 +182,103 @@ const DevSuperTaskPage: React.FC = () => {
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Dev Tasks (SuperAdmin)</h1>
-        <div>
-          <button className="h-10 rounded-xl bg-gray-900 text-white px-3" onClick={() => { setEditing(null); setModalOpen(true); }}>+ Thêm mới</button>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center">
+          <h1 className="text-3xl font-extrabold text-gray-900">Dev Tasks (SuperAdmin)</h1>
         </div>
       </div>
-      {loading && <div>Đang tải...</div>}
       {error && <div className="text-red-600">{error}</div>}
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-50 text-gray-600">
-            <tr>
-              <th className="px-4 py-2 text-left">ID</th>
-              <th className="px-4 py-2 text-left">Tên</th>
-              <th className="px-4 py-2 text-left">Bệnh viện</th>
-              <th className="px-4 py-2 text-left">PIC</th>
-              <th className="px-4 py-2 text-left">Trạng thái</th>
-              <th className="px-4 py-2 text-left">Tạo lúc</th>
-              <th className="px-4 py-2 text-right">Hành động</th>
-            </tr>
-          </thead>
-          <tbody>
-            {!loading && data.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-gray-500">Không có dữ liệu</td>
-              </tr>
-            )}
-            {data.map((row) => (
-              <tr key={row.id} className="border-t">
-                <td className="px-4 py-3">{row.id}</td>
-                <td className="px-4 py-3">{row.name}</td>
-                <td className="px-4 py-3">{row.hospitalName}</td>
-                <td className="px-4 py-3">{row.picDeploymentName}</td>
-                <td className="px-4 py-3">{row.status}</td>
-                <td className="px-4 py-3">{row.createdAt ?? "-"}</td>
-                <td className="px-4 py-3 text-right">
-                  <button className="mr-2 text-sm text-blue-600" onClick={() => { setEditing(row); setModalOpen(true); }}>Sửa</button>
-                  <button className="text-sm text-red-600" onClick={() => handleDelete(row.id)}>Xóa</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="mb-6 rounded-xl border bg-white p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Thao tác</h3>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative">
+                <input
+                  list="hospital-list"
+                  type="text"
+                  className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px]"
+                  placeholder="Tìm theo tên (gõ để gợi ý bệnh viện)"
+                  value={searchTerm}
+                  onChange={(e) => { setSearchTerm(e.target.value); setHospitalQuery(e.target.value); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { fetchList(); } }}
+                  onBlur={(e) => {
+                    // if the user picked a suggestion, keep the text (searchTerm already updated)
+                    // previously we fetched users by hospital here; that behavior is removed
+                    const val = e.currentTarget.value?.trim() || '';
+                    if (val.length === 0 || !hospitalOptions.some((h) => h.label === val)) {
+                      // do nothing special — free text search is allowed
+                    }
+                  }}
+                />
+                <datalist id="hospital-list">
+                  {hospitalOptions.map((h) => (
+                    <option key={h.id} value={h.label} />
+                  ))}
+                </datalist>
+              </div>
+
+              {/* person-in-charge filter removed; search uses the input box only */}
+
+              <select
+                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[160px]"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="">— Chọn trạng thái —</option>
+                <option value="NOT_STARTED">Chưa triển khai</option>
+                <option value="IN_PROGRESS">Đang triển khai</option>
+                <option value="API_TESTING">Test thông api</option>
+                <option value="INTEGRATING">Tích hợp với viện</option>
+                <option value="WAITING_FOR_DEV">Chờ dev build update</option>
+                <option value="ACCEPTED">Nghiệm thu</option>
+              </select>
+            </div>
+            <div className="mt-3 text-sm text-gray-600">Tổng: <span className="font-semibold text-gray-800">{loading ? '...' : (totalCount ?? data.length)}</span></div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <select className="rounded-lg border px-3 py-2 text-sm" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                <option value="id">Sắp xếp theo: id</option>
+                <option value="hospitalName">Sắp xếp theo: bệnh viện</option>
+                <option value="createdAt">Sắp xếp theo: ngày tạo</option>
+              </select>
+              <select className="rounded-lg border px-3 py-2 text-sm" value={sortDir} onChange={(e) => setSortDir(e.target.value)}>
+                <option value="asc">Tăng dần</option>
+                <option value="desc">Giảm dần</option>
+              </select>
+            </div>
+
+            <button className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700" onClick={() => { setEditing(null); setModalOpen(true); }}>+ Thêm mới</button>
+            <button className="rounded-full border px-4 py-2 text-sm shadow-sm" onClick={() => { setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc'); fetchList(); }}>Làm mới</button>
+          </div>
+        </div>
+      </div>
+      <style>{`@keyframes fadeInUp { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }`}</style>
+
+      <div className="space-y-3">
+        {loading && isInitialLoad ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-blue-600 text-4xl font-extrabold tracking-wider animate-pulse" aria-hidden="true">TAG</div>
+          </div>
+        ) : (
+          data.length === 0 ? (
+            <div className="px-4 py-6 text-center text-gray-500">Không có dữ liệu</div>
+          ) : (
+            data.map((row, idx) => (
+              <TaskCard
+                key={row.id}
+                task={row}
+                idx={idx}
+                animate={enableItemAnimation}
+                onOpen={(t) => { setEditing(t as DevTask); setModalOpen(true); }}
+                onEdit={(t) => { setEditing(t as DevTask); setModalOpen(true); }}
+                onDelete={(id) => handleDelete(id)}
+              />
+            ))
+          )
+        )}
       </div>
       <TaskFormModal open={modalOpen} onClose={() => setModalOpen(false)} initial={editing ?? undefined} onSubmit={handleSubmit} />
     </div>

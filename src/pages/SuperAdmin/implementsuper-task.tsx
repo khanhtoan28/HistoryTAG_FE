@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import TaskFormModal from "./TaskFormModal";
 import toast from "react-hot-toast";
-import { AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
-import { FaTasks } from "react-icons/fa";
+import TaskCard from "./TaskCardNew";
 
 const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
+const MIN_LOADING_MS = 2000; // ensure spinner shows at least ~2s for perceived smoothness
 
 type ImplTask = {
   id: number;
@@ -48,7 +48,20 @@ const ImplementSuperTaskPage: React.FC = () => {
   });
   const [data, setData] = useState<ImplTask[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [picFilter, setPicFilter] = useState<string>("");
+  const [hospitalQuery, setHospitalQuery] = useState<string>("");
+  const [hospitalOptions, setHospitalOptions] = useState<Array<{ id: number; label: string }>>([]);
+  const [selectedHospital, setSelectedHospital] = useState<string | null>(null);
+  const searchDebounce = useRef<number | null>(null);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [sortBy, setSortBy] = useState<string>("id");
+  const [sortDir, setSortDir] = useState<string>("asc");
+  const [enableItemAnimation, setEnableItemAnimation] = useState<boolean>(true);
+  const [userOptions, setUserOptions] = useState<Array<{ id: number; label: string }>>([]);
 
   const apiBase = `${API_ROOT}/api/v1/superadmin/implementation/tasks`;
 
@@ -56,29 +69,150 @@ const ImplementSuperTaskPage: React.FC = () => {
   const [editing, setEditing] = useState<ImplTask | null>(null);
 
   async function fetchList() {
+    const start = Date.now();
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${apiBase}?page=0&size=50&sortBy=id&sortDir=asc`, {
+      const params = new URLSearchParams({
+        page: "0",
+        size: "50",
+        sortBy: sortBy,
+        sortDir: sortDir,
+      });
+      // Build search param. If a PIC is selected, append the PIC's label (name)
+      // to the search query so backend can match tasks by PIC name even when
+      // there is no dedicated 'pic' filter on the server.
+      let combinedSearch = (searchTerm || "").trim();
+      if (picFilter) {
+        const found = userOptions.find((u) => String(u.id) === String(picFilter));
+        if (found && found.label) {
+          combinedSearch = [combinedSearch, found.label].filter(Boolean).join(" ");
+        }
+      }
+      if (combinedSearch) params.set("search", combinedSearch);
+      if (statusFilter) params.set("status", statusFilter);
+
+      const url = `${apiBase}?${params.toString()}`;
+      const res = await fetch(url, {
         method: "GET",
         headers: authHeaders(),
         credentials: "include",
       });
-      if (!res.ok) throw new Error(`GET ${apiBase} failed: ${res.status}`);
-      const page = await res.json();
-      setData(Array.isArray(page?.content) ? page.content : Array.isArray(page) ? page : []);
+      if (!res.ok) throw new Error(`GET ${url} failed: ${res.status}`);
+  const page = await res.json();
+      const items = Array.isArray(page?.content) ? page.content : Array.isArray(page) ? page : [];
+      setData(items);
+      // try to read total count from paged response
+      if (page && typeof page.totalElements === 'number') setTotalCount(page.totalElements);
+      else setTotalCount(Array.isArray(page) ? page.length : null);
+      // disable entrance animation after all staggered animations have started
+      if (enableItemAnimation) {
+        const itemCount = items.length;
+        // base delay 2000ms for first visible row, +80ms per subsequent row (as in TaskCardNew)
+        const maxDelay = itemCount > 1 ? 2000 + ((itemCount - 2) * 80) : 0;
+        const animationDuration = 220; // matches TaskCardNew animation duration
+        const buffer = 120; // small buffer before turning off
+        window.setTimeout(() => setEnableItemAnimation(false), maxDelay + animationDuration + buffer);
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg || "Lỗi tải dữ liệu");
     } finally {
+      const elapsed = Date.now() - start;
+      // enforce MIN_LOADING_MS only for the initial page load so searches/filters feel snappy
+      if (isInitialLoad) {
+        const remaining = Math.max(0, MIN_LOADING_MS - elapsed);
+        await new Promise((res) => setTimeout(res, remaining));
+      }
       setLoading(false);
+      // after first full load, stop treating loads as initial
+      if (isInitialLoad) setIsInitialLoad(false);
+    }
+  }
+
+  async function fetchUserOptions() {
+    try {
+      if (selectedHospital) {
+        await fetchUsersByHospital(selectedHospital);
+        return;
+      }
+      const res = await fetch(`${API_ROOT}/api/v1/superadmin/users/search?name=`, { headers: authHeaders() });
+      if (!res.ok) return;
+      const list = await res.json();
+      // expecting EntitySelectDTO { id, label }
+      if (Array.isArray(list)) {
+        setUserOptions(list.map((u: Record<string, unknown>) => ({ id: Number(u['id'] as unknown as number), label: String((u['label'] ?? u['fullname'] ?? u['id']) as unknown) })));
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  async function fetchHospitalOptions(query: string) {
+    try {
+      const res = await fetch(`${API_ROOT}/api/v1/superadmin/hospitals/search?name=${encodeURIComponent(query || "")}`, { headers: authHeaders() });
+      if (!res.ok) return;
+      const list = await res.json();
+      if (Array.isArray(list)) {
+        setHospitalOptions(list.map((h: Record<string, unknown>) => ({ id: Number(h['id'] as unknown as number), label: String(h['label'] ?? h['name'] ?? '') })));
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  async function fetchUsersByHospital(hospitalName: string) {
+    try {
+      const res = await fetch(`${API_ROOT}/api/v1/superadmin/users/by-hospital?hospitalName=${encodeURIComponent(hospitalName)}`, { headers: authHeaders() });
+      if (!res.ok) return;
+      const list = await res.json();
+      if (Array.isArray(list)) {
+        setUserOptions(list.map((u: Record<string, unknown>) => ({ id: Number(u['id'] as unknown as number), label: String(u['fullname'] ?? u['label'] ?? '') })));
+      }
+    } catch {
+      // ignore
     }
   }
 
   useEffect(() => {
     fetchList();
+    fetchUserOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      if (hospitalQuery && hospitalQuery.trim().length > 0) {
+        fetchHospitalOptions(hospitalQuery.trim());
+      } else {
+        setHospitalOptions([]);
+      }
+    }, 300);
+    return () => window.clearTimeout(id);
+  }, [hospitalQuery]);
+
+  // debounce searchTerm changes
+  useEffect(() => {
+    if (searchDebounce.current) window.clearTimeout(searchDebounce.current);
+    // small debounce to avoid too many requests while typing
+    searchDebounce.current = window.setTimeout(() => {
+      fetchList();
+    }, 600);
+    return () => { if (searchDebounce.current) window.clearTimeout(searchDebounce.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, picFilter]);
+
+  // refetch immediately when statusFilter changes
+  useEffect(() => {
+    fetchList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter]);
+
+  // refetch when sort changes
+  useEffect(() => {
+    fetchList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortBy, sortDir]);
 
   const handleDelete = async (id: number) => {
     if (!confirm("Xóa bản ghi này?")) return;
@@ -114,15 +248,7 @@ const ImplementSuperTaskPage: React.FC = () => {
     toast.success(isUpdate ? "Cập nhật thành công" : "Tạo mới thành công");
   };
 
-  function statusBadgeClass(status?: string) {
-    if (!status) return "bg-gray-100 text-gray-800";
-    const s = status.toLowerCase();
-    if (s.includes("done") || s.includes("completed") || s.includes("completed")) return "bg-green-100 text-green-800";
-    if (s.includes("progress") || s.includes("inprogress") || s.includes("doing")) return "bg-blue-100 text-blue-800";
-    if (s.includes("pending") || s.includes("new") || s.includes("todo")) return "bg-yellow-100 text-yellow-800";
-    if (s.includes("cancel") || s.includes("fail") || s.includes("error")) return "bg-red-100 text-red-800";
-    return "bg-gray-100 text-gray-800";
-  }
+  
 
   if (!isSuper) {
     return <div className="p-6 text-red-600">Bạn không có quyền truy cập trang SuperAdmin.</div>;
@@ -132,115 +258,107 @@ const ImplementSuperTaskPage: React.FC = () => {
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Danh sách công việc triển khai (SuperAdmin)</h1>
-        <div>
-          <button className="h-10 rounded-xl bg-gray-900 text-white px-3" onClick={() => { setEditing(null); setModalOpen(true); }}>+ Thêm mới</button>
+      </div>
+
+      {error && <div className="text-red-600">{error}</div>}
+
+      <div className="mb-6 rounded-xl border bg-white p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Thao tác</h3>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative">
+                <input
+                  list="hospital-list"
+                  type="text"
+                  className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px]"
+                  placeholder="Tìm theo tên (gõ để gợi ý bệnh viện)"
+                  value={searchTerm}
+                  onChange={(e) => { setSearchTerm(e.target.value); setHospitalQuery(e.target.value); setSelectedHospital(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { fetchList(); } }}
+                  onBlur={(e) => {
+                    const val = e.currentTarget.value?.trim() || '';
+                    if (val.length > 0 && hospitalOptions.some((h) => h.label === val)) {
+                      setSelectedHospital(val);
+                      fetchUsersByHospital(val);
+                    } else {
+                      setSelectedHospital(null);
+                    }
+                  }}
+                />
+                <datalist id="hospital-list">
+                  {hospitalOptions.map((h) => (
+                    <option key={h.id} value={h.label} />
+                  ))}
+                </datalist>
+              </div>
+
+              <select
+                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[160px]"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="">— Chọn trạng thái —</option>
+                <option value="NOT_STARTED">Chưa triển khai</option>
+                <option value="IN_PROGRESS">Đang triển khai</option>
+                <option value="API_TESTING">Test thông api</option>
+                <option value="INTEGRATING">Tích hợp với viện</option>
+                <option value="WAITING_FOR_DEV">Chờ dev build update</option>
+                <option value="ACCEPTED">Nghiệm thu</option>
+              </select>
+            </div>
+            <div className="mt-3 text-sm text-gray-600">Tổng: <span className="font-semibold text-gray-800">{loading ? '...' : (totalCount ?? data.length)}</span></div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <select className="rounded-lg border px-3 py-2 text-sm" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                <option value="id">Sắp xếp theo: id</option>
+                <option value="hospitalName">Sắp xếp theo: bệnh viện</option>
+                <option value="deadline">Sắp xếp theo: deadline</option>
+              </select>
+              <select className="rounded-lg border px-3 py-2 text-sm" value={sortDir} onChange={(e) => setSortDir(e.target.value)}>
+                <option value="asc">Tăng dần</option>
+                <option value="desc">Giảm dần</option>
+              </select>
+            </div>
+
+            <button className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700" onClick={() => { setEditing(null); setModalOpen(true); }}>+ Thêm mới</button>
+            <button className="rounded-full border px-4 py-2 text-sm shadow-sm" onClick={() => { setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc'); fetchList(); }}>Làm mới</button>
+          </div>
         </div>
       </div>
-      {loading && <div>Đang tải...</div>}
-      {error && <div className="text-red-600">{error}</div>}
+
       <div>
         <style>{`
           @keyframes fadeInUp { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
         `}</style>
 
-        {(!loading && data.length === 0) && (
-          <div className="px-4 py-6 text-center text-gray-500">Không có dữ liệu</div>
-        )}
-
         <div className="space-y-3">
-          {data.map((row, idx) => (
-            <div
-              key={row.id}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setEditing(row); setModalOpen(true); } }}
-              onClick={() => { setEditing(row); setModalOpen(true); }}
-              className="group flex items-center justify-between rounded-xl border-2 border-transparent bg-white px-4 py-3 shadow-sm transition-all hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-400/40 hover:border-blue-100"
-              style={{ animation: "fadeInUp 220ms both", animationDelay: `${idx * 30}ms` }}
-            >
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                  <FaTasks />
-                </div>
-                <div className="hidden w-px rounded bg-gray-200 md:block" />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-3">
-                    <div className="text-sm font-semibold truncate max-w-md" title={row.name ?? ""}>{row.name}</div>
-                    <div className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">#{row.id}</div>
-                    {row.status && (
-                      <div className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusBadgeClass(row.status)}`}>{row.status}</div>
-                    )}
-                  </div>
-
-                  <div className="mt-1 flex flex-col text-sm text-gray-500">
-                    <div className="truncate" title={row.hospitalName ?? ""}><span className="font-medium text-gray-700">Bệnh viện:</span> {row.hospitalName ?? "-"}</div>
-                    <div className="mt-1 text-xs text-gray-400 truncate" title={row.picDeploymentName ?? ""}><span className="font-medium text-gray-700">PIC:</span> {row.picDeploymentName ?? "-"}</div>
-                    {/* show extra fields if present on the object */}
-                    {row.hisSystemName && (
-                      <div className="mt-1 text-xs text-gray-400 truncate" title={row.hisSystemName}><span className="font-medium text-gray-700">HIS:</span> {row.hisSystemName}</div>
-                    )}
-                    {row.agency && (
-                      <div className="mt-1 text-xs text-gray-400 truncate" title={row.agency}><span className="font-medium text-gray-700">Agency:</span> {row.agency}</div>
-                    )}
-                    {row.quantity !== undefined && row.quantity !== null && (
-                      <div className="mt-1 text-xs text-gray-400 truncate"><span className="font-medium text-gray-700">Số lượng:</span> {row.quantity}</div>
-                    )}
-                    {row.hardware && (
-                      <div className="mt-1 text-xs text-gray-400 truncate" title={row.hardware}><span className="font-medium text-gray-700">Hardware:</span> {row.hardware}</div>
-                    )}
-                    {row.apiUrl && (
-                      <div className="mt-1 text-xs text-gray-400 truncate" title={row.apiUrl}><span className="font-medium text-gray-700">API URL:</span> {row.apiUrl}</div>
-                    )}
-                    {row.apiTestStatus && (
-                      <div className="mt-1 text-xs text-gray-400 truncate"><span className="font-medium text-gray-700">API Test:</span> {row.apiTestStatus}</div>
-                    )}
-                    {row.bhytPortCheckInfo && (
-                      <div className="mt-1 text-xs text-gray-400 truncate"><span className="font-medium text-gray-700">BHYT Port:</span> {row.bhytPortCheckInfo}</div>
-                    )}
-                    {row.deadline && (
-                      <div className="mt-1 text-xs text-gray-400 truncate"><span className="font-medium text-gray-700">Deadline:</span> {new Date(row.deadline).toLocaleString()}</div>
-                    )}
-                    {row.startDate && (
-                      <div className="mt-1 text-xs text-gray-400 truncate"><span className="font-medium text-gray-700">Start:</span> {new Date(row.startDate).toLocaleString()}</div>
-                    )}
-                    {row.acceptanceDate && (
-                      <div className="mt-1 text-xs text-gray-400 truncate"><span className="font-medium text-gray-700">Acceptance:</span> {new Date(row.acceptanceDate).toLocaleString()}</div>
-                    )}
-                    {row.finishDate && (
-                      <div className="mt-1 text-xs text-gray-400 truncate"><span className="font-medium text-gray-700">Finish:</span> {new Date(row.finishDate).toLocaleString()}</div>
-                    )}
-                    {row.notes && (
-                      <div className="mt-1 text-xs text-gray-400 truncate" title={row.notes}><span className="font-medium text-gray-700">Yêu cầu:</span> {row.notes}</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="ml-4 flex items-center gap-4">
-                <div className="hidden text-right md:block">
-                  <div className="text-sm font-medium text-gray-700">{row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "-"}</div>
-                  <div className="text-xs text-gray-400">{row.createdAt ? new Date(row.createdAt).toLocaleTimeString() : ""}</div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setEditing(row); setModalOpen(true); }}
-                    className="rounded-lg px-3 py-1 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition"
-                  >
-                    <AiOutlineEdit className="inline mr-1 text-base align-middle" /> Sửa
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDelete(row.id); }}
-                    className="rounded-lg px-3 py-1 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 shadow-sm transition"
-                  >
-                    <AiOutlineDelete className="inline mr-1 text-base align-middle" /> Xóa
-                  </button>
-                </div>
-              </div>
+          {loading && isInitialLoad ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-blue-600 text-4xl font-extrabold tracking-wider animate-pulse" aria-hidden="true">TAG</div>
             </div>
-          ))}
+          ) : (
+            data.length === 0 ? (
+              <div className="px-4 py-6 text-center text-gray-500">Không có dữ liệu</div>
+            ) : (
+              data.map((row, idx) => (
+                <TaskCard
+                  key={row.id}
+                  task={row}
+                  idx={idx}
+                  animate={enableItemAnimation}
+                  onOpen={(t) => { setEditing(t); setModalOpen(true); }}
+                  onEdit={(t) => { setEditing(t); setModalOpen(true); }}
+                  onDelete={(id) => handleDelete(id)}
+                />
+              ))
+            )
+          )}
         </div>
       </div>
+
       <TaskFormModal open={modalOpen} onClose={() => setModalOpen(false)} initial={editing ?? undefined} onSubmit={handleSubmit} />
     </div>
   );
