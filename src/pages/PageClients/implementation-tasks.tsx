@@ -20,7 +20,7 @@ export type ImplementationTaskResponseDTO = {
   completionDate?: string | null;
   apiTestStatus?: string | null;
   bhytPortCheckInfo?: string | null;
-  status?: DeploymentStatusFE | null;
+  status?: string | null;
   startDate?: string | null;
   acceptanceDate?: string | null;
   team?: "DEPLOYMENT" | string;
@@ -42,20 +42,21 @@ export type ImplementationTaskRequestDTO = {
   apiUrl?: string | null;
   deadline?: string | null;
   completionDate?: string | null;
-  status?: DeploymentStatusFE | null;
+  status?: string | null;
   startDate?: string | null;
   acceptanceDate?: string | null;
 };
 
 export type ImplementationTaskUpdateDTO = Partial<ImplementationTaskRequestDTO>;
 
-export const DEPLOYMENT_STATUS_OPTIONS = [
-  { value: "NOT_STARTED", label: "Chưa bắt đầu" },
-  { value: "IN_PROGRESS", label: "Đang thực hiện" },
-  { value: "COMPLETED", label: "Hoàn thành" },
-] as const;
-
-export type DeploymentStatusFE = typeof DEPLOYMENT_STATUS_OPTIONS[number]["value"];
+const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "NOT_STARTED", label: "Chưa triển khai" },
+  { value: "IN_PROGRESS", label: "Đang triển khai" },
+  { value: "API_TESTING", label: "Test thông api" },
+  { value: "INTEGRATING", label: "Tích hợp với viện" },
+  { value: "WAITING_FOR_DEV", label: "Chờ dev build update" },
+  { value: "ACCEPTED", label: "Nghiệm thu" },
+];
 
 function statusBadgeClasses(status?: string | null) {
   switch (status) {
@@ -63,7 +64,7 @@ function statusBadgeClasses(status?: string | null) {
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
     case "IN_PROGRESS":
       return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
-    case "COMPLETED":
+    case "ACCEPTED":
       return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
     default:
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
@@ -73,11 +74,17 @@ function statusBadgeClasses(status?: string | null) {
 function statusLabel(status?: string | null) {
   switch (status) {
     case "NOT_STARTED":
-      return "Chưa bắt đầu";
+      return "Chưa triển khai";
     case "IN_PROGRESS":
-      return "Đang thực hiện";
-    case "COMPLETED":
-      return "Hoàn thành";
+      return "Đang triển khai";
+    case "API_TESTING":
+      return "Test thông api";
+    case "INTEGRATING":
+      return "Tích hợp với viện";
+    case "WAITING_FOR_DEV":
+      return "Chờ dev build update";
+    case "ACCEPTED":
+      return "Nghiệm thu";
     default:
       return status || "";
   }
@@ -208,6 +215,25 @@ function RemoteSelect({
     };
   }, [q, fetchOptions]);
 
+  // Preload options when opened without typing
+  useEffect(() => {
+    let alive = true;
+    if (open && options.length === 0 && !q.trim()) {
+      (async () => {
+        setLoading(true);
+        try {
+          const res = await fetchOptions("");
+          if (alive) setOptions(res);
+        } finally {
+          if (alive) setLoading(false);
+        }
+      })();
+    }
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+
   return (
     <Field label={label} required={required}>
       <div className="relative">
@@ -252,7 +278,7 @@ function RemoteSelect({
             ✕
           </button>
         )}
-        {open && q.trim().length > 0 && (
+        {open && (
           <div
             className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
             onMouseLeave={() => setHighlight(-1)}
@@ -303,66 +329,77 @@ function TaskFormModal({
 }) {
   const searchHospitals = useMemo(
     () => async (term: string) => {
-      const qs = new URLSearchParams({
-        search: term || "",
-        keyword: term || "",
-        page: "0",
-        size: "10",
-        sortBy: "name",
-        sortDir: "asc",
-      });
-      const url = `${API_ROOT}/api/v1/auth/hospitals?${qs.toString()}`;
+      const url = `${API_ROOT}/api/v1/admin/hospitals/search?name=${encodeURIComponent(term)}`;
       const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
       if (!res.ok) return [];
-      const json = await res.json();
-      const list = Array.isArray(json?.content)
-        ? json.content
-        : Array.isArray(json)
-          ? json
-          : [];
-
-      // ✅ Lọc theo từ khóa nhập (term)
-      const lower = term.trim().toLowerCase();
-      return list
-        .map((h: any) => ({
+      const list = await res.json();
+      const mapped = Array.isArray(list)
+        ? list.map((h: { id?: number; label?: string; name?: string; hospitalName?: string; code?: string }) => ({
           id: Number(h.id),
-          name: String((h.name ?? h.hospitalName ?? h.code ?? h.id)),
+          name: String(h.label ?? h.name ?? h.hospitalName ?? h.code ?? h?.id),
         }))
-        .filter((x: any) =>
-          Number.isFinite(x.id) &&
-          x.name &&
-          (!lower || x.name.toLowerCase().includes(lower))
-        );
-
-
+        : [];
+      return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
     },
     []
   );
 
   const searchPICs = useMemo(
     () => async (term: string) => {
-      const qs = new URLSearchParams({
-        page: "0",
-        size: "10",
-        sortBy: "fullname",
-        sortDir: "asc",
-      });
-  const url = `${API_ROOT}/api/v1/admin/users?${qs.toString()}`;
+      const url = `${API_ROOT}/api/v1/admin/users/search?name=${encodeURIComponent(term)}`;
       const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
       if (!res.ok) return [];
-      const json = await res.json();
-      const raw = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
-      const onlyDeployment = raw.filter((u: any) =>
-        String(u.team ?? u.role ?? "").toUpperCase().includes("DEPLOYMENT")
-      );
-      return onlyDeployment
-        .filter((u: any) =>
-          term ? (u.fullname ?? u.fullName ?? u.name ?? "").toLowerCase().includes(term.toLowerCase()) : true
-        )
-        .map((u: any) => ({
-          id: u.id,
-          name: u.fullname ?? u.fullName ?? u.username ?? `User ${u.id}`,
-        }));
+      const list = await res.json();
+      const mapped = Array.isArray(list)
+        ? list.map((u: { id?: number; label?: string; name?: string; fullName?: string; fullname?: string; username?: string }) => ({
+          id: Number(u.id),
+          name: String(u.label ?? u.name ?? u.fullName ?? u.fullname ?? u.username ?? u?.id),
+        }))
+        : [];
+      return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
+    },
+    []
+  );
+
+  // Thêm loaders giống dev-tasks cho Agency/HIS/Hardware
+  const searchAgencies = useMemo(
+    () => async (term: string) => {
+      const url = `${API_ROOT}/api/v1/admin/agencies/search?search=${encodeURIComponent(term)}`;
+      const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+      if (!res.ok) return [];
+      const list = await res.json();
+      const mapped = Array.isArray(list)
+        ? list.map((a: { id?: number; label?: string; name?: string }) => ({ id: Number(a.id), name: String(a.label ?? a.name ?? a?.id) }))
+        : [];
+      return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
+    },
+    []
+  );
+
+  const searchHisSystems = useMemo(
+    () => async (term: string) => {
+      const url = `${API_ROOT}/api/v1/admin/his/search?search=${encodeURIComponent(term)}`;
+      const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+      if (!res.ok) return [];
+      const list = await res.json();
+      const mapped = Array.isArray(list)
+        ? list.map((h: { id?: number; label?: string; name?: string }) => ({ id: Number(h.id), name: String(h.label ?? h.name ?? h?.id) }))
+        : [];
+      return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
+    },
+    []
+  );
+
+  const searchHardwares = useMemo(
+    () => async (term: string) => {
+      const url = `${API_ROOT}/api/v1/admin/hardware/search?search=${encodeURIComponent(term)}`;
+      const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+      if (!res.ok) return [];
+      const list = await res.json();
+      const mapped = Array.isArray(list)
+        ? list.map((h: { id?: number; label?: string; name?: string }) => ({ id: Number(h.id), name: String(h.label ?? h.name ?? h?.id) }))
+        : [];
+      return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
     },
     []
   );
@@ -381,7 +418,7 @@ function TaskFormModal({
     apiUrl: initial?.apiUrl ?? "",
     deadline: initial?.deadline ?? "",
     completionDate: initial?.completionDate ?? "",
-    status: (initial?.status as DeploymentStatusFE) ?? "NOT_STARTED",
+    status: initial?.status ?? "",
     startDate: initial?.startDate ?? "",
     acceptanceDate: initial?.acceptanceDate ?? "",
   }));
@@ -398,24 +435,30 @@ function TaskFormModal({
     return id ? { id, name: nm || String(id) } : null;
   });
 
-  useEffect(() => {
-    if (open) {
-      setModel({
-        ...model,
-        name: initial?.name || "",
-      });
-    }
-  }, [open, initial]);
+  const [agencyOpt, setAgencyOpt] = useState<{ id: number; name: string } | null>(() => {
+    const id = (initial?.agencyId as number) || 0;
+    return id ? { id, name: String(id) } : null;
+  });
+  const [hisOpt, setHisOpt] = useState<{ id: number; name: string } | null>(() => {
+    const id = (initial?.hisSystemId as number) || 0;
+    return id ? { id, name: String(id) } : null;
+  });
+  const [hardwareOpt, setHardwareOpt] = useState<{ id: number; name: string } | null>(() => {
+    const id = (initial?.hardwareId as number) || 0;
+    return id ? { id, name: String(id) } : null;
+  });
 
   useEffect(() => {
-    if (!open || !initial) return;
+    if (!open) return;
 
-    // Cập nhật model khi mở modal
-    setModel((prev) => ({
-      ...prev,
+    // Khởi tạo model khi mở modal: nếu có initial thì đổ dữ liệu, nếu không thì reset trắng
+    setModel({
       name: initial?.name || "",
       hospitalId: Number(initial?.hospitalId) || 0,
       picDeploymentId: Number(initial?.picDeploymentId) || 0,
+      agencyId: initial?.agencyId ?? null,
+      hisSystemId: initial?.hisSystemId ?? null,
+      hardwareId: initial?.hardwareId ?? null,
       quantity: initial?.quantity ?? null,
       apiTestStatus: initial?.apiTestStatus ?? "",
       bhytPortCheckInfo: initial?.bhytPortCheckInfo ?? "",
@@ -423,17 +466,36 @@ function TaskFormModal({
       apiUrl: initial?.apiUrl ?? "",
       deadline: initial?.deadline ?? "",
       completionDate: initial?.completionDate ?? "",
-      status: (initial?.status as DeploymentStatusFE) ?? "NOT_STARTED",
+      status: initial?.status ?? "",
       startDate: initial?.startDate ?? "",
       acceptanceDate: initial?.acceptanceDate ?? "",
-    }));
+    });
 
-    // Nếu đã có name hiển thị -> set luôn
+    // Setup selects: nếu có tên truyền vào thì dùng, không thì null (và sẽ resolve theo ID phía dưới)
+    const hid = (initial?.hospitalId as number) || 0;
+    const hnm = (initial?.hospitalName as string) || "";
+    setHospitalOpt(hid ? { id: hid, name: hnm || String(hid) } : null);
+
+    const pid = (initial?.picDeploymentId as number) || 0;
+    const pnm = (initial?.picDeploymentName as string) || "";
+    setPicOpt(pid ? { id: pid, name: pnm || String(pid) } : null);
+
+    const aid = (initial?.agencyId as number) || 0;
+    setAgencyOpt(aid ? { id: aid, name: String(aid) } : null);
+    const hisId = (initial?.hisSystemId as number) || 0;
+    setHisOpt(hisId ? { id: hisId, name: String(hisId) } : null);
+    const hwid = (initial?.hardwareId as number) || 0;
+    setHardwareOpt(hwid ? { id: hwid, name: String(hwid) } : null);
+
+    // Nếu đang ở chế độ tạo mới, không cần resolve gì thêm
+    if (!initial) return;
+
+    // Nếu đã có name hiển thị -> set luôn, nếu chưa có thì fetch chi tiết
     if (initial.hospitalName && initial.hospitalId) {
       setHospitalOpt({ id: Number(initial.hospitalId), name: initial.hospitalName });
     } else if (initial.hospitalId) {
-      // 🔁 Fetch lại tên bệnh viện theo ID
-      fetch(`${API_ROOT}/api/v1/auth/hospitals/${initial.hospitalId}`, {
+      // 🔁 Fetch lại tên bệnh viện theo ID (admin)
+      fetch(`${API_ROOT}/api/v1/admin/hospitals/${initial.hospitalId}`, {
         headers: authHeaders(),
         credentials: "include",
       })
@@ -453,7 +515,7 @@ function TaskFormModal({
     if (initial.picDeploymentName && initial.picDeploymentId) {
       setPicOpt({ id: Number(initial.picDeploymentId), name: initial.picDeploymentName });
     } else if (initial.picDeploymentId) {
-      // 🔁 Fetch lại tên người phụ trách theo ID
+      // 🔁 Fetch lại tên người phụ trách theo ID (admin)
       fetch(`${API_ROOT}/api/v1/admin/users/${initial.picDeploymentId}`, {
         headers: authHeaders(),
         credentials: "include",
@@ -471,6 +533,77 @@ function TaskFormModal({
         .catch(() => { });
     }
   }, [open, initial]);
+
+  // Resolve tên cho Agency/HIS/Hardware nếu chỉ có ID
+  useEffect(() => {
+    if (!open) return;
+    async function resolveById(
+      id: number | null | undefined,
+      setOpt: (v: { id: number; name: string } | null) => void,
+      detailPath: string,
+      nameKeys: string[]
+    ) {
+      if (!id || id <= 0) return;
+      const extractName = (payload: unknown): string | null => {
+        const candidates: any[] = [];
+        if (payload && typeof payload === "object") {
+          candidates.push(payload);
+          // @ts-ignore
+          if ((payload as any).data) candidates.push((payload as any).data);
+          // @ts-ignore
+          if ((payload as any).result) candidates.push((payload as any).result);
+        }
+        for (const obj of candidates) {
+          for (const k of nameKeys) {
+            const v = (obj as any)?.[k];
+            if (typeof v === "string" && v.trim()) return String(v);
+          }
+        }
+        return null;
+      };
+
+      try {
+        const res = await fetch(`${API_ROOT}${detailPath}/${id}`, { headers: authHeaders(), credentials: "include" });
+        if (res.ok) {
+          const obj = await res.json();
+          const name = extractName(obj);
+          if (name) {
+            setOpt({ id, name });
+            return;
+          }
+        }
+      } catch { /* ignore */ }
+
+      try {
+        const res = await fetch(`${API_ROOT}${detailPath}?search=${encodeURIComponent(String(id))}&page=0&size=50`, { headers: authHeaders(), credentials: "include" });
+        if (res.ok) {
+          const obj = await res.json();
+          const list = Array.isArray(obj?.content) ? obj.content : Array.isArray(obj) ? obj : [];
+          const found = list.find((it: any) => Number(it?.id) === Number(id));
+          if (found) {
+            const name = extractName(found) || String((found as any).name ?? (found as any).label ?? found[id]);
+            if (name) {
+              setOpt({ id, name });
+              return;
+            }
+          }
+        }
+      } catch { /* ignore */ }
+
+      // 3) Last resort: dùng search loaders đã có
+      try {
+        const fetcher = setOpt === setAgencyOpt ? searchAgencies : setOpt === setHisOpt ? searchHisSystems : searchHardwares;
+        const opts: Array<{ id: number; name: string }> = await fetcher("");
+        const found = opts.find((o: { id: number; name: string }) => o.id === id);
+        if (found) setOpt(found);
+      } catch { /* ignore */ }
+    }
+
+    resolveById((initial?.agencyId as number) || null, setAgencyOpt, "/api/v1/admin/agencies", ["name", "agencyName", "label"]);
+    resolveById((initial?.hisSystemId as number) || null, setHisOpt, "/api/v1/admin/his", ["name", "hisName", "label"]);
+    resolveById((initial?.hardwareId as number) || null, setHardwareOpt, "/api/v1/admin/hardware", ["name", "hardwareName", "label"]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const [submitting, setSubmitting] = useState(false);
   if (!open) return null;
@@ -530,14 +663,16 @@ function TaskFormModal({
           role="dialog"
           aria-modal="true"
         >
-          <form onSubmit={handleSubmit} className="p-6 grid gap-4 max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between sticky top-0 bg-white dark:bg-gray-900 pb-2">
-              <h3 className="text-lg font-semibold">
-                {initial?.id ? "Cập nhật tác vụ triển khai" : "Tạo tác vụ triển khai"}
-              </h3>
-              <Button type="button" variant="ghost" onClick={onClose}>
-                Đóng
-              </Button>
+          <form onSubmit={handleSubmit} className="px-6 pt-0 pb-6 grid gap-4 max-h-[80vh] overflow-y-auto">
+            <div className="sticky top-0 z-[100] -mx-10 px-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+              <div className="flex items-center justify-between py-3">
+                <h3 className="text-lg font-semibold">
+                  {initial?.id ? "Cập nhật tác vụ triển khai" : "Tạo tác vụ triển khai"}
+                </h3>
+                <Button type="button" variant="ghost" onClick={onClose}>
+                  Đóng
+                </Button>
+              </div>
             </div>
             {/* Form fields */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -576,31 +711,27 @@ function TaskFormModal({
                   }
                 />
               </Field>
-              <Field label="Agency ID">
-                <TextInput
-                  type="number"
-                  value={model.agencyId ?? ""}
-                  onChange={(e) => setModel((s) => ({ ...s, agencyId: e.target.value ? Number(e.target.value) : null }))}
-                />
-              </Field>
-              <Field label="HIS System ID">
-                <TextInput
-                  type="number"
-                  value={model.hisSystemId ?? ""}
-                  onChange={(e) =>
-                    setModel((s) => ({ ...s, hisSystemId: e.target.value ? Number(e.target.value) : null }))
-                  }
-                />
-              </Field>
-              <Field label="Hardware ID">
-                <TextInput
-                  type="number"
-                  value={model.hardwareId ?? ""}
-                  onChange={(e) =>
-                    setModel((s) => ({ ...s, hardwareId: e.target.value ? Number(e.target.value) : null }))
-                  }
-                />
-              </Field>
+              <RemoteSelect
+                label="Agency"
+                placeholder="Nhập tên agency để tìm…"
+                fetchOptions={searchAgencies}
+                value={agencyOpt}
+                onChange={(v) => { setAgencyOpt(v); setModel((s) => ({ ...s, agencyId: v ? v.id : null })); }}
+              />
+              <RemoteSelect
+                label="HIS System"
+                placeholder="Nhập tên HIS để tìm…"
+                fetchOptions={searchHisSystems}
+                value={hisOpt}
+                onChange={(v) => { setHisOpt(v); setModel((s) => ({ ...s, hisSystemId: v ? v.id : null })); }}
+              />
+              <RemoteSelect
+                label="Hardware"
+                placeholder="Nhập tên hardware để tìm…"
+                fetchOptions={searchHardwares}
+                value={hardwareOpt}
+                onChange={(v) => { setHardwareOpt(v); setModel((s) => ({ ...s, hardwareId: v ? v.id : null })); }}
+              />
               <Field label="API URL">
                 <TextInput
                   value={model.apiUrl ?? ""}
@@ -628,10 +759,11 @@ function TaskFormModal({
                     "h-10 w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 outline-none",
                     "focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
                   )}
-                  value={model.status ?? "NOT_STARTED"}
-                  onChange={(e) => setModel((s) => ({ ...s, status: e.target.value as DeploymentStatusFE }))}
+                  value={model.status ?? ""}
+                  onChange={(e) => setModel((s) => ({ ...s, status: (e.target as HTMLSelectElement).value || "" }))}
                 >
-                  {DEPLOYMENT_STATUS_OPTIONS.map((opt) => (
+                  <option value="">— Chọn trạng thái —</option>
+                  {STATUS_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
                     </option>
@@ -749,20 +881,19 @@ const ImplementationTasksPage: React.FC = () => {
   const [query, setQuery] = useState("");
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<ImplementationTaskResponseDTO | null>(null);
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
-    const readStored = <T = unknown>(key: string): T | null => {
-      try {
-        const raw = localStorage.getItem(key) || sessionStorage.getItem(key);
-        if (!raw) return null;
-        return JSON.parse(raw) as T;
-      } catch {
-        return null;
-      }
-    };
+  const readStored = <T = unknown>(key: string): T | null => {
+    try {
+      const raw = localStorage.getItem(key) || sessionStorage.getItem(key);
+      if (!raw) return null;
+      return JSON.parse(raw) as T;
+    } catch {
+      return null;
+    }
+  };
 
-    const currentUser = readStored<{ id?: number; username?: string; team?: string; roles?: unknown[] }>("user") || null;
-    const userRoles = (readStored<string[]>("roles") || (currentUser?.roles as string[] | undefined)) || [];
-    const userTeam = (currentUser?.team || "").toString().toUpperCase();
+  const currentUser = readStored<{ id?: number; username?: string; team?: string; roles?: unknown[] }>("user") || null;
+  const userRoles = (readStored<string[]>("roles") || (currentUser?.roles as string[] | undefined)) || [];
+  const userTeam = (currentUser?.team || "").toString().toUpperCase();
   const isSuperAdmin = userRoles.some(
     (r: any) => (typeof r === "string" ? r : r.roleName)?.toUpperCase() === "SUPERADMIN"
   );

@@ -151,146 +151,155 @@ function Button(
     return <button className={clsx(base, styles, className)} {...rest} />;
 }
 
+const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
+    { value: "NOT_STARTED", label: "Chưa triển khai" },
+    { value: "IN_PROGRESS", label: "Đang triển khai" },
+    { value: "API_TESTING", label: "Test thông api" },
+    { value: "INTEGRATING", label: "Tích hợp với viện" },
+    { value: "WAITING_FOR_DEV", label: "Chờ dev build update" },
+    { value: "ACCEPTED", label: "Nghiệm thu" },
+];
+
 /** ===========================
  *  RemoteSelect (autocomplete)
  *  =========================== */
 function RemoteSelect({
-  label,
-  placeholder,
-  fetchOptions,
-  value,
-  onChange,
-  required,
+    label,
+    placeholder,
+    fetchOptions,
+    value,
+    onChange,
+    required,
 }: {
-  label: string;
-  placeholder?: string;
-  required?: boolean;
-  fetchOptions: (q: string) => Promise<Array<{ id: number; name: string }>>;
-  value: { id: number; name: string } | null;
-  onChange: (v: { id: number; name: string } | null) => void;
+    label: string;
+    placeholder?: string;
+    required?: boolean;
+    fetchOptions: (q: string) => Promise<Array<{ id: number; name: string }>>;
+    value: { id: number; name: string } | null;
+    onChange: (v: { id: number; name: string } | null) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [options, setOptions] = useState<Array<{ id: number; name: string }>>([]);
-  const [highlight, setHighlight] = useState<number>(-1);
+    const [open, setOpen] = useState(false);
+    const [q, setQ] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [options, setOptions] = useState<Array<{ id: number; name: string }>>([]);
+    const [highlight, setHighlight] = useState<number>(-1);
 
-  // debounce search
-  useEffect(() => {
-    let alive = true;
-    const t = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const res = await fetchOptions(q.trim());
-        if (alive) setOptions(res);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    }, 250);
-    return () => {
-      alive = false;
-      clearTimeout(t);
-    };
-  }, [q, fetchOptions]);
-
-  useEffect(() => {
-    if (open) {
-      // preload lần đầu
-      if (!options.length && !q.trim()) {
-        (async () => {
-          setLoading(true);
-          try {
-            const res = await fetchOptions("");
-            setOptions(res);
-          } finally {
-            setLoading(false);
-          }
-        })();
-      }
-    }
-  }, [open]); // eslint-disable-line
-
-  return (
-    <Field label={label} required={required}>
-      <div className="relative">
-        <input
-          className={clsx(
-            "h-10 w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 outline-none",
-            "focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
-          )}
-          placeholder={placeholder || "Gõ để tìm..."}
-          value={open ? q : value?.name || ""}
-          onChange={(e) => {
-            setQ(e.target.value);
-            if (!open) setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          onKeyDown={(e) => {
-            if (!open) return;
-            if (e.key === "ArrowDown") {
-              e.preventDefault();
-              setHighlight((h) => Math.min(h + 1, options.length - 1));
-            } else if (e.key === "ArrowUp") {
-              e.preventDefault();
-              setHighlight((h) => Math.max(h - 1, 0));
-            } else if (e.key === "Enter") {
-              e.preventDefault();
-              if (highlight >= 0 && options[highlight]) {
-                onChange(options[highlight]);
-                setOpen(false);
-              }
-            } else if (e.key === "Escape") {
-              setOpen(false);
+    // debounce search
+    useEffect(() => {
+        let alive = true;
+        const t = setTimeout(async () => {
+            setLoading(true);
+            try {
+                const res = await fetchOptions(q.trim());
+                if (alive) setOptions(res);
+            } finally {
+                if (alive) setLoading(false);
             }
-          }}
-        />
-        {/* Nút xóa chọn */}
-        {value && !open && (
-          <button
-            type="button"
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            onClick={() => onChange(null)}
-            aria-label="Clear"
-          >
-            ✕
-          </button>
-        )}
+        }, 250);
+        return () => {
+            alive = false;
+            clearTimeout(t);
+        };
+    }, [q, fetchOptions]);
 
-        {open && (
-          <div
-            className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
-            onMouseLeave={() => setHighlight(-1)}
-          >
-            {loading && (
-              <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>
-            )}
-            {!loading && options.length === 0 && (
-              <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>
-            )}
-            {!loading &&
-              options.map((opt, idx) => (
-                <div
-                  key={opt.id}
-                  className={clsx(
-                    "px-3 py-2 text-sm cursor-pointer",
-                    idx === highlight ? "bg-gray-100 dark:bg-gray-800" : ""
-                  )}
-                  onMouseEnter={() => setHighlight(idx)}
-                  onMouseDown={(e) => {
-                    // dùng mousedown để chọn trước khi input blur
-                    e.preventDefault();
-                    onChange(opt);
-                    setOpen(false);
-                  }}
-                >
-                  {opt.name}
-                </div>
-              ))}
-          </div>
-        )}
-      </div>
-    </Field>
-  );
+    useEffect(() => {
+        if (open) {
+            // preload lần đầu
+            if (!options.length && !q.trim()) {
+                (async () => {
+                    setLoading(true);
+                    try {
+                        const res = await fetchOptions("");
+                        setOptions(res);
+                    } finally {
+                        setLoading(false);
+                    }
+                })();
+            }
+        }
+    }, [open]); // eslint-disable-line
+
+    return (
+        <Field label={label} required={required}>
+            <div className="relative">
+                <input
+                    className={clsx(
+                        "h-10 w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 outline-none",
+                        "focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
+                    )}
+                    placeholder={placeholder || "Gõ để tìm..."}
+                    value={open ? q : value?.name || ""}
+                    onChange={(e) => {
+                        setQ(e.target.value);
+                        if (!open) setOpen(true);
+                    }}
+                    onFocus={() => setOpen(true)}
+                    onKeyDown={(e) => {
+                        if (!open) return;
+                        if (e.key === "ArrowDown") {
+                            e.preventDefault();
+                            setHighlight((h) => Math.min(h + 1, options.length - 1));
+                        } else if (e.key === "ArrowUp") {
+                            e.preventDefault();
+                            setHighlight((h) => Math.max(h - 1, 0));
+                        } else if (e.key === "Enter") {
+                            e.preventDefault();
+                            if (highlight >= 0 && options[highlight]) {
+                                onChange(options[highlight]);
+                                setOpen(false);
+                            }
+                        } else if (e.key === "Escape") {
+                            setOpen(false);
+                        }
+                    }}
+                />
+                {/* Nút xóa chọn */}
+                {value && !open && (
+                    <button
+                        type="button"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        onClick={() => onChange(null)}
+                        aria-label="Clear"
+                    >
+                        ✕
+                    </button>
+                )}
+
+                {open && (
+                    <div
+                        className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
+                        onMouseLeave={() => setHighlight(-1)}
+                    >
+                        {loading && (
+                            <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>
+                        )}
+                        {!loading && options.length === 0 && (
+                            <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>
+                        )}
+                        {!loading &&
+                            options.map((opt, idx) => (
+                                <div
+                                    key={opt.id}
+                                    className={clsx(
+                                        "px-3 py-2 text-sm cursor-pointer",
+                                        idx === highlight ? "bg-gray-100 dark:bg-gray-800" : ""
+                                    )}
+                                    onMouseEnter={() => setHighlight(idx)}
+                                    onMouseDown={(e) => {
+                                        // dùng mousedown để chọn trước khi input blur
+                                        e.preventDefault();
+                                        onChange(opt);
+                                        setOpen(false);
+                                    }}
+                                >
+                                    {opt.name}
+                                </div>
+                            ))}
+                    </div>
+                )}
+            </div>
+        </Field>
+    );
 }
 
 function TaskFormModal({
@@ -307,40 +316,77 @@ function TaskFormModal({
     // ===== Fetchers cho RemoteSelect =====
     const searchHospitals = useMemo(
         () => async (term: string) => {
-            // ĐỔI URL nếu API khác
-            const url = `/api/v1/admin/hospitals?keyword=${encodeURIComponent(term)}&page=0&size=10`;
+            const url = `${API_ROOT}/api/v1/admin/hospitals/search?name=${encodeURIComponent(term)}`;
             const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
             if (!res.ok) return [];
-            const json = await res.json();
-            const list = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
-            return list
-                .map((h: unknown) => {
-                    const obj = h as Record<string, unknown>;
-                    const id = Number(obj.id as unknown);
-                    const name = String(obj.name ?? obj.hospitalName ?? obj.code ?? obj.id ?? "");
-                    return { id, name };
-                })
-                .filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
+            const list = await res.json();
+            const mapped = Array.isArray(list)
+                ? list.map((h: { id?: number; label?: string; name?: string; hospitalName?: string; code?: string }) => ({
+                    id: Number(h.id),
+                    name: String(h.label ?? h.name ?? h.hospitalName ?? h.code ?? h?.id),
+                }))
+                : [];
+            return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
         },
         []
     );
 
     const searchPICs = useMemo(
         () => async (term: string) => {
-            // ĐỔI URL nếu API khác
-            const url = `/api/v1/admin/users?role=DEPLOYMENT&keyword=${encodeURIComponent(term)}&page=0&size=10`;
+            const url = `${API_ROOT}/api/v1/admin/users/search?name=${encodeURIComponent(term)}`;
             const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
             if (!res.ok) return [];
-            const json = await res.json();
-            const list = Array.isArray(json?.content) ? json.content : Array.isArray(json) ? json : [];
-            return list
-                .map((u: unknown) => {
-                    const obj = u as Record<string, unknown>;
-                    const id = Number(obj.id as unknown);
-                    const name = String(obj.fullName ?? obj.name ?? obj.username ?? obj.id ?? "");
-                    return { id, name };
-                })
-                .filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
+            const list = await res.json();
+            const mapped = Array.isArray(list)
+                ? list.map((u: { id?: number; label?: string; name?: string; fullName?: string; fullname?: string; username?: string }) => ({
+                    id: Number(u.id),
+                    name: String(u.label ?? u.name ?? u.fullName ?? u.fullname ?? u.username ?? u?.id),
+                }))
+                : [];
+            return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
+        },
+        []
+    );
+
+    // Thêm loaders giống dev-tasks cho Agency/HIS/Hardware
+    const searchAgencies = useMemo(
+        () => async (term: string) => {
+            const url = `${API_ROOT}/api/v1/admin/agencies/search?search=${encodeURIComponent(term)}`;
+            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+            if (!res.ok) return [];
+            const list = await res.json();
+            const mapped = Array.isArray(list)
+                ? list.map((a: { id?: number; label?: string; name?: string }) => ({ id: Number(a.id), name: String(a.label ?? a.name ?? a?.id) }))
+                : [];
+            return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
+        },
+        []
+    );
+
+    const searchHisSystems = useMemo(
+        () => async (term: string) => {
+            const url = `${API_ROOT}/api/v1/admin/his/search?search=${encodeURIComponent(term)}`;
+            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+            if (!res.ok) return [];
+            const list = await res.json();
+            const mapped = Array.isArray(list)
+                ? list.map((h: { id?: number; label?: string; name?: string }) => ({ id: Number(h.id), name: String(h.label ?? h.name ?? h?.id) }))
+                : [];
+            return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
+        },
+        []
+    );
+
+    const searchHardwares = useMemo(
+        () => async (term: string) => {
+            const url = `${API_ROOT}/api/v1/admin/hardware/search?search=${encodeURIComponent(term)}`;
+            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+            if (!res.ok) return [];
+            const list = await res.json();
+            const mapped = Array.isArray(list)
+                ? list.map((h: { id?: number; label?: string; name?: string }) => ({ id: Number(h.id), name: String(h.label ?? h.name ?? h?.id) }))
+                : [];
+            return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
         },
         []
     );
@@ -376,6 +422,19 @@ function TaskFormModal({
         return id ? { id, name: nm || String(id) } : null;
     });
 
+    const [agencyOpt, setAgencyOpt] = useState<{ id: number; name: string } | null>(() => {
+        const id = (initial?.agencyId as number) || 0;
+        return id ? { id, name: String(id) } : null;
+    });
+    const [hisOpt, setHisOpt] = useState<{ id: number; name: string } | null>(() => {
+        const id = (initial?.hisSystemId as number) || 0;
+        return id ? { id, name: String(id) } : null;
+    });
+    const [hardwareOpt, setHardwareOpt] = useState<{ id: number; name: string } | null>(() => {
+        const id = (initial?.hardwareId as number) || 0;
+        return id ? { id, name: String(id) } : null;
+    });
+
     useEffect(() => {
         if (open) {
             setModel({
@@ -404,8 +463,91 @@ function TaskFormModal({
             const pid = (initial?.picDeploymentId as number) || 0;
             const pnm = (initial?.picDeploymentName as string) || "";
             setPicOpt(pid ? { id: pid, name: pnm || String(pid) } : null);
+
+            // Prefill các select phụ
+            const aid = (initial?.agencyId as number) || 0;
+            setAgencyOpt(aid ? { id: aid, name: String(aid) } : null);
+            const hid2 = (initial?.hisSystemId as number) || 0;
+            setHisOpt(hid2 ? { id: hid2, name: String(hid2) } : null);
+            const hwid = (initial?.hardwareId as number) || 0;
+            setHardwareOpt(hwid ? { id: hwid, name: String(hwid) } : null);
         }
     }, [open, initial]);
+
+    // Khi sửa: resolve tên theo ID cho Agency/HIS/Hardware/Hospital/PIC nếu chỉ có ID
+    useEffect(() => {
+        if (!open) return;
+        async function resolveById(
+            id: number | null | undefined,
+            setOpt: (v: { id: number; name: string } | null) => void,
+            detailPath: string,
+            nameKeys: string[]
+        ) {
+            if (!id || id <= 0) return;
+
+            const extractName = (payload: unknown): string | null => {
+                const candidates: any[] = [];
+                if (payload && typeof payload === "object") {
+                    candidates.push(payload);
+                    // @ts-ignore
+                    if ((payload as any).data) candidates.push((payload as any).data);
+                    // @ts-ignore
+                    if ((payload as any).result) candidates.push((payload as any).result);
+                }
+                for (const obj of candidates) {
+                    for (const k of nameKeys) {
+                        const v = (obj as any)?.[k];
+                        if (typeof v === "string" && v.trim()) return String(v);
+                    }
+                }
+                return null;
+            };
+
+            try {
+                const res = await fetch(`${API_ROOT}${detailPath}/${id}`, { headers: authHeaders(), credentials: "include" });
+                if (res.ok) {
+                    const obj = await res.json();
+                    const name = extractName(obj);
+                    if (name) {
+                        setOpt({ id, name });
+                        return;
+                    }
+                }
+            } catch { /* ignore */ }
+
+            try {
+                const res = await fetch(`${API_ROOT}${detailPath}?search=${encodeURIComponent(String(id))}&page=0&size=50`, { headers: authHeaders(), credentials: "include" });
+                if (res.ok) {
+                    const obj = await res.json();
+                    const list = Array.isArray(obj?.content) ? obj.content : Array.isArray(obj) ? obj : [];
+                    const found = list.find((it: any) => Number(it?.id) === Number(id));
+                    if (found) {
+                        const name = extractName(found) || String((found as any).name ?? (found as any).label ?? found[id]);
+                        if (name) {
+                            setOpt({ id, name });
+                            return;
+                        }
+                    }
+                }
+            } catch { /* ignore */ }
+
+            // 3) Last resort: dùng search loaders đã có
+            try {
+                const fetcher = setOpt === setAgencyOpt ? searchAgencies : setOpt === setHisOpt ? searchHisSystems : searchHardwares;
+                const opts: Array<{ id: number; name: string }> = await fetcher("");
+                const found = opts.find((o: { id: number; name: string }) => o.id === id);
+                if (found) setOpt(found);
+            } catch { /* ignore */ }
+        }
+
+        resolveById((initial?.agencyId as number) || null, setAgencyOpt, "/api/v1/admin/agencies", ["name", "agencyName", "label"]);
+        resolveById((initial?.hisSystemId as number) || null, setHisOpt, "/api/v1/admin/his", ["name", "hisName", "label"]);
+        resolveById((initial?.hardwareId as number) || null, setHardwareOpt, "/api/v1/admin/hardware", ["name", "hardwareName", "label"]);
+        // Resolve cho Hospital & PIC
+        resolveById((initial?.hospitalId as number) || null, setHospitalOpt, "/api/v1/admin/hospitals", ["name", "hospitalName", "label", "code"]);
+        resolveById((initial?.picDeploymentId as number) || null, setPicOpt, "/api/v1/admin/users", ["fullName", "fullname", "name", "username", "label"]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
 
     // Đóng bằng phím ESC
     useEffect(() => {
@@ -477,10 +619,13 @@ function TaskFormModal({
                         aria-modal="true"
                     >
                         {/* Thêm max-h & overflow để có thanh cuộn */}
-                        <form onSubmit={handleSubmit} className="p-6 grid gap-4 max-h-[80vh] overflow-y-auto">
-                            <div className="flex items-center justify-between sticky top-0 bg-white dark:bg-gray-900 pb-2">
-                                <h3 className="text-lg font-semibold">{initial?.id ? "Cập nhật tác vụ triển khai" : "Tạo tác vụ triển khai"}</h3>
-                                <Button type="button" variant="ghost" onClick={onClose}>Đóng</Button>
+                        <form onSubmit={handleSubmit} className="px-6 pt-0 pb-6 grid gap-4 max-h-[80vh] overflow-y-auto">
+                            <div className="sticky top-0 z-[100] -mx-10 px-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+                                <div className="flex items-center justify-between py-3">
+
+                                    <h3 className="text-lg font-semibold">{initial?.id ? "Cập nhật tác vụ triển khai" : "Tạo tác vụ triển khai"}</h3>
+                                    <Button type="button" variant="ghost" onClick={onClose}>Đóng</Button>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -494,22 +639,22 @@ function TaskFormModal({
 
                                 {/* Bệnh viện theo TÊN */}
                                 <RemoteSelect
-                                  label="Bệnh viện"
-                                  required
-                                  placeholder="Nhập tên bệnh viện để tìm…"
-                                  fetchOptions={searchHospitals}
-                                  value={hospitalOpt}
-                                  onChange={setHospitalOpt}
+                                    label="Bệnh viện"
+                                    required
+                                    placeholder="Nhập tên bệnh viện để tìm…"
+                                    fetchOptions={searchHospitals}
+                                    value={hospitalOpt}
+                                    onChange={setHospitalOpt}
                                 />
 
                                 {/* PIC theo TÊN */}
                                 <RemoteSelect
-                                  label="Người phụ trách (PIC)"
-                                  required
-                                  placeholder="Nhập tên người phụ trách để tìm…"
-                                  fetchOptions={searchPICs}
-                                  value={picOpt}
-                                  onChange={setPicOpt}
+                                    label="Người phụ trách (PIC)"
+                                    required
+                                    placeholder="Nhập tên người phụ trách để tìm…"
+                                    fetchOptions={searchPICs}
+                                    value={picOpt}
+                                    onChange={setPicOpt}
                                 />
 
                                 <Field label="Số lượng">
@@ -519,27 +664,27 @@ function TaskFormModal({
                                         onChange={(e) => setModel((s) => ({ ...s, quantity: e.target.value ? Number(e.target.value) : null }))}
                                     />
                                 </Field>
-                                <Field label="Agency ID">
-                                    <TextInput
-                                        type="number"
-                                        value={model.agencyId ?? ""}
-                                        onChange={(e) => setModel((s) => ({ ...s, agencyId: e.target.value ? Number(e.target.value) : null }))}
-                                    />
-                                </Field>
-                                <Field label="HIS System ID">
-                                    <TextInput
-                                        type="number"
-                                        value={model.hisSystemId ?? ""}
-                                        onChange={(e) => setModel((s) => ({ ...s, hisSystemId: e.target.value ? Number(e.target.value) : null }))}
-                                    />
-                                </Field>
-                                <Field label="Hardware ID">
-                                    <TextInput
-                                        type="number"
-                                        value={model.hardwareId ?? ""}
-                                        onChange={(e) => setModel((s) => ({ ...s, hardwareId: e.target.value ? Number(e.target.value) : null }))}
-                                    />
-                                </Field>
+                                <RemoteSelect
+                                    label="Agency"
+                                    placeholder="Nhập tên agency để tìm…"
+                                    fetchOptions={searchAgencies}
+                                    value={agencyOpt}
+                                    onChange={(v) => { setAgencyOpt(v); setModel((s) => ({ ...s, agencyId: v ? v.id : null })); }}
+                                />
+                                <RemoteSelect
+                                    label="HIS System"
+                                    placeholder="Nhập tên HIS để tìm…"
+                                    fetchOptions={searchHisSystems}
+                                    value={hisOpt}
+                                    onChange={(v) => { setHisOpt(v); setModel((s) => ({ ...s, hisSystemId: v ? v.id : null })); }}
+                                />
+                                <RemoteSelect
+                                    label="Hardware"
+                                    placeholder="Nhập tên hardware để tìm…"
+                                    fetchOptions={searchHardwares}
+                                    value={hardwareOpt}
+                                    onChange={(v) => { setHardwareOpt(v); setModel((s) => ({ ...s, hardwareId: v ? v.id : null })); }}
+                                />
                                 <Field label="API URL">
                                     <TextInput
                                         value={model.apiUrl ?? ""}
@@ -561,11 +706,19 @@ function TaskFormModal({
                                     />
                                 </Field>
                                 <Field label="Trạng thái">
-                                    <TextInput
+                                    <select
+                                        className={clsx(
+                                            "h-10 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 outline-none",
+                                            "focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
+                                        )}
                                         value={model.status ?? ""}
-                                        onChange={(e) => setModel((s) => ({ ...s, status: e.target.value }))}
-                                        placeholder="NEW / IN_PROGRESS / DONE..."
-                                    />
+                                        onChange={(e) => setModel((s) => ({ ...s, status: (e.target as HTMLSelectElement).value || "" }))}
+                                    >
+                                        <option value="">— Chọn trạng thái —</option>
+                                        {STATUS_OPTIONS.map((opt) => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                    </select>
                                 </Field>
                                 <Field label="Deadline (ngày)">
                                     <TextInput
@@ -658,7 +811,7 @@ const ImplementationTasksPage: React.FC = () => {
                 credentials: "include",
             });
             if (!res.ok) throw new Error(`GET ${apiBase} failed: ${res.status}`);
-            const page = await res.json(); 
+            const page = await res.json();
             setData(Array.isArray(page?.content) ? page.content : []);
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -675,7 +828,7 @@ const ImplementationTasksPage: React.FC = () => {
     const handleSubmit = async (payload: ImplementationTaskRequestDTO, id?: number) => {
         const isUpdate = Boolean(id);
         const url = isUpdate ? `${apiBase}/${id}` : apiBase;
-       const method = isUpdate ? "PUT" : "POST";
+        const method = isUpdate ? "PUT" : "POST";
 
         const res = await fetch(url, {
             method,
@@ -724,15 +877,20 @@ const ImplementationTasksPage: React.FC = () => {
                         onChange={(e) => setQuery(e.target.value)}
                     />
                     {/* Only SUPERADMIN or members of MAINTENANCE team can create */}
-                    <Button
-                        onClick={() => {
-                            setEditing(null);
-                            setModalOpen(true);
-                        }}
-                        disabled={!(isSuperAdmin || userTeam === "MAINTENANCE")}
-                    >
-                        + Thêm mới
-                    </Button>
+                    {isSuperAdmin || userTeam === "MAINTENANCE" ? (
+                        <Button
+                            onClick={() => {
+                                setEditing(null);
+                                setModalOpen(true);
+                            }}
+                        >
+                            + Thêm mới
+                        </Button>
+                    ) : (
+                        <Button disabled className="opacity-50 cursor-not-allowed">
+                            + Thêm mới
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -781,23 +939,34 @@ const ImplementationTasksPage: React.FC = () => {
                                     <td className="px-4 py-3">{fmt(row.createdAt)}</td>
                                     <td className="px-4 py-3 text-right">
                                         <div className="flex justify-end gap-2">
-                                            <Button
-                                                variant="ghost"
-                                                onClick={() => {
-                                                    setEditing(row);
-                                                    setModalOpen(true);
-                                                }}
-                                                disabled={!(isSuperAdmin || userTeam === "MAINTENANCE")}
-                                            >
-                                                Sửa
-                                            </Button>
-                                            <Button
-                                                variant="danger"
-                                                onClick={() => handleDelete(row.id)}
-                                                disabled={!(isSuperAdmin || userTeam === "MAINTENANCE")}
-                                            >
-                                                Xóa
-                                            </Button>
+                                            {isSuperAdmin || userTeam === "MAINTENANCE" ? (
+                                                <>
+                                                    <Button
+                                                        variant="ghost"
+                                                        onClick={() => {
+                                                            setEditing(row);
+                                                            setModalOpen(true);
+                                                        }}
+                                                    >
+                                                        Sửa
+                                                    </Button>
+                                                    <Button
+                                                        variant="danger"
+                                                        onClick={() => handleDelete(row.id)}
+                                                    >
+                                                        Xóa
+                                                    </Button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Button variant="ghost" disabled className="opacity-50 cursor-not-allowed">
+                                                        Sửa
+                                                    </Button>
+                                                    <Button variant="danger" disabled className="opacity-50 cursor-not-allowed">
+                                                        Xóa
+                                                    </Button>
+                                                </>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
