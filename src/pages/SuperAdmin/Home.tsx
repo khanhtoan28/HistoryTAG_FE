@@ -6,6 +6,20 @@ import { ApexOptions } from "apexcharts";
 import { getSummaryReport, type SuperAdminSummaryDTO } from "../../api/superadmin.api";
 import toast from "react-hot-toast";
 
+function StatCard({ title, value, icon, color }: { title: string; value: string | number; icon?: React.ReactNode; color?: string }) {
+  return (
+    <div className="flex items-center gap-4 rounded-xl bg-gradient-to-r from-white to-white/50 p-4 shadow-sm border border-gray-100">
+      <div className={`flex h-12 w-12 items-center justify-center rounded-lg text-white ${color ?? 'bg-slate-400'}`}>
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <div className="text-xs text-gray-500">{title}</div>
+        <div className="text-xl font-semibold text-gray-900 truncate">{value}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function SuperAdminHome() {
   const [summary, setSummary] = useState<SuperAdminSummaryDTO | null>(null);
   useEffect(() => {
@@ -18,8 +32,6 @@ export default function SuperAdminHome() {
         console.error("Failed to load summary:", err);
         const msg = err instanceof Error ? err.message : String(err);
         toast.error(msg || "Không thể tải báo cáo");
-      } finally {
-        /* no-op */
       }
     };
     void load();
@@ -29,23 +41,13 @@ export default function SuperAdminHome() {
   }, []);
 
   const donutOptions: ApexOptions = {
-    labels: ["Người dùng", "Bệnh viện", "HIS" , "Phần cứng", "Đại lý"],
-    legend: {
-      position: "bottom",
-      // Keep default legend labels (color + label). Percent is shown on slices.
-    },
+    labels: ["Người dùng", "Bệnh viện", "HIS", "Phần cứng", "Đại lý"],
+    legend: { position: 'bottom' },
     chart: { toolbar: { show: false } },
-    plotOptions: {
-      pie: {
-        donut: {
-          size: '65%',
-        },
-      },
-    },
+    plotOptions: { pie: { donut: { size: '64%' } } },
     dataLabels: {
       enabled: true,
-      // Show percentage on slices
-      formatter: (val: number, opts?: { seriesIndex?: number; w?: { globals?: { series?: number[] } } }) => {
+      formatter: (val: number, opts?: any) => {
         const w = opts?.w;
         const series = w?.globals?.series ?? [];
         const idx = opts?.seriesIndex ?? 0;
@@ -58,7 +60,7 @@ export default function SuperAdminHome() {
     },
     tooltip: {
       y: {
-        formatter: (val: number, opts?: { seriesIndex?: number; w?: { globals?: { series?: number[] } } }) => {
+        formatter: (val: number, opts?: any) => {
           const w = opts?.w;
           const series = w?.globals?.series ?? [];
           const idx = opts?.seriesIndex ?? 0;
@@ -71,129 +73,120 @@ export default function SuperAdminHome() {
     },
     colors: ["#465fff", "#10b981", "#f59e0b", "#ef4444", "#6366f1"],
   };
+
   return (
     <>
       <PageMeta title="Super Admin Dashboard | TAGTECH" description="" />
-      <div className="grid grid-cols-12 gap-4 md:gap-6">
-        <div className="col-span-12 space-y-6 xl:col-span-8">
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-            <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-white">
-              Super Admin Dashboard
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400">
-              Chào mừng đến với trang quản lý Super Admin. Từ đây bạn có thể quản lý tất cả các thành phần của hệ thống.
-            </p>
+
+      <div className="space-y-6">
+        <header className="flex items-center justify-between gap-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 p-6 text-white shadow-md">
+          <div>
+            <h1 className="text-2xl font-bold">Super Admin Dashboard</h1>
+            <p className="mt-1 text-sm opacity-90">Tổng quan hệ thống & truy cập nhanh các phần quản trị</p>
           </div>
-
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-            <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
-              Quản lý nhanh
-            </h3>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <Link
-                to="/superadmin/users"
-                className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:bg-white/[0.05]"
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
-                  👥
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">Người dùng</p>
-                  <p className="text-xs text-gray-500">Quản lý người dùng</p>
-                </div>
-              </Link>
-              <Link
-                to="/superadmin/hospitals"
-                className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:bg-white/[0.05]"
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-green-100 text-green-600">
-                  🏥
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">Bệnh viện</p>
-                  <p className="text-xs text-gray-500">Quản lý bệnh viện</p>
-                </div>
-              </Link>
-              <Link
-                to="/superadmin/his-systems"
-                className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:bg-white/[0.05]"
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-purple-100 text-purple-600">
-                  💼
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">HIS Systems</p>
-                  <p className="text-xs text-gray-500">Quản lý hệ thống HIS</p>
-                </div>
-              </Link>
-              <Link
-                to="/superadmin/agencies"
-                className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:bg-white/[0.05]"
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-orange-100 text-orange-600">
-                  🏢
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">Đại lý</p>
-                  <p className="text-xs text-gray-500">Quản lý đại lý</p>
-                </div>
-              </Link>
-              <Link
-                to="/superadmin/hardware"
-                className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:bg-white/[0.05]"
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-teal-100 text-teal-600">
-                  💻
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">Phần cứng</p>
-                  <p className="text-xs text-gray-500">Quản lý phần cứng</p>
-                </div>
-              </Link>
-            </div>
+          <div className="flex items-center gap-3">
+            <Link to="/superadmin/users" className="rounded-md bg-white/20 px-3 py-2 text-sm font-medium hover:bg-white/30">Người dùng</Link>
+            <Link to="/superadmin/hospitals" className="rounded-md bg-white/20 px-3 py-2 text-sm font-medium hover:bg-white/30">Bệnh viện</Link>
           </div>
-        </div>
+        </header>
 
-        <div className="col-span-12 xl:col-span-4">
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-            <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
-              Thống kê nhanh
-            </h3>
-            {/* Donut chart */}
-            <div className="mb-4">
-              <div className="flex justify-center">
-                <Chart
-                  options={donutOptions}
-                  series={summary ? [summary.totalUsers, summary.totalHospitals, summary.totalHisSystems, summary.totalHardware, summary.totalAgencies] : [0,0,0,0,0]}
-                  type="donut"
-                  width={320}
-                />
-              </div>
-            </div>
+        <div className="grid grid-cols-12 gap-6">
+          <main className="col-span-12 xl:col-span-8 space-y-6">
+            <section className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+              <h2 className="text-lg font-semibold text-gray-900">Quản lý nhanh</h2>
+              <p className="text-sm text-gray-500 mt-1">Các hành động thường dùng được gom lại để bạn thao tác nhanh.</p>
 
-            <div className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Tổng người dùng</span>
-                <span className="text-lg font-semibold text-gray-900 dark:text-white">{summary ? summary.totalUsers : "--"}</span>
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <Link to="/superadmin/users" className="flex items-center gap-4 rounded-lg border p-4 hover:shadow-md">
+                  <div className="h-12 w-12 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-lg">👥</div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">Người dùng</div>
+                    <div className="text-xs text-gray-500">Quản lý người dùng</div>
+                  </div>
+                </Link>
+
+                <Link to="/superadmin/hospitals" className="flex items-center gap-4 rounded-lg border p-4 hover:shadow-md">
+                  <div className="h-12 w-12 rounded-lg bg-green-50 text-green-600 flex items-center justify-center text-lg">🏥</div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">Bệnh viện</div>
+                    <div className="text-xs text-gray-500">Quản lý bệnh viện</div>
+                  </div>
+                </Link>
+
+                <Link to="/superadmin/his-systems" className="flex items-center gap-4 rounded-lg border p-4 hover:shadow-md">
+                  <div className="h-12 w-12 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center text-lg">💼</div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">HIS Systems</div>
+                    <div className="text-xs text-gray-500">Quản lý hệ thống HIS</div>
+                  </div>
+                </Link>
+
+                <Link to="/superadmin/agencies" className="flex items-center gap-4 rounded-lg border p-4 hover:shadow-md">
+                  <div className="h-12 w-12 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center text-lg">🏢</div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">Đại lý</div>
+                    <div className="text-xs text-gray-500">Quản lý đại lý</div>
+                  </div>
+                </Link>
+
+                <Link to="/superadmin/hardware" className="flex items-center gap-4 rounded-lg border p-4 hover:shadow-md">
+                  <div className="h-12 w-12 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center text-lg">💻</div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">Phần cứng</div>
+                    <div className="text-xs text-gray-500">Quản lý phần cứng</div>
+                  </div>
+                </Link>
               </div>
-              <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Tổng bệnh viện</span>
-                <span className="text-lg font-semibold text-gray-900 dark:text-white">{summary ? summary.totalHospitals : "--"}</span>
+            </section>
+
+            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+                <h3 className="text-sm font-medium text-gray-700">Thống kê tổng quan</h3>
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <StatCard title="Người dùng" value={summary ? summary.totalUsers : '--'} icon={<span>👥</span>} color="bg-indigo-500" />
+                  <StatCard title="Bệnh viện" value={summary ? summary.totalHospitals : '--'} icon={<span>🏥</span>} color="bg-emerald-500" />
+                  <StatCard title="Hệ thống HIS" value={summary ? summary.totalHisSystems : '--'} icon={<span>💼</span>} color="bg-purple-500" />
+                  <StatCard title="Phần cứng" value={summary ? summary.totalHardware : '--'} icon={<span>💻</span>} color="bg-teal-500" />
+                </div>
               </div>
-              <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Tổng hệ thống HIS</span>
-                <span className="text-lg font-semibold text-gray-900 dark:text-white">{summary ? summary.totalHisSystems : "--"}</span>
+
+              <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+                <h3 className="text-sm font-medium text-gray-700">Sơ đồ phân bố</h3>
+                <div className="mt-3 flex justify-center">
+                  <Chart
+                    options={donutOptions}
+                    series={summary ? [summary.totalUsers, summary.totalHospitals, summary.totalHisSystems, summary.totalHardware, summary.totalAgencies] : [0,0,0,0,0]}
+                    type="donut"
+                    width={260}
+                  />
+                </div>
               </div>
-              <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Tổng đại lý</span>
-                <span className="text-lg font-semibold text-gray-900 dark:text-white">{summary ? summary.totalAgencies : "--"}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Tổng phần cứng</span>
-                <span className="text-lg font-semibold text-gray-900 dark:text-white">{summary ? summary.totalHardware : "--"}</span>
+            </section>
+          </main>
+
+          <aside className="col-span-12 xl:col-span-4 space-y-6">
+            <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+              <h3 className="text-sm font-medium text-gray-700">Quick stats</h3>
+              <div className="mt-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-500">Tổng đại lý</div>
+                  <div className="text-sm font-semibold text-gray-900">{summary ? summary.totalAgencies : '--'}</div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-500">Hệ thống HIS</div>
+                  <div className="text-sm font-semibold text-gray-900">{summary ? summary.totalHisSystems : '--'}</div>
+                </div>
               </div>
             </div>
-          </div>
+
+            <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+              <h3 className="text-sm font-medium text-gray-700">Hành động nhanh</h3>
+              <div className="mt-3 flex flex-col gap-2">
+                <Link to="/superadmin/users" className="rounded-md bg-indigo-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-indigo-700">Tạo người dùng mới</Link>
+                <Link to="/superadmin/hospitals" className="rounded-md bg-emerald-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-emerald-700">Thêm bệnh viện</Link>
+              </div>
+            </div>
+          </aside>
         </div>
       </div>
     </>
