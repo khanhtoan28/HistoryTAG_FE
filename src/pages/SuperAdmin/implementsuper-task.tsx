@@ -53,6 +53,9 @@ const ImplementSuperTaskPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [picFilter, setPicFilter] = useState<string>("");
+  const [hospitalQuery, setHospitalQuery] = useState<string>("");
+  const [hospitalOptions, setHospitalOptions] = useState<Array<{ id: number; label: string }>>([]);
+  const [selectedHospital, setSelectedHospital] = useState<string | null>(null);
   const searchDebounce = useRef<number | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<string>("id");
@@ -129,6 +132,10 @@ const ImplementSuperTaskPage: React.FC = () => {
 
   async function fetchUserOptions() {
     try {
+      if (selectedHospital) {
+        await fetchUsersByHospital(selectedHospital);
+        return;
+      }
       const res = await fetch(`${API_ROOT}/api/v1/superadmin/users/search?name=`, { headers: authHeaders() });
       if (!res.ok) return;
       const list = await res.json();
@@ -141,11 +148,48 @@ const ImplementSuperTaskPage: React.FC = () => {
     }
   }
 
+  async function fetchHospitalOptions(query: string) {
+    try {
+      const res = await fetch(`${API_ROOT}/api/v1/superadmin/hospitals/search?name=${encodeURIComponent(query || "")}`, { headers: authHeaders() });
+      if (!res.ok) return;
+      const list = await res.json();
+      if (Array.isArray(list)) {
+        setHospitalOptions(list.map((h: Record<string, unknown>) => ({ id: Number(h['id'] as unknown as number), label: String(h['label'] ?? h['name'] ?? '') })));
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  async function fetchUsersByHospital(hospitalName: string) {
+    try {
+      const res = await fetch(`${API_ROOT}/api/v1/superadmin/users/by-hospital?hospitalName=${encodeURIComponent(hospitalName)}`, { headers: authHeaders() });
+      if (!res.ok) return;
+      const list = await res.json();
+      if (Array.isArray(list)) {
+        setUserOptions(list.map((u: Record<string, unknown>) => ({ id: Number(u['id'] as unknown as number), label: String(u['fullname'] ?? u['label'] ?? '') })));
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   useEffect(() => {
     fetchList();
     fetchUserOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      if (hospitalQuery && hospitalQuery.trim().length > 0) {
+        fetchHospitalOptions(hospitalQuery.trim());
+      } else {
+        setHospitalOptions([]);
+      }
+    }, 300);
+    return () => window.clearTimeout(id);
+  }, [hospitalQuery]);
 
   // debounce searchTerm changes
   useEffect(() => {
@@ -212,16 +256,10 @@ const ImplementSuperTaskPage: React.FC = () => {
 
   return (
     <div className="p-6">
-<<<<<<< HEAD
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center">
-          <h1 className="text-3xl font-extrabold text-gray-900">Task triển khai (SuperAdmin)</h1>
-=======
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Danh sách công việc triển khai (SuperAdmin)</h1>
         <div>
           <button className="h-10 rounded-xl bg-gray-900 text-white px-3" onClick={() => { setEditing(null); setModalOpen(true); }}>+ Thêm mới</button>
->>>>>>> dfbbcf9840b3e1c005910278f8ddaaf56d68555c
         </div>
       </div>
 
@@ -232,25 +270,31 @@ const ImplementSuperTaskPage: React.FC = () => {
           <div>
             <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Thao tác</h3>
             <div className="flex flex-wrap items-center gap-3">
-              <input
-                type="text"
-                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px]"
-                placeholder="Tìm theo tên"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { fetchList(); } }}
-              />
-
-              <select
-                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[160px]"
-                value={picFilter}
-                onChange={(e) => setPicFilter(e.target.value)}
-              >
-                <option value="">Người phụ trách</option>
-                {userOptions.map((u) => (
-                  <option key={u.id} value={String(u.id)}>{u.label}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <input
+                  list="hospital-list"
+                  type="text"
+                  className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px]"
+                  placeholder="Tìm theo tên (gõ để gợi ý bệnh viện)"
+                  value={searchTerm}
+                  onChange={(e) => { setSearchTerm(e.target.value); setHospitalQuery(e.target.value); setSelectedHospital(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { fetchList(); } }}
+                  onBlur={(e) => {
+                    const val = e.currentTarget.value?.trim() || '';
+                    if (val.length > 0 && hospitalOptions.some((h) => h.label === val)) {
+                      setSelectedHospital(val);
+                      fetchUsersByHospital(val);
+                    } else {
+                      setSelectedHospital(null);
+                    }
+                  }}
+                />
+                <datalist id="hospital-list">
+                  {hospitalOptions.map((h) => (
+                    <option key={h.id} value={h.label} />
+                  ))}
+                </datalist>
+              </div>
 
               <select
                 className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[160px]"
@@ -280,7 +324,7 @@ const ImplementSuperTaskPage: React.FC = () => {
               </select>
             </div>
 
-            <button className="rounded-full bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700" onClick={() => { setEditing(null); setModalOpen(true); }}>+ Thêm mới</button>
+            <button className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700" onClick={() => { setEditing(null); setModalOpen(true); }}>+ Thêm mới</button>
             <button className="rounded-full border px-4 py-2 text-sm shadow-sm" onClick={() => { setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc'); fetchList(); }}>Làm mới</button>
           </div>
         </div>
