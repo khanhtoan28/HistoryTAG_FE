@@ -1123,6 +1123,8 @@ const ImplementationTasksPage: React.FC = () => {
                                     onOpen={(t) => { setDetailItem(t as any); setDetailOpen(true); }}
                                     onEdit={(t) => { setEditing(t as any); setModalOpen(true); }}
                                     onDelete={(id) => handleDelete(id)}
+                                    canEdit={isSuperAdmin || userTeam === "DEV"}
+                                    canDelete={isSuperAdmin || userTeam === "DEV"}
                                 />
                             ))
                         )
