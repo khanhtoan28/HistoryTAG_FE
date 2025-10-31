@@ -139,6 +139,18 @@ const HisSystemPage: React.FC = () => {
   const isEditing = !!editing?.id;
   const isViewing = !!viewing?.id;
 
+  // Determine if current user can perform write actions (SUPERADMIN)
+  const canEdit = (() => {
+    try {
+      const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
+      if (!rolesStr) return false;
+      const roles = JSON.parse(rolesStr);
+      return Array.isArray(roles) && roles.some((r: string) => r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin");
+    } catch (e) {
+      return false;
+    }
+  })();
+
   // ------- data fetching (server paging compatible) ------- //
   async function fetchList() {
     setLoading(true);
@@ -254,6 +266,10 @@ const HisSystemPage: React.FC = () => {
   }
 
   async function onDelete(id: number) {
+    if (!canEdit) {
+      alert("Bạn không có quyền xóa HIS");
+      return;
+    }
     if (!confirm("Xóa HIS này?")) return;
     setLoading(true);
     try {
@@ -276,9 +292,12 @@ const HisSystemPage: React.FC = () => {
     const errs = validate(form);
     setFormErrors(errs);
     if (Object.keys(errs).length) return;
-
     setLoading(true);
     setError(null);
+    if (!canEdit) {
+      setError("Bạn không có quyền thực hiện thao tác này");
+      return;
+    }
     try {
       const method = isEditing ? "PUT" : "POST";
       // @ts-ignore
@@ -324,10 +343,12 @@ const HisSystemPage: React.FC = () => {
               <option value="desc">Giảm dần</option>
             </select>
           </div>
-          <div className="mt-6 flex items-center justify-between">
+            <div className="mt-6 flex items-center justify-between">
             <p className="text-sm text-gray-600">Tổng: <span className="font-semibold text-gray-900">{totalElements}</span></p>
             <div className="flex items-center gap-3">
-              <button className="rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md" onClick={onCreate}> + Thêm HIS</button>
+              {canEdit && (
+                <button className="rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md" onClick={onCreate}> + Thêm HIS</button>
+              )}
               <button className="rounded-xl border-2 border-gray-300 px-5 py-3 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400 flex items-center gap-2" onClick={fetchList}>
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -396,24 +417,28 @@ const HisSystemPage: React.FC = () => {
                         <AiOutlineEye className="w-4 h-4" />
                         <span className="hidden sm:inline">Xem</span>
                       </button>
-                      <button
-                        title="Sửa"
-                        aria-label={`Sửa ${h.name}`}
-                        onClick={(e) => { e.stopPropagation(); onEdit(h); }}
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition transform group-hover:scale-105 text-xs font-medium"
-                      >
-                        <AiOutlineEdit className="w-4 h-4" />
-                        <span className="hidden sm:inline">Sửa</span>
-                      </button>
-                      <button
-                        title="Xóa"
-                        aria-label={`Xóa ${h.name}`}
-                        onClick={(e) => { e.stopPropagation(); onDelete(h.id); }}
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 transition transform group-hover:scale-105 text-xs font-medium"
-                      >
-                        <AiOutlineDelete className="w-4 h-4" />
-                        <span className="hidden sm:inline">Xóa</span>
-                      </button>
+                      {canEdit && (
+                        <>
+                          <button
+                            title="Sửa"
+                            aria-label={`Sửa ${h.name}`}
+                            onClick={(e) => { e.stopPropagation(); onEdit(h); }}
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition transform group-hover:scale-105 text-xs font-medium"
+                          >
+                            <AiOutlineEdit className="w-4 h-4" />
+                            <span className="hidden sm:inline">Sửa</span>
+                          </button>
+                          <button
+                            title="Xóa"
+                            aria-label={`Xóa ${h.name}`}
+                            onClick={(e) => { e.stopPropagation(); onDelete(h.id); }}
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 transition transform group-hover:scale-105 text-xs font-medium"
+                          >
+                            <AiOutlineDelete className="w-4 h-4" />
+                            <span className="hidden sm:inline">Xóa</span>
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -480,8 +505,8 @@ const HisSystemPage: React.FC = () => {
                   <div>
                     <label className="mb-2 block text-sm font-semibold text-gray-700">Tên HIS*</label>
                     <input
-                      required
-                      disabled={isViewing}
+                        required
+                        disabled={isViewing || !canEdit}
                       className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
                         formErrors.name ? "border-red-400" : "border-gray-300"
                       }`}
@@ -493,7 +518,7 @@ const HisSystemPage: React.FC = () => {
                   <div>
                     <label className="mb-2 block text-sm font-semibold text-gray-700">Người liên hệ</label>
                     <input
-                      disabled={isViewing}
+                      disabled={isViewing || !canEdit}
                       className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
                         formErrors.contactPerson ? "border-red-400" : "border-gray-300"
                       }`}
@@ -507,7 +532,7 @@ const HisSystemPage: React.FC = () => {
                   <div>
                     <label className="mb-2 block text-sm font-semibold text-gray-700">Email</label>
                     <input
-                      disabled={isViewing}
+                      disabled={isViewing || !canEdit}
                       type="email"
                       className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
                         formErrors.email ? "border-red-400" : "border-gray-300"
@@ -520,7 +545,7 @@ const HisSystemPage: React.FC = () => {
                   <div>
                     <label className="mb-2 block text-sm font-semibold text-gray-700">Số điện thoại</label>
                     <input
-                      disabled={isViewing}
+                      disabled={isViewing || !canEdit}
                       className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
                         formErrors.phoneNumber ? "border-red-400" : "border-gray-300"
                       }`}
@@ -547,7 +572,7 @@ const HisSystemPage: React.FC = () => {
                     >
                       {isViewing ? "Đóng" : "Huỷ"}
                     </button>
-                    {!isViewing && (
+                    {!isViewing && canEdit && (
                       <button
                         type="submit"
                         className="rounded-xl border-2 border-blue-500 bg-blue-500 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-blue-600 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"

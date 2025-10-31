@@ -200,6 +200,17 @@ function toLocalDateTime(value?: string) {
 }
 
 export default function HospitalsPage() {
+  // Determine if current user can perform write actions (SUPERADMIN)
+  const canEdit = (() => {
+    try {
+      const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
+      if (!rolesStr) return false;
+      const roles = JSON.parse(rolesStr);
+      return Array.isArray(roles) && roles.some((r: string) => r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin");
+    } catch (e) {
+      return false;
+    }
+  })();
   const [items, setItems] = useState<Hospital[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -430,8 +441,14 @@ export default function HospitalsPage() {
     }
   }
 
+
+
   async function onDelete(id: number) {
-    if (!confirm("Xóa bệnh viện này?")) return;
+    if (!canEdit) {
+      alert("Bạn không có quyền xóa bệnh viện");
+      return;
+    }
+    if (!confirm("Xóa bệnh viện này?")) return;
     setLoading(true);
     try {
       const res = await fetch(`${BASE}/${id}`, {
@@ -439,7 +456,9 @@ export default function HospitalsPage() {
         headers: { ...authHeader() },
       });
       if (!res.ok) throw new Error(`DELETE failed ${res.status}`);
-      await fetchList();
+      await fetchList();
+      // close modal if currently viewing the deleted item
+      if (isViewing) closeModal();
     } catch (e: any) {
       alert(e.message || "Xóa thất bại");
     } finally {
@@ -455,6 +474,10 @@ export default function HospitalsPage() {
       return;
     }
     if (isViewing) return;
+    if (!canEdit) {
+      setError("Bạn không có quyền thực hiện thao tác này");
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -553,10 +576,12 @@ export default function HospitalsPage() {
               <option value="desc">Giảm dần</option>
             </select>
           </div>
-          <div className="mt-6 flex items-center justify-between">
-            <p className="text-sm text-gray-600">Tổng: <span className="font-semibold text-gray-900">{totalElements}</span></p>
-            <div className="flex items-center gap-3">
-              <button className="rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md" onClick={onCreate}> + Thêm bệnh viện</button>
+              <div className="mt-6 flex items-center justify-between">
+              <p className="text-sm text-gray-600">Tổng: <span className="font-semibold text-gray-900">{totalElements}</span></p>
+              <div className="flex items-center gap-3">
+                {canEdit && (
+                  <button className={`rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md`} onClick={onCreate}> + Thêm bệnh viện</button>
+                )}
               <button className="rounded-xl border-2 border-gray-300 px-5 py-3 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400 flex items-center gap-2" onClick={fetchList}>
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -710,14 +735,18 @@ export default function HospitalsPage() {
                           <AiOutlineEye className="w-4 h-4" />
                           <span className="hidden sm:inline">Xem</span>
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); onEdit(h); }} title="Sửa" aria-label={`Sửa ${h.name}`} className="flex items-center gap-2 px-3 py-2 rounded-md bg-white border border-amber-100 text-amber-700 hover:bg-amber-50 transition transform text-xs font-medium">
-                          <AiOutlineEdit className="w-4 h-4" />
-                          <span className="hidden sm:inline">Sửa</span>
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); onDelete(h.id); }} title="Xóa" aria-label={`Xóa ${h.name}`} className="flex items-center gap-2 px-3 py-2 rounded-md bg-white border border-red-100 text-red-700 hover:bg-red-50 transition transform text-xs font-medium">
-                          <AiOutlineDelete className="w-4 h-4" />
-                          <span className="hidden sm:inline">Xóa</span>
-                        </button>
+                        {canEdit && (
+                          <>
+                            <button onClick={(e) => { e.stopPropagation(); onEdit(h); }} title="Sửa" aria-label={`Sửa ${h.name}`} className="flex items-center gap-2 px-3 py-2 rounded-md bg-white border border-amber-100 text-amber-700 hover:bg-amber-50 transition transform text-xs font-medium">
+                              <AiOutlineEdit className="w-4 h-4" />
+                              <span className="hidden sm:inline">Sửa</span>
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); onDelete(h.id); }} title="Xóa" aria-label={`Xóa ${h.name}`} className="flex items-center gap-2 px-3 py-2 rounded-md bg-white border border-red-100 text-red-700 hover:bg-red-50 transition transform text-xs font-medium">
+                              <AiOutlineDelete className="w-4 h-4" />
+                              <span className="hidden sm:inline">Xóa</span>
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -777,6 +806,7 @@ export default function HospitalsPage() {
               </button>
             </div>
             
+            
             {isModalLoading ? (
               <div className="flex flex-col items-center justify-center py-16 text-gray-500">
                 <svg className="mb-4 h-12 w-12 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -793,9 +823,9 @@ export default function HospitalsPage() {
                   <label className="mb-2 block text-sm font-semibold text-gray-700">Mã bệnh viện</label>
                   <input 
                     className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 disabled:cursor-not-allowed" 
-                    value={form.hospitalCode || ""} 
-                    onChange={(e) => setForm((s) => ({ ...s, hospitalCode: e.target.value }))} 
-                    disabled={isViewing}
+          value={form.hospitalCode || ""} 
+        onChange={(e) => setForm((s) => ({ ...s, hospitalCode: e.target.value }))} 
+        disabled={isViewing || !canEdit}
                   />
                 </div>
                 <div>
@@ -805,7 +835,7 @@ export default function HospitalsPage() {
                     className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 disabled:cursor-not-allowed" 
                     value={form.name} 
                     onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} 
-                    disabled={isViewing}
+                    disabled={isViewing || !canEdit}
                   />
                 </div>
                 <div>
@@ -814,17 +844,17 @@ export default function HospitalsPage() {
                     className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 disabled:cursor-not-allowed" 
                     value={form.address || ""} 
                     onChange={(e) => setForm((s) => ({ ...s, address: e.target.value }))} 
-                    disabled={isViewing}
+                    disabled={isViewing || !canEdit}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="mb-1 block text-sm">Tỉnh/Thành</label>
                     <input 
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" 
-                      value={form.province || ""} 
-                      onChange={(e) => setForm((s) => ({ ...s, province: e.target.value }))} 
-                    disabled={isViewing}
+                    value={form.province || ""} 
+                    onChange={(e) => setForm((s) => ({ ...s, province: e.target.value }))} 
+                    disabled={isViewing || !canEdit}
                     />
                   </div>
                   <div>
@@ -832,19 +862,19 @@ export default function HospitalsPage() {
                     <input
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
                       placeholder="ID users (cách nhau dấu phẩy)"
-                      value={(form.assignedUserIds ?? []).join(",")}
-                      onChange={(e) =>
-                        setForm((s) => ({
-                          ...s,
-                          assignedUserIds: e.target.value
-                            .split(",")
-                            .map((x) => x.trim())
-                            .filter(Boolean)
-                            .map((x) => Number(x))
-                            .filter((n) => !Number.isNaN(n)),
-                        }))
-                      }
-                    disabled={isViewing}
+                      value={(form.assignedUserIds ?? []).join(",")}
+                      onChange={(e) =>
+                        setForm((s) => ({
+                          ...s,
+                          assignedUserIds: e.target.value
+                            .split(",")
+                            .map((x) => x.trim())
+                            .filter(Boolean)
+                            .map((x) => Number(x))
+                            .filter((n) => !Number.isNaN(n)),
+                        }))
+                      }
+                    disabled={isViewing || !canEdit}
                     />
                   </div>
                 </div>
@@ -853,9 +883,9 @@ export default function HospitalsPage() {
                     <label className="mb-1 block text-sm">Liên hệ chung</label>
                     <input 
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" 
-                      value={form.contactNumber || ""} 
-                      onChange={(e) => setForm((s) => ({ ...s, contactNumber: e.target.value }))} 
-                    disabled={isViewing}
+                    value={form.contactNumber || ""} 
+                    onChange={(e) => setForm((s) => ({ ...s, contactNumber: e.target.value }))} 
+                    disabled={isViewing || !canEdit}
                     />
                   </div>
                   <div>
@@ -863,9 +893,9 @@ export default function HospitalsPage() {
                     <input 
                       type="email" 
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" 
-                      value={form.contactEmail || ""} 
-                      onChange={(e) => setForm((s) => ({ ...s, contactEmail: e.target.value }))} 
-                    disabled={isViewing}
+                    value={form.contactEmail || ""} 
+                    onChange={(e) => setForm((s) => ({ ...s, contactEmail: e.target.value }))} 
+                    disabled={isViewing || !canEdit}
                     />
                   </div>
                 </div>
@@ -874,9 +904,9 @@ export default function HospitalsPage() {
                     <label className="mb-1 block text-sm">Người liên hệ</label>
                     <input 
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" 
-                      value={form.contactPerson || ""} 
-                      onChange={(e) => setForm((s) => ({ ...s, contactPerson: e.target.value }))} 
-                    disabled={isViewing}
+                    value={form.contactPerson || ""} 
+                    onChange={(e) => setForm((s) => ({ ...s, contactPerson: e.target.value }))} 
+                    disabled={isViewing || !canEdit}
                     />
                   </div>
                   <div>
@@ -885,12 +915,12 @@ export default function HospitalsPage() {
                       type="number"
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
                       placeholder="(không bắt buộc)"
-                      value={form.hisSystemId ?? ""}
-                      onChange={(e) => {
-                        const v = e.target.value.trim();
-                        setForm((s) => ({ ...s, hisSystemId: v === "" ? undefined : Number(v) }));
-                      }}
-                    disabled={isViewing}
+                      value={form.hisSystemId ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value.trim();
+                        setForm((s) => ({ ...s, hisSystemId: v === "" ? undefined : Number(v) }));
+                      }}
+                    disabled={isViewing || !canEdit}
                     />
                   </div>
                 </div>
@@ -915,13 +945,13 @@ export default function HospitalsPage() {
                       <p className="text-xs text-gray-500 mt-1">Ảnh hiện tại</p>
                     </div>
                   )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
-                    onChange={(e) => setForm((s) => ({ ...s, imageFile: e.target.files?.[0] ?? null }))}
-                    disabled={isViewing}
-                  />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                        onChange={(e) => setForm((s) => ({ ...s, imageFile: e.target.files?.[0] ?? null }))}
+                    disabled={isViewing || !canEdit}
+                  />
                   {form.imageFile && (
                     <p className="text-xs text-green-600 mt-1">Đã chọn: {form.imageFile.name}</p>
                   )}
@@ -929,13 +959,13 @@ export default function HospitalsPage() {
 
                 <div>
                   <label className="mb-1 block text-sm font-medium leading-tight">Ưu tiên*</label>
-                  <select
-                    required
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                    value={form.priority}
-                    onChange={(e) => setForm((s) => ({ ...s, priority: e.target.value }))}
-                    disabled={isViewing}
-                  >
+                  <select
+                    required
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
+                    value={form.priority}
+                    onChange={(e) => setForm((s) => ({ ...s, priority: e.target.value }))}
+                    disabled={isViewing || !canEdit}
+                  >
                     {priorityOptions.map((p) => (
                       <option key={p.name} value={p.name}>{p.displayName}</option>
                     ))}
@@ -944,13 +974,13 @@ export default function HospitalsPage() {
 
                 <div>
                   <label className="mb-1 block text-sm font-medium">Trạng thái dự án*</label>
-                  <select
-                    required
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                    value={form.projectStatus}
-                    onChange={(e) => setForm((s) => ({ ...s, projectStatus: e.target.value }))}
-                    disabled={isViewing}
-                  >
+                  <select
+                    required
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
+                    value={form.projectStatus}
+                    onChange={(e) => setForm((s) => ({ ...s, projectStatus: e.target.value }))}
+                    disabled={isViewing || !canEdit}
+                  >
                     {statusOptions.map((s) => (
                       <option key={s.name} value={s.name}>{s.displayName}</option>
                     ))}
@@ -963,9 +993,9 @@ export default function HospitalsPage() {
                     <input 
                       type="datetime-local" 
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" 
-                      value={form.startDate || ""} 
-                      onChange={(e) => setForm((s) => ({ ...s, startDate: e.target.value }))} 
-                    disabled={isViewing}
+                    value={form.startDate || ""} 
+                    onChange={(e) => setForm((s) => ({ ...s, startDate: e.target.value }))} 
+                    disabled={isViewing || !canEdit}
                     />
                   </div>
                   <div>
@@ -973,9 +1003,9 @@ export default function HospitalsPage() {
                     <input 
                       type="datetime-local" 
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" 
-                      value={form.deadline || ""} 
-                      onChange={(e) => setForm((s) => ({ ...s, deadline: e.target.value }))} 
-                    disabled={isViewing}
+                    value={form.deadline || ""} 
+                    onChange={(e) => setForm((s) => ({ ...s, deadline: e.target.value }))} 
+                    disabled={isViewing || !canEdit}
                     />
                   </div>
                   <div>
@@ -983,9 +1013,9 @@ export default function HospitalsPage() {
                     <input 
                       type="datetime-local" 
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" 
-                      value={form.completionDate || ""} 
-                      onChange={(e) => setForm((s) => ({ ...s, completionDate: e.target.value }))} 
-                    disabled={isViewing}
+                    value={form.completionDate || ""} 
+                    onChange={(e) => setForm((s) => ({ ...s, completionDate: e.target.value }))} 
+                    disabled={isViewing || !canEdit}
                     />
                   </div>
                 </div>
@@ -993,33 +1023,33 @@ export default function HospitalsPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="mb-1 block text-sm">Đơn vị tài trợ</label>
-                    <input 
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" 
-                      value={form.bankName || ""} 
-                      onChange={(e) => setForm((s) => ({ ...s, bankName: e.target.value }))} 
-                    disabled={isViewing}
-                    />
+                  <input 
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" 
+                    value={form.bankName || ""} 
+                    onChange={(e) => setForm((s) => ({ ...s, bankName: e.target.value }))} 
+                    disabled={isViewing || !canEdit}
+                  />
                   </div>
                   <div>
                     <label className="mb-1 block text-sm">Liên hệ đơn vị tài trợ</label>
-                    <input 
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" 
-                      value={form.bankContactPerson || ""} 
-                      onChange={(e) => setForm((s) => ({ ...s, bankContactPerson: e.target.value }))} 
-                    disabled={isViewing}
-                    />
+                  <input 
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" 
+                    value={form.bankContactPerson || ""} 
+                    onChange={(e) => setForm((s) => ({ ...s, bankContactPerson: e.target.value }))} 
+                    disabled={isViewing || !canEdit}
+                  />
                   </div>
                 </div>
 
                 <div>
                   <label className="mb-1 block text-sm">Ghi chú</label>
-                  <textarea 
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" 
-                    rows={3} 
-                    value={form.notes || ""} 
-                    onChange={(e) => setForm((s) => ({ ...s, notes: e.target.value }))} 
-                    disabled={isViewing}
-                  />
+          <textarea 
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" 
+            rows={3} 
+            value={form.notes || ""} 
+            onChange={(e) => setForm((s) => ({ ...s, notes: e.target.value }))} 
+                    disabled={isViewing || !canEdit}
+          />
                 </div>
               </div>
 
@@ -1038,7 +1068,7 @@ export default function HospitalsPage() {
                   >
                     {isViewing ? "Đóng" : "Huỷ"}
                   </button>
-                  {!isViewing && ( // Chỉ hiện nút Lưu/Cập nhật khi không ở chế độ xem
+                  {!isViewing && canEdit && ( // Chỉ hiện nút Lưu/Cập nhật cho SuperAdmin
                     <button
                       type="submit"
                       className="rounded-xl border-2 border-blue-500 bg-blue-500 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-blue-600 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"

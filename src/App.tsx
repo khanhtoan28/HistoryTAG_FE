@@ -25,7 +25,6 @@ import DevTasksPage from "./pages/PageClients/dev-tasks";
 import MaintenanceTasksPage from "./pages/PageClients/maintenance-tasks";
 import Hospitals from "./pages/Page/Hospitals";
 import HisSystemPage from "./pages/Page/HisSystem";
-import PersonCharge from "./pages/Page/PersonCharge";
 import SuperAdminHome from "./pages/SuperAdmin/Home";
 import SuperAdminUsers from "./pages/SuperAdmin/Users";
 import Agencies from "./pages/SuperAdmin/Agencies";
@@ -140,7 +139,6 @@ export default function App() {
             {/* Tables */}
             <Route path="/hospitals" element={<Hospitals />} />
             <Route path="/his-sys" element={<HisSystemPage />} />
-            <Route path="/personCharge" element={<PersonCharge />} />
 
             {/* Ui Elements */}
             <Route path="/alerts" element={<Alerts />} />
