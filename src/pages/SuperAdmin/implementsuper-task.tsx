@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from "react";
-import TaskFormModal from "./TaskFormModal";
+import { motion } from "framer-motion";// hoặc copy 2 hàm này từ trang cũ nếu bạn chưa có
 import toast from "react-hot-toast";
 import TaskCard from "./TaskCardNew";
+import TaskFormModal from "./TaskFormModal";
 
 const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
 const MIN_LOADING_MS = 2000; // ensure spinner shows at least ~2s for perceived smoothness
@@ -34,6 +35,40 @@ function authHeaders() {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
+}
+function statusBadgeClasses(status?: string | null) {
+  if (!status) return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
+  const s = status.toUpperCase();
+  switch (s) {
+    case "NOT_STARTED":
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
+    case "IN_PROGRESS":
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
+    case "API_TESTING":
+      return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+    case "INTEGRATING":
+      return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
+    case "WAITING_FOR_DEV":
+      return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
+    case "ACCEPTED":
+      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+    default:
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
+  }
+}
+
+function statusLabel(status?: string | null) {
+  if (!status) return "-";
+  const map: Record<string, string> = {
+    NOT_STARTED: "Chưa triển khai",
+    IN_PROGRESS: "Đang triển khai",
+    API_TESTING: "Test API",
+    INTEGRATING: "Đang tích hợp",
+    WAITING_FOR_DEV: "Chờ dev build",
+    ACCEPTED: "Nghiệm thu",
+  };
+  const normalized = status.toUpperCase();
+  return map[normalized] || status;
 }
 
 const ImplementSuperTaskPage: React.FC = () => {
@@ -399,9 +434,114 @@ const ImplementSuperTaskPage: React.FC = () => {
           </div>
         </div>
 
-  <TaskFormModal open={modalOpen} onClose={() => setModalOpen(false)} initial={editing ?? undefined} onSubmit={handleSubmit} readOnly={viewOnly} />
+ {viewOnly ? (
+  <DetailModal open={modalOpen} onClose={() => setModalOpen(false)} item={editing} />
+) : (
+  <TaskFormModal
+    open={modalOpen}
+    onClose={() => setModalOpen(false)}
+    initial={editing ?? undefined}
+    onSubmit={handleSubmit}
+    readOnly={false}
+  />
+)}
+
     </div>
   );
 };
+function DetailModal({
+  open,
+  onClose,
+  item,
+}: {
+  open: boolean;
+  onClose: () => void;
+  item: ImplTask | null;
+}) {
+  if (!open || !item) return null;
+
+  const fmt = (d?: string | null) => (d ? new Date(d).toLocaleString("vi-VN") : "—");
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 20 }}
+        className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-6"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            📋 Chi tiết tác vụ triển khai
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+          <Info label="Tên" value={item.name} />
+          <Info label="Bệnh viện" value={item.hospitalName} />
+          <Info label="Người phụ trách" value={item.picDeploymentName} />
+
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-gray-900 dark:text-gray-100">Trạng thái:</span>
+            <span
+              className={`px-3 py-1 text-xs font-medium rounded-full ${statusBadgeClasses(
+                item.status
+              )}`}
+            >
+              {statusLabel(item.status)}
+            </span>
+          </div>
+
+          <Info label="API URL" value={item.apiUrl} />
+          <Info label="API Test" value={item.apiTestStatus} />
+          <Info label="Số lượng" value={item.quantity ?? "—"} />
+          <Info label="Deadline" value={fmt(item.deadline)} />
+          <Info label="Ngày bắt đầu" value={fmt(item.startDate)} />
+          <Info label="Ngày nghiệm thu" value={fmt(item.acceptanceDate)} />
+          <Info label="Ngày hoàn thành" value={fmt(item.finishDate)} />
+          <Info label="Tạo lúc" value={fmt(item.createdAt)} />
+        </div>
+
+        <div className="mt-6">
+          <p className="text-gray-500 mb-2">Ghi chú / Yêu cầu bổ sung:</p>
+          <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 min-h-[60px]">
+            {item.notes?.trim() || "—"}
+          </div>
+        </div>
+
+        <div className="flex justify-end mt-6">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+          >
+            Đóng
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value?: string | number | null }) {
+  return (
+    <div className="flex justify-between items-start">
+      <span className="font-semibold text-gray-900 dark:text-gray-100">{label}:</span>
+      <span className="text-gray-700 dark:text-gray-300 text-right max-w-[60%] break-words">
+        {value ?? "—"}
+      </span>
+    </div>
+  );
+}
 
 export default ImplementSuperTaskPage;

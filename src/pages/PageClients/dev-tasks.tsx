@@ -825,8 +825,46 @@ function TaskFormModal({
 }
 
 // Chi tiết (Detail) modal
-function DetailModal({ open, onClose, item }: { open: boolean; onClose: () => void; item: ImplementationTaskResponseDTO | null; }) {
+// =====================
+// DetailModal (đẹp + chuẩn bố cục 2 cột, màu sắc rõ ràng)
+// =====================
+function DetailModal({
+    open,
+    onClose,
+    item,
+}: {
+    open: boolean;
+    onClose: () => void;
+    item: ImplementationTaskResponseDTO | null;
+}) {
     if (!open || !item) return null;
+
+    const fmt = (d?: string | null) =>
+        d ? new Date(d).toLocaleString("vi-VN") : "—";
+
+    // Tô màu badge theo trạng thái
+    const statusBadge = (status?: string | null) => {
+        const s = (status || "").toUpperCase();
+        const base =
+            "px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap";
+        switch (s) {
+            case "NOT_STARTED":
+                return `${base} bg-gray-100 text-gray-800`;
+            case "IN_PROGRESS":
+                return `${base} bg-yellow-100 text-yellow-800`;
+            case "API_TESTING":
+                return `${base} bg-blue-100 text-blue-800`;
+            case "INTEGRATING":
+                return `${base} bg-purple-100 text-purple-800`;
+            case "WAITING_FOR_DEV":
+                return `${base} bg-orange-100 text-orange-800`;
+            case "ACCEPTED":
+                return `${base} bg-green-100 text-green-800`;
+            default:
+                return `${base} bg-gray-100 text-gray-800`;
+        }
+    };
+
     return (
         <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -836,31 +874,94 @@ function DetailModal({ open, onClose, item }: { open: boolean; onClose: () => vo
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 20 }}
-                className="w-full max-w-2xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-6"
+                className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-6"
                 onMouseDown={(e) => e.stopPropagation()}
             >
-                <h2 className="text-lg font-semibold mb-5">Chi tiết tác vụ DEV</h2>
-                <hr></hr>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm mt-5">
-                    <p><b>Tên:</b> {item.name}</p>
-                    <p><b>Bệnh viện:</b> {item.hospitalName}</p>
-                    <p><b>PIC:</b> {item.picDeploymentName}</p>
-                    <p><b>Trạng thái:</b> {statusLabel(item.status)}</p>
-                    <p><b>API URL:</b> {item.apiUrl || "—"}</p>
-                    <p><b>API Test:</b> {item.apiTestStatus || "—"}</p>
-                    <p><b>Số lượng:</b> {item.quantity ?? "—"}</p>
-                    <p><b>Deadline:</b> {fmt(item.deadline)}</p>
-                    <p><b>Ngày bắt đầu:</b> {fmt(item.startDate)}</p>
-                    <p><b>Ngày nghiệm thu:</b> {fmt(item.acceptanceDate)}</p>
-                    <p><b>Ngày hoàn thành:</b> {fmt(item.completionDate)}</p>
-                    <p><b>Tạo lúc:</b> {fmt(item.createdAt)}</p>
-                    <p><b>Cập nhật lúc:</b> {fmt(item.updatedAt)}</p>
-                    <p className="col-span-2"><b>Yêu cầu bổ sung:</b> {item.additionalRequest || "—"}</p>
+                {/* Header */}
+                <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                        📋 Chi tiết tác vụ DEV
+                    </h2>
+                    <button
+                        onClick={onClose}
+                        className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition"
+                    >
+                        ✕
+                    </button>
                 </div>
-                <div className="flex justify-end mt-6">
-                    <Button variant="ghost" onClick={onClose}>Đóng</Button>
+
+                {/* Content */}
+                <div className="p-6 space-y-6 text-sm text-gray-800 dark:text-gray-200">
+                    {/* Grid Info */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3">
+                        <Info label="Tên" value={item.name} />
+                        <Info label="Bệnh viện" value={item.hospitalName} />
+                        <Info label="Người phụ trách" value={item.picDeploymentName} />
+
+                        <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                Trạng thái:
+                            </span>
+                            <span
+                                className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${statusBadge(
+                                    item.status
+                                )}`}
+                            >
+                                {statusLabel(item.status)}
+                            </span>
+                        </div>
+
+                        <Info label="API URL" value={item.apiUrl || "—"} />
+                        <Info label="API Test" value={item.apiTestStatus || "—"} />
+                        <Info label="Số lượng" value={item.quantity ?? "—"} />
+                        <Info label="Deadline" value={fmt(item.deadline)} />
+                        <Info label="Ngày bắt đầu" value={fmt(item.startDate)} />
+                        <Info label="Ngày nghiệm thu" value={fmt(item.acceptanceDate)} />
+                        <Info label="Ngày hoàn thành" value={fmt(item.completionDate)} />
+                        <Info label="Tạo lúc" value={fmt(item.createdAt)} />
+                        <Info label="Cập nhật lúc" value={fmt(item.updatedAt)} />
+                    </div>
+
+                    {/* Additional request */}
+                    <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+                        <p className="text-gray-500 mb-2">Ghi chú / Yêu cầu bổ sung:</p>
+                        <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px]">
+                            {item.additionalRequest || "—"}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="flex justify-end px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 rounded-lg text-sm font-medium text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+                    >
+                        Đóng
+                    </button>
                 </div>
             </motion.div>
+        </div>
+    );
+}
+
+
+// Component con để render label + value cân đối
+function Info({
+    label,
+    value,
+}: {
+    label: string;
+    value?: string | number | null;
+}) {
+    return (
+        <div className="flex justify-between items-start">
+            <span className="font-semibold text-gray-900 dark:text-gray-100">
+                {label}:
+            </span>
+            <span className="text-gray-700 dark:text-gray-300 text-right max-w-[60%] break-words">
+                {value ?? "—"}
+            </span>
         </div>
     );
 }

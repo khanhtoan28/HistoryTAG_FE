@@ -16,7 +16,6 @@ import {
 } from "../icons";
 import { UserIcon } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
-import SidebarWidget from "./SidebarWidget";
 
 // Kiểu dữ liệu cho mục điều hướng
 type NavItem = {
@@ -388,7 +387,7 @@ const AppSidebar: React.FC = () => {
             </div>
           </div>
         </nav>
-        {isExpanded || isHovered || isMobileOpen ? <SidebarWidget /> : null}
+        {isExpanded || isHovered || isMobileOpen }
       </div>
     </aside>
   );

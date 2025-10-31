@@ -17,28 +17,41 @@ type ImplTask = {
   apiUrl?: string | null;
 };
 
+// ✅ Thay thế statusBadgeClass bằng bản có màu rõ ràng + dark mode
 function statusBadgeClass(status?: string) {
-  if (!status) return "bg-gray-100 text-gray-800";
-  const s = status.toLowerCase();
-  const norm = s.replace(/[-\s]/g, "_");
-  if (norm === "not_started" || norm === "notstarted" || norm === "not-started" || norm === "not_start") return "bg-orange-100 text-orange-800";
-  if (s.includes("done") || s.includes("completed")) return "bg-green-100 text-green-800";
-  if (s.includes("progress") || s.includes("inprogress") || s.includes("doing")) return "bg-blue-100 text-blue-800";
-  if (s.includes("pending") || s.includes("new") || s.includes("todo")) return "bg-yellow-100 text-yellow-800";
-  if (s.includes("cancel") || s.includes("fail") || s.includes("error")) return "bg-red-100 text-red-800";
-  return "bg-gray-100 text-gray-800";
+  if (!status) return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
+
+  const normalized = status.toUpperCase();
+
+  switch (normalized) {
+    case "NOT_STARTED":
+      // ⛔ Chưa bắt đầu → xám
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
+    case "IN_PROGRESS":
+      // 🟡 Đang triển khai → vàng
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
+    case "API_TESTING":
+      // 🔵 Test API → xanh dương
+      return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+    case "INTEGRATING":
+      // 🟣 Tích hợp → tím
+      return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
+    case "WAITING_FOR_DEV":
+      // 🟠 Chờ dev → cam
+      return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
+    case "ACCEPTED":
+      // ✅ Nghiệm thu → xanh lá
+      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+    default:
+      // fallback
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
+  }
 }
 
-function isNotStarted(status?: string) {
-  if (!status) return false;
-  const norm = status.toLowerCase().replace(/[-\s]/g, "_");
-  return norm === "not_started" || norm === "notstarted" || norm === "not-started" || norm === "not_start";
-}
-
+// ✅ Giữ nguyên logic nhận dạng trạng thái ban đầu
 function getDisplayStatus(status?: string) {
   if (!status) return "-";
-  const s = status.toLowerCase();
-  const norm = s.replace(/[-\s]/g, "_");
+  const s = status.toLowerCase().replace(/[-\s]/g, "_");
   const map: Record<string, string> = {
     not_started: "Chưa triển khai",
     in_progress: "Đang triển khai",
@@ -54,12 +67,7 @@ function getDisplayStatus(status?: string) {
     cancelled: "Đã hủy",
     failed: "Thất bại",
   };
-  if (map[norm]) return map[norm];
-  if (norm.includes("in_progress") || norm.includes("progress")) return "Đang triển khai";
-  if (norm.includes("api") && (norm.includes("test") || norm.includes("testing"))) return "Kiểm tra API";
-  if (norm.includes("integrat")) return "Đang tích hợp";
-  if (norm.includes("wait") || norm.includes("waiting")) return "Đang chờ";
-  if (norm.includes("accept") || norm.includes("nghiem")) return "Nghiệm thu";
+  if (map[s]) return map[s];
   return status;
 }
 
@@ -84,19 +92,23 @@ export default function TaskCardNew({
   canEdit?: boolean;
   canDelete?: boolean;
 }) {
-  const delayMs = (typeof idx === "number" && idx > 0) ? 2000 + ((idx - 1) * 80) : 0;
-  const isNot = isNotStarted(task.status ?? undefined);
+  const delayMs = typeof idx === "number" && idx > 0 ? 2000 + (idx - 1) * 80 : 0;
   const style = animate ? { animation: "fadeInUp 220ms both", animationDelay: `${delayMs}ms` } : undefined;
 
   return (
-    <div className="group w-full rounded-2xl bg-white px-6 py-5 shadow-sm transition-all border border-gray-100 hover:border-blue-100 hover:shadow-lg" style={style}>
+    <div
+      className="group w-full rounded-2xl bg-white dark:bg-gray-900 px-6 py-5 shadow-sm transition-all border border-gray-100 dark:border-gray-800 hover:border-blue-200 hover:shadow-lg"
+      style={style}
+    >
       <div className="flex gap-4 items-start">
         {/* Left badge + icon */}
         <div className="flex items-center gap-3">
           <div className="flex flex-col items-center">
-            <div className="w-12 h-12 rounded-md bg-gray-50 border flex items-center justify-center text-sm font-semibold text-gray-700">{String(task.id).padStart(3, '0')}</div>
+            <div className="w-12 h-12 rounded-md bg-gray-50 dark:bg-gray-800 border flex items-center justify-center text-sm font-semibold text-gray-700 dark:text-gray-200">
+              {String(task.id).padStart(3, "0")}
+            </div>
           </div>
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 text-blue-600 shadow-sm">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900 text-blue-600 dark:text-blue-200 shadow-sm">
             <FaTasks className="text-xl" />
           </div>
         </div>
@@ -105,40 +117,122 @@ export default function TaskCardNew({
         <div className="flex-1">
           <div className="flex items-start justify-between">
             <div className="min-w-0">
-              <div className="flex items-center gap-3">
-                <h3 className="text-lg font-semibold text-gray-900 truncate">{task.hospitalName ?? task.name}</h3>
+              <div className="flex items-center gap-3 flex-wrap">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
+                  {task.hospitalName ?? task.name}
+                </h3>
+
                 {task.status && (
-                  <span className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${statusBadgeClass(task.status ?? undefined)} ${isNot ? 'animate-pulse' : ''}`}>{getDisplayStatus(task.status ?? undefined)}</span>
+                  <span
+                    className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${statusBadgeClass(
+                      task.status
+                    )}`}
+                  >
+                    {getDisplayStatus(task.status)}
+                  </span>
                 )}
               </div>
-              <div className="text-sm text-gray-500 mt-1 truncate">{task.hisSystemName ? `Đơn vị HIS: ${task.hisSystemName}` : ''}</div>
-              <div className="text-sm text-gray-500 mt-2">Người liên hệ: <span className="font-medium text-gray-800">{task.picDeploymentName ?? '-'}</span></div>
-              {/* Show project name under contact when hospitalName is present (avoid duplicating title) */}
-              {(task.hospitalName && task.name && String(task.name).trim() && String(task.name).trim() !== String(task.hospitalName).trim()) && (
-                <div className="text-sm text-gray-500 mt-1">Tên dự án: <span title={task.name} className="inline-block font-medium text-gray-800 rounded px-2 py-0.5 transition-colors duration-150 hover:bg-blue-50 hover:text-blue-700">{task.name}</span></div>
+
+              {task.hisSystemName && (
+                <div className="text-sm text-gray-500 dark:text-gray-400 mt-1 truncate">
+                  Đơn vị HIS: {task.hisSystemName}
+                </div>
               )}
+
+              <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                Nhân viên phụ trách:{" "}
+                <span className="font-medium text-gray-800 dark:text-gray-200">
+                  {task.picDeploymentName ?? "-"}
+                </span>
+              </div>
+
+              {task.hospitalName &&
+                task.name &&
+                task.name.trim() &&
+                task.name.trim() !== task.hospitalName.trim() && (
+                  <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    Tên dự án:{" "}
+                    <span
+                      title={task.name}
+                      className="inline-block font-medium text-gray-800 dark:text-gray-100 rounded px-2 py-0.5 transition-colors duration-150 hover:bg-blue-50 dark:hover:bg-blue-800/40 hover:text-blue-700"
+                    >
+                      {task.name}
+                    </span>
+                  </div>
+                )}
             </div>
 
             {/* Right column: dates */}
-            <div className="flex flex-col items-end ml-4 gap-1">
-              <div className="text-sm text-gray-400">Bắt đầu</div>
-              <div className="text-sm font-semibold text-gray-900">{task.startDate ? new Date(task.startDate).toLocaleDateString('vi-VN') : '-'}</div>
-              <div className="text-sm text-gray-400 mt-2">Deadline</div>
-              <div className="text-sm font-semibold text-gray-900">{task.deadline ? new Date(task.deadline).toLocaleDateString('vi-VN') : '-'}</div>
+            <div className="flex flex-col items-end ml-4 gap-1 text-right">
+              <div className="text-sm text-gray-400 dark:text-gray-500">Bắt đầu</div>
+              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {task.startDate
+                  ? new Date(task.startDate).toLocaleDateString("vi-VN")
+                  : "-"}
+              </div>
+              <div className="text-sm text-gray-400 dark:text-gray-500 mt-2">Deadline</div>
+              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {task.deadline
+                  ? new Date(task.deadline).toLocaleDateString("vi-VN")
+                  : "-"}
+              </div>
             </div>
           </div>
 
+          {/* Footer actions */}
           <div className="flex items-center justify-between mt-4">
-            <div className="text-sm text-orange-500">{task.apiUrl ? <span>API: <a className="underline text-orange-500" href={task.apiUrl} target="_blank" rel="noreferrer">{task.apiUrl}</a></span> : ''}</div>
+            <div className="text-sm text-orange-500">
+              {task.apiUrl && (
+                <span>
+                  API:{" "}
+                  <a
+                    className="underline text-orange-500 dark:text-orange-300 hover:text-orange-600"
+                    href={task.apiUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {task.apiUrl}
+                  </a>
+                </span>
+              )}
+            </div>
+
             <div className="flex items-center gap-3">
               {canView && (
-                <button onClick={(e) => { e.stopPropagation(); onOpen(task); }} className="inline-flex items-center gap-2 bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-sm"> <AiOutlineEye /> <span className="hidden md:inline">Xem</span></button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpen(task);
+                  }}
+                  className="inline-flex items-center gap-2 bg-blue-50 dark:bg-blue-900 text-blue-600 dark:text-blue-200 px-3 py-1 rounded-lg text-sm hover:bg-blue-100 dark:hover:bg-blue-800"
+                >
+                  <AiOutlineEye />
+                  <span className="hidden md:inline">Xem</span>
+                </button>
               )}
               {canEdit && (
-                <button onClick={(e) => { e.stopPropagation(); onEdit(task); }} className="inline-flex items-center gap-2 bg-white border border-orange-100 text-orange-500 px-3 py-1 rounded-lg text-sm"> <AiOutlineEdit /> <span className="hidden md:inline">Sửa</span></button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(task);
+                  }}
+                  className="inline-flex items-center gap-2 bg-white dark:bg-gray-900 border border-orange-100 dark:border-orange-800 text-orange-500 px-3 py-1 rounded-lg text-sm hover:bg-orange-50 dark:hover:bg-orange-900/40"
+                >
+                  <AiOutlineEdit />
+                  <span className="hidden md:inline">Sửa</span>
+                </button>
               )}
               {canDelete && (
-                <button onClick={(e) => { e.stopPropagation(); onDelete(task.id); }} className="inline-flex items-center gap-2 bg-white border border-red-100 text-red-600 px-3 py-1 rounded-lg text-sm"> <AiOutlineDelete /> <span className="hidden md:inline">Xóa</span></button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(task.id);
+                  }}
+                  className="inline-flex items-center gap-2 bg-white dark:bg-gray-900 border border-red-100 dark:border-red-800 text-red-600 px-3 py-1 rounded-lg text-sm hover:bg-red-50 dark:hover:bg-red-900/40"
+                >
+                  <AiOutlineDelete />
+                  <span className="hidden md:inline">Xóa</span>
+                </button>
               )}
             </div>
           </div>
