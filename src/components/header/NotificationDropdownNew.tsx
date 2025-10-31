@@ -4,7 +4,7 @@ import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { getNotifications, getUnreadCount, markAsRead } from "../../api/notification.api";
 import { useModal } from "../../hooks/useModal";
 import NotificationDetailModal from "./NotificationDetailModal";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 export default function NotificationDropdown() {
   const [isOpen, setIsOpen] = useState(false);
@@ -53,6 +53,10 @@ export default function NotificationDropdown() {
   };
 
   const { isOpen: isModalOpen, openModal, closeModal } = useModal(false);
+  const location = useLocation();
+
+  // Decide where "View All" should go based on current path: keep superadmin context
+  const viewAllPath = location.pathname.startsWith("/superadmin") ? "/superadmin/notifications" : "/notifications";
 
   const handleItemClick = async (n: any) => {
     try {
@@ -192,7 +196,7 @@ export default function NotificationDropdown() {
           ))}
         </ul>
         <Link
-          to="/notifications"
+          to={viewAllPath}
           className="block w-full px-4 py-2 mt-3 text-sm font-medium text-center text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 hover:shadow-md transition-shadow dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
         >
           View All Notifications

@@ -120,6 +120,8 @@ export default function App() {
             <Route path="/superadmin/dev-tasks" element={<DevSuperTaskPage />} />
             <Route path="/superadmin/maintenance-tasks" element={<MaintenanceSuperTaskPage />} />
             <Route path="/superadmin/profile" element={<SuperAdminProfile />} />
+            {/* SuperAdmin notifications - keep layout consistent for superadmin users */}
+            <Route path="/superadmin/notifications" element={<AllNotificationsPage />} />
           </Route>
 
           {/* Dashboard Layout - Protected */}
