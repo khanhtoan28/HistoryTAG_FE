@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "react-hot-toast";
 
@@ -91,6 +91,7 @@ function statusLabel(status?: string | null) {
 }
 
 const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
+const MIN_LOADING_MS = 2000;
 
 // PageClients folder is admin-facing: always use admin API root for tasks
 const apiBase = `${API_ROOT}/api/v1/admin/implementation/tasks`;
@@ -142,7 +143,7 @@ function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
     <input
       {...props}
       className={clsx(
-        "h-10 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 outline-none",
+        "h-10 rounded-xl border border-blue-300 dark:border-blue-700 bg-white dark:bg-blue-900 px-3 outline-none",
         "focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500",
         props.className || ""
       )}
@@ -175,6 +176,47 @@ function Button(
         ? "bg-red-600 text-white hover:bg-red-700"
         : "bg-transparent border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800";
   return <button className={clsx(base, styles, className)} {...rest} />;
+}
+
+// Lightweight inline icons (no external deps)
+function PlusIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className || "w-4 h-4"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+function PencilIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className || "w-4 h-4"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+    </svg>
+  );
+}
+function TrashIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className || "w-4 h-4"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
+  );
+}
+function ChevronLeftIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className || "w-4 h-4"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="15 18 9 12 15 6" />
+    </svg>
+  );
+}
+function ChevronRightIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className || "w-4 h-4"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
+// helper for STT display like 001, 002
+function formatStt(n: number) {
+  try { return String(Math.max(0, Math.floor(n))).padStart(3, '0'); } catch { return String(n); }
 }
 function RemoteSelect({
   label,
@@ -623,6 +665,18 @@ function TaskFormModal({
       return;
     }
 
+    // Extra validation: When status is ACCEPTED, require acceptanceDate and completionDate
+    if ((model.status || '').toUpperCase() === 'ACCEPTED') {
+      if (!model.acceptanceDate || String(model.acceptanceDate).trim() === '') {
+        toast.error("Vui lòng nhập ngày nghiệm thu");
+        return;
+      }
+      if (!model.completionDate || String(model.completionDate).trim() === '') {
+        toast.error("Vui lòng nhập ngày hoàn thành");
+        return;
+      }
+    }
+
     const payload: ImplementationTaskRequestDTO = {
       ...model,
       hospitalId: hospitalOpt.id,
@@ -702,7 +756,7 @@ function TaskFormModal({
                 onChange={setPicOpt}
               />
 
-              <Field label="Số lượng">
+              <Field label="Số lượng Kiosk">
                 <TextInput
                   type="number"
                   value={model.quantity ?? ""}
@@ -739,13 +793,13 @@ function TaskFormModal({
                   placeholder="https://..."
                 />
               </Field>
-              <Field label="Trạng thái API Test">
+              {/* <Field label="Trạng thái API Test">
                 <TextInput
                   value={model.apiTestStatus ?? ""}
                   onChange={(e) => setModel((s) => ({ ...s, apiTestStatus: e.target.value }))}
                   placeholder="PASSED / FAILED / PENDING..."
                 />
-              </Field>
+              </Field> */}
               <Field label="BHYT Port Check Info">
                 <TextInput
                   value={model.bhytPortCheckInfo ?? ""}
@@ -785,7 +839,7 @@ function TaskFormModal({
                   onChange={(e) => setModel((s) => ({ ...s, startDate: e.target.value }))}
                 />
               </Field>
-              <Field label="Ngày nghiệm thu">
+              <Field label="Ngày nghiệm thu" required={model.status === 'ACCEPTED'}>
                 <TextInput
                   type="datetime-local"
                   value={model.acceptanceDate ? new Date(model.acceptanceDate).toISOString().slice(0, 16) : ""}
@@ -793,6 +847,7 @@ function TaskFormModal({
                 />
               </Field>
               <Field label="Ngày hoàn thành">
+                
                 <TextInput
                   type="datetime-local"
                   value={model.completionDate ? new Date(model.completionDate).toISOString().slice(0, 16) : ""}
@@ -847,8 +902,9 @@ function DetailModal({
         className="w-full max-w-2xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-6"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold mb-4">Chi tiết tác vụ triển khai</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+        <h2 className="text-lg font-semibold mb-5">Chi tiết tác vụ triển khai</h2>
+        <hr></hr>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm mt-5">
           <p><b>Tên:</b> {item.name}</p>
           <p><b>Bệnh viện:</b> {item.hospitalName}</p>
           <p><b>Người phụ trách:</b> {item.picDeploymentName}</p>
@@ -875,12 +931,23 @@ function DetailModal({
 const ImplementationTasksPage: React.FC = () => {
   const [data, setData] = useState<ImplementationTaskResponseDTO[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ImplementationTaskResponseDTO | null>(null);
-  const [query, setQuery] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sortBy, setSortBy] = useState("id");
+  const [sortDir, setSortDir] = useState("asc");
+  const [page, setPage] = useState(0);
+  const [size, setSize] = useState(10);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [enableItemAnimation, setEnableItemAnimation] = useState<boolean>(true);
+  const [hospitalQuery, setHospitalQuery] = useState<string>("");
+  const [hospitalOptions, setHospitalOptions] = useState<Array<{ id: number; label: string }>>([]);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<ImplementationTaskResponseDTO | null>(null);
+  const searchDebounce = useRef<number | null>(null);
   const readStored = <T = unknown>(key: string): T | null => {
     try {
       const raw = localStorage.getItem(key) || sessionStorage.getItem(key);
@@ -897,38 +964,93 @@ const ImplementationTasksPage: React.FC = () => {
   const isSuperAdmin = userRoles.some(
     (r: any) => (typeof r === "string" ? r : r.roleName)?.toUpperCase() === "SUPERADMIN"
   );
-  const filtered = useMemo(() => {
-    if (!query.trim()) return data;
-    const q = query.toLowerCase();
-    return data.filter((x) =>
-      [x.name, x.hospitalName, x.picDeploymentName, x.status, x.apiTestStatus]
-        .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(q))
-    );
-  }, [data, query]);
+  const filtered = useMemo(() => data, [data]);
 
   async function fetchList() {
+    const start = Date.now();
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${apiBase}?page=0&size=50&sortBy=id&sortDir=asc`, {
-        method: "GET",
-        headers: authHeaders(),
-        credentials: "include",
+      const params = new URLSearchParams({
+        page: String(page),
+        size: String(size),
+        sortBy: sortBy,
+        sortDir: sortDir,
       });
-      if (!res.ok) throw new Error(`GET ${apiBase} failed: ${res.status}`);
-      const page = await res.json();
-      setData(Array.isArray(page?.content) ? page.content : Array.isArray(page) ? page : []);
+      if (searchTerm) params.set("search", searchTerm.trim());
+      if (statusFilter) params.set("status", statusFilter);
+
+      const url = `${apiBase}?${params.toString()}`;
+      const res = await fetch(url, { method: "GET", headers: authHeaders(), credentials: "include" });
+      if (!res.ok) throw new Error(`GET ${url} failed: ${res.status}`);
+      const resp = await res.json();
+      const items = Array.isArray(resp?.content) ? resp.content : Array.isArray(resp) ? resp : [];
+      setData(items);
+      if (resp && typeof resp.totalElements === "number") setTotalCount(resp.totalElements);
+      else setTotalCount(Array.isArray(resp) ? resp.length : null);
+
+      if (enableItemAnimation) {
+        const itemCount = items.length;
+        const maxDelay = itemCount > 1 ? 2000 + ((itemCount - 2) * 80) : 0;
+        const animationDuration = 220;
+        const buffer = 120;
+        window.setTimeout(() => setEnableItemAnimation(false), maxDelay + animationDuration + buffer);
+      }
     } catch (e: any) {
       setError(e.message || "Lỗi tải dữ liệu");
     } finally {
+      const elapsed = Date.now() - start;
+      if (isInitialLoad) {
+        const remaining = Math.max(0, MIN_LOADING_MS - elapsed);
+        await new Promise((r) => setTimeout(r, remaining));
+      }
       setLoading(false);
+      if (isInitialLoad) setIsInitialLoad(false);
     }
   }
 
   useEffect(() => {
     fetchList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // when page or size changes, refetch
+  useEffect(() => {
+    fetchList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, size]);
+
+  // reset page when filters/sort/search change
+  useEffect(() => { setPage(0); }, [searchTerm, statusFilter, sortBy, sortDir]);
+
+  // debounce searchTerm changes and refetch
+  useEffect(() => {
+    if (searchDebounce.current) window.clearTimeout(searchDebounce.current);
+    searchDebounce.current = window.setTimeout(() => { fetchList(); }, 600);
+    return () => { if (searchDebounce.current) window.clearTimeout(searchDebounce.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
+
+  // refetch when statusFilter or sort changes
+  useEffect(() => { fetchList(); /* eslint-disable-line */ }, [statusFilter]);
+  useEffect(() => { fetchList(); /* eslint-disable-line */ }, [sortBy, sortDir]);
+
+  async function fetchHospitalOptions(q: string) {
+    try {
+      const res = await fetch(`${API_ROOT}/api/v1/admin/hospitals/search?name=${encodeURIComponent(q || "")}`, { headers: authHeaders() });
+      if (!res.ok) return;
+      const list = await res.json();
+      if (Array.isArray(list)) setHospitalOptions(list.map((h: any) => ({ id: Number(h.id), label: String(h.label ?? h.name ?? "") })));
+    } catch { /* ignore */ }
+  }
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      if (hospitalQuery && hospitalQuery.trim().length > 0) fetchHospitalOptions(hospitalQuery.trim());
+      else setHospitalOptions([]);
+    }, 300);
+    return () => window.clearTimeout(id);
+  }, [hospitalQuery]);
 
   const handleSubmit = async (payload: ImplementationTaskRequestDTO, id?: number) => {
     const isUpdate = Boolean(id);
@@ -967,122 +1089,173 @@ const ImplementationTasksPage: React.FC = () => {
 
   return (
     <div className="p-6 xl:p-10">
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Tác vụ triển khai</h1>
-        <div className="flex items-center gap-2">
-          <input
-            placeholder="Tìm kiếm theo tên, bệnh viện, trạng thái..."
-            className="h-10 w-64 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 outline-none"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          {isSuperAdmin || userTeam === "DEPLOYMENT" ? (
-            <Button
-              onClick={() => {
-                setEditing(null);
-                setModalOpen(true);
-              }}
-            >
-              + Thêm mới
-            </Button>
-          ) : (
-            <Button disabled className="opacity-50 cursor-not-allowed">
-              + Thêm mới
-            </Button>
-          )}
+      </div>
 
+      {error && <div className="text-red-600 mb-4">{error}</div>}
+
+      <div className="mb-6 rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Thao tác</h3>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative">
+                <input
+                  list="hospital-list"
+                  type="text"
+                  className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                  placeholder="Tìm theo tên (gõ để gợi ý bệnh viện)"
+                  value={searchTerm}
+                  onChange={(e) => { setSearchTerm(e.target.value); setHospitalQuery(e.target.value); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { fetchList(); } }}
+                  onBlur={() => { /* keep search as-is */ }}
+                />
+                <datalist id="hospital-list">
+                  {hospitalOptions.map((h) => (
+                    <option key={h.id} value={h.label} />
+                  ))}
+                </datalist>
+              </div>
+
+              <select
+                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[160px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="">— Chọn trạng thái —</option>
+                {STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="mt-3 text-sm text-gray-600 dark:text-gray-300">Tổng: <span className="font-semibold text-gray-800 dark:text-gray-100">{loading ? '...' : (totalCount ?? data.length)}</span></div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900" value={sortBy} onChange={(e) => { setSortBy(e.target.value); setPage(0); }}>
+                <option value="id">Sắp xếp theo: id</option>
+                <option value="hospitalName">Sắp xếp theo: bệnh viện</option>
+                <option value="deadline">Sắp xếp theo: deadline</option>
+              </select>
+              <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900" value={sortDir} onChange={(e) => setSortDir(e.target.value)}>
+                <option value="asc">Tăng dần</option>
+                <option value="desc">Giảm dần</option>
+              </select>
+            </div>
+
+            {isSuperAdmin || userTeam === "DEPLOYMENT" ? (
+              <Button className="rounded-xl flex items-center gap-2" onClick={() => { setEditing(null); setModalOpen(true); }}>
+                <PlusIcon />
+                <span>Thêm mới</span>
+              </Button>
+            ) : (
+              <Button disabled className="opacity-50 cursor-not-allowed flex items-center gap-2">
+                <PlusIcon />
+                <span>Thêm mới</span>
+              </Button>
+            )}
+            <button className="rounded-full border px-4 py-2 text-sm shadow-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 flex items-center gap-2" onClick={async () => {
+              setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc'); setPage(0);
+              setLoading(true);
+              const start = Date.now();
+              await fetchList();
+              const minMs = 800;
+              const elapsed = Date.now() - start;
+              if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
+              setLoading(false);
+            }}>
+
+              <span>Làm mới</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-300">
-              <tr>
-                <th className="px-4 py-3 text-left">ID</th>
-                <th className="px-4 py-3 text-left">Tên</th>
-                <th className="px-4 py-3 text-left">Bệnh viện</th>
-                <th className="px-4 py-3 text-left">PIC</th>
-                <th className="px-4 py-3 text-left">Trạng thái</th>
-                <th className="px-4 py-3 text-left">API Test</th>
-                <th className="px-4 py-3 text-left">Deadline</th>
-                <th className="px-4 py-3 text-right">Hành động</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr>
-                  <td colSpan={10} className="px-4 py-6 text-center text-gray-500">Đang tải...</td>
-                </tr>
-              )}
-              {error && !loading && (
-                <tr>
-                  <td colSpan={10} className="px-4 py-6 text-center text-red-600">{error}</td>
-                </tr>
-              )}
-              {!loading && !error && filtered.length === 0 && (
-                <tr>
-                  <td colSpan={10} className="px-4 py-6 text-center text-gray-500">Không có dữ liệu</td>
-                </tr>
-              )}
-              {!loading && !error &&
-                filtered.map((row) => (
-                  <tr key={row.id} className="border-t border-gray-100 dark:border-gray-800">
-                    <td className="px-4 py-3">{row.id}</td>
-                    <td className="px-4 py-3 font-medium">{row.name}</td>
-                    <td className="px-4 py-3">{row.hospitalName}</td>
-                    <td className="px-4 py-3">{row.picDeploymentName}</td>
-                    <td className="px-4 py-3">
-                      <span className={clsx("px-2 py-1 rounded-full text-xs font-medium", statusBadgeClasses(row.status))}>
-                        {statusLabel(row.status)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">{row.apiTestStatus || "—"}</td>
-                    <td className="px-4 py-3">{fmt(row.deadline)}</td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          onClick={() => {
-                            setDetailItem(row);
-                            setDetailOpen(true);
-                          }}
-                        >
-                          Xem
-                        </Button>
+      <div>
+        <style>{`
+          @keyframes fadeInUp { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
+        `}</style>
 
-                        {isSuperAdmin || userTeam === "DEPLOYMENT" ? (
-                          <>
-                            <Button
-                              variant="ghost"
-                              onClick={() => {
-                                setEditing(row);
-                                setModalOpen(true);
-                              }}
-                            >
-                              Sửa
-                            </Button>
-                            <Button variant="danger" onClick={() => handleDelete(row.id)}>
-                              Xóa
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            <Button variant="ghost" disabled className="opacity-50 cursor-not-allowed">
-                              Sửa
-                            </Button>
-                            <Button variant="danger" disabled className="opacity-50 cursor-not-allowed">
-                              Xóa
-                            </Button>
-                          </>
-                        )}
+        <div className="space-y-3">
+          {loading && isInitialLoad ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-blue-600 text-4xl font-extrabold tracking-wider animate-pulse" aria-hidden="true">TAG</div>
+            </div>
+          ) : (
+            filtered.length === 0 ? (
+              <div className="px-4 py-6 text-center text-gray-500">Không có dữ liệu</div>
+            ) : (
+              filtered.map((row, idx) => (
+                <div
+                  key={row.id}
+                  className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm cursor-pointer transition-colors transition-shadow transition-transform duration-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-blue-200 hover:shadow-md transform-gpu hover:scale-[1.015]"
+                  style={enableItemAnimation ? { animation: `fadeInUp 220ms ease-out ${Math.min(0.08 * idx, 1)}s both` } : undefined}
+                  onClick={() => { setDetailItem(row); setDetailOpen(true); }}
+                >
+                  <div className="flex items-center justify-start gap-3">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-blue-50 text-gray-700 dark:bg-blue-900/40 dark:text-blue-200 border border-blue-100 dark:border-blue-800 text-sm font-semibold shadow-sm shrink-0">
+                        {formatStt(page * size + idx + 1)}
                       </div>
-                    </td>
+                      <div className="min-w-0">
+                        <div className="text-base font-semibold truncate">{row.name}</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                          <span className="mr-3">Bệnh Viện: {row.hospitalName || '—'}</span>
 
-                  </tr>
-                ))}
-            </tbody>
-          </table>
+                          <span className="mx-3 text-gray-400">|</span>
+                          <span>Người phụ trách: {row.picDeploymentName || '—'}</span>
+                        </div>
+                        <div className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                          {/* API: {row.apiTestStatus || '—'} • */}
+                          Deadline: {fmt(row.deadline) || '—'}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={clsx("px-2 py-1 rounded-full text-xs font-medium", statusBadgeClasses(row.status))}>{statusLabel(row.status)}</span>
+                      {isSuperAdmin || userTeam === "DEPLOYMENT" ? (
+                        <>
+                          <Button variant="ghost" className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs hover:shadow-sm transition-all hover:scale-[1.02]" onClick={(e) => { e.stopPropagation(); setEditing(row); setModalOpen(true); }}>
+                            <PencilIcon />
+                            <span>sửa</span>
+                          </Button>
+                          <Button variant="danger" className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs hover:shadow-sm transition-all hover:scale-[1.02]" onClick={(e) => { e.stopPropagation(); handleDelete(row.id); }}>
+                            <TrashIcon />
+                            <span>xóa</span>
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button className="px-3 py-1 border rounded inline-flex items-center gap-2" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0}>
+            <ChevronLeftIcon />
+            <span>Prev</span>
+          </button>
+          <span>Trang {page + 1}{totalCount ? ` / ${Math.max(1, Math.ceil((totalCount || 0) / size))}` : ""}</span>
+          <button className="px-3 py-1 border rounded inline-flex items-center gap-2" onClick={() => setPage((p) => p + 1)} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)}>
+            <span>Next</span>
+            <ChevronRightIcon />
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm">Số hàng:</label>
+          <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1">
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+          </select>
         </div>
       </div>
 
