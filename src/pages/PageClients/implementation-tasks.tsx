@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import TaskCardNew from "../SuperAdmin/TaskCardNew";
 import { toast } from "react-hot-toast";
 
 export type ImplementationTaskResponseDTO = {
@@ -58,18 +59,7 @@ const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "ACCEPTED", label: "Nghiệm thu" },
 ];
 
-function statusBadgeClasses(status?: string | null) {
-  switch (status) {
-    case "NOT_STARTED":
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
-    case "IN_PROGRESS":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
-    case "ACCEPTED":
-      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-    default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
-  }
-}
+// Using shared TaskCardNew for visuals — local statusBadgeClasses removed
 
 function statusLabel(status?: string | null) {
   switch (status) {
@@ -186,20 +176,6 @@ function PlusIcon({ className }: { className?: string }) {
     </svg>
   );
 }
-function PencilIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className || "w-4 h-4"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
-    </svg>
-  );
-}
-function TrashIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className || "w-4 h-4"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-    </svg>
-  );
-}
 function ChevronLeftIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className || "w-4 h-4"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -215,9 +191,7 @@ function ChevronRightIcon({ className }: { className?: string }) {
   );
 }
 // helper for STT display like 001, 002
-function formatStt(n: number) {
-  try { return String(Math.max(0, Math.floor(n))).padStart(3, '0'); } catch { return String(n); }
-}
+// local icons and formatStt removed — TaskCardNew provides consistent UI
 function RemoteSelect({
   label,
   placeholder,
@@ -718,14 +692,11 @@ function TaskFormModal({
           aria-modal="true"
         >
           <form onSubmit={handleSubmit} className="px-6 pt-0 pb-6 grid gap-4 max-h-[80vh] overflow-y-auto">
-            <div className="sticky top-0 z-[100] -mx-10 px-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+              <div className="sticky top-0 z-[100] -mx-10 px-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center justify-between py-3">
                 <h3 className="text-lg font-semibold">
-                  {initial?.id ? "Cập nhật tác vụ triển khai" : "Tạo tác vụ triển khai"}
+                  {initial?.id ? (initial?.name || "") : "Tạo tác vụ"}
                 </h3>
-                <Button type="button" variant="ghost" onClick={onClose}>
-                  Đóng
-                </Button>
               </div>
             </div>
             {/* Form fields */}
@@ -1090,7 +1061,8 @@ const ImplementationTasksPage: React.FC = () => {
   return (
     <div className="p-6 xl:p-10">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Tác vụ triển khai</h1>
+        <h1 className="text-3xl font-extrabold">Tác vụ triển khai</h1>
+        {/* project name shown inside card; removed duplicate header pill */}
       </div>
 
       {error && <div className="text-red-600 mb-4">{error}</div>}
@@ -1146,12 +1118,12 @@ const ImplementationTasksPage: React.FC = () => {
             </div>
 
             {isSuperAdmin || userTeam === "DEPLOYMENT" ? (
-              <Button className="rounded-xl flex items-center gap-2" onClick={() => { setEditing(null); setModalOpen(true); }}>
+              <Button variant="primary" className="rounded-xl flex items-center gap-2" onClick={() => { setEditing(null); setModalOpen(true); }}>
                 <PlusIcon />
                 <span>Thêm mới</span>
               </Button>
             ) : (
-              <Button disabled className="opacity-50 cursor-not-allowed flex items-center gap-2">
+              <Button variant="primary" disabled className="opacity-50 cursor-not-allowed flex items-center gap-2">
                 <PlusIcon />
                 <span>Thêm mới</span>
               </Button>
@@ -1187,50 +1159,19 @@ const ImplementationTasksPage: React.FC = () => {
             filtered.length === 0 ? (
               <div className="px-4 py-6 text-center text-gray-500">Không có dữ liệu</div>
             ) : (
-              filtered.map((row, idx) => (
-                <div
-                  key={row.id}
-                  className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm cursor-pointer transition-colors transition-shadow transition-transform duration-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-blue-200 hover:shadow-md transform-gpu hover:scale-[1.015]"
-                  style={enableItemAnimation ? { animation: `fadeInUp 220ms ease-out ${Math.min(0.08 * idx, 1)}s both` } : undefined}
-                  onClick={() => { setDetailItem(row); setDetailOpen(true); }}
-                >
-                  <div className="flex items-center justify-start gap-3">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-blue-50 text-gray-700 dark:bg-blue-900/40 dark:text-blue-200 border border-blue-100 dark:border-blue-800 text-sm font-semibold shadow-sm shrink-0">
-                        {formatStt(page * size + idx + 1)}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-base font-semibold truncate">{row.name}</div>
-                        <div className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                          <span className="mr-3">Bệnh Viện: {row.hospitalName || '—'}</span>
-
-                          <span className="mx-3 text-gray-400">|</span>
-                          <span>Người phụ trách: {row.picDeploymentName || '—'}</span>
-                        </div>
-                        <div className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                          {/* API: {row.apiTestStatus || '—'} • */}
-                          Deadline: {fmt(row.deadline) || '—'}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={clsx("px-2 py-1 rounded-full text-xs font-medium", statusBadgeClasses(row.status))}>{statusLabel(row.status)}</span>
-                      {isSuperAdmin || userTeam === "DEPLOYMENT" ? (
-                        <>
-                          <Button variant="ghost" className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs hover:shadow-sm transition-all hover:scale-[1.02]" onClick={(e) => { e.stopPropagation(); setEditing(row); setModalOpen(true); }}>
-                            <PencilIcon />
-                            <span>sửa</span>
-                          </Button>
-                          <Button variant="danger" className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs hover:shadow-sm transition-all hover:scale-[1.02]" onClick={(e) => { e.stopPropagation(); handleDelete(row.id); }}>
-                            <TrashIcon />
-                            <span>xóa</span>
-                          </Button>
-                        </>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              ))
+                filtered.map((row, idx) => (
+                  <TaskCardNew
+                    key={row.id}
+                    task={row as any}
+                    idx={enableItemAnimation ? idx : undefined}
+                    animate={enableItemAnimation}
+                    onOpen={() => { setDetailItem(row); setDetailOpen(true); }}
+                    onEdit={() => { setEditing(row); setModalOpen(true); }}
+                    onDelete={(id: number) => { handleDelete(id); }}
+                    canEdit={isSuperAdmin || userTeam === "DEPLOYMENT"}
+                    canDelete={isSuperAdmin || userTeam === "DEPLOYMENT"}
+                  />
+                ))
             )
           )}
         </div>

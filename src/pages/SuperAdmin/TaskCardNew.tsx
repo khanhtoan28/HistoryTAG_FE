@@ -70,6 +70,9 @@ export default function TaskCardNew({
   onOpen,
   idx,
   animate = true,
+  canView = true,
+  canEdit = true,
+  canDelete = true,
 }: {
   task: ImplTask;
   onEdit: (t: ImplTask) => void;
@@ -77,13 +80,16 @@ export default function TaskCardNew({
   onOpen: (t: ImplTask) => void;
   idx?: number;
   animate?: boolean;
+  canView?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }) {
   const delayMs = (typeof idx === "number" && idx > 0) ? 2000 + ((idx - 1) * 80) : 0;
   const isNot = isNotStarted(task.status ?? undefined);
   const style = animate ? { animation: "fadeInUp 220ms both", animationDelay: `${delayMs}ms` } : undefined;
 
   return (
-    <div className="group w-full rounded-2xl bg-white px-6 py-5 shadow-sm transition-all hover:shadow-lg" style={style}>
+    <div className="group w-full rounded-2xl bg-white px-6 py-5 shadow-sm transition-all border border-gray-100 hover:border-blue-100 hover:shadow-lg" style={style}>
       <div className="flex gap-4 items-start">
         {/* Left badge + icon */}
         <div className="flex items-center gap-3">
@@ -107,6 +113,10 @@ export default function TaskCardNew({
               </div>
               <div className="text-sm text-gray-500 mt-1 truncate">{task.hisSystemName ? `Đơn vị HIS: ${task.hisSystemName}` : ''}</div>
               <div className="text-sm text-gray-500 mt-2">Người liên hệ: <span className="font-medium text-gray-800">{task.picDeploymentName ?? '-'}</span></div>
+              {/* Show project name under contact when hospitalName is present (avoid duplicating title) */}
+              {(task.hospitalName && task.name && String(task.name).trim() && String(task.name).trim() !== String(task.hospitalName).trim()) && (
+                <div className="text-sm text-gray-500 mt-1">Tên dự án: <span title={task.name} className="inline-block font-medium text-gray-800 rounded px-2 py-0.5 transition-colors duration-150 hover:bg-blue-50 hover:text-blue-700">{task.name}</span></div>
+              )}
             </div>
 
             {/* Right column: dates */}
@@ -121,9 +131,15 @@ export default function TaskCardNew({
           <div className="flex items-center justify-between mt-4">
             <div className="text-sm text-orange-500">{task.apiUrl ? <span>API: <a className="underline text-orange-500" href={task.apiUrl} target="_blank" rel="noreferrer">{task.apiUrl}</a></span> : ''}</div>
             <div className="flex items-center gap-3">
-              <button onClick={(e) => { e.stopPropagation(); onOpen(task); }} className="inline-flex items-center gap-2 bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-sm"> <AiOutlineEye /> <span className="hidden md:inline">Xem</span></button>
-              <button onClick={(e) => { e.stopPropagation(); onEdit(task); }} className="inline-flex items-center gap-2 bg-white border border-orange-100 text-orange-500 px-3 py-1 rounded-lg text-sm"> <AiOutlineEdit /> <span className="hidden md:inline">Sửa</span></button>
-              <button onClick={(e) => { e.stopPropagation(); onDelete(task.id); }} className="inline-flex items-center gap-2 bg-white border border-red-100 text-red-600 px-3 py-1 rounded-lg text-sm"> <AiOutlineDelete /> <span className="hidden md:inline">Xóa</span></button>
+              {canView && (
+                <button onClick={(e) => { e.stopPropagation(); onOpen(task); }} className="inline-flex items-center gap-2 bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-sm"> <AiOutlineEye /> <span className="hidden md:inline">Xem</span></button>
+              )}
+              {canEdit && (
+                <button onClick={(e) => { e.stopPropagation(); onEdit(task); }} className="inline-flex items-center gap-2 bg-white border border-orange-100 text-orange-500 px-3 py-1 rounded-lg text-sm"> <AiOutlineEdit /> <span className="hidden md:inline">Sửa</span></button>
+              )}
+              {canDelete && (
+                <button onClick={(e) => { e.stopPropagation(); onDelete(task.id); }} className="inline-flex items-center gap-2 bg-white border border-red-100 text-red-600 px-3 py-1 rounded-lg text-sm"> <AiOutlineDelete /> <span className="hidden md:inline">Xóa</span></button>
+              )}
             </div>
           </div>
         </div>

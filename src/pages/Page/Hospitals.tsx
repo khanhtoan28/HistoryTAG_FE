@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
 // removed unused icons import (use react-icons instead)
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
-import { FaBuilding } from "react-icons/fa";
 
 export type Hospital = {
   id: number;
@@ -63,6 +62,8 @@ export type HospitalForm = {
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
 const BASE = `${API_BASE}/api/v1/auth/hospitals`;
+
+const MIN_LOADING_MS = 800;
 
 function authHeader(): Record<string, string> {
   const token = localStorage.getItem("access_token");
@@ -140,22 +141,38 @@ function getPriorityColor(priority?: string | null): string {
   }
 }
 
-function getPriorityBg(priority?: string | null): string {
-  switch (priority) {
-    case "P0":
-      return "bg-red-50";
-    case "P1":
-      return "bg-amber-50";
-    case "P2":
-      return "bg-yellow-50";
-    case "P3":
-      return "bg-blue-50";
-    case "P4":
-      return "bg-gray-50";
-    default:
-      return "bg-white";
+  // Background color helpers for small status/priority indicators
+  function getStatusBg(status?: string | null): string {
+    switch (status) {
+      case "IN_PROGRESS":
+        return "bg-orange-500";
+      case "COMPLETED":
+        return "bg-green-500";
+      case "ISSUE":
+        return "bg-red-500";
+      default:
+        return "bg-gray-300";
+    }
   }
-}
+
+  function getPriorityBg(priority?: string | null): string {
+    switch (priority) {
+      case "P0":
+        return "bg-red-700";
+      case "P1":
+        return "bg-orange-600";
+      case "P2":
+        return "bg-yellow-500";
+      case "P3":
+        return "bg-blue-600";
+      case "P4":
+        return "bg-gray-500";
+      default:
+        return "bg-gray-300";
+    }
+  }
+
+
 
 function formatDateTimeLocal(value?: string | null) {
   if (!value) return "";
@@ -186,6 +203,9 @@ export default function HospitalsPage() {
   const [items, setItems] = useState<Hospital[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [enableItemAnimation, setEnableItemAnimation] = useState(true);
+  const animationTimer = useRef<number | null>(null);
 
   // Pagination
   const [page, setPage] = useState(0);
@@ -304,27 +324,45 @@ export default function HospitalsPage() {
   }
 
   // ✅ fetchList() - Pagination đúng
-  async function fetchList() {
-    setLoading(true);
-    setError(null);
-    try {
-      const url = new URL(BASE);
-      url.searchParams.set("page", String(page));
-      url.searchParams.set("size", String(size));
-      url.searchParams.set("sortBy", sortBy);
-      url.searchParams.set("sortDir", sortDir);
-      const res = await fetch(url.toString(), { headers: { ...authHeader() } });
-      if (!res.ok) throw new Error(`GET failed ${res.status}`);
-      const data = await res.json();
-      setItems(data.content ?? data);
-      setTotalElements(data.totalElements ?? data.length ?? 0);
-      setTotalPages(data.totalPages ?? Math.ceil((data.totalElements ?? data.length ?? 0) / size));
-    } catch (e: any) {
-      setError(e.message || "Lỗi tải danh sách");
-    } finally {
-      setLoading(false);
-    }
-  }
+  async function fetchList() {
+    const start = Date.now();
+    setLoading(true);
+    setError(null);
+    try {
+      const url = new URL(BASE);
+      url.searchParams.set("page", String(page));
+      url.searchParams.set("size", String(size));
+      url.searchParams.set("sortBy", sortBy);
+      url.searchParams.set("sortDir", sortDir);
+      const res = await fetch(url.toString(), { headers: { ...authHeader() } });
+      if (!res.ok) throw new Error(`GET failed ${res.status}`);
+      const data = await res.json();
+      setItems(data.content ?? data);
+      setTotalElements(data.totalElements ?? data.length ?? 0);
+      setTotalPages(data.totalPages ?? Math.ceil((data.totalElements ?? data.length ?? 0) / size));
+
+      // schedule disabling item animation after stagger finishes
+      if (enableItemAnimation) {
+        const itemCount = (data.content ?? data)?.length ?? (Array.isArray(data) ? data.length : 0);
+        const maxDelay = itemCount > 1 ? 2000 + ((itemCount - 2) * 80) : 0;
+        const animationDuration = 220;
+        const buffer = 120;
+        if (animationTimer.current) window.clearTimeout(animationTimer.current);
+        animationTimer.current = window.setTimeout(() => setEnableItemAnimation(false), maxDelay + animationDuration + buffer) as unknown as number;
+      }
+
+    } catch (e: any) {
+      setError(e.message || "Lỗi tải danh sách");
+    } finally {
+      const elapsed = Date.now() - start;
+      if (isInitialLoad) {
+        const remaining = Math.max(0, MIN_LOADING_MS - elapsed);
+        if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
+      }
+      setLoading(false);
+      if (isInitialLoad) setIsInitialLoad(false);
+    }
+  }
 
   useEffect(() => {
     fetchList();
@@ -483,17 +521,34 @@ export default function HospitalsPage() {
       <div className="space-y-10">
         {/* Filters & Actions */}
         <ComponentCard title="Tìm kiếm & Thao tác">
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-6">
-            <input className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" placeholder="Tìm theo tên" value={qName} onChange={(e) => setQName(e.target.value)} />
-            <input className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" placeholder="Tỉnh/Thành" value={qProvince} onChange={(e) => setQProvince(e.target.value)} />
-            <input className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" placeholder="Trạng thái" value={qStatus} onChange={(e) => setQStatus(e.target.value)} />
-            <span className="hidden md:block col-span-1" />
-            <select className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              type="text"
+              className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px] border-gray-300 bg-white"
+              placeholder="Tìm theo tên"
+              value={qName}
+              onChange={(e) => setQName(e.target.value)}
+            />
+            <input
+              type="text"
+              className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[180px] border-gray-300 bg-white"
+              placeholder="Tỉnh/Thành"
+              value={qProvince}
+              onChange={(e) => setQProvince(e.target.value)}
+            />
+            <input
+              type="text"
+              className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[160px] border-gray-300 bg-white"
+              placeholder="Trạng thái"
+              value={qStatus}
+              onChange={(e) => setQStatus(e.target.value)}
+            />
+            <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 bg-white" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
               {["id", "name", "priority", "startDate", "deadline"].map((k) => (
                 <option key={k} value={k}>Sắp xếp theo: {k}</option>
               ))}
             </select>
-            <select className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" value={sortDir} onChange={(e) => setSortDir(e.target.value as any)}>
+            <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 bg-white" value={sortDir} onChange={(e) => setSortDir(e.target.value as any)}>
               <option value="asc">Tăng dần</option>
               <option value="desc">Giảm dần</option>
             </select>
@@ -523,91 +578,147 @@ export default function HospitalsPage() {
           `}</style>
           <div className="space-y-4">
             {filtered.map((h, idx) => {
-              const delayMs = Math.round(idx * (2000 / Math.max(1, filtered.length)));
+              const delayMs = enableItemAnimation ? Math.round(idx * (2000 / Math.max(1, filtered.length))) : 0;
+              const leftIndex = h.hospitalCode ? h.hospitalCode : String(page * size + idx + 1).padStart(3, "0");
+              // detect first URL in notes (basic)
+              const apiMatch = h.notes ? (h.notes.match(/https?:\/\/[^\s)]+/i) ?? null) : null;
+              const apiUrl = apiMatch ? apiMatch[0] : null;
+              const showApiPill = !!apiUrl || (h.notes && /API/i.test(h.notes));
+
               return (
-                <div
-                  key={h.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onView(h)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onView(h);
-                    }
-                  }}
-                  className="group bg-white rounded-2xl border border-gray-200 p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-1 group-hover:bg-blue-50 hover:ring-1 hover:ring-blue-200 cursor-pointer"
-                  style={{ animation: `fadeInUp 600ms ease ${delayMs}ms both` }}
-                >
-                  <div className="flex items-center gap-4 w-full md:w-2/3">
-                      {/* left: hospital code badge */}
-                      <div className="flex-shrink-0">
-                        <div className="h-10 min-w-[48px] max-w-[96px] rounded-md border bg-gray-50 flex items-center justify-center text-xs font-semibold text-gray-600 px-1">
-                          <span className="truncate block w-full text-center">{h.hospitalCode || "—"}</span>
+                <div key={h.id} className="flex items-start gap-4" style={{ animation: `fadeInUp 600ms ease ${delayMs}ms both` }}>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onView(h)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onView(h);
+                      }
+                    }}
+                    className="group w-full bg-white rounded-2xl border border-gray-100 p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-1 group-hover:bg-blue-50 hover:ring-1 hover:ring-blue-200 hover:border-blue-100 cursor-pointer"
+                  >
+                    <div className="flex items-start gap-4 w-full md:w-2/3">
+                      {/* moved: badge + small icon box inside the card */}
+                      <div className="flex-shrink-0 mt-0 flex items-center gap-2">
+                        {/* Larger badge that includes project status/priority dots to avoid overflow */}
+                        <div className="w-14 h-14 rounded-md bg-white border border-gray-100 flex flex-col items-center justify-center text-sm font-semibold text-gray-700 shadow-sm relative">
+                          <span className="text-base font-bold">{leftIndex}</span>
+                          <div className="absolute -top-1 -right-1 flex space-x-1">
+                            <span className={`${getStatusBg(h.projectStatus)} w-3 h-3 rounded-full border-2 border-white`} />
+                            <span className={`${getPriorityBg(h.priority)} w-3 h-3 rounded-full border-2 border-white`} />
+                          </div>
                         </div>
                       </div>
 
-                      <div className="flex-shrink-0">
-                        <div className={`${getPriorityBg(h.priority)} h-12 w-12 rounded-lg flex items-center justify-center text-indigo-600 font-semibold text-sm border border-gray-100 transition-colors duration-200 group-hover:border-blue-200 group-hover:bg-blue-50`}> 
-                          <FaBuilding className="h-6 w-6 text-blue-600" />
-                        </div>
-                      </div>
-
-                      {/* vertical divider between icon and content on md+ */}
-                      <div className="hidden md:block w-px h-10 bg-gray-100 rounded mx-2" />
+                      {/* hospital icon removed intentionally to avoid visual overflow */}
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3">
-                          <h4 title={h.name} className="font-semibold text-gray-900 truncate group-hover:text-blue-800">{h.name}</h4>
-                          <span className="text-xs text-gray-400">•</span>
+                          <h4 title={h.name} className="text-lg font-semibold text-gray-900 truncate group-hover:text-blue-800">{h.name}</h4>
+                          {showApiPill && (
+                            <a
+                              href={apiUrl ?? '#'}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center ml-2 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-50"
+                            >
+                              Kiểm tra API
+                            </a>
+                          )}
+                          <span className="ml-2 text-xs text-gray-400">•</span>
                           <span className="text-xs text-gray-500">{h.province || "—"}</span>
-                          <span className="ml-2">
-                            <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${getStatusColor(h.projectStatus)} bg-gray-50`}>{disp(statusMap, h.projectStatus)}</span>
-                            <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${getPriorityColor(h.priority)} bg-gray-50 ml-2`}>{disp(priorityMap, h.priority)}</span>
+                          <span className="ml-2 inline-flex items-center">
+                            <span className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(h.projectStatus)} bg-gray-50`}>{disp(statusMap, h.projectStatus)}</span>
+                            <span className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(h.priority)} bg-gray-50 ml-2`}>{disp(priorityMap, h.priority)}</span>
                           </span>
                         </div>
 
-                        {/* address and HIS unit (shown under title like screenshot) */}
-                        <div title={h.address || ""} className="mt-1 text-sm text-gray-500 truncate">{h.address || "—"}</div>
-                        <div className="mt-2 text-sm text-gray-600 flex items-center gap-3">
-                          <div className="truncate">
-                            <span className="text-xs text-gray-400">Người liên hệ: </span>
-                            <span title={h.contactPerson || ""} className="font-medium text-gray-800">{h.contactPerson || "—"}</span>
-                            {h.contactNumber && <span className="ml-2 text-xs text-gray-500">• {h.contactNumber}</span>}
-                          </div>
-                          {h.contactEmail && (
-                            <div className="truncate">
-                              <span className="text-xs text-gray-400">Email: </span>
-                              <span title={h.contactEmail} className="text-gray-700 truncate">{h.contactEmail}</span>
+                        {/* important summary: address, contact, project, HIS, bank */}
+                          <div className="mt-2 text-sm text-gray-700">
+                          <div className="truncate">{h.address || "—"}</div>
+                          <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-700">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400">Người liên hệ:</span>
+                              <span className="font-medium text-gray-800">{h.contactPerson || "—"}</span>
                             </div>
-                          )}
+                            {h.contactNumber && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-400">•</span>
+                                <span className="text-sm text-gray-600">{h.contactNumber}</span>
+                              </div>
+                            )}
+                            {h.contactEmail && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-400">•</span>
+                                <span className="text-sm text-gray-600 truncate">{h.contactEmail}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="mt-2 text-sm text-gray-700">
+                            <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-gray-600">
+                              <div>
+                                <span className="text-xs text-gray-400">Đơn vị HIS:</span>
+                                <span className="font-medium text-orange-600 ml-2">{h.hisSystemName || '—'}</span>
+                              </div>
+                              {h.bankName && (
+                                <div>
+                                  <span className="text-xs text-gray-400">Đơn vị tài trợ:</span>
+                                  <span className="font-medium text-gray-800 ml-2">{h.bankName}</span>
+                                </div>
+                              )}
+                              {h.bankContactPerson && (
+                                <div>
+                                  <span className="text-xs text-gray-400">Liên hệ tài trợ:</span>
+                                  <span className="font-medium text-gray-800 ml-2">{h.bankContactPerson}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                        {apiUrl && (
+                          <div className="mt-2 text-sm">
+                            <span className="text-xs text-orange-500 font-medium">API: </span>
+                            <a
+                              href={apiUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-orange-600 underline text-sm truncate block max-w-full"
+                            >
+                              {apiUrl}
+                            </a>
+                          </div>
+                        )}
                         </div>
-
-                        <div className="mt-2 text-sm text-orange-600">Đơn vị HIS: <span className="font-medium text-orange-600">{h.hisSystemName || "—"}</span></div>
                       </div>
-                  </div>
-
-                  <div className="flex items-center justify-between w-full md:w-1/3">
-                    <div className="hidden md:flex flex-col text-right text-sm text-gray-600">
-                      <span className="text-xs text-gray-400">Bắt đầu</span>
-                      <span className="font-medium">{formatDateShort(h.startDate)}</span>
-                      <span className="text-xs text-gray-400 mt-2">Deadline</span>
-                      <span className="font-medium">{formatDateShort(h.deadline)}</span>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <button onClick={(e) => { e.stopPropagation(); onView(h); }} title="Xem" aria-label={`Xem ${h.name}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition transform group-hover:scale-105 text-xs font-medium">
-                        <AiOutlineEye className="w-4 h-4" />
-                        <span className="hidden sm:inline">Xem</span>
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); onEdit(h); }} title="Sửa" aria-label={`Sửa ${h.name}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition transform group-hover:scale-105 text-xs font-medium">
-                        <AiOutlineEdit className="w-4 h-4" />
-                        <span className="hidden sm:inline">Sửa</span>
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); onDelete(h.id); }} title="Xóa" aria-label={`Xóa ${h.name}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 transition transform group-hover:scale-105 text-xs font-medium">
-                        <AiOutlineDelete className="w-4 h-4" />
-                        <span className="hidden sm:inline">Xóa</span>
-                      </button>
+                    <div className="flex flex-col items-end w-full md:w-1/3">
+                      <div className="text-right text-sm text-gray-600 mb-3">
+                        <div className="text-xs text-gray-400">Bắt đầu</div>
+                        <div className="text-sm font-semibold text-gray-900">{formatDateShort(h.startDate)}</div>
+                        <div className="mt-2 text-xs text-gray-400">Deadline</div>
+                        <div className="text-sm font-semibold text-gray-900">{formatDateShort(h.deadline)}</div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button onClick={(e) => { e.stopPropagation(); onView(h); }} title="Xem" aria-label={`Xem ${h.name}`} className="flex items-center gap-2 px-3 py-2 rounded-md bg-white border border-blue-100 text-blue-700 hover:bg-blue-50 transition transform text-xs font-medium">
+                          <AiOutlineEye className="w-4 h-4" />
+                          <span className="hidden sm:inline">Xem</span>
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); onEdit(h); }} title="Sửa" aria-label={`Sửa ${h.name}`} className="flex items-center gap-2 px-3 py-2 rounded-md bg-white border border-amber-100 text-amber-700 hover:bg-amber-50 transition transform text-xs font-medium">
+                          <AiOutlineEdit className="w-4 h-4" />
+                          <span className="hidden sm:inline">Sửa</span>
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); onDelete(h.id); }} title="Xóa" aria-label={`Xóa ${h.name}`} className="flex items-center gap-2 px-3 py-2 rounded-md bg-white border border-red-100 text-red-700 hover:bg-red-50 transition transform text-xs font-medium">
+                          <AiOutlineDelete className="w-4 h-4" />
+                          <span className="hidden sm:inline">Xóa</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

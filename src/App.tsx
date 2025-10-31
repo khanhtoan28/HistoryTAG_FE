@@ -34,6 +34,7 @@ import SuperAdminProfile from "./pages/SuperAdmin/Profile";
 import ImplementSuperTaskPage from "./pages/SuperAdmin/implementsuper-task";
 import DevSuperTaskPage from "./pages/SuperAdmin/devsupertask";
 import MaintenanceSuperTaskPage from "./pages/SuperAdmin/maintenacesuper-task";
+import AllNotificationsPage from "./pages/Notifications/AllNotificationsPage";
 
 // Protected Route Component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -152,6 +153,7 @@ export default function App() {
             {/* Charts */}
             <Route path="/line-chart" element={<LineChart />} />
             <Route path="/bar-chart" element={<BarChart />} />
+            <Route path="/notifications" element={<AllNotificationsPage />} />
           </Route>
 
           {/* Auth Layout */}
