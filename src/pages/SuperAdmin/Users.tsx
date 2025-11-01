@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { FaRegUser } from "react-icons/fa";
+import { FiImage, FiMail, FiPhone, FiMapPin, FiUsers, FiBriefcase, FiClock, FiCalendar, FiUser, FiInfo } from "react-icons/fi";
 import axios from "axios";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
@@ -489,272 +491,251 @@ export default function SuperAdminUsers() {
         </ComponentCard>
       </div>
 
-      {/* MODAL */}
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={closeModal} />
-          <div className="relative z-10 m-4 w-full max-w-5xl rounded-2xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">
-                {isViewing ? "Chi tiết người dùng" : isEditing ? "Cập nhật người dùng" : "Thêm người dùng"}
-              </h3>
-              <button className="rounded-md p-1 hover:bg-gray-100" onClick={closeModal}>
-                ✕
+      {/* MODAL: Detail view modal (styled like Hospitals) */}
+      {open && isViewing && viewing && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+          onMouseDown={(e) => e.target === e.currentTarget && closeModal()}
+        >
+          <div className="relative z-10 w-full max-w-4xl rounded-2xl bg-white shadow-2xl border border-gray-200 overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="sticky top-0 z-20 bg-white border-b px-6 py-4">
+              <div className="flex justify-between items-center">
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><FaRegUser className="text-xl text-gray-700" /><span className="ml-1">Chi tiết người dùng</span></h2>
+                <button onClick={closeModal} className="text-gray-500 hover:text-gray-800">✕</button>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto px-6 py-6 space-y-6 text-sm text-gray-800 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3">
+                <div className="flex items-start gap-4">
+                  <div className="min-w-[150px]">
+                    <span className="font-semibold text-gray-900 flex items-center gap-2"><FiUser className="text-gray-500" />Username:</span>
+                  </div>
+                  <div className="flex-1 text-gray-700 break-words">{viewing.username ?? "—"}</div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiMail className="text-gray-500" />Email:</span></div>
+                  <div className="flex-1 text-gray-700 break-words">{viewing.email ?? "—"}</div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FaRegUser className="text-gray-500" />Họ & tên:</span></div>
+                  <div className="flex-1 text-gray-700 break-words">{viewing.fullname ?? "—"}</div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiPhone className="text-gray-500" />Số điện thoại:</span></div>
+                  <div className="flex-1 text-gray-700 break-words">{viewing.phone ?? "—"}</div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiMapPin className="text-gray-500" />Địa chỉ:</span></div>
+                  <div className="flex-1 text-gray-700 break-words">{viewing.address ?? "—"}</div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiUsers className="text-gray-500" />Vai trò:</span></div>
+                  <div className="flex-1 text-gray-700 break-words">{
+                    (function formatRoles(x: unknown) {
+                      if (!x) return "—";
+                      if (Array.isArray(x)) {
+                        return x
+                          .map((r) => {
+                            if (r && typeof r === "object") {
+                              const obj = r as Record<string, unknown>;
+                              const v = obj["roleName"] ?? obj["roleType"] ?? obj["name"] ?? r;
+                              return String(v).replace(/^ROLE_/i, "");
+                            }
+                            return String(r);
+                          })
+                          .join(", ");
+                      }
+                      return String(x);
+                    })(viewing.roles)
+                  }</div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiBriefcase className="text-gray-500" />Phòng ban:</span></div>
+                  <div className="flex-1 text-gray-700 break-words">{viewing.department ?? "—"}</div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiBriefcase className="text-gray-500" />Team:</span></div>
+                  <div className="flex-1 text-gray-700 break-words">{viewing.team ?? "—"}</div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiInfo className="text-gray-500" />Trạng thái làm việc:</span></div>
+                  <div className="flex-1 text-gray-700 break-words">{(() => { const obj = viewing as Record<string, unknown>; const v = 'workStatus' in obj ? obj['workStatus'] : undefined; return v != null && v !== '' ? String(v) : '—'; })()}</div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiCalendar className="text-gray-500" />Tạo lúc:</span></div>
+                  <div className="flex-1 text-gray-700 break-words">{(viewing.createdAt ? new Date(viewing.createdAt).toLocaleString() : "—")}</div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiClock className="text-gray-500" />Cập nhật:</span></div>
+                  <div className="flex-1 text-gray-700 break-words">{(viewing.updatedAt ? new Date(viewing.updatedAt).toLocaleString() : "—")}</div>
+                </div>
+              </div>
+
+              {viewing.avatar && (
+                <div className="pt-4 border-t border-gray-200">
+                  <p className="font-semibold text-gray-900 mb-2"><FiImage className="inline mr-2 text-lg text-gray-600" />Avatar</p>
+                  <div className="rounded-xl overflow-hidden w-full">
+                    <img src={viewing.avatar} alt="Avatar" className="w-full h-auto object-cover rounded-lg max-h-[420px]" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="sticky bottom-0 flex justify-end px-6 py-4 border-t bg-white">
+              <button
+                onClick={closeModal}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-800 bg-white border border-gray-300 hover:bg-gray-50"
+              >
+                Đóng
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Form modal for create / edit (sticky header + scrollable body) */}
+      {open && !isViewing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={closeModal} />
+          <div className="relative z-10 w-full max-w-5xl rounded-2xl bg-white shadow-xl max-h-[90vh] flex flex-col">
+            <div className="sticky top-0 z-20 bg-white rounded-t-2xl px-6 pt-6 pb-4 border-b border-gray-200">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">{isEditing ? "Cập nhật người dùng" : "Thêm người dùng"}</h3>
+                <button className="rounded-md p-1 hover:bg-gray-100" onClick={closeModal}>✕</button>
+              </div>
             </div>
 
             {isModalLoading ? (
               <div className="text-center py-12 text-gray-500">Đang tải chi tiết...</div>
             ) : (
-              <form onSubmit={onSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="space-y-3">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">
-                      Username <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      required
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                      value={form.username}
-                      onChange={(e) => setForm((s) => ({ ...s, username: e.target.value }))}
-                      disabled={isViewing || isEditing}
-                      pattern="^[a-zA-Z0-9]+$"
-                      minLength={6}
-                      maxLength={100}
-                    />
-                    {!isViewing && (
-                      <p className="mt-1 text-xs text-gray-500">Từ 6-100 ký tự, chỉ chữ và số</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">
-                      Email <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      required
-                      type="email"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                      value={form.email}
-                      onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
-                      disabled={isViewing}
-                    />
-                  </div>
-                  {!isEditing && !isViewing && (
-                    <>
-                      <div>
-                        <label className="mb-1 block text-sm font-medium">
-                          Mật khẩu <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          required
-                          type="password"
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                          value={form.password}
-                          onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))}
-                          disabled={isViewing}
-                          minLength={8}
-                        />
-                        <p className="mt-1 text-xs text-gray-500">Tối thiểu 8 ký tự</p>
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-sm font-medium">
-                          Xác nhận mật khẩu <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          required
-                          type="password"
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                          value={form.confirmPassword}
-                          onChange={(e) => setForm((s) => ({ ...s, confirmPassword: e.target.value }))}
-                          disabled={isViewing}
-                          minLength={8}
-                        />
-                      </div>
-                    </>
-                  )}
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">
-                      Họ và tên <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      required
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                      value={form.fullName}
-                      onChange={(e) => setForm((s) => ({ ...s, fullName: e.target.value }))}
-                      disabled={isViewing}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">Số điện thoại</label>
-                    <input
-                      type="tel"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                      value={form.phoneNumber}
-                      onChange={(e) => setForm((s) => ({ ...s, phoneNumber: e.target.value }))}
-                      disabled={isViewing}
-                      pattern="^\d{10,11}$"
-                      placeholder="10-11 chữ số"
-                    />
-                  </div>
-                </div>
+              <div className="overflow-y-auto px-6 py-6 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                <form onSubmit={onSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {/* form content kept intact */}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium">Username <span className="text-red-500">*</span></label>
+                      <input required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.username} onChange={(e) => setForm((s) => ({ ...s, username: e.target.value }))} disabled={isViewing || isEditing} pattern="^[a-zA-Z0-9]+$" minLength={6} maxLength={100} />
+                      {!isViewing && <p className="mt-1 text-xs text-gray-500">Từ 6-100 ký tự, chỉ chữ và số</p>}
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium">Email <span className="text-red-500">*</span></label>
+                      <input required type="email" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} disabled={isViewing} />
+                    </div>
 
-                <div className="space-y-3">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">
-                      Địa chỉ <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      required
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                      rows={3}
-                      value={form.address}
-                      onChange={(e) => setForm((s) => ({ ...s, address: e.target.value }))}
-                      disabled={isViewing}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">Avatar</label>
-                    {form.avatar && (
-                      <div className="mb-3">
-                        <img
-                          src={form.avatar}
-                          alt="Avatar hiện tại"
-                          className="h-32 w-full max-w-full rounded-lg border object-cover"
-                          onError={(e) => {
-                            console.error("Image load error:", form.avatar);
-                            (e.target as HTMLImageElement).style.display = "none";
-                          }}
-                        />
-                        {!isViewing && (
-                          <p className="mt-1 text-xs text-gray-500">Avatar hiện tại</p>
-                        )}
-                      </div>
+                    {!isEditing && !isViewing && (
+                      <>
+                        <div>
+                          <label className="mb-1 block text-sm font-medium">Mật khẩu <span className="text-red-500">*</span></label>
+                          <input required type="password" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.password} onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))} disabled={isViewing} minLength={8} />
+                          <p className="mt-1 text-xs text-gray-500">Tối thiểu 8 ký tự</p>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-sm font-medium">Xác nhận mật khẩu <span className="text-red-500">*</span></label>
+                          <input required type="password" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.confirmPassword} onChange={(e) => setForm((s) => ({ ...s, confirmPassword: e.target.value }))} disabled={isViewing} minLength={8} />
+                        </div>
+                      </>
                     )}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
-                      onChange={(e) => setForm((s) => ({ ...s, avatarFile: e.target.files?.[0] ?? null }))}
-                      disabled={isViewing}
-                    />
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium">Họ và tên <span className="text-red-500">*</span></label>
+                      <input required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.fullName} onChange={(e) => setForm((s) => ({ ...s, fullName: e.target.value }))} disabled={isViewing} />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium">Số điện thoại</label>
+                      <input type="tel" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.phoneNumber} onChange={(e) => setForm((s) => ({ ...s, phoneNumber: e.target.value }))} disabled={isViewing} pattern="^\d{10,11}$" placeholder="10-11 chữ số" />
+                    </div>
                   </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">
-                      Vai trò <span className="text-red-500">*</span> {!isEditing && !isViewing && "(Có thể chọn nhiều)"}
-                    </label>
-                    <div className="rounded-lg border border-gray-300 p-3">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        {ROLE_OPTIONS.map((role) => {
-                          const checked = form.roles.includes(role);
-                          return (
-                            <label key={role} className={`flex items-center gap-2 text-sm ${isViewing || isEditing ? "opacity-60" : ""}`}>
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4"
-                                checked={checked}
-                                onChange={(e) => {
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium">Địa chỉ <span className="text-red-500">*</span></label>
+                      <textarea required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" rows={3} value={form.address} onChange={(e) => setForm((s) => ({ ...s, address: e.target.value }))} disabled={isViewing} />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium">Avatar</label>
+                      {form.avatar && (
+                        <div className="mb-3">
+                          <img src={form.avatar} alt="Avatar hiện tại" className="h-32 w-full max-w-full rounded-lg border object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                          {!isViewing && <p className="mt-1 text-xs text-gray-500">Avatar hiện tại</p>}
+                        </div>
+                      )}
+                      <input type="file" accept="image/*" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50" onChange={(e) => setForm((s) => ({ ...s, avatarFile: e.target.files?.[0] ?? null }))} disabled={isViewing} />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium">Vai trò <span className="text-red-500">*</span> {!isEditing && !isViewing && "(Có thể chọn nhiều)"}</label>
+                      <div className="rounded-lg border border-gray-300 p-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          {ROLE_OPTIONS.map((role) => {
+                            const checked = form.roles.includes(role);
+                            return (
+                              <label key={role} className={`flex items-center gap-2 text-sm ${isViewing || isEditing ? 'opacity-60' : ''}`}>
+                                <input type="checkbox" className="h-4 w-4" checked={checked} onChange={(e) => {
                                   const isChecked = e.target.checked;
                                   setForm((s) => {
                                     const next = new Set(s.roles);
-                                    if (isChecked) {
-                                      next.add(role);
-                                    } else {
-                                      next.delete(role);
-                                    }
+                                    if (isChecked) next.add(role); else next.delete(role);
                                     return { ...s, roles: Array.from(next) };
                                   });
-                                }}
-                                disabled={isViewing}
-                              />
-                              <span>{role}</span>
-                            </label>
-                          );
-                        })}
+                                }} disabled={isViewing} />
+                                <span>{role}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
                       </div>
+                      {!isEditing && !isViewing && <p className="mt-1 text-xs text-gray-500">Chọn một hoặc nhiều vai trò</p>}
                     </div>
-                    {!isEditing && !isViewing && <p className="mt-1 text-xs text-gray-500">Chọn một hoặc nhiều vai trò</p>}
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">
-                      Phòng ban <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      required={!isEditing}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                      value={form.department}
-                      onChange={(e) => setForm((s) => ({ ...s, department: e.target.value as UserForm["department"] }))}
-                      disabled={isViewing}
-                    >
-                      <option value="">— Chọn phòng ban —</option>
-                      {DEPARTMENT_OPTIONS.map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm">Team</label>
-                    <select
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                      value={form.team}
-                      onChange={(e) => setForm((s) => ({ ...s, team: e.target.value as UserForm["team"] }))}
-                      disabled={isViewing}
-                    >
-                      <option value="">— Chọn team —</option>
-                      {TEAM_OPTIONS.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {isEditing && (
+
                     <div>
-                      <label className="mb-1 block text-sm">Trạng thái làm việc</label>
-                      <select
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                        value={form.workStatus}
-                        onChange={(e) => setForm((s) => ({ ...s, workStatus: e.target.value }))}
-                        disabled={isViewing}
-                      >
-                        <option value="">— Chọn trạng thái —</option>
-                        {WORK_STATUS_OPTIONS.map((w) => (
-                          <option key={w} value={w}>
-                            {w}
-                          </option>
-                        ))}
+                      <label className="mb-1 block text-sm font-medium">Phòng ban <span className="text-red-500">*</span></label>
+                      <select required={!isEditing} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.department} onChange={(e) => setForm((s) => ({ ...s, department: e.target.value as UserForm['department'] }))} disabled={isViewing}>
+                        <option value="">— Chọn phòng ban —</option>
+                        {DEPARTMENT_OPTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
                       </select>
                     </div>
-                  )}
-                </div>
 
-                <div className="col-span-1 mt-2 flex items-center justify-between md:col-span-2">
-                  {error && (
-                    <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                      {error}
+                    <div>
+                      <label className="mb-1 block text-sm">Team</label>
+                      <select className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.team} onChange={(e) => setForm((s) => ({ ...s, team: e.target.value as UserForm['team'] }))} disabled={isViewing}>
+                        <option value="">— Chọn team —</option>
+                        {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
                     </div>
-                  )}
-                  <div className="ml-auto flex items-center gap-2">
-                    <button
-                      type="button"
-                      className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 hover:bg-red-100"
-                      onClick={closeModal}
-                    >
-                      {isViewing ? "Đóng" : "Huỷ"}
-                    </button>
-                    {!isViewing && (
-                      <button
-                        type="submit"
-                        className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-                        disabled={loading}
-                      >
-                        {loading ? "Đang lưu..." : isEditing ? "Cập nhật" : "Tạo mới"}
-                      </button>
+
+                    {isEditing && (
+                      <div>
+                        <label className="mb-1 block text-sm">Trạng thái làm việc</label>
+                        <select className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.workStatus} onChange={(e) => setForm((s) => ({ ...s, workStatus: e.target.value }))} disabled={isViewing}>
+                          <option value="">— Chọn trạng thái —</option>
+                          {WORK_STATUS_OPTIONS.map((w) => <option key={w} value={w}>{w}</option>)}
+                        </select>
+                      </div>
                     )}
                   </div>
-                </div>
-              </form>
+
+                  <div className="col-span-1 mt-2 flex items-center justify-between md:col-span-2">
+                    {error && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+                    <div className="ml-auto flex items-center gap-2">
+                      <button type="button" className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 hover:bg-red-100" onClick={closeModal}>{isViewing ? 'Đóng' : 'Huỷ'}</button>
+                      {!isViewing && <button type="submit" className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100 disabled:opacity-50" disabled={loading}>{loading ? 'Đang lưu...' : isEditing ? 'Cập nhật' : 'Tạo mới'}</button>}
+                    </div>
+                  </div>
+                </form>
+              </div>
             )}
           </div>
         </div>

@@ -5,6 +5,8 @@ import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
 // removed unused icons import (use react-icons instead)
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
+import { FiMapPin, FiMail, FiPhone, FiUser, FiClock, FiTag, FiImage, FiMap, FiCalendar } from "react-icons/fi";
+import { FaHospitalAlt } from "react-icons/fa";
 
 export type Hospital = {
   id: number;
@@ -223,13 +225,22 @@ function fmt(dt?: string | null) {
 }
 
 // Helper component để hiển thị thông tin
-function Info({ label, value }: { label: string; value?: string | number | null }) {
+function Info({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value?: React.ReactNode;
+  icon?: React.ReactNode;
+}) {
   return (
-    <div className="flex justify-between items-start">
-      <span className="font-semibold text-gray-900 dark:text-gray-100">{label}:</span>
-      <span className="text-gray-700 dark:text-gray-300 text-right max-w-[60%] break-words">
-        {value ?? "—"}
-      </span>
+    <div className="flex items-start gap-4">
+      <div className="min-w-[150px] flex items-center gap-3">
+        {icon && <span className="text-gray-500 dark:text-gray-400 text-lg">{icon}</span>}
+        <span className="font-semibold text-gray-900 dark:text-gray-100">{label}:</span>
+      </div>
+      <div className="flex-1 text-gray-700 dark:text-gray-300 break-words">{value ?? "—"}</div>
     </div>
   );
 }
@@ -285,53 +296,47 @@ function DetailModal({
         >
           {/* Grid Info */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3">
-            <Info label="Mã bệnh viện" value={item.hospitalCode || "—"} />
-            <Info label="Tên bệnh viện" value={item.name} />
-            <Info label="Địa chỉ" value={item.address || "—"} />
-            <Info label="Tỉnh/Thành" value={item.province || "—"} />
-            <Info label="Mã số thuế" value={item.taxCode || "—"} />
-            
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-gray-900 dark:text-gray-100">
-                Trạng thái:
-              </span>
-              <span
-                className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${getStatusBg(
-                  item.projectStatus
-                )} text-white`}
-              >
-                {disp(statusMap, item.projectStatus)}
-              </span>
-            </div>
+            <Info label="Mã bệnh viện" icon={<FiTag />} value={item.hospitalCode || "—"} />
+            <Info label="Tên bệnh viện" icon={<FaHospitalAlt />} value={item.name} />
+            <Info label="Địa chỉ" icon={<FiMapPin />} value={item.address || "—"} />
+            <Info label="Tỉnh/Thành" icon={<FiMap />} value={item.province || "—"} />
+            <Info label="Mã số thuế" icon={<FiTag />} value={item.taxCode || "—"} />
 
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-gray-900 dark:text-gray-100">
-                Độ ưu tiên:
-              </span>
-              <span
-                className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${getPriorityBg(
-                  item.priority
-                )} text-white`}
-              >
-                {disp(priorityMap, item.priority)}
-              </span>
-            </div>
+            <Info
+              label="Trạng thái"
+              icon={<FiClock />}
+              value={
+                <span className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${getStatusBg(item.projectStatus)} text-white`}>
+                  {disp(statusMap, item.projectStatus)}
+                </span>
+              }
+            />
 
-            <Info label="Người liên hệ" value={item.contactPerson || "—"} />
-            <Info label="Vị trí liên hệ" value={item.contactPosition || "—"} />
-            <Info label="Email liên hệ" value={item.contactEmail || "—"} />
-            <Info label="Số điện thoại" value={item.contactNumber || "—"} />
-            <Info label="Phòng IT - Người liên hệ" value={item.itDepartmentContact || "—"} />
-            <Info label="Phòng IT - Số điện thoại" value={item.itContactPhone || "—"} />
-            <Info label="Đơn vị HIS" value={item.hisSystemName || item.hisSystemId || "—"} />
-            <Info label="Phần cứng" value={item.hardwareName || item.hardwareId || "—"} />
-            <Info label="Đơn vị tài trợ" value={item.bankName || "—"} />
-            <Info label="Liên hệ đơn vị tài trợ" value={item.bankContactPerson || "—"} />
-            <Info label="Ngày bắt đầu" value={fmt(item.startDate)} />
-            <Info label="Deadline" value={fmt(item.deadline)} />
-            <Info label="Ngày hoàn thành" value={fmt(item.completionDate)} />
-            <Info label="Tạo lúc" value={fmt(item.createdAt)} />
-            <Info label="Cập nhật lúc" value={fmt(item.updatedAt)} />
+            <Info
+              label="Độ ưu tiên"
+              icon={<FiTag />}
+              value={
+                <span className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${getPriorityBg(item.priority)} text-white`}>
+                  {disp(priorityMap, item.priority)}
+                </span>
+              }
+            />
+
+            <Info label="Người liên hệ" icon={<FiUser />} value={item.contactPerson || "—"} />
+            <Info label="Vị trí liên hệ" icon={<FiTag />} value={item.contactPosition || "—"} />
+            <Info label="Email liên hệ" icon={<FiMail />} value={item.contactEmail || "—"} />
+            <Info label="Số điện thoại" icon={<FiPhone />} value={item.contactNumber || "—"} />
+            <Info label="Phòng IT - Người liên hệ" icon={<FiUser />} value={item.itDepartmentContact || "—"} />
+            <Info label="Phòng IT - Số điện thoại" icon={<FiPhone />} value={item.itContactPhone || "—"} />
+            <Info label="Đơn vị HIS" icon={<FiMapPin />} value={item.hisSystemName || item.hisSystemId || "—"} />
+            <Info label="Phần cứng" icon={<FiImage />} value={item.hardwareName || item.hardwareId || "—"} />
+            <Info label="Đơn vị tài trợ" icon={<FiUser />} value={item.bankName || "—"} />
+            <Info label="Liên hệ đơn vị tài trợ" icon={<FiUser />} value={item.bankContactPerson || "—"} />
+            <Info label="Ngày bắt đầu" icon={<FiCalendar />} value={fmt(item.startDate)} />
+            <Info label="Deadline" icon={<FiClock />} value={fmt(item.deadline)} />
+            <Info label="Ngày hoàn thành" icon={<FiCalendar />} value={fmt(item.completionDate)} />
+            <Info label="Tạo lúc" icon={<FiClock />} value={fmt(item.createdAt)} />
+            <Info label="Cập nhật lúc" icon={<FiClock />} value={fmt(item.updatedAt)} />
           </div>
 
           {/* Image */}

@@ -54,6 +54,8 @@ export type ImplementationTaskRequestDTO = {
 export type ImplementationTaskUpdateDTO = Partial<ImplementationTaskRequestDTO>;
 
 const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
+import { FaHospital } from "react-icons/fa";
+import { FiUser, FiLink, FiClock, FiTag } from "react-icons/fi";
 
 // PageClients: admin area — always use admin endpoints
 const apiBase = `${API_ROOT}/api/v1/admin/dev/tasks`;
@@ -874,7 +876,7 @@ function DetailModal({
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 20 }}
-                className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-6"
+                className="w-full max-w-4xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-6"
                 onMouseDown={(e) => e.stopPropagation()}
             >
                 {/* Header */}
@@ -894,32 +896,42 @@ function DetailModal({
                 <div className="p-6 space-y-6 text-sm text-gray-800 dark:text-gray-200">
                     {/* Grid Info */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3">
-                        <Info label="Tên" value={item.name} />
-                        <Info label="Bệnh viện" value={item.hospitalName} />
-                        <Info label="Người phụ trách" value={item.picDeploymentName} />
+                        <Info icon={<FiTag />} label="Tên" value={item.name} />
+                        <Info icon={<FaHospital />} label="Bệnh viện" value={item.hospitalName} />
+                        <Info icon={<FiUser />} label="Người phụ trách" value={item.picDeploymentName} />
 
-                        <div className="flex items-center gap-2">
-                            <span className="font-semibold text-gray-900 dark:text-gray-100">
-                                Trạng thái:
-                            </span>
-                            <span
-                                className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${statusBadge(
-                                    item.status
-                                )}`}
-                            >
-                                {statusLabel(item.status)}
-                            </span>
-                        </div>
+                        <Info
+                            icon={<FiTag />}
+                            label="Trạng thái"
+                            value={(
+                                <span className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${statusBadge(item.status)}`}>
+                                    {statusLabel(item.status)}
+                                </span>
+                            )}
+                        />
 
-                        <Info label="API URL" value={item.apiUrl || "—"} />
-                        <Info label="API Test" value={item.apiTestStatus || "—"} />
-                        <Info label="Số lượng" value={item.quantity ?? "—"} />
-                        <Info label="Deadline" value={fmt(item.deadline)} />
-                        <Info label="Ngày bắt đầu" value={fmt(item.startDate)} />
-                        <Info label="Ngày nghiệm thu" value={fmt(item.acceptanceDate)} />
-                        <Info label="Ngày hoàn thành" value={fmt(item.completionDate)} />
-                        <Info label="Tạo lúc" value={fmt(item.createdAt)} />
-                        <Info label="Cập nhật lúc" value={fmt(item.updatedAt)} />
+                        <Info
+                            icon={<FiLink />}
+                            label="API URL"
+                            stacked
+                            value={
+                                item.apiUrl ? (
+                                    <a href={item.apiUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline break-words">
+                                        {item.apiUrl}
+                                    </a>
+                                ) : (
+                                    "—"
+                                )
+                            }
+                        />
+                        <Info icon={<FiTag />} label="API Test" value={item.apiTestStatus || "—"} />
+                        <Info icon={<FiTag />} label="Số lượng" value={item.quantity ?? "—"} />
+                        <Info icon={<FiClock />} label="Deadline" value={fmt(item.deadline)} />
+                        <Info icon={<FiClock />} label="Ngày bắt đầu" value={fmt(item.startDate)} />
+                        <Info icon={<FiClock />} label="Ngày nghiệm thu" value={fmt(item.acceptanceDate)} />
+                        <Info icon={<FiClock />} label="Ngày hoàn thành" value={fmt(item.completionDate)} />
+                        <Info icon={<FiClock />} label="Tạo lúc" value={fmt(item.createdAt)} />
+                        <Info icon={<FiClock />} label="Cập nhật lúc" value={fmt(item.updatedAt)} />
                     </div>
 
                     {/* Additional request */}
@@ -947,21 +959,38 @@ function DetailModal({
 
 
 // Component con để render label + value cân đối
+// 🔹 Helper cho hiển thị gọn gàng (icon, label, value, stacked for long text)
 function Info({
     label,
     value,
+    icon,
+    stacked,
 }: {
     label: string;
-    value?: string | number | null;
+    value?: React.ReactNode;
+    icon?: React.ReactNode;
+    stacked?: boolean;
 }) {
+    if (stacked) {
+        // keep the same left columns (icon + fixed label width) so rows align vertically
+        return (
+            <div className="flex items-start gap-3">
+                {icon && <div className="min-w-[36px] flex items-center justify-center text-gray-500">{icon}</div>}
+                <div className="flex-1">
+                    <div className="min-w-[140px] font-semibold text-gray-900 dark:text-gray-100">{label}</div>
+                    <div className="mt-1 text-gray-700 dark:text-gray-300 text-sm break-words">{value ?? "—"}</div>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="flex justify-between items-start">
-            <span className="font-semibold text-gray-900 dark:text-gray-100">
-                {label}:
-            </span>
-            <span className="text-gray-700 dark:text-gray-300 text-right max-w-[60%] break-words">
-                {value ?? "—"}
-            </span>
+        <div className="flex items-start gap-3">
+            {icon && <div className="min-w-[36px] flex items-center justify-center text-gray-500">{icon}</div>}
+            <div className="flex-1 flex items-start">
+                <div className="min-w-[140px] font-semibold text-gray-900 dark:text-gray-100">{label}</div>
+                <div className="text-gray-700 dark:text-gray-300 flex-1 text-right break-words">{value ?? "—"}</div>
+            </div>
         </div>
     );
 }

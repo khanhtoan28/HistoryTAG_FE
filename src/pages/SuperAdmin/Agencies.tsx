@@ -4,6 +4,7 @@ import { BoxCubeIcon } from "../../icons";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
+import { FiHash, FiMapPin, FiUser, FiMail, FiPhone, FiClock, FiFileText } from "react-icons/fi";
 
 type Agency = {
   id: number;
@@ -69,6 +70,49 @@ export default function AgenciesPage() {
 
   const isEditing = !!editing?.id;
   const isViewing = !!viewing?.id;
+
+  // Helper for aligned rows with optional icon and stacked value
+  function Info({
+    label,
+    value,
+    icon,
+    stacked,
+  }: {
+    label: string;
+    value?: React.ReactNode;
+    icon?: React.ReactNode;
+    stacked?: boolean;
+  }) {
+    const IconCol = icon ? (
+      <div className="min-w-[40px] flex items-center justify-center">
+        <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center text-gray-600">{icon}</div>
+      </div>
+    ) : (
+      <div className="min-w-[40px]" />
+    );
+
+    if (stacked) {
+      return (
+        <div className="flex items-start gap-3">
+          {IconCol}
+          <div className="flex-1">
+            <div className="min-w-[140px] font-semibold text-gray-800">{label}</div>
+            <div className="mt-2 text-gray-600 text-sm break-words">{value ?? "—"}</div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex items-start gap-3">
+        {IconCol}
+        <div className="flex-1 flex items-start">
+          <div className="min-w-[140px] font-semibold text-gray-800">{label}</div>
+          <div className="text-gray-600 flex-1 text-right break-words">{value ?? "—"}</div>
+        </div>
+      </div>
+    );
+  }
 
   function closeModal() {
     setOpen(false);
@@ -371,6 +415,24 @@ export default function AgenciesPage() {
 
             {isModalLoading ? (
               <div className="text-center py-12 text-gray-500">Đang tải chi tiết...</div>
+            ) : isViewing ? (
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="space-y-5">
+                  <Info icon={<FiHash className="w-5 h-5" />} label="Tên đại lý" value={<div className="text-lg font-semibold text-gray-900">{viewing?.name ?? "—"}</div>} />
+                  <Info icon={<FiMapPin className="w-5 h-5" />} label="Địa chỉ" value={viewing?.address ?? "—"} stacked />
+                  <Info icon={<FiFileText className="w-5 h-5" />} label="Ghi chú" value={viewing?.notes ?? "—"} stacked />
+                </div>
+                <div className="space-y-5">
+                  <Info icon={<FiUser className="w-5 h-5" />} label="Người liên hệ" value={viewing?.contactPerson ?? "—"} />
+                  <Info icon={<FiPhone className="w-5 h-5" />} label="Điện thoại" value={viewing?.phoneNumber ?? "—"} />
+                  <Info icon={<FiMail className="w-5 h-5" />} label="Email" value={viewing?.email ?? "—"} />
+                  <Info icon={<FiClock className="w-5 h-5" />} label="Ngày tạo" value={viewing?.createdAt ? new Date(viewing.createdAt).toLocaleString() : "—"} />
+                  <Info icon={<FiClock className="w-5 h-5" />} label="Cập nhật" value={viewing?.updatedAt ? new Date(viewing.updatedAt).toLocaleString() : "—"} />
+                </div>
+                <div className="col-span-1 md:col-span-2 mt-4 flex items-center justify-end border-t border-gray-200 pt-6">
+                  <button type="button" className="rounded-xl border-2 border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400" onClick={closeModal}>Đóng</button>
+                </div>
+              </div>
             ) : (
               <form onSubmit={onSubmit} className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div className="space-y-5">

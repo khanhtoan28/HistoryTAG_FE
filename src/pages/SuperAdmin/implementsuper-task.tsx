@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { motion } from "framer-motion";// hoặc copy 2 hàm này từ trang cũ nếu bạn chưa có
+import { FiClipboard, FiMapPin, FiUser, FiClock, FiLink, FiActivity, FiCalendar, FiInfo } from "react-icons/fi";
 import toast from "react-hot-toast";
 import TaskCard from "./TaskCardNew";
 import TaskFormModal from "./TaskFormModal";
@@ -464,66 +465,65 @@ function DetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 20 }}
-        className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-6"
+        initial={{ opacity: 0, y: 20, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 20, scale: 0.95 }}
+        transition={{ type: "spring", stiffness: 250, damping: 25 }}
         onMouseDown={(e) => e.stopPropagation()}
+        className="w-full max-w-4xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden max-h-[90vh] flex flex-col"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            📋 Chi tiết tác vụ triển khai
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
-          <Info label="Tên" value={item.name} />
-          <Info label="Bệnh viện" value={item.hospitalName} />
-          <Info label="Người phụ trách" value={item.picDeploymentName} />
-
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-gray-900 dark:text-gray-100">Trạng thái:</span>
-            <span
-              className={`px-3 py-1 text-xs font-medium rounded-full ${statusBadgeClasses(
-                item.status
-              )}`}
-            >
-              {statusLabel(item.status)}
-            </span>
-          </div>
-
-          <Info label="API URL" value={item.apiUrl} />
-          <Info label="API Test" value={item.apiTestStatus} />
-          <Info label="Số lượng" value={item.quantity ?? "—"} />
-          <Info label="Deadline" value={fmt(item.deadline)} />
-          <Info label="Ngày bắt đầu" value={fmt(item.startDate)} />
-          <Info label="Ngày nghiệm thu" value={fmt(item.acceptanceDate)} />
-          <Info label="Ngày hoàn thành" value={fmt(item.finishDate)} />
-          <Info label="Tạo lúc" value={fmt(item.createdAt)} />
-        </div>
-
-        <div className="mt-6">
-          <p className="text-gray-500 mb-2">Ghi chú / Yêu cầu bổ sung:</p>
-          <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 min-h-[60px]">
-            {item.notes?.trim() || "—"}
+        {/* Sticky Header */}
+        <div className="sticky top-0 z-20 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2"><FiClipboard className="text-xl text-gray-700" /> <span>Chi tiết tác vụ triển khai</span></h2>
+            <button onClick={onClose} className="text-gray-500 hover:text-gray-800">✕</button>
           </div>
         </div>
 
-        <div className="flex justify-end mt-6">
+        {/* Scrollable content */}
+        <div className="overflow-y-auto px-6 py-6 space-y-6 text-sm text-gray-800 dark:text-gray-200 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
+            <Info icon={<FiActivity />} label="Tên" value={item.name} />
+            <Info icon={<FiMapPin />} label="Bệnh viện" value={item.hospitalName} />
+            <Info icon={<FiUser />} label="Người phụ trách" value={item.picDeploymentName} />
+
+            <Info
+              icon={<FiInfo className="text-gray-500" />}
+              label="Trạng thái"
+              value={(
+                <span className={`px-3 py-1 text-xs font-medium rounded-full ${statusBadgeClasses(item.status)}`}>
+                  {statusLabel(item.status)}
+                </span>
+              )}
+            />
+
+            <Info icon={<FiLink />} label="API URL" value={item.apiUrl} />
+            <Info icon={<FiActivity />} label="API Test" value={item.apiTestStatus} />
+            <Info icon={<FiInfo />} label="Số lượng" value={item.quantity ?? "—"} />
+            <Info icon={<FiClock />} label="Deadline" value={fmt(item.deadline)} />
+            <Info icon={<FiCalendar />} label="Ngày bắt đầu" value={fmt(item.startDate)} />
+            <Info icon={<FiCalendar />} label="Ngày nghiệm thu" value={fmt(item.acceptanceDate)} />
+            <Info icon={<FiCalendar />} label="Ngày hoàn thành" value={fmt(item.finishDate)} />
+            <Info icon={<FiCalendar />} label="Tạo lúc" value={fmt(item.createdAt)} />
+          </div>
+
+          <div>
+            <p className="text-gray-500 mb-2">Ghi chú / Yêu cầu bổ sung:</p>
+            <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 min-h-[60px]">
+              {item.notes?.trim() || "—"}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 flex justify-end px-6 py-4 border-t bg-white dark:bg-gray-900">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
           >
             Đóng
           </button>
@@ -533,13 +533,16 @@ function DetailModal({
   );
 }
 
-function Info({ label, value }: { label: string; value?: string | number | null }) {
+function Info({ label, value, icon }: { label: string; value?: React.ReactNode; icon?: React.ReactNode }) {
   return (
-    <div className="flex justify-between items-start">
-      <span className="font-semibold text-gray-900 dark:text-gray-100">{label}:</span>
-      <span className="text-gray-700 dark:text-gray-300 text-right max-w-[60%] break-words">
-        {value ?? "—"}
-      </span>
+    <div className="flex items-start gap-4">
+      <div className="min-w-[150px]">
+        <span className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+          {icon}
+          {label}:
+        </span>
+      </div>
+      <div className="flex-1 text-gray-700 dark:text-gray-300 break-words">{value ?? "—"}</div>
     </div>
   );
 }

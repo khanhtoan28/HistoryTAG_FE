@@ -4,6 +4,7 @@ import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
 import { FaHospital } from "react-icons/fa";
+import { FiMapPin, FiMail, FiPhone, FiUser, FiClock, FiLink, FiTag } from "react-icons/fi";
 
 // ===================== Types ===================== //
 export type SortDir = "asc" | "desc";
@@ -106,6 +107,40 @@ function formatDateShort(value?: string | null) {
   } catch {
     return "—";
   }
+}
+
+// Small Info helper (label column + value column, accepts an icon)
+function Info({
+  label,
+  value,
+  icon,
+  stacked,
+}: {
+  label: string;
+  value?: React.ReactNode;
+  icon?: React.ReactNode;
+  stacked?: boolean;
+}) {
+  if (stacked) {
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          {icon && <span className="text-gray-500 dark:text-gray-400 text-lg">{icon}</span>}
+          <span className="font-semibold text-gray-900 dark:text-gray-100">{label}:</span>
+        </div>
+        <div className="text-gray-700 dark:text-gray-300 break-words pl-7">{value ?? "—"}</div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-start gap-4">
+      <div className="min-w-[120px] flex items-center gap-3">
+        {icon && <span className="text-gray-500 dark:text-gray-400 text-lg">{icon}</span>}
+        <span className="font-semibold text-gray-900 dark:text-gray-100">{label}:</span>
+      </div>
+      <div className="flex-1 text-gray-700 dark:text-gray-300 break-words">{value ?? "—"}</div>
+    </div>
+  );
 }
 
 // ===================== Page ===================== //
@@ -482,15 +517,14 @@ const HisSystemPage: React.FC = () => {
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <div className="relative z-10 w-full max-w-4xl rounded-3xl bg-white p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="relative z-10 w-full max-w-5xl rounded-3xl bg-white p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="mb-6 flex items-center justify-between">
               <h3 className="text-2xl font-bold text-gray-900">{isViewing ? "Chi tiết HIS" : (isEditing ? "Cập nhật HIS" : "Thêm HIS")}</h3>
               <button className="rounded-xl p-2 transition-all hover:bg-gray-100 hover:scale-105" onClick={() => setOpen(false)}>
-                {/* <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg> */}
+                {/* close */}
               </button>
             </div>
+
             {isModalLoading ? (
               <div className="flex flex-col items-center justify-center py-16 text-gray-500">
                 <svg className="mb-4 h-12 w-12 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -498,6 +532,28 @@ const HisSystemPage: React.FC = () => {
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
                 <span>Đang tải chi tiết...</span>
+              </div>
+            ) : isViewing ? (
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <Info stacked label="Tên HIS" icon={<FaHospital />} value={viewing?.name || "—"} />
+                <Info stacked label="Địa chỉ" icon={<FiMapPin />} value={viewing?.address || "—"} />
+                <Info stacked label="Người liên hệ" icon={<FiUser />} value={viewing?.contactPerson || "—"} />
+                <Info stacked label="Email" icon={<FiMail />} value={viewing?.email || "—"} />
+                <Info stacked label="Số điện thoại" icon={<FiPhone />} value={viewing?.phoneNumber || "—"} />
+                <Info
+                  stacked
+                  label="API URL"
+                  icon={<FiLink />}
+                  value={viewing?.apiUrl ? <a href={viewing.apiUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline break-words">{viewing.apiUrl}</a> : "—"}
+                />
+                <Info stacked label="Tạo lúc" icon={<FiClock />} value={formatDateShort(viewing?.createdAt)} />
+                <Info stacked label="Cập nhật lúc" icon={<FiClock />} value={formatDateShort(viewing?.updatedAt)} />
+
+                <div className="col-span-1 md:col-span-2 mt-4 pt-2 border-t border-gray-200 flex justify-end">
+                  <button className="rounded-xl border-2 border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-700" onClick={() => setOpen(false)}>
+                    Đóng
+                  </button>
+                </div>
               </div>
             ) : (
               <form onSubmit={onSubmit} className="grid grid-cols-1 gap-6 md:grid-cols-2">

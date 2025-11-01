@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { motion } from "framer-motion";
+import { FiActivity, FiInfo, FiLink, FiUser, FiClock } from "react-icons/fi";
 import TaskFormModal from "./TaskFormModal";
 import TaskCard from "./TaskCardNew";
 import toast from "react-hot-toast";
@@ -416,8 +417,7 @@ function DetailModal({
   item: DevTask | null;
 }) {
   if (!open || !item) return null;
-  const fmt = (d?: string | null) =>
-    d ? new Date(d).toLocaleString("vi-VN") : "—";
+  const fmt = (d?: string | null) => (d ? new Date(d).toLocaleString("vi-VN") : "—");
 
   return (
     <div
@@ -428,12 +428,14 @@ function DetailModal({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 20 }}
-        className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-6"
+        className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            💻 Chi tiết tác vụ Dev
+        {/* Header (sticky) */}
+        <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-6 py-4 rounded-t-2xl flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
+            <span className="text-blue-600 dark:text-blue-400"><FiActivity /></span>
+            <span>Chi tiết tác vụ Dev</span>
           </h2>
           <button
             onClick={onClose}
@@ -443,36 +445,49 @@ function DetailModal({
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
-          <Info label="Tên" value={item.name} />
-          <Info label="Bệnh viện" value={item.hospitalName} />
-          <Info label="Người phụ trách" value={item.picDeploymentName} />
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-gray-900 dark:text-gray-100">
-              Trạng thái:
-            </span>
-            <span
-              className={`px-3 py-1 text-xs font-medium rounded-full ${statusBadgeClasses(
-                item.status
-              )}`}
-            >
-              {statusLabel(item.status)}
-            </span>
+        {/* Body (scrollable) */}
+        <div className="p-6 max-h-[60vh] overflow-y-auto text-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
+            <Info label="Tên" value={item.name} icon={<FiInfo />} />
+            <Info label="Bệnh viện" value={item.hospitalName} icon={<FiUser />} />
+            <Info label="Người phụ trách" value={item.picDeploymentName} icon={<FiUser />} />
+            <Info
+              label="Trạng thái"
+              icon={<FiActivity />}
+              value={
+                <span className={`px-3 py-1 text-xs font-medium rounded-full ${statusBadgeClasses(item.status)}`}>
+                  {statusLabel(item.status)}
+                </span>
+              }
+            />
+            <Info
+              label="API URL"
+              icon={<FiLink />}
+              value={
+                item.apiUrl ? (
+                  <a href={item.apiUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                    {item.apiUrl}
+                  </a>
+                ) : (
+                  "—"
+                )
+              }
+            />
+            <Info label="Ngày bắt đầu" icon={<FiClock />} value={fmt(item.startDate)} />
+            <Info label="Ngày hoàn thành" icon={<FiClock />} value={fmt(item.finishDate)} />
+            <Info label="Tạo lúc" icon={<FiClock />} value={fmt(item.createdAt)} />
           </div>
-          <Info label="API URL" value={item.apiUrl} />
-          <Info label="Ngày bắt đầu" value={fmt(item.startDate)} />
-          <Info label="Ngày hoàn thành" value={fmt(item.finishDate)} />
-          <Info label="Tạo lúc" value={fmt(item.createdAt)} />
+
+          <div className="mt-6">
+            <p className="text-gray-500 mb-2">Ghi chú / Mô tả:</p>
+            <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 min-h-[60px]">
+              {item.notes?.trim() || "—"}
+            </div>
+          </div>
         </div>
 
-        <div className="mt-6">
-          <p className="text-gray-500 mb-2">Ghi chú / Mô tả:</p>
-          <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 min-h-[60px]">
-            {item.notes?.trim() || "—"}
-          </div>
-        </div>
-
-        <div className="flex justify-end mt-6">
+        {/* Footer (sticky) */}
+        <div className="sticky bottom-0 z-10 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 px-6 py-4 rounded-b-2xl flex justify-end">
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
@@ -485,13 +500,24 @@ function DetailModal({
   );
 }
 
-function Info({ label, value }: { label: string; value?: string | number | null }) {
+function Info({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value?: React.ReactNode;
+  icon?: React.ReactNode;
+}) {
   return (
     <div className="flex justify-between items-start">
-      <span className="font-semibold text-gray-900 dark:text-gray-100">{label}:</span>
-      <span className="text-gray-700 dark:text-gray-300 text-right max-w-[60%] break-words">
+      <div className="flex items-center gap-2 min-w-[140px]">
+        {icon && <span className="text-gray-400">{icon}</span>}
+        <span className="font-semibold text-gray-900 dark:text-gray-100">{label}:</span>
+      </div>
+      <div className="text-gray-700 dark:text-gray-300 text-right max-w-[60%] break-words">
         {value ?? "—"}
-      </span>
+      </div>
     </div>
   );
 }

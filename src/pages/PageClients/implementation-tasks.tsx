@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCardNew from "../SuperAdmin/TaskCardNew";
 import { toast } from "react-hot-toast";
+import { FaHospital } from "react-icons/fa";
+import { FiUser, FiMapPin, FiLink, FiClock, FiTag, FiMail, FiPhone } from "react-icons/fi";
 
 export type ImplementationTaskResponseDTO = {
   id: number;
@@ -905,7 +907,7 @@ function DetailModal({
         exit={{ opacity: 0, y: 20, scale: 0.95 }}
         transition={{ type: "spring", stiffness: 250, damping: 25 }}
         onMouseDown={(e) => e.stopPropagation()}
-        className="w-full max-w-3xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden"
+  className="w-full max-w-4xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden"
       >
         {/* Header */}
         <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 dark:border-gray-800">
@@ -923,33 +925,43 @@ function DetailModal({
         {/* Content */}
         <div className="p-6 space-y-6 text-sm text-gray-800 dark:text-gray-200">
           {/* Grid Info */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3">
-            <Info label="Tên" value={item.name} />
-            <Info label="Bệnh viện" value={item.hospitalName} />
-            <Info label="Người phụ trách" value={item.picDeploymentName} />
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <Info icon={<FaHospital />} label="Tên" value={item.name} />
+            <Info icon={<FiMapPin />} label="Bệnh viện" value={item.hospitalName} />
+            <Info icon={<FiUser />} label="Người phụ trách" value={item.picDeploymentName} />
 
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-gray-900 dark:text-gray-100">
-                Trạng thái:
-              </span>
-              <span
-                className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${statusBadgeClasses(
-                  item.status
-                )}`}
-              >
-                {statusLabel(item.status)}
-              </span>
-            </div>
+            <Info
+              icon={<FiTag />}
+              label="Trạng thái"
+              value={
+                <span className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${statusBadgeClasses(item.status)}`}>
+                  {statusLabel(item.status)}
+                </span>
+              }
+            />
 
-            <Info label="API URL" value={item.apiUrl || "—"} />
-            <Info label="API Test" value={item.apiTestStatus || "—"} />
-            <Info label="Số lượng" value={item.quantity ?? "—"} />
-            <Info label="Deadline" value={fmt(item.deadline)} />
-            <Info label="Ngày bắt đầu" value={fmt(item.startDate)} />
-            <Info label="Ngày nghiệm thu" value={fmt(item.acceptanceDate)} />
-            <Info label="Ngày hoàn thành" value={fmt(item.completionDate)} />
-            <Info label="Tạo lúc" value={fmt(item.createdAt)} />
-            <Info label="Cập nhật lúc" value={fmt(item.updatedAt)} />
+            <Info
+              icon={<FiLink />}
+              label="API URL"
+              value={
+                item.apiUrl ? (
+                  <a href={item.apiUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline break-words">
+                    {item.apiUrl}
+                  </a>
+                ) : (
+                  "—"
+                )
+              }
+            />
+
+            <Info icon={<FiTag />} label="API Test" value={item.apiTestStatus || "—"} />
+            <Info icon={<FiPhone />} label="Số lượng" value={item.quantity ?? "—"} />
+            <Info icon={<FiClock />} label="Deadline" value={fmt(item.deadline)} />
+            <Info icon={<FiClock />} label="Ngày bắt đầu" value={fmt(item.startDate)} />
+            <Info icon={<FiClock />} label="Ngày nghiệm thu" value={fmt(item.acceptanceDate)} />
+            <Info icon={<FiClock />} label="Ngày hoàn thành" value={fmt(item.completionDate)} />
+            <Info icon={<FiClock />} label="Tạo lúc" value={fmt(item.createdAt)} />
+            <Info icon={<FiClock />} label="Cập nhật lúc" value={fmt(item.updatedAt)} />
           </div>
 
           {/* Additional request */}
@@ -976,13 +988,36 @@ function DetailModal({
 }
 
 // 🔹 Helper cho hiển thị gọn gàng
-function Info({ label, value }: { label: string; value?: string | number | null }) {
+function Info({
+  label,
+  value,
+  icon,
+  stacked,
+}: {
+  label: string;
+  value?: React.ReactNode;
+  icon?: React.ReactNode;
+  stacked?: boolean;
+}) {
+  if (stacked) {
+    return (
+      <div className="flex flex-col">
+        <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+          {icon && <span className="text-gray-500">{icon}</span>}
+          <span>{label}</span>
+        </div>
+        <div className="mt-1 text-gray-700 dark:text-gray-300 text-sm break-words">{value ?? "—"}</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex justify-between items-start">
-      <span className="font-semibold text-gray-900 dark:text-gray-100">{label}:</span>
-      <span className="text-gray-700 dark:text-gray-300 text-right max-w-[60%] break-words">
-        {value ?? "—"}
-      </span>
+    <div className="flex items-start gap-3">
+      {icon && <div className="min-w-[36px] flex items-center justify-center text-gray-500">{icon}</div>}
+      <div className="flex-1 flex items-start">
+        <div className="min-w-[140px] font-semibold text-gray-900 dark:text-gray-100">{label}</div>
+        <div className="text-gray-700 dark:text-gray-300 flex-1 text-right break-words">{value ?? "—"}</div>
+      </div>
     </div>
   );
 }
