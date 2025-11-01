@@ -3,19 +3,10 @@
 
 import { AiOutlineEdit, AiOutlineDelete, AiOutlineEye } from "react-icons/ai";
 import { FaTasks } from "react-icons/fa";
+import { ImplementationTaskResponseDTO } from "../PageClients/implementation-tasks";
 
-type ImplTask = {
-  id: number;
-  name: string;
-  hospitalName?: string | null;
-  picDeploymentName?: string | null;
-  status?: string | null;
-  deadline?: string | null;
-  hisSystemName?: string | null;
-  acceptanceDate?: string | null;
-  startDate?: string | null;
-  apiUrl?: string | null;
-};
+// 🔹 Dùng cùng type từ ImplementationTasksPage để đồng bộ kiểu dữ liệu
+type ImplTask = ImplementationTaskResponseDTO;
 
 // ✅ Thay thế statusBadgeClass bằng bản có màu rõ ràng + dark mode
 function statusBadgeClass(status?: string) {
@@ -25,25 +16,18 @@ function statusBadgeClass(status?: string) {
 
   switch (normalized) {
     case "NOT_STARTED":
-      // ⛔ Chưa bắt đầu → xám
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
     case "IN_PROGRESS":
-      // 🟡 Đang triển khai → vàng
       return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
     case "API_TESTING":
-      // 🔵 Test API → xanh dương
       return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
     case "INTEGRATING":
-      // 🟣 Tích hợp → tím
       return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
     case "WAITING_FOR_DEV":
-      // 🟠 Chờ dev → cam
       return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
     case "ACCEPTED":
-      // ✅ Nghiệm thu → xanh lá
       return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
     default:
-      // fallback
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
   }
 }
@@ -76,6 +60,7 @@ export default function TaskCardNew({
   onEdit,
   onDelete,
   onOpen,
+  onConvert,
   idx,
   animate = true,
   canView = true,
@@ -86,6 +71,7 @@ export default function TaskCardNew({
   onEdit: (t: ImplTask) => void;
   onDelete: (id: number) => void;
   onOpen: (t: ImplTask) => void;
+  onConvert?: (t: ImplTask) => void;
   idx?: number;
   animate?: boolean;
   canView?: boolean;
@@ -232,6 +218,14 @@ export default function TaskCardNew({
                 >
                   <AiOutlineDelete />
                   <span className="hidden md:inline">Xóa</span>
+                </button>
+              )}
+              {onConvert && task.status?.toUpperCase() === "ACCEPTED" && (
+                <button
+                  onClick={() => onConvert(task)}
+                  className="text-green-600 hover:underline text-sm ml-3"
+                >
+                  ➜ Chuyển sang bảo trì
                 </button>
               )}
             </div>

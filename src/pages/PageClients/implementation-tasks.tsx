@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import TaskCardNew from "../SuperAdmin/TaskCardNew";
 import { toast } from "react-hot-toast";
 
+
 export type ImplementationTaskResponseDTO = {
   id: number;
   name: string;
@@ -13,6 +14,7 @@ export type ImplementationTaskResponseDTO = {
   quantity?: number | null;
   agencyId?: number | null;
   hisSystemId?: number | null;
+  hisSystemName?: string | null; 
   hardwareId?: number | null;
   endDate?: string | null;
   additionalRequest?: string | null;
@@ -723,7 +725,7 @@ function TaskFormModal({
           aria-modal="true"
         >
           <form onSubmit={handleSubmit} className="px-6 pt-0 pb-6 grid gap-4 max-h-[80vh] overflow-y-auto">
-              <div className="sticky top-0 z-[100] -mx-10 px-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+            <div className="sticky top-0 z-[100] -mx-10 px-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center justify-between py-3">
                 <h3 className="text-lg font-semibold">
                   {initial?.id ? (initial?.name || "") : "Tạo tác vụ"}
@@ -849,7 +851,7 @@ function TaskFormModal({
                 />
               </Field>
               <Field label="Ngày hoàn thành">
-                
+
                 <TextInput
                   type="datetime-local"
                   value={model.completionDate ? new Date(model.completionDate).toISOString().slice(0, 16) : ""}
@@ -1005,6 +1007,8 @@ const ImplementationTasksPage: React.FC = () => {
   const [hospitalOptions, setHospitalOptions] = useState<Array<{ id: number; label: string }>>([]);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<ImplementationTaskResponseDTO | null>(null);
+  const handleConvert = (t: ImplementationTaskResponseDTO) => handleConvertToMaintenance(t);
+
   const searchDebounce = useRef<number | null>(null);
   const readStored = <T = unknown>(key: string): T | null => {
     try {
@@ -1144,6 +1148,29 @@ const ImplementationTasksPage: React.FC = () => {
     setData((s) => s.filter((x) => x.id !== id));
     toast.success("Đã xóa");
   };
+  const handleConvertToMaintenance = async (task: ImplementationTaskResponseDTO) => {
+    if (!confirm(`Chuyển tác vụ "${task.name}" sang BẢO TRÌ?`)) return;
+
+    try {
+      const res = await fetch(`${API_ROOT}/api/v1/admin/implementation/${task.id}/convert-to-maintenance`, {
+        method: "POST",
+        headers: authHeaders(),
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const msg = await res.text();
+        toast.error(`Chuyển thất bại: ${msg || res.status}`);
+        return;
+      }
+
+      toast.success(`Đã chuyển tác vụ "${task.name}" sang bảo trì`);
+      await fetchList();
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Lỗi khi chuyển sang bảo trì");
+    }
+  };
 
   return (
     <div className="p-6 xl:p-10">
@@ -1246,19 +1273,21 @@ const ImplementationTasksPage: React.FC = () => {
             filtered.length === 0 ? (
               <div className="px-4 py-6 text-center text-gray-500">Không có dữ liệu</div>
             ) : (
-                filtered.map((row, idx) => (
-                  <TaskCardNew
-                    key={row.id}
-                    task={row as any}
-                    idx={enableItemAnimation ? idx : undefined}
-                    animate={enableItemAnimation}
-                    onOpen={() => { setDetailItem(row); setDetailOpen(true); }}
-                    onEdit={() => { setEditing(row); setModalOpen(true); }}
-                    onDelete={(id: number) => { handleDelete(id); }}
-                    canEdit={isSuperAdmin || userTeam === "DEPLOYMENT"}
-                    canDelete={isSuperAdmin || userTeam === "DEPLOYMENT"}
-                  />
-                ))
+              filtered.map((row, idx) => (
+                <TaskCardNew
+                  key={row.id}
+                  task={row as any}
+                  idx={enableItemAnimation ? idx : undefined}
+                  animate={enableItemAnimation}
+                  onOpen={() => { setDetailItem(row); setDetailOpen(true); }}
+                  onEdit={() => { setEditing(row); setModalOpen(true); }}
+                  onDelete={(id: number) => { handleDelete(id); }}
+                  onConvert={handleConvert}
+                  canEdit={isSuperAdmin || userTeam === "DEPLOYMENT"}
+                  canDelete={isSuperAdmin || userTeam === "DEPLOYMENT"}
+                />
+
+              ))
             )
           )}
         </div>

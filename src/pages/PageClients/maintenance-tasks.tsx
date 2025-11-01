@@ -2,7 +2,82 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCardNew from "../SuperAdmin/TaskCardNew";
 import toast from "react-hot-toast";
+import { useCallback } from "react";
 
+
+function PendingTasksModal({
+    open,
+    onClose,
+    onAccept,
+    list,
+    loading,
+}: {
+    open: boolean;
+    onClose: () => void;
+    onAccept: (id: number) => Promise<void>;
+    list: ImplementationTaskResponseDTO[];
+    loading: boolean;
+}) {
+    if (!open) return null;
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+        >
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-6"
+                onMouseDown={(e) => e.stopPropagation()}
+            >
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                        📨 Công việc chờ tiếp nhận
+                    </h2>
+                    <button
+                        onClick={onClose}
+                        className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                    >
+                        ✕
+                    </button>
+                </div>
+
+                {loading ? (
+                    <div className="text-center text-gray-500 py-6">Đang tải...</div>
+                ) : list.length === 0 ? (
+                    <div className="text-center text-gray-500 py-6">
+                        Không có công việc nào chờ tiếp nhận.
+                    </div>
+                ) : (
+                    <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                        {list.map((t) => (
+                            <div
+                                key={t.id}
+                                className="flex justify-between items-center border border-gray-200 dark:border-gray-700 rounded-xl p-4"
+                            >
+                                <div>
+                                    <div className="font-semibold text-gray-900 dark:text-gray-100">
+                                        {t.hospitalName || t.name}
+                                    </div>
+                                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                                        Người triển khai: {t.picDeploymentName || "-"}
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => onAccept(t.id)}
+                                    className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
+                                >
+                                    ✅ Tiếp nhận
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </motion.div>
+        </div>
+    );
+}
 // =====================
 // Types khớp với BE DTOs
 // =====================
@@ -987,6 +1062,10 @@ const ImplementationTasksPage: React.FC = () => {
     const [detailOpen, setDetailOpen] = useState(false);
     const [detailItem, setDetailItem] = useState<ImplementationTaskResponseDTO | null>(null);
     const searchDebounce = useRef<number | null>(null);
+    const [pendingTasks, setPendingTasks] = useState<ImplementationTaskResponseDTO[]>([]);
+    const [pendingOpen, setPendingOpen] = useState(false);
+    const [loadingPending, setLoadingPending] = useState(false);
+
 
     const currentUser = useMemo<UserInfo>(() => readStored<UserInfo>("user"), []);
     const roles = useMemo<string[]>(() => {
@@ -1040,6 +1119,38 @@ const ImplementationTasksPage: React.FC = () => {
             if (isInitialLoad) setIsInitialLoad(false);
         }
     }
+    const fetchPendingTasks = useCallback(async () => {
+        setLoadingPending(true);
+        try {
+            const res = await fetch(`${API_ROOT}/api/v1/admin/maintenance/pending`, {
+                headers: authHeaders(),
+                credentials: "include",
+            });
+            if (!res.ok) throw new Error("Không thể tải danh sách chờ tiếp nhận");
+            const list = await res.json();
+            setPendingTasks(Array.isArray(list) ? list : []);
+        } catch (e: any) {
+            toast.error(e.message);
+        } finally {
+            setLoadingPending(false);
+        }
+    }, []);
+
+    const handleAcceptTask = async (id: number) => {
+        try {
+            const res = await fetch(`${API_ROOT}/api/v1/admin/maintenance/accept/${id}`, {
+                method: "PUT",
+                headers: authHeaders(),
+                credentials: "include",
+            });
+            if (!res.ok) throw new Error(`Tiếp nhận thất bại (${res.status})`);
+            toast.success("Đã tiếp nhận công việc!");
+            setPendingTasks((s) => s.filter((x) => x.id !== id));
+            await fetchList();
+        } catch (e: any) {
+            toast.error(e.message);
+        }
+    };
 
     useEffect(() => { fetchList(); /* eslint-disable-line */ }, []);
     useEffect(() => { fetchList(); /* eslint-disable-line */ }, [page, size]);
@@ -1177,6 +1288,22 @@ const ImplementationTasksPage: React.FC = () => {
                                 <span>Thêm mới</span>
                             </Button>
                         )}
+                        <Button
+                            variant="ghost"
+                            className="relative flex items-center gap-2 border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300"
+                            onClick={() => {
+                                setPendingOpen(true);
+                                fetchPendingTasks();
+                            }}
+                        >
+                            📨 Công việc chờ
+                            {pendingTasks.length > 0 && (
+                                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
+                                    {pendingTasks.length}
+                                </span>
+                            )}
+                        </Button>
+
                         <button className="rounded-full border px-4 py-2 text-sm shadow-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 flex items-center gap-2" onClick={async () => {
                             setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc'); setPage(0);
                             setLoading(true);
@@ -1247,6 +1374,13 @@ const ImplementationTasksPage: React.FC = () => {
                     </select>
                 </div>
             </div>
+            <PendingTasksModal
+                open={pendingOpen}
+                onClose={() => setPendingOpen(false)}
+                onAccept={handleAcceptTask}
+                list={pendingTasks}
+                loading={loadingPending}
+            />
 
             <TaskFormModal
                 open={modalOpen}
