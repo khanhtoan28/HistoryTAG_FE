@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
@@ -201,6 +202,188 @@ function formatDateShort(value?: string | null) {
 function toLocalDateTime(value?: string) {
   if (!value) return undefined;
   return value.length === 16 ? `${value}:00` : value;
+}
+
+// Helper function để format date time
+function fmt(dt?: string | null) {
+  if (!dt) return "";
+  try {
+    const d = new Date(dt);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString("vi-VN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
+// Helper component để hiển thị thông tin
+function Info({ label, value }: { label: string; value?: string | number | null }) {
+  return (
+    <div className="flex justify-between items-start">
+      <span className="font-semibold text-gray-900 dark:text-gray-100">{label}:</span>
+      <span className="text-gray-700 dark:text-gray-300 text-right max-w-[60%] break-words">
+        {value ?? "—"}
+      </span>
+    </div>
+  );
+}
+
+// DetailModal component tương tự implementation-tasks.tsx
+function DetailModal({
+  open,
+  onClose,
+  item,
+  statusMap,
+  priorityMap,
+}: {
+  open: boolean;
+  onClose: () => void;
+  item: Hospital | null;
+  statusMap: Record<string, string>;
+  priorityMap: Record<string, string>;
+}) {
+  if (!open || !item) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 20, scale: 0.95 }}
+        transition={{ type: "spring", stiffness: 250, damping: 25 }}
+        onMouseDown={(e) => e.stopPropagation()}
+        className="w-full max-w-4xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden max-h-[90vh] flex flex-col"
+      >
+        {/* Header - Sticky */}
+        <div className="sticky top-0 z-20 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              📋 Chi tiết bệnh viện
+            </h2>
+            {/* <button
+              onClick={onClose}
+              className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition"
+            >
+              ✕
+            </button> */}
+          </div>
+        </div>
+
+        {/* Content - Scrollable with hidden scrollbar */}
+        <div 
+          className="overflow-y-auto px-6 py-6 space-y-6 text-sm text-gray-800 dark:text-gray-200 [&::-webkit-scrollbar]:hidden" 
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        >
+          {/* Grid Info */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3">
+            <Info label="Mã bệnh viện" value={item.hospitalCode || "—"} />
+            <Info label="Tên bệnh viện" value={item.name} />
+            <Info label="Địa chỉ" value={item.address || "—"} />
+            <Info label="Tỉnh/Thành" value={item.province || "—"} />
+            <Info label="Mã số thuế" value={item.taxCode || "—"} />
+            
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-gray-900 dark:text-gray-100">
+                Trạng thái:
+              </span>
+              <span
+                className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${getStatusBg(
+                  item.projectStatus
+                )} text-white`}
+              >
+                {disp(statusMap, item.projectStatus)}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-gray-900 dark:text-gray-100">
+                Độ ưu tiên:
+              </span>
+              <span
+                className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${getPriorityBg(
+                  item.priority
+                )} text-white`}
+              >
+                {disp(priorityMap, item.priority)}
+              </span>
+            </div>
+
+            <Info label="Người liên hệ" value={item.contactPerson || "—"} />
+            <Info label="Vị trí liên hệ" value={item.contactPosition || "—"} />
+            <Info label="Email liên hệ" value={item.contactEmail || "—"} />
+            <Info label="Số điện thoại" value={item.contactNumber || "—"} />
+            <Info label="Phòng IT - Người liên hệ" value={item.itDepartmentContact || "—"} />
+            <Info label="Phòng IT - Số điện thoại" value={item.itContactPhone || "—"} />
+            <Info label="Đơn vị HIS" value={item.hisSystemName || item.hisSystemId || "—"} />
+            <Info label="Phần cứng" value={item.hardwareName || item.hardwareId || "—"} />
+            <Info label="Đơn vị tài trợ" value={item.bankName || "—"} />
+            <Info label="Liên hệ đơn vị tài trợ" value={item.bankContactPerson || "—"} />
+            <Info label="Ngày bắt đầu" value={fmt(item.startDate)} />
+            <Info label="Deadline" value={fmt(item.deadline)} />
+            <Info label="Ngày hoàn thành" value={fmt(item.completionDate)} />
+            <Info label="Tạo lúc" value={fmt(item.createdAt)} />
+            <Info label="Cập nhật lúc" value={fmt(item.updatedAt)} />
+          </div>
+
+          {/* Image */}
+          {item.imageUrl && (
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+              <p className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Ảnh bệnh viện:</p>
+              <div className="rounded-xl overflow-hidden">
+                <img
+                  src={item.imageUrl}
+                  alt="Ảnh bệnh viện"
+                  className="max-w-full h-auto object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Notes */}
+          {item.notes && (
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+              <p className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Ghi chú:</p>
+              <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px]">
+                {item.notes}
+              </div>
+            </div>
+          )}
+
+          {/* Assigned Users */}
+          {item.assignedUserIds && item.assignedUserIds.length > 0 && (
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+              <p className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Người phụ trách (IDs):</p>
+              <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300">
+                {item.assignedUserIds.join(", ")}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 flex justify-end px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-10 dark:bg-gray-800/40">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+          >
+            Đóng
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
 }
 
 export default function HospitalsPage() {
@@ -717,12 +900,12 @@ export default function HospitalsPage() {
               {canEdit && (
                 <button className={`rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md`} onClick={onCreate}> + Thêm bệnh viện</button>
               )}
-              <button className="rounded-xl border-2 border-gray-300 px-5 py-3 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400 flex items-center gap-2" onClick={fetchList}>
+              {/* <button className="rounded-xl border-2 border-gray-300 px-5 py-3 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400 flex items-center gap-2" onClick={fetchList}>
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
                 Làm mới
-              </button>
+              </button> */}
             </div>
           </div>
         </ComponentCard>
@@ -931,21 +1114,41 @@ export default function HospitalsPage() {
         </ComponentCard>
       </div>
 
-      {/* MODAL */}
-      {open && (
+      {/* Detail Modal - chỉ hiển thị khi isViewing */}
+      <AnimatePresence mode="wait">
+        {open && isViewing && viewing && (
+          <DetailModal
+            key={viewing.id}
+            open={open && isViewing}
+            onClose={closeModal}
+            item={viewing}
+            statusMap={statusMap}
+            priorityMap={priorityMap}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Form Modal - chỉ hiển thị khi không phải viewing */}
+      {open && !isViewing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeModal} />
-          <div className="relative z-10 w-full max-w-4xl rounded-3xl bg-white p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-2xl font-bold text-gray-900">
-                {isViewing ? "Chi tiết bệnh viện" : (isEditing ? "Cập nhật bệnh viện" : "Thêm bệnh viện")}
-              </h3>
-              <button className="rounded-xl p-2 transition-all hover:bg-gray-100 hover:scale-105" onClick={closeModal}>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+          <div className="relative z-10 w-full max-w-4xl rounded-3xl bg-white shadow-2xl max-h-[90vh] flex flex-col">
+            {/* Sticky Header */}
+            <div className="sticky top-0 z-20 bg-white rounded-t-3xl px-8 pt-8 pb-4 border-b border-gray-200">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-2xl font-bold text-gray-900">
+                  {isEditing ? "Cập nhật bệnh viện" : "Thêm bệnh viện"}
+                </h3>
+                <button className="rounded-xl p-2 transition-all hover:bg-gray-100 hover:scale-105" onClick={closeModal}>
+                  {/* <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg> */}
+                </button>
+              </div>
             </div>
+            {/* Scrollable Content */}
+
+            <div className="overflow-y-auto px-8 pb-8 [&::-webkit-scrollbar]:hidden mt-6  " style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
 
 
             {isModalLoading ? (
@@ -1219,9 +1422,9 @@ export default function HospitalsPage() {
                       className="rounded-xl border-2 border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400"
                       onClick={closeModal}
                     >
-                      {isViewing ? "Đóng" : "Huỷ"}
+                      Huỷ
                     </button>
-                    {!isViewing && canEdit && ( // Chỉ hiện nút Lưu/Cập nhật cho SuperAdmin
+                    {canEdit && ( // Chỉ hiện nút Lưu/Cập nhật cho SuperAdmin
                       <button
                         type="submit"
                         className="rounded-xl border-2 border-blue-500 bg-blue-500 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-blue-600 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1234,6 +1437,7 @@ export default function HospitalsPage() {
                 </div>
               </form>
             )}
+            </div>
           </div>
         </div>
       )}

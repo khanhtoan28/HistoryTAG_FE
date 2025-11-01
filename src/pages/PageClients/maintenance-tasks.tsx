@@ -676,7 +676,7 @@ function TaskFormModal({
                         aria-modal="true"
                     >
                         {/* Thêm max-h & overflow để có thanh cuộn */}
-                        <form onSubmit={handleSubmit} className="px-6 pt-0 pb-6 grid gap-4 max-h-[80vh] overflow-y-auto">
+                        <form onSubmit={handleSubmit} className="px-6 pt-0 pb-6 grid gap-4 max-h-[80vh] overflow-y-auto no-scrollbar">
                             <div className="sticky top-0 z-[100] -mx-10 px-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
                                 <div className="flex items-center justify-between py-3">
                                     <h3 className="text-lg font-semibold">{initial?.id ? (initial?.name || "") : "Tạo tác vụ"}</h3>
@@ -883,12 +883,12 @@ function DetailModal({
                     <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                         📋 Chi tiết tác vụ bảo trì
                     </h2>
-                    <button
+                    {/* <button
                         onClick={onClose}
                         className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition"
                     >
                         ✕
-                    </button>
+                    </button> */}
                 </div>
 
                 {/* Content */}
@@ -933,7 +933,7 @@ function DetailModal({
                 </div>
 
                 {/* Footer */}
-                <div className="flex justify-end px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40">
+                <div className="flex justify-end px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-10 dark:bg-gray-800/40">
                     <button
                         onClick={onClose}
                         className="px-4 py-2 rounded-lg text-sm font-medium text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
