@@ -1,13 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCardNew from "../SuperAdmin/TaskCardNew";
 import toast from "react-hot-toast";
-<<<<<<< HEAD
 import { FaHospital } from "react-icons/fa";
 import { FiUser, FiLink, FiClock, FiTag } from "react-icons/fi";
-=======
-import { useCallback } from "react";
->>>>>>> 7b60708716a473dca5ca836d9f521bc0c1200adf
 
 
 function PendingTasksModal({
@@ -110,6 +106,8 @@ export type ImplementationTaskResponseDTO = {
     team?: "DEPLOYMENT" | string;
     createdAt?: string | null;
     updatedAt?: string | null;
+    transferredToMaintenance?: boolean | null;
+    readOnlyForDeployment?: boolean | null;
 };
 
 export type ImplementationTaskRequestDTO = {
@@ -239,7 +237,8 @@ const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
     { value: "API_TESTING", label: "Test thông api" },
     { value: "INTEGRATING", label: "Tích hợp với viện" },
     { value: "WAITING_FOR_DEV", label: "Chờ dev build update" },
-    { value: "ACCEPTED", label: "Nghiệm thu" },
+    // NOTE: maintenance users should NOT be able to set 'ACCEPTED' (Nghiệm thu).
+    // That status is controlled by the Implementation (DEPLOYMENT) team only.
 ];
 
 
@@ -257,6 +256,8 @@ function statusLabel(status?: string | null) {
             return "Chờ dev build update";
         case "ACCEPTED":
             return "Nghiệm thu";
+        case "TRANSFERRED":
+            return "Đã chuyển sang bảo trì";
         default:
             return status || "";
     }

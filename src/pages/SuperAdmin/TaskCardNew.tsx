@@ -27,6 +27,10 @@ function statusBadgeClass(status?: string) {
       return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
     case "ACCEPTED":
       return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+    case "PENDING_TRANSFER":
+      return "bg-indigo-50 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200";
+    case "TRANSFERRED":
+      return "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200";
     default:
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
   }
@@ -45,6 +49,8 @@ function getDisplayStatus(status?: string) {
     waiting_for_dev: "Chờ cập nhật từ dev",
     waiting_for_developer: "Chờ cập nhật từ dev",
     accepted: "Nghiệm thu",
+  pending_transfer: "Chờ chuyển bảo trì",
+  transferred: "Đã chuyển sang bảo trì",
     done: "Hoàn thành",
     completed: "Hoàn thành",
     pending: "Đang chờ",
@@ -184,6 +190,35 @@ export default function TaskCardNew({
             </div>
 
             <div className="flex items-center gap-3">
+              {/**
+               * If the implementation task has been marked readOnlyForDeployment or
+               * already transferred, disable edit/delete and hide convert action.
+               */}
+              {canEdit && !task.readOnlyForDeployment && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(task);
+                  }}
+                  className="inline-flex items-center gap-2 bg-white dark:bg-gray-900 border border-orange-100 dark:border-orange-800 text-orange-500 px-3 py-1 rounded-lg text-sm hover:bg-orange-50 dark:hover:bg-orange-900/40"
+                >
+                  <AiOutlineEdit />
+                  <span className="hidden md:inline">Sửa</span>
+                </button>
+              )}
+              {canDelete && !task.readOnlyForDeployment && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(task.id);
+                  }}
+                  className="inline-flex items-center gap-2 bg-white dark:bg-gray-900 border border-red-100 dark:border-red-800 text-red-600 px-3 py-1 rounded-lg text-sm hover:bg-red-50 dark:hover:bg-red-900/40"
+                >
+                  <AiOutlineDelete />
+                  <span className="hidden md:inline">Xóa</span>
+                </button>
+              )}
+
               {canView && (
                 <button
                   onClick={(e) => {
@@ -196,33 +231,20 @@ export default function TaskCardNew({
                   <span className="hidden md:inline">Xem</span>
                 </button>
               )}
-              {canEdit && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEdit(task);
-                  }}
-                  className="inline-flex items-center gap-2 bg-white dark:bg-gray-900 border border-orange-100 dark:border-orange-800 text-orange-500 px-3 py-1 rounded-lg text-sm hover:bg-orange-50 dark:hover:bg-orange-900/40"
-                >
-                  <AiOutlineEdit />
-                  <span className="hidden md:inline">Sửa</span>
-                </button>
+              {/* Non-clickable indicators shown next to Xem */}
+              {task.status?.toUpperCase() === "PENDING_TRANSFER" && (
+                <span className="inline-flex items-center ml-3 px-3 py-1 rounded-full text-sm font-medium bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-200">
+                  Chờ chuyển bảo trì
+                </span>
               )}
-              {canDelete && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(task.id);
-                  }}
-                  className="inline-flex items-center gap-2 bg-white dark:bg-gray-900 border border-red-100 dark:border-red-800 text-red-600 px-3 py-1 rounded-lg text-sm hover:bg-red-50 dark:hover:bg-red-900/40"
-                >
-                  <AiOutlineDelete />
-                  <span className="hidden md:inline">Xóa</span>
-                </button>
+              {task.status?.toUpperCase() === "TRANSFERRED" && (
+                <span className="inline-flex items-center ml-3 px-3 py-1 rounded-full text-sm font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200">
+                  Đã chuyển sang bảo trì
+                </span>
               )}
-              {onConvert && task.status?.toUpperCase() === "ACCEPTED" && (
+              {onConvert && task.status?.toUpperCase() === "ACCEPTED" && !task.transferredToMaintenance && !task.readOnlyForDeployment && (
                 <button
-                  onClick={() => onConvert(task)}
+                  onClick={(e) => { e.stopPropagation(); onConvert(task); }}
                   className="text-green-600 hover:underline text-sm ml-3"
                 >
                   ➜ Chuyển sang bảo trì

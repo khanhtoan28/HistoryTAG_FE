@@ -31,6 +31,8 @@ export type ImplementationTaskResponseDTO = {
   team?: "DEPLOYMENT" | string;
   createdAt?: string | null;
   updatedAt?: string | null;
+  transferredToMaintenance?: boolean | null;
+  readOnlyForDeployment?: boolean | null;
 };
 
 export type ImplementationTaskRequestDTO = {
@@ -79,6 +81,8 @@ function statusLabel(status?: string | null) {
       return "Chờ DEV build";
     case "ACCEPTED":
       return "Nghiệm thu";
+    case "TRANSFERRED":
+      return "Đã chuyển sang bảo trì";
     default:
       return status || "";
   }
@@ -109,6 +113,9 @@ function statusBadgeClasses(status?: string | null) {
     case "ACCEPTED":
       // ✅ Đã nghiệm thu → xanh lá
       return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+    case "TRANSFERRED":
+      // 🔷 Đã chuyển sang bảo trì → indigo
+      return "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200";
 
     default:
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
@@ -716,7 +723,7 @@ function TaskFormModal({
       }}
     >
       <AnimatePresence initial={false}>
-        <motion.div
+  <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 20, opacity: 0 }}
@@ -726,13 +733,8 @@ function TaskFormModal({
           role="dialog"
           aria-modal="true"
         >
-<<<<<<< HEAD
           <form onSubmit={handleSubmit} className="px-6 pt-0 pb-6 grid gap-4 max-h-[80vh] overflow-y-auto no-scrollbar">
-              <div className="sticky top-0 z-[100] -mx-3 px-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
-=======
-          <form onSubmit={handleSubmit} className="px-6 pt-0 pb-6 grid gap-4 max-h-[80vh] overflow-y-auto">
-            <div className="sticky top-0 z-[100] -mx-10 px-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
->>>>>>> 7b60708716a473dca5ca836d9f521bc0c1200adf
+            <div className="sticky top-0 z-[100] -mx-3 px-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center justify-between py-3">
                 <h3 className="text-lg font-semibold">
                   {initial?.id ? (initial?.name || "") : "Tạo tác vụ"}
