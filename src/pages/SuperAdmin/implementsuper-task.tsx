@@ -277,6 +277,28 @@ const ImplementSuperTaskPage: React.FC = () => {
     setData((s) => s.filter((x) => x.id !== id));
   };
 
+  const handleConvert = async (task: ImplTask) => {
+    if (!task || !task.id) return;
+    if (!confirm(`Chuyển tác vụ "${task.name}" sang BẢO TRÌ?`)) return;
+    try {
+      const res = await fetch(`${API_ROOT}/api/v1/admin/implementation/${task.id}/convert-to-maintenance`, {
+        method: "POST",
+        headers: authHeaders(),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const msg = await res.text();
+        toast.error(`Chuyển thất bại: ${msg || res.status}`);
+        return;
+      }
+      toast.success(`Đã chuyển tác vụ "${task.name}" sang bảo trì`);
+      await fetchList();
+    } catch (err: unknown) {
+      console.error(err);
+      toast.error("Lỗi khi chuyển sang bảo trì");
+    }
+  };
+
   const handleSubmit = async (payload: Record<string, unknown>, id?: number) => {
     const isUpdate = Boolean(id);
     const url = isUpdate ? `${apiBase}/${id}` : apiBase;
@@ -401,17 +423,26 @@ const ImplementSuperTaskPage: React.FC = () => {
             data.length === 0 ? (
               <div className="px-4 py-6 text-center text-gray-500">Không có dữ liệu</div>
             ) : (
-              data.map((row, idx) => (
-                <TaskCard
-                  key={row.id}
-                  task={row}
-                  idx={idx}
-                  animate={enableItemAnimation}
-                  onOpen={(t) => { setEditing(t); setViewOnly(true); setModalOpen(true); }}
-                  onEdit={(t) => { setEditing(t); setViewOnly(false); setModalOpen(true); }}
-                  onDelete={(id) => handleDelete(id)}
-                />
-              ))
+              data.map((row, idx) => {
+                  // SuperAdmin should be allowed to edit/delete even if backend marks readOnlyForDeployment
+                  const displayed = { ...(row as any), readOnlyForDeployment: false } as ImplTask;
+                  return (
+                    <TaskCard
+                      key={row.id}
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      task={displayed as any}
+                      idx={idx}
+                      animate={enableItemAnimation}
+                      // open detail as view-only
+                      onOpen={(t) => { setEditing(t); setViewOnly(true); setModalOpen(true); }}
+                      onEdit={(t) => { setEditing(t); setViewOnly(false); setModalOpen(true); }}
+                      onDelete={(id) => handleDelete(id)}
+                      onConvert={handleConvert}
+                      canEdit={true}
+                      canDelete={true}
+                    />
+                  );
+              })
             )
           )}
         </div>
@@ -444,6 +475,7 @@ const ImplementSuperTaskPage: React.FC = () => {
     initial={editing ?? undefined}
     onSubmit={handleSubmit}
     readOnly={false}
+    transferred={Boolean((editing as any)?.transferredToMaintenance || String(editing?.status ?? '').toUpperCase() === 'TRANSFERRED')}
   />
 )}
 

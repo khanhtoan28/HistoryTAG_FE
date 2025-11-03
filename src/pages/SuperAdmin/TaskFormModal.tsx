@@ -98,12 +98,16 @@ export default function TaskFormModal({
     initial,
     onSubmit,
     readOnly,
+    excludeAccepted = false,
+    transferred = false,
 }: {
     open: boolean;
     onClose: () => void;
     initial?: Partial<ImplementationTaskRequestDTO> & { id?: number; hospitalName?: string | null; picDeploymentName?: string | null };
     onSubmit: (payload: ImplementationTaskRequestDTO, id?: number) => Promise<void>;
     readOnly?: boolean;
+    excludeAccepted?: boolean;
+    transferred?: boolean;
 }) {
     // Fetchers for RemoteSelect (minimal: hospitals and PICs)
     const searchHospitals = useMemo(
@@ -366,6 +370,13 @@ export default function TaskFormModal({
 
     if (!open) return null;
 
+    // Determine if this task has been transferred to maintenance.
+    // Sources: explicit prop, initial payload flag, or status === 'TRANSFERRED'
+    const isTransferred = Boolean(
+        transferred ||
+        (initial && ((initial as any).transferredToMaintenance || String(initial.status ?? "").toUpperCase() === "TRANSFERRED"))
+    );
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!model.name?.trim()) {
@@ -577,31 +588,31 @@ export default function TaskFormModal({
                                 </Field>
 
                                 <Field label="Trạng thái" required>
-                                    <Select disabled={readOnly}
+                                    <Select disabled={readOnly || isTransferred}
                                         value={model.status ?? ""}
                                         onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setModel((s) => ({ ...s, status: e.target.value || null }))}
                                     >
                                         <option value="">— Chọn trạng thái —</option>
-                                        {STATUS_OPTIONS.map((opt) => (
+                                        {(excludeAccepted ? STATUS_OPTIONS.filter(o => o.value !== 'ACCEPTED') : STATUS_OPTIONS).map((opt) => (
                                             <option key={opt.value} value={opt.value}>{opt.label}</option>
                                         ))}
                                     </Select>
                                 </Field>
 
                                 <Field label="Deadline (ngày)">
-                                    <TextInput disabled={readOnly} type="datetime-local" value={model.deadline ? new Date(model.deadline).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, deadline: e.target.value }))} />
+                                    <TextInput disabled={readOnly || isTransferred} type="datetime-local" value={model.deadline ? new Date(model.deadline).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, deadline: e.target.value }))} />
                                 </Field>
 
                                 <Field label="Ngày bắt đầu">
-                                    <TextInput disabled={readOnly} type="datetime-local" value={model.startDate ? new Date(model.startDate).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, startDate: e.target.value }))} />
+                                    <TextInput disabled={readOnly || isTransferred} type="datetime-local" value={model.startDate ? new Date(model.startDate).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, startDate: e.target.value }))} />
                                 </Field>
 
                                 <Field label="Ngày nghiệm thu">
-                                    <TextInput disabled={readOnly} type="datetime-local" value={model.acceptanceDate ? new Date(model.acceptanceDate).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, acceptanceDate: e.target.value }))} />
+                                    <TextInput disabled={readOnly || isTransferred} type="datetime-local" value={model.acceptanceDate ? new Date(model.acceptanceDate).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, acceptanceDate: e.target.value }))} />
                                 </Field>
 
                                 <Field label="Ngày hoàn thành">
-                                    <TextInput disabled={readOnly} type="datetime-local" value={model.completionDate ? new Date(model.completionDate).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, completionDate: e.target.value }))} />
+                                    <TextInput disabled={readOnly || isTransferred} type="datetime-local" value={model.completionDate ? new Date(model.completionDate).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, completionDate: e.target.value }))} />
                                 </Field>
                             </div>
 

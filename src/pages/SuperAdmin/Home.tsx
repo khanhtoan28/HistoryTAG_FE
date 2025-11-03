@@ -79,14 +79,26 @@ export default function SuperAdminHome() {
       <PageMeta title="Super Admin Dashboard | TAGTECH" description="" />
 
       <div className="space-y-6">
-        <header className="flex items-center justify-between gap-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 p-6 text-white shadow-md">
-          <div>
-            <h1 className="text-2xl font-bold">Super Admin Dashboard</h1>
-            <p className="mt-1 text-sm opacity-90">Tổng quan hệ thống & truy cập nhanh các phần quản trị</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link to="/superadmin/users" className="rounded-md bg-white/20 px-3 py-2 text-sm font-medium hover:bg-white/30">Người dùng</Link>
-            <Link to="/superadmin/hospitals" className="rounded-md bg-white/20 px-3 py-2 text-sm font-medium hover:bg-white/30">Bệnh viện</Link>
+        <header className="relative overflow-hidden rounded-2xl p-6 text-white shadow-md">
+          {/* animated gradient background */}
+          <div
+            aria-hidden
+            className="absolute inset-0"
+            style={{
+              background: 'linear-gradient(270deg,#7c3aed,#06b6d4,#f97316,#8b5cf6)',
+              backgroundSize: '600% 600%',
+              filter: 'saturate(1.1) contrast(1.02)',
+              animation: 'bgShift 12s ease infinite',
+              opacity: 0.95,
+            }}
+          />
+          <style>{`@keyframes bgShift { 0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%} }`}</style>
+
+          <div className="relative z-10 flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold">Super Admin Dashboard</h1>
+              <p className="mt-1 text-sm opacity-90">Tổng quan hệ thống & truy cập nhanh các phần quản trị</p>
+            </div>
           </div>
         </header>
 
@@ -147,6 +159,7 @@ export default function SuperAdminHome() {
                   <StatCard title="Bệnh viện" value={summary ? summary.totalHospitals : '--'} icon={<span>🏥</span>} color="bg-emerald-500" />
                   <StatCard title="Hệ thống HIS" value={summary ? summary.totalHisSystems : '--'} icon={<span>💼</span>} color="bg-purple-500" />
                   <StatCard title="Phần cứng" value={summary ? summary.totalHardware : '--'} icon={<span>💻</span>} color="bg-teal-500" />
+                  <StatCard title="Đại lý" value={summary ? summary.totalAgencies : '--'} icon={<span>🏢</span>} color="bg-orange-500" />
                 </div>
               </div>
 

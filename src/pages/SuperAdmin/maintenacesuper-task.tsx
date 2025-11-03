@@ -21,6 +21,18 @@ type MaintTask = {
   acceptanceDate?: string | null;
   finishDate?: string | null;
   notes?: string | null;
+  // include optional fields used by shared TaskCardNew component
+  hospitalId?: number | null;
+  picDeploymentId?: number | null;
+  quantity?: number | null;
+  agencyId?: number | null;
+  hisSystemId?: number | null;
+  hardwareId?: number | null;
+  deadline?: string | null;
+  completionDate?: string | null;
+  team?: string | null;
+  transferredToMaintenance?: boolean | null;
+  readOnlyForDeployment?: boolean | null;
 };
 
 function authHeaders() {
@@ -105,6 +117,9 @@ const MaintenanceSuperTaskPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<MaintTask | null>(null);
   const [viewOnly, setViewOnly] = useState<boolean>(false);
+  const [pendingOpen, setPendingOpen] = useState(false);
+  const [pendingTasks, setPendingTasks] = useState<MaintTask[]>([]);
+  const [loadingPending, setLoadingPending] = useState(false);
 
   async function fetchList() {
     const start = Date.now();
@@ -192,6 +207,57 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     toast.success("Đã xóa");
   };
 
+  // --- pending tasks (chờ) for maintenance: fetch & accept ---
+  async function fetchPendingTasks() {
+    setLoadingPending(true);
+    try {
+      const res = await fetch(`${API_ROOT}/api/v1/admin/maintenance/pending`, {
+        method: "GET",
+        headers: authHeaders(),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const msg = await res.text();
+        toast.error(`Tải công việc chờ thất bại: ${msg || res.status}`);
+        return;
+      }
+      const list = await res.json();
+      const items = Array.isArray(list)
+        ? list
+        : Array.isArray(list?.content)
+        ? list.content
+        : [];
+      setPendingTasks(items);
+    } catch (err: unknown) {
+      console.error(err);
+      toast.error("Lỗi khi tải công việc chờ");
+    } finally {
+      setLoadingPending(false);
+    }
+  }
+
+  const handleAcceptPending = async (id: number) => {
+    if (!confirm("Tiếp nhận công việc này và thêm vào danh sách bảo trì?")) return;
+    try {
+      const res = await fetch(`${API_ROOT}/api/v1/admin/maintenance/accept/${id}`, {
+        method: "PUT",
+        headers: authHeaders(),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const msg = await res.text();
+        toast.error(`Tiếp nhận thất bại: ${msg || res.status}`);
+        return;
+      }
+      toast.success("Đã tiếp nhận công việc");
+      setPendingTasks((s) => s.filter((t) => t.id !== id));
+      await fetchList();
+    } catch (err: unknown) {
+      console.error(err);
+      toast.error("Lỗi khi tiếp nhận công việc");
+    }
+  };
+ 
   const handleSubmit = async (payload: Record<string, unknown>, id?: number) => {
     const isUpdate = Boolean(id);
     const url = isUpdate ? `${apiBase}/${id}` : apiBase;
@@ -256,7 +322,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                 <option value="API_TESTING">Test thông API</option>
                 <option value="INTEGRATING">Tích hợp với viện</option>
                 <option value="WAITING_FOR_DEV">Chờ dev build update</option>
-                <option value="ACCEPTED">Nghiệm thu</option>
+                {/* ACCEPTED intentionally omitted for maintenance UI */}
               </select>
             </div>
             <div className="mt-3 text-sm text-gray-600">
@@ -298,6 +364,20 @@ const MaintenanceSuperTaskPage: React.FC = () => {
             >
               + Thêm mới
             </button>
+            <button
+              className="relative rounded-full border px-4 py-2 text-sm shadow-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 flex items-center gap-2"
+              onClick={() => {
+                setPendingOpen(true);
+                fetchPendingTasks();
+              }}
+            >
+              📨 Công việc chờ
+              {pendingTasks.length > 0 && (
+                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
+                  {pendingTasks.length}
+                </span>
+              )}
+            </button>
           </div>
         </div>
       </div>
@@ -318,20 +398,24 @@ const MaintenanceSuperTaskPage: React.FC = () => {
           data.map((row, idx) => (
             <TaskCard
               key={row.id}
-              task={row}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              task={row as any}
               idx={idx}
               animate={enableItemAnimation}
-              onOpen={(t) => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              onOpen={(t: any) => {
+                // Open in view-only mode for SuperAdmin on maintenance list
                 setEditing(t);
                 setViewOnly(true);
                 setModalOpen(true);
               }}
-              onEdit={(t) => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              onEdit={(t: any) => {
                 setEditing(t);
                 setViewOnly(false);
                 setModalOpen(true);
               }}
-              onDelete={(id) => handleDelete(id)}
+              onDelete={(id: number) => handleDelete(id)}
             />
           ))
         )}
@@ -388,15 +472,24 @@ const MaintenanceSuperTaskPage: React.FC = () => {
           onClose={() => setModalOpen(false)}
           item={editing}
         />
-      ) : (
+        ) : (
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         <TaskFormModal
           open={modalOpen}
           onClose={() => setModalOpen(false)}
-          initial={editing ?? undefined}
+          initial={editing as any}
+          excludeAccepted={true}
           onSubmit={handleSubmit}
           readOnly={false}
         />
       )}
+      <PendingTasksModal
+        open={pendingOpen}
+        onClose={() => setPendingOpen(false)}
+        tasks={pendingTasks}
+        loading={loadingPending}
+        onAccept={handleAcceptPending}
+      />
     </div>
   );
 };
@@ -498,6 +591,75 @@ function DetailModal({
     </div>
   );
 }
+
+  // =======================
+  // Pending Tasks Modal (công việc chờ)
+  // =======================
+  function PendingTasksModal({
+    open,
+    onClose,
+    tasks,
+    loading,
+    onAccept,
+  }: {
+    open: boolean;
+    onClose: () => void;
+    tasks: MaintTask[];
+    loading: boolean;
+    onAccept: (id: number) => void;
+  }) {
+    if (!open) return null;
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      >
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+          className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b px-6 py-4 flex items-center justify-between">
+            <h3 className="text-lg font-bold">Công việc chờ (Bảo trì)</h3>
+            <button onClick={onClose} className="text-gray-500">✕</button>
+          </div>
+
+          <div className="p-4 max-h-[60vh] overflow-y-auto">
+            {loading ? (
+              <div className="text-center py-8">Đang tải...</div>
+            ) : tasks.length === 0 ? (
+              <div className="text-center py-6 text-gray-500">Không có công việc chờ</div>
+            ) : (
+              <div className="space-y-3">
+                {tasks.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between p-3 border rounded">
+                    <div>
+                      <div className="font-semibold">{t.name}</div>
+                      <div className="text-sm text-gray-500">{t.hospitalName ?? "—"}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="px-3 py-1 rounded border bg-green-600 text-white"
+                        onClick={() => onAccept(t.id)}
+                      >
+                        Tiếp nhận
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="sticky bottom-0 bg-white dark:bg-gray-900 border-t p-4 flex justify-end">
+            <button onClick={onClose} className="px-4 py-2 rounded border">Đóng</button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
 function Info({
   label,
