@@ -1197,6 +1197,16 @@ const ImplementationTasksPage: React.FC = () => {
     useEffect(() => { fetchList(); /* eslint-disable-line */ }, [statusFilter]);
     useEffect(() => { fetchList(); /* eslint-disable-line */ }, [sortBy, sortDir]);
 
+    // Fetch pending tasks on mount so the badge shows without requiring a click.
+    // Also refresh periodically (every 60s) to keep the count up-to-date.
+    useEffect(() => {
+        fetchPendingTasks();
+        const timer = window.setInterval(() => {
+            fetchPendingTasks();
+        }, 40000);
+        return () => window.clearInterval(timer);
+    }, [fetchPendingTasks]);
+
     async function fetchHospitalOptions(q: string) {
         try {
             const res = await fetch(`${API_ROOT}/api/v1/admin/hospitals/search?name=${encodeURIComponent(q || "")}`, { headers: authHeaders() });

@@ -7,7 +7,7 @@ export async function getNotifications(limit = 20) {
 
 export async function getNotificationsPage(page = 0, size = 20) {
   const res = await api.get(`/api/v1/auth/notifications?page=${page}&size=${size}`);
-  return res.data; // expects a Page-like response (content, totalElements, totalPages, number)
+  return res.data;
 }
 
 export async function getUnreadCount() {

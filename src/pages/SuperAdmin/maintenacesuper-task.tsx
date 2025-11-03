@@ -257,6 +257,16 @@ const MaintenanceSuperTaskPage: React.FC = () => {
       toast.error("Lỗi khi tiếp nhận công việc");
     }
   };
+  
+  // Fetch pending tasks on mount so the badge shows without requiring a click.
+  // Also refresh periodically (every 60s) to keep the count up-to-date.
+  useEffect(() => {
+    fetchPendingTasks();
+    const timer = window.setInterval(() => {
+      fetchPendingTasks();
+    }, 40000);
+    return () => window.clearInterval(timer);
+  }, []);
  
   const handleSubmit = async (payload: Record<string, unknown>, id?: number) => {
     const isUpdate = Boolean(id);

@@ -1,17 +1,18 @@
 import { useEffect, useState } from "react";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
-import { getNotifications, getUnreadCount, markAsRead } from "../../api/notification.api";
+// notifications now provided by NotificationContext
+import { useNotification } from "../../context/NotificationContext";
 import { useModal } from "../../hooks/useModal";
 import NotificationDetailModal from "./NotificationDetailModal";
 import { Link, useLocation } from "react-router-dom";
 
 export default function NotificationDropdown() {
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<any[]>([]);
   const [selectedNotification, setSelectedNotification] = useState<any | null>(null);
   const [notifying, setNotifying] = useState(true);
-  const [unreadCount, setUnreadCount] = useState(0);
+
+  const { notifications, unreadCount, loadNotifications, markAsRead } = useNotification();
   // no modal; we'll navigate to /notifications
 
   function toggleDropdown() {
@@ -22,34 +23,19 @@ export default function NotificationDropdown() {
     setIsOpen(false);
   }
 
-  const loadUnread = async () => {
-    try {
-      const c = await getUnreadCount();
-      setUnreadCount(c || 0);
-      setNotifying((c || 0) > 0);
-    } catch (e) {
-      // ignore
-    }
-  };
-
-  const loadNotifications = async () => {
-    try {
-      const list = await getNotifications(50);
-      setNotifications(list || []);
-    } catch (e) {
-      // ignore
-    }
-  };
-
+  // reflect unreadCount into local notifying badge
   useEffect(() => {
-    loadUnread();
-  }, []);
+    setNotifying((unreadCount || 0) > 0);
+  }, [unreadCount]);
+
+  const refreshNotifications = async () => {
+    await loadNotifications(50);
+  };
 
   const handleClick = async () => {
     toggleDropdown();
     setNotifying(false);
-    await loadNotifications();
-    await loadUnread();
+    await refreshNotifications();
   };
 
   const { isOpen: isModalOpen, openModal, closeModal } = useModal(false);
@@ -58,12 +44,12 @@ export default function NotificationDropdown() {
   // Decide where "View All" should go based on current path: keep superadmin context
   const viewAllPath = location.pathname.startsWith("/superadmin") ? "/superadmin/notifications" : "/notifications";
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleItemClick = async (n: any) => {
     try {
       if (!n.read) await markAsRead(n.id);
-    } catch (e) {}
-    // refresh counts and list
-    await loadUnread();
+    } catch (e) { console.debug(e); }
+    // refresh list
     await loadNotifications();
 
     // open detail modal instead of auto-navigating
