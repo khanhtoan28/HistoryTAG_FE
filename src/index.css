@@ -195,7 +195,8 @@ layer(base);
   }
 
   :root {
-    --default-font-family: "Be Vietnam Pro", sans-serif;
+    /* Use Times New Roman for the whole project as requested */
+    --default-font-family: "Times New Roman", Times, serif;
   }
 
   html, body {

@@ -417,16 +417,16 @@ const HisSystemPage: React.FC = () => {
                       onView(h);
                     }
                   }}
-                  className="group bg-white rounded-2xl border border-gray-200 p-4 flex items-center justify-between gap-4 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-1 hover:bg-blue-50/30 hover:ring-1 hover:ring-blue-200 cursor-pointer"
+                  className="group bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between gap-4 shadow-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-1 hover:bg-primary/5 hover:ring-1 hover:ring-primary/20 cursor-pointer"
                   style={{ animation: `fadeInUp 600ms ease ${delayMs}ms both` }}
                 >
                   <div className="flex items-center gap-4 w-2/3">
-                    <div className="h-12 w-12 rounded-lg bg-white flex items-center justify-center text-indigo-600 font-semibold text-sm border border-gray-100 transition-colors duration-200 group-hover:border-blue-200 group-hover:bg-blue-50">
-                      <FaHospital className="h-6 w-6 text-blue-600" />
+                    <div className="h-12 w-12 rounded-lg bg-white flex items-center justify-center text-indigo-600 font-semibold text-sm border border-gray-100 transition-colors duration-200 group-hover:border-transparent group-hover:bg-blue-600 group-hover:text-white">
+                      <FaHospital className="h-6 w-6" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3">
-                        <h4 title={h.name} className="font-semibold text-gray-900 truncate group-hover:text-blue-800">{h.name}</h4>
+                        <h4 title={h.name} className="font-semibold text-gray-900 truncate group-hover:text-primary">{h.name}</h4>
                         <span className="text-xs text-gray-400">•</span>
                         <span title={h.address || ""} className="text-xs text-gray-500">{h.address || "—"}</span>
                       </div>
@@ -447,7 +447,7 @@ const HisSystemPage: React.FC = () => {
                         title="Xem"
                         aria-label={`Xem ${h.name}`}
                         onClick={(e) => { e.stopPropagation(); onView(h); }}
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition transform group-hover:scale-105 text-xs font-medium"
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition transform group-hover:scale-105 text-xs font-medium"
                       >
                         <AiOutlineEye className="w-4 h-4" />
                         <span className="hidden sm:inline">Xem</span>
