@@ -44,9 +44,10 @@ export default function ForgotPasswordForm() {
       toast.success("Email khôi phục mật khẩu đã được gửi!");
       // Tự động chuyển sang trang reset password
       navigate("/reset-password");
-    } catch (ex: any) {
-      const fe = pickFieldErrors(ex);
-      const errorMsg = pickErrMsg(ex);
+    } catch (ex: unknown) {
+      const e = ex as any;
+      const fe = pickFieldErrors(e);
+      const errorMsg = pickErrMsg(e);
       if (Object.keys(fe).length) setFieldErr(fe);
       setErr(errorMsg);
       toast.error(errorMsg || "Gửi email thất bại!");
@@ -64,25 +65,31 @@ export default function ForgotPasswordForm() {
     "border-gray-200 focus:ring-2 focus:ring-blue-400/40 focus:border-blue-400";
 
   return (
-    <div className="flex flex-col w-full text-white min-h-screen justify-center items-center">
-      <div className="w-full max-w-[700px] px-6">
-        <div className="mb-6 text-center sm:text-left">
-          <h1 className="mb-2 font-semibold text-white text-[28px] sm:text-3xl">
-            Quên mật khẩu
-          </h1>
-          <p className="mt-2 text-white/80">
-            Nhập email của bạn để nhận link đặt lại mật khẩu
-          </p>
+    <div className="auth-bg flex flex-col w-full text-white min-h-screen justify-center items-center py-12">
+      <div className="w-full max-w-[720px] px-6">
+        <div className="mb-6 text-center sm:text-left flex items-center gap-4">
+          <div className="flex-none">
+            <div className="flame-logo" aria-hidden />
+          </div>
+          <div>
+            <h1 className="mb-2 font-semibold text-white text-[28px] sm:text-3xl">
+              Quên mật khẩu
+            </h1>
+            <p className="mt-2 text-blue-100/80">
+              Nhập email của bạn để nhận link đặt lại mật khẩu
+            </p>
+          </div>
         </div>
 
-        <form onSubmit={onSubmit} noValidate className="space-y-5">
+        <div className="auth-card mx-auto bg-white/6 backdrop-blur-md border border-white/10 rounded-2xl p-8 shadow-xl">
+          <form onSubmit={onSubmit} noValidate className="space-y-5">
           {err && (
             <div className="text-sm text-red-600 bg-red-100/80 border border-red-300 rounded p-2">
               {err}
             </div>
           )}
 
-          <div className="space-y-2">
+          <div className="space-y-2 field-row group">
             <Label className="text-white">
               Email <span className="text-red-500">*</span>
             </Label>
@@ -111,19 +118,20 @@ export default function ForgotPasswordForm() {
 
           <div>
             <Button
-              className="w-full py-3 text-base font-medium text-white transition rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+              className="neon-btn w-full py-3 text-base font-semibold rounded-lg disabled:opacity-50"
               disabled={loading}
               type="submit"
             >
               {loading ? "Đang gửi..." : "Gửi email"}
             </Button>
           </div>
-        </form>
+          </form>
+        </div>
 
-        <div className="mt-5 text-center sm:text-left">
+        <div className="mt-5 text-center">
           <Link
             to="/signin"
-            className="text-sm text-blue-300 hover:text-blue-200 underline"
+            className="text-sm text-blue-200 hover:text-white underline"
           >
             ← Quay lại đăng nhập
           </Link>

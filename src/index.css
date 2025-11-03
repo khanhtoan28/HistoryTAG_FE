@@ -399,6 +399,243 @@ layer(base);
   @apply static! mt-0 h-8 w-9 rounded-full border dark:hover:bg-white/[0.05] border-gray-200 !text-gray-700 transition hover:bg-gray-100 dark:border-white/[0.03] dark:bg-gray-800 dark:!text-gray-400  dark:hover:!text-white/90;
 }
 
+/* --- Custom styles for a flashy login (auth) --- */
+/* background gradient + subtle moving particles */
+.auth-bg {
+  /* layered radial accents + deep base gradient */
+  background: radial-gradient(1200px 400px at 10% 10%, rgba(255,120,80,0.12), transparent 8%),
+              radial-gradient(800px 300px at 90% 80%, rgba(120,80,255,0.12), transparent 12%),
+              linear-gradient(120deg,#0f172a 0%, #0b1220 50%, #071022 100%);
+  position: relative;
+  overflow: hidden;
+  /* subtle animated gradient shift for liveliness */
+  background-size: 200% 200%;
+  animation: backgroundShift 14s linear infinite alternate;
+}
+
+.auth-card {
+  /* glass effect */
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+  box-shadow: 0 10px 30px rgba(2,6,23,0.6), 0 2px 6px rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.auth-card {
+  transition: transform .28s cubic-bezier(.2,.9,.25,1), box-shadow .28s ease, filter .28s ease;
+}
+.auth-card:hover {
+  transform: translateY(-8px) scale(1.01);
+  filter: saturate(1.06) contrast(1.03);
+  box-shadow: 0 24px 60px rgba(2,6,23,0.7), 0 6px 20px rgba(122,90,248,0.12);
+}
+
+.auth-card input:hover {
+  box-shadow: 0 6px 18px rgba(122,90,248,0.06) inset, 0 0 0 3px rgba(122,90,248,0.04);
+}
+
+.flame-logo:hover { transform: scale(1.08) rotate(2deg); filter: saturate(1.25) blur(4px); }
+
+/* small decorative animated flame logo */
+.flame-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: conic-gradient(from 200deg at 50% 50%, #ff8a00, #ff2d95, #7a5af8);
+  filter: blur(6px) saturate(140%);
+  position: relative;
+  box-shadow: 0 6px 20px rgba(122,90,248,0.18), 0 2px 6px rgba(255,45,149,0.12) inset;
+}
+.flame-logo::after {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  border-radius: 8px;
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.6), transparent 20%), linear-gradient(180deg, rgba(255,255,255,0.06), transparent 50%);
+  transform-origin: center;
+  animation: flame-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes flame-pulse {
+  0% { transform: scale(0.98) rotate(-3deg); opacity: 0.95 }
+  50% { transform: scale(1.06) rotate(3deg); opacity: 1 }
+  100% { transform: scale(0.98) rotate(-3deg); opacity: 0.95 }
+}
+
+/* Neon button */
+.neon-btn {
+  background: linear-gradient(90deg,#ff416c,#ff8a00,#7a5af8);
+  color: #fff !important;
+  box-shadow: 0 6px 30px rgba(122,90,248,0.18), 0 0 40px rgba(255,65,108,0.12);
+  transition: transform .16s ease, box-shadow .16s ease;
+  position: relative;
+  overflow: hidden;
+}
+.neon-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 50px rgba(122,90,248,0.22), 0 0 80px rgba(255,65,108,0.14); }
+.neon-btn:active { transform: translateY(0); }
+.neon-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, rgba(255,255,255,0.08), rgba(255,255,255,0));
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/* focus styles for inputs to look neon */
+.auth-card input:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(122,90,248,0.12);
+  border-color: rgba(122,90,248,0.6);
+}
+
+/* Field row hover/focus styles - affects label + input when hovering or focus-within */
+.field-row {
+  transition: background .18s ease, transform .18s ease, box-shadow .18s ease;
+  border-radius: 10px;
+}
+.field-row:hover {
+  background: linear-gradient(180deg, rgba(63,182,255,0.03), rgba(10,40,70,0.02));
+}
+.field-row:focus-within {
+  transform: translateY(-2px);
+}
+.field-row label {
+  transition: color .18s ease;
+}
+.field-row:hover label,
+.field-row:focus-within label {
+  color: #dfe9ff;
+}
+.field-row input {
+  transition: box-shadow .18s ease, border-color .18s ease, background .18s ease;
+}
+.field-row:hover input,
+.field-row:focus-within input {
+  box-shadow: 0 8px 30px rgba(63,182,255,0.08), 0 4px 12px rgba(0,0,0,0.12) inset;
+  border-color: rgba(63,182,255,0.9);
+  background: rgba(255,255,255,0.96);
+}
+
+/* keyboard focus visible for accessibility */
+.field-row input:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 5px rgba(63,182,255,0.18);
+  border-color: rgba(63,182,255,0.95);
+}
+
+/* smaller helper: subtle floating particles using pseudo elements */
+.auth-bg::before,
+.auth-bg::after {
+  content: '';
+  position: absolute;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  filter: blur(40px) saturate(140%);
+  opacity: 0.09;
+  pointer-events: none;
+}
+.auth-bg::before { left: 6%; top: 10%; background: radial-gradient(circle,#ff7a59,#ff2d95); }
+.auth-bg::after { right: 6%; bottom: 8%; background: radial-gradient(circle,#7a5af8,#3fb6ff); }
+
+@media (max-width: 640px) {
+  .flame-logo { width: 48px; height: 48px }
+  .auth-card { padding: 1.25rem }
+}
+
+/* animated background shift */
+@keyframes backgroundShift {
+  0% { background-position: 0% 0% }
+  100% { background-position: 100% 100% }
+}
+
+/* move the decorative blobs slowly to make background feel alive */
+@keyframes blobFloat1 {
+  0% { transform: translateY(0) translateX(0) scale(1) }
+  50% { transform: translateY(-18px) translateX(6px) scale(1.05) }
+  100% { transform: translateY(0) translateX(0) scale(1) }
+}
+@keyframes blobFloat2 {
+  0% { transform: translateY(0) translateX(0) scale(1) }
+  50% { transform: translateY(24px) translateX(-10px) scale(0.98) }
+  100% { transform: translateY(0) translateX(0) scale(1) }
+}
+
+.auth-bg::before { animation: blobFloat1 9s ease-in-out infinite; }
+.auth-bg::after { animation: blobFloat2 11s ease-in-out infinite; }
+
+/* glowing border behind the auth card to harmonize color */
+.auth-card {
+  position: relative;
+  z-index: 10;
+}
+.auth-card::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
+  border-radius: 20px;
+  background: linear-gradient(90deg,#ff416c, #ff8a00, #7a5af8 80%);
+  filter: blur(28px) saturate(140%);
+  opacity: 0.22;
+  z-index: -1;
+}
+
+/* sheen animation on neon button */
+@keyframes sheen {
+  0% { transform: translateX(-120%) }
+  100% { transform: translateX(120%) }
+}
+.neon-btn::before {
+  content: '';
+  position: absolute;
+  left: -40%;
+  top: -10%;
+  width: 40%;
+  height: 120%;
+  background: linear-gradient(90deg, rgba(255,255,255,0.12), rgba(255,255,255,0.02), rgba(255,255,255,0.12));
+  transform: skewX(-20deg);
+  mix-blend-mode: overlay;
+  opacity: 0.7;
+  pointer-events: none;
+  animation: sheen 2s linear infinite;
+}
+
+/* ensure inputs and labels pick up the brighter accent for readability */
+.auth-card label, .auth-card .text-white { color: #e6eefc; }
+.auth-card input { background: rgba(255,255,255,0.94); }
+
+/* Success overlay (used on ResetPasswordForm) */
+.success-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(2,6,23,0.6), rgba(2,6,23,0.7));
+  border-radius: 1rem;
+  z-index: 40;
+}
+.success-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 1.25rem 2rem;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+  box-shadow: 0 12px 40px rgba(2,6,23,0.6), 0 6px 20px rgba(122,90,248,0.12);
+  transform: translateY(0);
+  animation: successPop .6s cubic-bezier(.2,.9,.25,1) both;
+}
+.checkmark { width: 72px; height: 72px; stroke: #fff; filter: drop-shadow(0 6px 20px rgba(122,90,248,0.25)); }
+@keyframes successPop {
+  0% { transform: scale(.6) translateY(6px); opacity: 0 }
+  60% { transform: scale(1.06) translateY(-4px); opacity: 1 }
+  100% { transform: scale(1) translateY(0); opacity: 1 }
+}
+
+
+
 /* =======================
    Softer global dark-mode overrides
    These rules scope common Tailwind utility classes under

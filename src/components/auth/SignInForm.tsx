@@ -131,22 +131,30 @@ export default function SignInForm() {
     "border-gray-200 focus:ring-2 focus:ring-blue-400/40 focus:border-blue-400";
 
   return (
-    <div className="flex flex-col w-full text-white min-h-screen justify-center items-center">
-      <div className="w-full max-w-[700px] px-6">
-        <div className="mb-6 text-center sm:text-left">
-          <h1 className="mb-2 font-semibold text-white text-[28px] sm:text-3xl">
-            Đăng nhập
-          </h1>
+    <div className="auth-bg flex flex-col w-full text-white min-h-screen justify-center items-center py-12">
+      <div className="w-full max-w-[720px] px-6">
+        <div className="mb-6 text-center sm:text-left flex items-center gap-4">
+          {/* Animated flame/logo */}
+          <div className="flex-none">
+            <div className="flame-logo" aria-hidden />
+          </div>
+          <div>
+            <h1 className="mb-2 font-semibold text-white text-[28px] sm:text-3xl">
+              Đăng nhập
+            </h1>
+            <p className="text-sm text-blue-100/80">Đăng nhập để tiếp tục trải nghiệm</p>
+          </div>
         </div>
 
-        <form onSubmit={onSubmit} noValidate className="space-y-5">
+        <div className="auth-card mx-auto bg-white/6 backdrop-blur-md border border-white/10 rounded-2xl p-8 shadow-xl">
+          <form onSubmit={onSubmit} noValidate className="space-y-5">
           {err && (
             <div className="text-sm text-red-600 bg-red-100/80 border border-red-300 rounded p-2">
               {err}
             </div>
           )}
 
-          <div className="space-y-2">
+          <div className="space-y-2 field-row group">
             <Label className="text-white">
               Tên đăng nhập <span className="text-red-500">*</span>
             </Label>
@@ -172,7 +180,7 @@ export default function SignInForm() {
             )}
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 field-row group">
             <Label className="text-white">
               Mật khẩu <span className="text-red-500">*</span>
             </Label>
@@ -215,7 +223,7 @@ export default function SignInForm() {
             )}
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between field-row group">
             <label className="flex items-center gap-3 cursor-pointer select-none">
               <Checkbox
                 checked={remember}
@@ -240,19 +248,20 @@ export default function SignInForm() {
 
           <div>
             <Button
-              className="w-full py-3 text-base font-medium text-white transition rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+              className="neon-btn w-full py-3 text-base font-semibold rounded-lg disabled:opacity-50"
               disabled={loading}
               type="submit"
             >
               {loading ? "Đang đăng nhập..." : "Đăng nhập"}
             </Button>
           </div>
-        </form>
+          </form>
+  </div>
 
-        <div className="mt-5">
-          <p className="text-sm font-normal text-center text-white sm:text-start">
-            Chưa có tài khoản?{" "}
-            <Link to="/signup" className="underline text-blue-300 hover:text-blue-200">
+        <div className="mt-5 text-center">
+          <p className="text-sm font-normal text-center text-white/90">
+            Chưa có tài khoản?{' '}
+            <Link to="/signup" className="underline text-blue-200 hover:text-white">
               Đăng ký
             </Link>
           </p>
