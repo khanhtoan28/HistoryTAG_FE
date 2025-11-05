@@ -139,60 +139,17 @@ export default function TaskFormModal({
         []
     );
 
-    const searchAgencies = useMemo(
-        () => async (term: string) => {
-            const url = `${API_ROOT}/api/v1/superadmin/agencies/search?search=${encodeURIComponent(term)}`;
-            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
-            if (!res.ok) return [];
-            const list = await res.json();
-            const mapped = Array.isArray(list)
-                ? list.map((a: { id?: number; label?: string }) => ({ id: Number(a.id), name: String(a.label ?? a.id) }))
-                : [];
-            return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name) as Array<{ id: number; name: string }>;
-        },
-        []
-    );
-
-    const searchHisSystems = useMemo(
-        () => async (term: string) => {
-            const url = `${API_ROOT}/api/v1/superadmin/his/search?search=${encodeURIComponent(term)}`;
-            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
-            if (!res.ok) return [];
-            const list = await res.json();
-            const mapped = Array.isArray(list)
-                ? list.map((h: { id?: number; label?: string }) => ({ id: Number(h.id), name: String(h.label ?? h.id) }))
-                : [];
-            return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name) as Array<{ id: number; name: string }>;
-        },
-        []
-    );
-
-    const searchHardwares = useMemo(
-        () => async (term: string) => {
-            const url = `${API_ROOT}/api/v1/superadmin/hardware/search?search=${encodeURIComponent(term)}`;
-            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
-            if (!res.ok) return [];
-            const list = await res.json();
-            const mapped = Array.isArray(list)
-                ? list.map((h: { id?: number; label?: string }) => ({ id: Number(h.id), name: String(h.label ?? h.id) }))
-                : [];
-            return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name) as Array<{ id: number; name: string }>;
-        },
-        []
-    );
+    // Removed: searchAgencies, searchHisSystems, searchHardwares as related fields are hidden
 
     const [model, setModel] = useState<Partial<ImplementationTaskRequestDTO>>(() => ({
         name: initial?.name || "",
         hospitalId: initial?.hospitalId || 0,
         picDeploymentId: initial?.picDeploymentId || 0,
-        agencyId: initial?.agencyId ?? null,
-        hisSystemId: initial?.hisSystemId ?? null,
-        hardwareId: initial?.hardwareId ?? null,
-        quantity: initial?.quantity ?? null,
+        // removed optional fields from form (kept nulls on submit)
         apiTestStatus: initial?.apiTestStatus ?? "",
-        bhytPortCheckInfo: initial?.bhytPortCheckInfo ?? "",
+        // removed from form
         additionalRequest: initial?.additionalRequest ?? "",
-        apiUrl: initial?.apiUrl ?? "",
+        // removed from form
         deadline: initial?.deadline ?? "",
         completionDate: initial?.completionDate ?? "",
         status: initial?.status ?? "",
@@ -210,18 +167,7 @@ export default function TaskFormModal({
         const nm = initial?.picDeploymentName || "";
         return id ? { id, name: nm || String(id) } : null;
     });
-    const [agencyOpt, setAgencyOpt] = useState<{ id: number; name: string } | null>(() => {
-        const id = (initial?.agencyId as number) || 0;
-        return id ? { id, name: String(id) } : null;
-    });
-    const [hisOpt, setHisOpt] = useState<{ id: number; name: string } | null>(() => {
-        const id = (initial?.hisSystemId as number) || 0;
-        return id ? { id, name: String(id) } : null;
-    });
-    const [hardwareOpt, setHardwareOpt] = useState<{ id: number; name: string } | null>(() => {
-        const id = (initial?.hardwareId as number) || 0;
-        return id ? { id, name: String(id) } : null;
-    });
+    // Removed: agencyOpt, hisOpt, hardwareOpt states
 
     useEffect(() => {
         if (open) {
@@ -229,14 +175,11 @@ export default function TaskFormModal({
                 name: initial?.name || "",
                 hospitalId: initial?.hospitalId || 0,
                 picDeploymentId: initial?.picDeploymentId || 0,
-                agencyId: initial?.agencyId ?? null,
-                hisSystemId: initial?.hisSystemId ?? null,
-                hardwareId: initial?.hardwareId ?? null,
-                quantity: initial?.quantity ?? null,
+                // removed optional fields from form (kept nulls on submit)
                 apiTestStatus: initial?.apiTestStatus ?? "",
-                bhytPortCheckInfo: initial?.bhytPortCheckInfo ?? "",
+                // removed from form
                 additionalRequest: initial?.additionalRequest ?? "",
-                apiUrl: initial?.apiUrl ?? "",
+                // removed from form
                 deadline: initial?.deadline ?? "",
                 completionDate: initial?.completionDate ?? "",
                 status: initial?.status ?? "",
@@ -252,101 +195,12 @@ export default function TaskFormModal({
             const pnm = initial?.picDeploymentName || "";
             setPicOpt(pid ? { id: pid, name: pnm || String(pid) } : null);
 
-            const aid = (initial?.agencyId as number) || 0;
-            setAgencyOpt(aid ? { id: aid, name: String(aid) } : null);
-
-            const hisId = (initial?.hisSystemId as number) || 0;
-            setHisOpt(hisId ? { id: hisId, name: String(hisId) } : null);
-
-            const hwid = (initial?.hardwareId as number) || 0;
-            setHardwareOpt(hwid ? { id: hwid, name: String(hwid) } : null);
+            // removed: agency/his/hardware selections
         }
     }, [open, initial]);
 
     // When editing: resolve names for Agency/HIS/Hardware if we only have IDs
-    useEffect(() => {
-        if (!open) return;
-        async function resolveById(
-            id: number | null | undefined,
-            setOpt: (v: { id: number; name: string } | null) => void,
-            detailPath: string,
-            nameKeys: string[]
-        ) {
-            if (!id || id <= 0) return;
-            const current = ((): { id: number; name: string } | null => {
-                if (setOpt === setAgencyOpt) return agencyOpt;
-                if (setOpt === setHisOpt) return hisOpt;
-                if (setOpt === setHardwareOpt) return hardwareOpt;
-                return null;
-            })();
-            // If already resolved to a non-numeric name, skip
-            if (current && current.name && current.name !== String(id)) return;
-
-            // Helper to extract name from possible wrapped payloads
-            const extractName = (payload: unknown): string | null => {
-                const candidates: any[] = [];
-                if (payload && typeof payload === "object") {
-                    candidates.push(payload);
-                    // Common wrappers: data, result
-                    // @ts-ignore
-                    if (payload.data) candidates.push((payload as any).data);
-                    // @ts-ignore
-                    if (payload.result) candidates.push((payload as any).result);
-                }
-                for (const obj of candidates) {
-                    for (const k of nameKeys) {
-                        const v = obj?.[k];
-                        if (typeof v === "string" && v.trim()) return String(v);
-                    }
-                }
-                return null;
-            };
-
-            // 1) Try detail endpoint
-            try {
-                const res = await fetch(`${API_ROOT}${detailPath}/${id}`, { headers: authHeaders(), credentials: "include" });
-                if (res.ok) {
-                    const obj = await res.json();
-                    const name = extractName(obj);
-                    if (name) {
-                        setOpt({ id, name });
-                        return;
-                    }
-                }
-            } catch { /* ignore */ }
-
-            // 2) Fallback: query list with keyword and pick exact id
-            try {
-                const res = await fetch(`${API_ROOT}${detailPath}?search=${encodeURIComponent(String(id))}&page=0&size=50`, { headers: authHeaders(), credentials: "include" });
-                if (res.ok) {
-                    const obj = await res.json();
-                    const list = Array.isArray(obj?.content) ? obj.content : Array.isArray(obj) ? obj : [];
-                    const found = list.find((it: any) => Number(it?.id) === Number(id));
-                    if (found) {
-                        const name = extractName(found) || String(found.name ?? found[id]);
-                        if (name) {
-                            setOpt({ id, name });
-                            return;
-                        }
-                    }
-                }
-            } catch { /* ignore */ }
-
-            // 3) Last resort: use search loaders
-            try {
-                const fetcher = setOpt === setAgencyOpt ? searchAgencies : setOpt === setHisOpt ? searchHisSystems : searchHardwares;
-                const opts = await fetcher("");
-                const found = opts.find((o) => o.id === id);
-                if (found) setOpt(found);
-            } catch { /* ignore */ }
-        }
-
-        resolveById((initial?.agencyId as number) || null, setAgencyOpt, "/api/v1/superadmin/agencies", ["name", "agencyName", "label"]);
-        resolveById((initial?.hisSystemId as number) || null, setHisOpt, "/api/v1/superadmin/his", ["name", "hisName", "label"]);
-        resolveById((initial?.hardwareId as number) || null, setHardwareOpt, "/api/v1/superadmin/hardware", ["name", "hardwareName", "label"]);
-        // also react when current option states change from numeric → name
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, agencyOpt?.name, hisOpt?.name, hardwareOpt?.name]);
+    // Removed: resolveById logic for agency/his/hardware
 
     useEffect(() => {
         if (!open) return;
@@ -369,6 +223,8 @@ export default function TaskFormModal({
     const [submitting, setSubmitting] = useState(false);
 
     if (!open) return null;
+
+    const lockHospital = !initial?.id && (Boolean(initial?.hospitalId) || Boolean(initial?.hospitalName));
 
     // Determine if this task has been transferred to maintenance.
     // Sources: explicit prop, initial payload flag, or status === 'TRANSFERRED'
@@ -400,14 +256,14 @@ export default function TaskFormModal({
             name: model.name!.trim(),
             hospitalId: hospitalOpt.id,
             picDeploymentId: picOpt.id,
-            agencyId: model.agencyId ?? null,
-            hisSystemId: model.hisSystemId ?? null,
-            hardwareId: model.hardwareId ?? null,
-            quantity: model.quantity ?? null,
+            agencyId: null,
+            hisSystemId: null,
+            hardwareId: null,
+            quantity: null,
             apiTestStatus: model.apiTestStatus ?? null,
-            bhytPortCheckInfo: model.bhytPortCheckInfo ?? null,
+            bhytPortCheckInfo: null,
             additionalRequest: model.additionalRequest ?? null,
-            apiUrl: model.apiUrl ?? null,
+            apiUrl: null,
             deadline: toISOOrNull(model.deadline) ?? null,
             completionDate: toISOOrNull(model.completionDate) ?? null,
             status: model.status ?? null,
@@ -563,29 +419,11 @@ export default function TaskFormModal({
                                     <TextInput disabled={readOnly} value={model.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, name: e.target.value }))} placeholder="Nhập tên dự án" />
                                 </Field>
 
-                                <RemoteSelect label="Bệnh viện" required placeholder="Nhập tên bệnh viện để tìm…" fetchOptions={searchHospitals} value={hospitalOpt} onChange={setHospitalOpt} disabled={readOnly} />
+                                <RemoteSelect label="Bệnh viện" required placeholder="Nhập tên bệnh viện để tìm…" fetchOptions={searchHospitals} value={hospitalOpt} onChange={setHospitalOpt} disabled={readOnly || lockHospital} />
 
                                 <RemoteSelect label="Người phụ trách (PIC)" required placeholder="Nhập tên người phụ trách để tìm…" fetchOptions={searchPICs} value={picOpt} onChange={setPicOpt} disabled={readOnly} />
 
-                                <Field label="Số lượng">
-                                    <TextInput disabled={readOnly} type="number" value={model.quantity ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, quantity: e.target.value ? Number(e.target.value) : null }))} />
-                                </Field>
-
-                                <RemoteSelect label="Agency" placeholder="Nhập tên agency để tìm…" fetchOptions={searchAgencies} value={agencyOpt} onChange={(v) => { setAgencyOpt(v); setModel((s) => ({ ...s, agencyId: v ? v.id : null })); }} disabled={readOnly} />
-
-                                <RemoteSelect label="HIS System" placeholder="Nhập tên HIS để tìm…" fetchOptions={searchHisSystems} value={hisOpt} onChange={(v) => { setHisOpt(v); setModel((s) => ({ ...s, hisSystemId: v ? v.id : null })); }} disabled={readOnly} />
-
-                                <RemoteSelect label="Hardware" placeholder="Nhập tên hardware để tìm…" fetchOptions={searchHardwares} value={hardwareOpt} onChange={(v) => { setHardwareOpt(v); setModel((s) => ({ ...s, hardwareId: v ? v.id : null })); }} disabled={readOnly} />
-
-                                <Field label="API URL">
-                                    <TextInput disabled={readOnly} value={model.apiUrl ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, apiUrl: e.target.value }))} placeholder="https://..." />
-                                </Field>
-
-
-
-                                <Field label="BHYT Port Check Info">
-                                    <TextInput disabled={readOnly} value={model.bhytPortCheckInfo ?? ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, bhytPortCheckInfo: e.target.value }))} />
-                                </Field>
+                                {/* Removed fields: Số lượng, Agency, HIS, Hardware, API URL, BHYT */}
 
                                 <Field label="Trạng thái" required>
                                     <Select disabled={readOnly || isTransferred}
