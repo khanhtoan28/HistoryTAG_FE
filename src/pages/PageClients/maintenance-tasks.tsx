@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import TaskCardNew from "../SuperAdmin/TaskCardNew";
 import toast from "react-hot-toast";
 import { FaHospital } from "react-icons/fa";
-import { FiUser, FiLink, FiClock, FiTag } from "react-icons/fi";
+import { FiUser, FiLink, FiClock, FiTag, FiCheckCircle } from "react-icons/fi";
+
 
 
 function PendingTasksModal({
@@ -19,7 +20,10 @@ function PendingTasksModal({
     list: ImplementationTaskResponseDTO[];
     loading: boolean;
 }) {
+    const [acceptingId, setAcceptingId] = useState<number | null>(null);
+
     if (!open) return null;
+
     return (
         <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -55,7 +59,7 @@ function PendingTasksModal({
                         {list.map((t) => (
                             <div
                                 key={t.id}
-                                className="flex justify-between items-center border border-gray-200 dark:border-gray-700 rounded-xl p-4"
+                                className="flex justify-between items-center border border-gray-200 dark:border-gray-700 rounded-xl p-4 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition"
                             >
                                 <div>
                                     <div className="font-semibold text-gray-900 dark:text-gray-100">
@@ -65,11 +69,34 @@ function PendingTasksModal({
                                         Người triển khai: {t.picDeploymentName || "-"}
                                     </div>
                                 </div>
+
                                 <button
-                                    onClick={() => onAccept(t.id)}
-                                    className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
+                                    onClick={async () => {
+                                        setAcceptingId(t.id);
+                                        try {
+                                            await onAccept(t.id);
+                                        } finally {
+                                            setAcceptingId(null);
+                                        }
+                                    }}
+                                    disabled={acceptingId === t.id}
+                                    className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-xl text-white
+                             bg-gradient-to-r from-emerald-600 to-green-600
+                             hover:from-emerald-500 hover:to-green-500
+                             shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40
+                             disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
-                                    ✅ Tiếp nhận
+                                    {acceptingId === t.id ? (
+                                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10"
+                                                stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor"
+                                                d="M4 12a8 8 0 018-8v4A4 4 0 008 12H4z"></path>
+                                        </svg>
+                                    ) : (
+                                        <FiCheckCircle className="w-4 h-4" />
+                                    )}
+                                    <span>Tiếp nhận</span>
                                 </button>
                             </div>
                         ))}
@@ -79,6 +106,7 @@ function PendingTasksModal({
         </div>
     );
 }
+
 // =====================
 // Types khớp với BE DTOs
 // =====================
@@ -1271,9 +1299,9 @@ const ImplementationTasksPage: React.FC = () => {
             {error && <div className="text-red-600 mb-4">{error}</div>}
 
             <div className="mb-6 rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Thao tác</h3>
+                <div className="flex items-start gap-4">
+                   <div className="flex-1 min-w-[320px]">
+                        <h3 className="text-lg font-semibold mb-3 ">Tìm kiếm & Thao tác</h3>
                         <div className="flex flex-wrap items-center gap-3">
                             <div className="relative">
                                 <input
@@ -1307,58 +1335,81 @@ const ImplementationTasksPage: React.FC = () => {
                         <div className="mt-3 text-sm text-gray-600 dark:text-gray-300">Tổng: <span className="font-semibold text-gray-800 dark:text-gray-100">{loading ? '...' : (totalCount ?? data.length)}</span></div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3 ml-auto justify-end">
+                        {/* Sort */}
                         <div className="flex items-center gap-2">
-                            <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900" value={sortBy} onChange={(e) => { setSortBy(e.target.value); setPage(0); }}>
+                            <select
+                                className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                                value={sortBy}
+                                onChange={(e) => { setSortBy(e.target.value); setPage(0); }}
+                            >
                                 <option value="id">Sắp xếp theo: id</option>
                                 <option value="hospitalName">Sắp xếp theo: bệnh viện</option>
                                 <option value="deadline">Sắp xếp theo: deadline</option>
                             </select>
-                            <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900" value={sortDir} onChange={(e) => setSortDir(e.target.value)}>
+                            <select
+                                className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                                value={sortDir}
+                                onChange={(e) => setSortDir(e.target.value)}
+                            >
                                 <option value="asc">Tăng dần</option>
                                 <option value="desc">Giảm dần</option>
                             </select>
                         </div>
 
+                        {/* Thêm mới */}
                         {isSuperAdmin || userTeam === "MAINTENANCE" ? (
-                            <Button variant="primary" className="rounded-xl flex items-center gap-2" onClick={() => { setEditing(null); setModalOpen(true); }}>
+                            <button
+                                className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700 flex items-center gap-2"
+                                onClick={() => { setEditing(null); setModalOpen(true); }}
+                            >
                                 <PlusIcon />
                                 <span>Thêm mới</span>
-                            </Button>
+                            </button>
                         ) : (
-                            <Button variant="primary" disabled className="opacity-50 cursor-not-allowed flex items-center gap-2">
+                            <button
+                                disabled
+                                className="rounded-xl bg-gray-200 text-gray-500 px-5 py-2 shadow-sm flex items-center gap-2"
+                                title="Không có quyền"
+                            >
                                 <PlusIcon />
                                 <span>Thêm mới</span>
-                            </Button>
+                            </button>
                         )}
-                        <Button
-                            variant="ghost"
-                            className="relative flex items-center gap-2 border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300"
-                            onClick={() => {
-                                setPendingOpen(true);
-                                fetchPendingTasks();
+
+                        {/* Làm mới */}
+                        <button
+                            className="rounded-full border px-4 py-2 text-sm shadow-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 flex items-center gap-2"
+                            onClick={async () => {
+                                setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc'); setPage(0);
+                                setLoading(true);
+                                const start = Date.now();
+                                await fetchList();
+                                const minMs = 800;
+                                const elapsed = Date.now() - start;
+                                if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
+                                setLoading(false);
                             }}
                         >
-                            📨 Công việc chờ
-                            {pendingTasks.length > 0 && (
-                                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
-                                    {pendingTasks.length}
-                                </span>
-                            )}
-                        </Button>
-
-                        <button className="rounded-full border px-4 py-2 text-sm shadow-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 flex items-center gap-2" onClick={async () => {
-                            setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc'); setPage(0);
-                            setLoading(true);
-                            const start = Date.now();
-                            await fetchList();
-                            const minMs = 800;
-                            const elapsed = Date.now() - start;
-                            if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
-                            setLoading(false);
-                        }}>
                             <span>Làm mới</span>
                         </button>
+
+                        {/* —— xuống dòng rồi mới hiện “Công việc chờ” —— */}
+                        <div className="basis-full" />
+                        <div className="w-full flex justify-end">
+                            <Button
+                                variant="ghost"
+                                className="relative flex items-center gap-2 border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300"
+                                onClick={() => { setPendingOpen(true); fetchPendingTasks(); }}
+                            >
+                                📨 Công việc chờ
+                                {pendingTasks.length > 0 && (
+                                    <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
+                                        {pendingTasks.length}
+                                    </span>
+                                )}
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1396,27 +1447,42 @@ const ImplementationTasksPage: React.FC = () => {
             </div>
 
             <div className="mt-4 flex items-center justify-between">
+                {/* Trái: phân trang */}
                 <div className="flex items-center gap-2">
-                    <button className="px-3 py-1 border rounded inline-flex items-center gap-2" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0}>
+                    <button className="px-3 py-1 border rounded inline-flex items-center gap-2"
+                        onClick={() => setPage((p) => Math.max(0, p - 1))}
+                        disabled={page <= 0}>
                         <ChevronLeftIcon />
                         <span>Prev</span>
                     </button>
                     <span>Trang {page + 1}{totalCount ? ` / ${Math.max(1, Math.ceil((totalCount || 0) / size))}` : ""}</span>
-                    <button className="px-3 py-1 border rounded inline-flex items-center gap-2" onClick={() => setPage((p) => p + 1)} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)}>
+                    <button className="px-3 py-1 border rounded inline-flex items-center gap-2"
+                        onClick={() => setPage((p) => p + 1)}
+                        disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)}>
                         <span>Next</span>
                         <ChevronRightIcon />
                     </button>
                 </div>
-                <div className="flex items-center gap-2">
-                    <label className="text-sm">Số hàng:</label>
-                    <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1">
-                        <option value="5">5</option>
-                        <option value="10">10</option>
-                        <option value="20">20</option>
-                        <option value="50">50</option>
-                    </select>
+
+                {/* Phải: nút Công việc chờ + chọn size */}
+                <div className="flex items-center gap-3">
+
+                    <div className="flex items-center gap-2">
+                        <label className="text-sm">Số hàng:</label>
+                        <select
+                            value={String(size)}
+                            onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }}
+                            className="border rounded px-2 py-1"
+                        >
+                            <option value="5">5</option>
+                            <option value="10">10</option>
+                            <option value="20">20</option>
+                            <option value="50">50</option>
+                        </select>
+                    </div>
                 </div>
             </div>
+
             <PendingTasksModal
                 open={pendingOpen}
                 onClose={() => setPendingOpen(false)}

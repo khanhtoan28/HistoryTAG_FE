@@ -16,7 +16,7 @@ export type ImplementationTaskResponseDTO = {
   quantity?: number | null;
   agencyId?: number | null;
   hisSystemId?: number | null;
-  hisSystemName?: string | null; 
+  hisSystemName?: string | null;
   hardwareId?: number | null;
   endDate?: string | null;
   additionalRequest?: string | null;
@@ -723,7 +723,7 @@ function TaskFormModal({
       }}
     >
       <AnimatePresence initial={false}>
-  <motion.div
+        <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 20, opacity: 0 }}
@@ -916,7 +916,7 @@ function DetailModal({
         exit={{ opacity: 0, y: 20, scale: 0.95 }}
         transition={{ type: "spring", stiffness: 250, damping: 25 }}
         onMouseDown={(e) => e.stopPropagation()}
-  className="w-full max-w-4xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden"
+        className="w-full max-w-4xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden"
       >
         {/* Header */}
         <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 dark:border-gray-800">
@@ -1275,15 +1275,18 @@ const ImplementationTasksPage: React.FC = () => {
             </div>
 
             {isSuperAdmin || userTeam === "DEPLOYMENT" ? (
-              <Button variant="primary" className="rounded-xl flex items-center gap-2" onClick={() => { setEditing(null); setModalOpen(true); }}>
+              <button
+                className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700 flex items-center gap-2"
+                onClick={() => { setEditing(null); setModalOpen(true); }}
+              >
                 <PlusIcon />
                 <span>Thêm mới</span>
-              </Button>
+              </button>
             ) : (
-              <Button variant="primary" disabled className="opacity-50 cursor-not-allowed flex items-center gap-2">
+              <button disabled className="rounded-xl bg-gray-200 text-gray-500 px-5 py-2 shadow-sm flex items-center gap-2" title="Không có quyền">
                 <PlusIcon />
                 <span>Thêm mới</span>
-              </Button>
+              </button>
             )}
             <button className="rounded-full border px-4 py-2 text-sm shadow-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 flex items-center gap-2" onClick={async () => {
               setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc'); setPage(0);
