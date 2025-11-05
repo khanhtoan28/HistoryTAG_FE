@@ -72,6 +72,7 @@ export default function TaskCardNew({
   canView = true,
   canEdit = true,
   canDelete = true,
+  hideHospitalName = false,
 }: {
   task: ImplTask;
   onEdit: (t: ImplTask) => void;
@@ -83,6 +84,7 @@ export default function TaskCardNew({
   canView?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;
+  hideHospitalName?: boolean;
 }) {
   const delayMs = typeof idx === "number" && idx > 0 ? 2000 + (idx - 1) * 80 : 0;
   const style = animate ? { animation: "fadeInUp 220ms both", animationDelay: `${delayMs}ms` } : undefined;
@@ -111,7 +113,7 @@ export default function TaskCardNew({
             <div className="min-w-0">
               <div className="flex items-center gap-3 flex-wrap">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
-                  {task.hospitalName ?? task.name}
+                  { task.name}
                 </h3>
 
                 {task.status && (
@@ -138,17 +140,17 @@ export default function TaskCardNew({
                 </span>
               </div>
 
-              {task.hospitalName &&
+              {!hideHospitalName && task.hospitalName &&
                 task.name &&
                 task.name.trim() &&
                 task.name.trim() !== task.hospitalName.trim() && (
                   <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                    Tên dự án:{" "}
+                    Tên bệnh viện:{" "}
                     <span
-                      title={task.name}
+                      title={task.hospitalName}
                       className="inline-block font-medium text-gray-800 dark:text-gray-100 rounded px-2 py-0.5 transition-colors duration-150 hover:bg-blue-50 dark:hover:bg-blue-800/40 hover:text-blue-700"
                     >
-                      {task.name}
+                      {task.hospitalName}
                     </span>
                   </div>
                 )}
