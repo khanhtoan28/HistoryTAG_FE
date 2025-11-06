@@ -4,7 +4,7 @@ import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
 import { FaHospital } from "react-icons/fa";
-import { FiMapPin, FiMail, FiPhone, FiUser, FiClock, FiLink, FiTag } from "react-icons/fi";
+import { FiMapPin, FiMail, FiPhone, FiUser, FiClock, FiLink } from "react-icons/fi";
 
 // ===================== Types ===================== //
 export type SortDir = "asc" | "desc";

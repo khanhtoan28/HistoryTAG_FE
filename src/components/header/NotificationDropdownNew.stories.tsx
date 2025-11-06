@@ -1,4 +1,3 @@
-import React from 'react';
 import NotificationDropdown from './NotificationDropdownNew';
 import NotificationContext from '../../context/NotificationContext';
 

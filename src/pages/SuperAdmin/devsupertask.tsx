@@ -83,10 +83,8 @@ const DevSuperTaskPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [hospitalQuery, setHospitalQuery] = useState<string>("");
-  const [hospitalOptions, setHospitalOptions] = useState<
-    Array<{ id: number; label: string }>
-  >([]);
+  // hospitalOptions is used only for datalist; we don't need the setter here
+  const hospitalOptions = useState<Array<{ id: number; label: string }>>([])[0];
   const searchDebounce = useRef<number | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<string>("id");
@@ -157,10 +155,12 @@ const DevSuperTaskPage: React.FC = () => {
     }
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchList();
   }, [page, size]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (searchDebounce.current) window.clearTimeout(searchDebounce.current);
     searchDebounce.current = window.setTimeout(() => {
@@ -228,7 +228,7 @@ const DevSuperTaskPage: React.FC = () => {
           <div>
             <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Thao tác</h3>
             <div className="flex flex-wrap items-center gap-3">
-              <input
+                <input
                 list="hospital-list"
                 type="text"
                 className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px]"
@@ -236,7 +236,6 @@ const DevSuperTaskPage: React.FC = () => {
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
-                  setHospitalQuery(e.target.value);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") fetchList();
@@ -319,9 +318,9 @@ const DevSuperTaskPage: React.FC = () => {
           </div>
         ) : (
           data.map((row, idx) => (
-            <TaskCard
-              key={row.id}
-              task={row}
+                <TaskCard
+                  key={row.id}
+                  task={row as unknown as import("../PageClients/implementation-tasks").ImplementationTaskResponseDTO}
               idx={idx}
               animate={enableItemAnimation}
               onOpen={(t) => {

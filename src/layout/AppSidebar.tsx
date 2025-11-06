@@ -3,14 +3,11 @@ import { Link, useLocation } from "react-router";
 
 // Giả sử các icon này được import từ một thư viện icon
 import {
-  BoxCubeIcon,
   CalenderIcon,
   ChevronDownIcon,
   GridIcon,
   HorizontaLDots,
-  ListIcon,
   PageIcon,
-  PieChartIcon,
   PlugInIcon,
   TableIcon
 } from "../icons";

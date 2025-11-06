@@ -81,12 +81,6 @@ function toISOOrNull(v?: string | Date | null) {
     }
 }
 
-function fmt(dt?: string | null) {
-    if (!dt) return "";
-    const d = new Date(dt);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleString();
-}
 
 function clsx(...arr: Array<string | false | undefined>) {
     return arr.filter(Boolean).join(" ");

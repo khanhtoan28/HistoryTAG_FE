@@ -45,6 +45,11 @@ const navItems: NavItem[] = [
     ],
   },
   {
+    name: "Phòng Kinh doanh",
+    icon: <BoxCubeIcon />,
+    path: "/superadmin/business",
+  },
+  {
     name: "Tasks",
     icon: <TableIcon />,
     subItems: [

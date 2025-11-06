@@ -14,6 +14,7 @@ type HardwareForm = {
   warrantyPeriod?: string;
   notes?: string;
   imageFile?: File | null;
+  price?: number | null;
 };
 
 export default function HardwarePage() {
@@ -47,7 +48,17 @@ export default function HardwarePage() {
     warrantyPeriod: "",
     notes: "",
     imageFile: null,
+    price: null,
   });
+
+  function formatPrice(v?: number | null) {
+    if (v == null) return "—";
+    try {
+      return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(v);
+    } catch (e) {
+      return String(v);
+    }
+  }
 
   const isEditing = !!editing?.id;
   const isViewing = !!viewing?.id;
@@ -58,7 +69,7 @@ export default function HardwarePage() {
     setViewing(null);
     setError(null);
     setIsModalLoading(false);
-    setForm({ name: "", type: "", supplier: "", warrantyPeriod: "", notes: "", imageFile: null });
+    setForm({ name: "", type: "", supplier: "", warrantyPeriod: "", notes: "", imageFile: null, price: null });
     setImagePreview(null);
     setShowImageModal(false);
   }
@@ -71,6 +82,7 @@ export default function HardwarePage() {
       warrantyPeriod: h.warrantyPeriod ?? "",
       notes: h.notes ?? "",
       imageFile: null,
+      price: h.price != null ? Number(h.price) : null,
     });
     setImagePreview(h.imageUrl || null);
   }
@@ -129,7 +141,7 @@ export default function HardwarePage() {
   function onCreate() {
     setEditing(null);
     setViewing(null);
-    setForm({ name: "", type: "", supplier: "", warrantyPeriod: "", notes: "", imageFile: null });
+    setForm({ name: "", type: "", supplier: "", warrantyPeriod: "", notes: "", imageFile: null, price: null });
     setImagePreview(null);
     setOpen(true);
   }
@@ -190,7 +202,8 @@ export default function HardwarePage() {
         supplier: form.supplier || undefined,
         warrantyPeriod: form.warrantyPeriod || undefined,
         notes: form.notes || undefined,
-        imageFile: form.imageFile || undefined,
+          imageFile: form.imageFile || undefined,
+          price: form.price != null ? form.price : undefined,
       };
 
       if (isEditing) {
@@ -294,6 +307,7 @@ export default function HardwarePage() {
                       <div className="mt-2 text-sm text-gray-600">
                         <div className="truncate"><span className="text-xs text-gray-400">Nhà cung cấp: </span><span title={h.supplier || ""} className="font-medium text-gray-800">{h.supplier || "—"}</span></div>
                         <div className="truncate mt-1"><span className="text-xs text-gray-400">Ghi chú: </span><span title={h.notes || ""} className="text-gray-700">{h.notes || "—"}</span></div>
+                        <div className="truncate mt-1"><span className="text-xs text-gray-400">Giá: </span><span title={String(h.price ?? "—")} className="font-medium text-gray-800">{formatPrice(h.price)}</span></div>
                       </div>
                     </div>
                   </div>
@@ -430,6 +444,10 @@ export default function HardwarePage() {
                       <label className="block text-sm font-semibold text-orange-800 mb-2">ID</label>
                       <p className="text-lg font-medium text-orange-900">#{viewing?.id}</p>
                     </div>
+                    <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-2xl p-6">
+                      <label className="block text-sm font-semibold text-yellow-800 mb-2">Giá</label>
+                      <p className="text-lg font-medium text-yellow-900">{formatPrice(form.price)}</p>
+                    </div>
                   </div>
                   
                   {form.notes && (
@@ -458,6 +476,12 @@ export default function HardwarePage() {
                     <label className="mb-2 block text-sm font-semibold text-gray-700">Tên phần cứng*</label>
                     <input required className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 disabled:cursor-not-allowed" value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} disabled={isViewing} />
                   </div>
+                <div className="space-y-5">
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">Giá (VND)</label>
+                    <input type="number" step="0.01" min="0" className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 disabled:cursor-not-allowed" value={form.price ?? ""} onChange={(e) => setForm((s) => ({ ...s, price: e.target.value === "" ? null : Number(e.target.value) }))} disabled={isViewing} />
+                  </div>
+                </div>
                   <div>
                     <label className="mb-2 block text-sm font-semibold text-gray-700">Loại</label>
                     <input className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 disabled:cursor-not-allowed" value={form.type || ""} onChange={(e) => setForm((s) => ({ ...s, type: e.target.value }))} disabled={isViewing} />

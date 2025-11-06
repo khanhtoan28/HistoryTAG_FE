@@ -98,11 +98,10 @@ const MaintenanceSuperTaskPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [hospitalQuery, setHospitalQuery] = useState<string>("");
-  const [hospitalOptions, setHospitalOptions] = useState<
-    Array<{ id: number; label: string }>
-  >([]);
-  const [selectedHospital, setSelectedHospital] = useState<string | null>(null);
+  // hospitalOptions is used only to render datalist suggestions; we don't need setters here
+  const hospitalOptions = useState<Array<{ id: number; label: string }>>([])[0];
+  // intentionally referenced to avoid unused-variable TS error
+  void hospitalOptions;
   const searchDebounce = useRef<number | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<string>("id");

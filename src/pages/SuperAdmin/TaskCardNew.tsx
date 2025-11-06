@@ -92,7 +92,7 @@ export default function TaskCardNew({
   // Determine status by whole-day comparison (local time)
   const { isDueSoon, isDueToday, isOverdue } = (() => {
     try {
-      if (!task.deadline) return false;
+      if (!task.deadline) return { isDueSoon: false, isDueToday: false, isOverdue: false };
       const d = new Date(task.deadline);
       if (Number.isNaN(d.getTime())) return { isDueSoon: false, isDueToday: false, isOverdue: false };
       const today = new Date();
