@@ -81,12 +81,6 @@ function toISOOrNull(v?: string | Date | null) {
     }
 }
 
-function fmt(dt?: string | null) {
-    if (!dt) return "";
-    const d = new Date(dt);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleString();
-}
 
 function clsx(...arr: Array<string | false | undefined>) {
     return arr.filter(Boolean).join(" ");
@@ -678,7 +672,7 @@ function TaskFormModal({
                         aria-modal="true"
                     >
                         <form onSubmit={handleSubmit} className="px-6 pt-0 pb-6 grid gap-4 max-h-[80vh] overflow-y-auto no-scrollbar">
-                            <div className="sticky top-0 z-[100] -mx-10 px-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+                            <div className="sticky top-0 z-[100] -mx-3 px-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
                                 <div className="flex items-center justify-between py-3">
                                     <h3 className="text-lg font-semibold">{initial?.id ? (initial?.name || "") : "Tạo tác vụ"}</h3>
                                 </div>

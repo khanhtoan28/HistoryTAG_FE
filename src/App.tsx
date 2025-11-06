@@ -34,6 +34,7 @@ import ImplementSuperTaskPage from "./pages/SuperAdmin/implementsuper-task";
 import DevSuperTaskPage from "./pages/SuperAdmin/devsupertask";
 import MaintenanceSuperTaskPage from "./pages/SuperAdmin/maintenacesuper-task";
 import AllNotificationsPage from "./pages/Notifications/AllNotificationsPage";
+import BusinessPage from "./pages/Admin/Business";
 
 // Protected Route Component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -121,12 +122,17 @@ export default function App() {
             <Route path="/superadmin/maintenance-tasks" element={<MaintenanceSuperTaskPage />} />
             <Route path="/superadmin/profile" element={<SuperAdminProfile />} />
             {/* SuperAdmin notifications - keep layout consistent for superadmin users */}
+            {/* SuperAdmin Business (reuse Admin Business page) */}
+            <Route path="/superadmin/business" element={<BusinessPage />} />
             <Route path="/superadmin/notifications" element={<AllNotificationsPage />} />
           </Route>
 
           {/* Dashboard Layout - Protected */}
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route path="/home" element={<Home />} />
+
+            {/* Admin - Business department */}
+            <Route path="/admin/business" element={<BusinessPage />} />
 
             {/* Others Page */}
             <Route path="/profile" element={<UserProfiles />} />

@@ -24,6 +24,10 @@ function PendingTasksModal({
 
     if (!open) return null;
 
+    
+
+    
+
     return (
         <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -763,6 +767,8 @@ function TaskFormModal({
         }
     };
 
+    const lockHospital = !initial?.id && (Boolean(initial?.hospitalId) || Boolean(initial?.hospitalName));
+
     return (
         <>
             {/* Wrapper làm overlay + bắt click nền để đóng */}
@@ -786,13 +792,14 @@ function TaskFormModal({
                     >
                         {/* Thêm max-h & overflow để có thanh cuộn */}
                         <form onSubmit={handleSubmit} className="px-6 pt-0 pb-6 grid gap-4 max-h-[80vh] overflow-y-auto no-scrollbar">
-                            <div className="sticky top-0 z-[100] -mx-10 px-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+                            <div className="sticky top-0 z-[100] -mx-3 px-3  bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
                                 <div className="flex items-center justify-between py-3">
                                     <h3 className="text-lg font-semibold">{initial?.id ? (initial?.name || "") : "Tạo tác vụ"}</h3>
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {(() => { return null; })()}
                                 <Field label="Tên dự án" required>
                                     <TextInput
                                         value={model.name}
@@ -802,14 +809,22 @@ function TaskFormModal({
                                 </Field>
 
                                 {/* Bệnh viện theo TÊN */}
-                                <RemoteSelect
-                                    label="Bệnh viện"
-                                    required
-                                    placeholder="Nhập tên bệnh viện để tìm…"
-                                    fetchOptions={searchHospitals}
-                                    value={hospitalOpt}
-                                    onChange={setHospitalOpt}
-                                />
+                                {lockHospital ? (
+                                    <Field label="Bệnh viện" required>
+                                        <div className="h-10 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 flex items-center">
+                                            {hospitalOpt?.name || "-"}
+                                        </div>
+                                    </Field>
+                                ) : (
+                                    <RemoteSelect
+                                        label="Bệnh viện"
+                                        required
+                                        placeholder="Nhập tên bệnh viện để tìm…"
+                                        fetchOptions={searchHospitals}
+                                        value={hospitalOpt}
+                                        onChange={setHospitalOpt}
+                                    />
+                                )}
 
                                 {/* PIC theo TÊN */}
                                 <RemoteSelect
@@ -821,54 +836,7 @@ function TaskFormModal({
                                     onChange={setPicOpt}
                                 />
 
-                                <Field label="Số lượng">
-                                    <TextInput
-                                        type="number"
-                                        value={model.quantity ?? ""}
-                                        onChange={(e) => setModel((s) => ({ ...s, quantity: e.target.value ? Number(e.target.value) : null }))}
-                                    />
-                                </Field>
-                                <RemoteSelect
-                                    label="Agency"
-                                    placeholder="Nhập tên agency để tìm…"
-                                    fetchOptions={searchAgencies}
-                                    value={agencyOpt}
-                                    onChange={(v) => { setAgencyOpt(v); setModel((s) => ({ ...s, agencyId: v ? v.id : null })); }}
-                                />
-                                <RemoteSelect
-                                    label="HIS System"
-                                    placeholder="Nhập tên HIS để tìm…"
-                                    fetchOptions={searchHisSystems}
-                                    value={hisOpt}
-                                    onChange={(v) => { setHisOpt(v); setModel((s) => ({ ...s, hisSystemId: v ? v.id : null })); }}
-                                />
-                                <RemoteSelect
-                                    label="Hardware"
-                                    placeholder="Nhập tên hardware để tìm…"
-                                    fetchOptions={searchHardwares}
-                                    value={hardwareOpt}
-                                    onChange={(v) => { setHardwareOpt(v); setModel((s) => ({ ...s, hardwareId: v ? v.id : null })); }}
-                                />
-                                <Field label="API URL">
-                                    <TextInput
-                                        value={model.apiUrl ?? ""}
-                                        onChange={(e) => setModel((s) => ({ ...s, apiUrl: e.target.value }))}
-                                        placeholder="https://..."
-                                    />
-                                </Field>
-                                {/* <Field label="Trạng thái API Test">
-                                    <TextInput
-                                        value={model.apiTestStatus ?? ""}
-                                        onChange={(e) => setModel((s) => ({ ...s, apiTestStatus: e.target.value }))}
-                                        placeholder="PASSED / FAILED / PENDING..."
-                                    />
-                                </Field> */}
-                                <Field label="BHYT Port Check Info">
-                                    <TextInput
-                                        value={model.bhytPortCheckInfo ?? ""}
-                                        onChange={(e) => setModel((s) => ({ ...s, bhytPortCheckInfo: e.target.value }))}
-                                    />
-                                </Field>
+                                {/* Ẩn các trường nâng cao để đồng bộ với form triển khai */}
                                 <Field label="Trạng thái" required>
                                     <select
                                         className={clsx(
@@ -1126,6 +1094,18 @@ const ImplementationTasksPage: React.FC = () => {
     const [pendingTasks, setPendingTasks] = useState<ImplementationTaskResponseDTO[]>([]);
     const [pendingOpen, setPendingOpen] = useState(false);
     const [loadingPending, setLoadingPending] = useState(false);
+    // hospital list view state (like implementation-tasks page)
+    const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
+    const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number }>>([]);
+    const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
+    const [hospitalPage, setHospitalPage] = useState<number>(0);
+    const [hospitalSize, setHospitalSize] = useState<number>(20);
+    const [selectedHospital, setSelectedHospital] = useState<string | null>(null);
+    const [acceptedCount, setAcceptedCount] = useState<number | null>(null);
+    const [hospitalSearch, setHospitalSearch] = useState<string>("");
+    const [hospitalStatusFilter, setHospitalStatusFilter] = useState<string>("");
+    const [hospitalSortBy, setHospitalSortBy] = useState<string>("label");
+    const [hospitalSortDir, setHospitalSortDir] = useState<string>("asc");
 
 
     const currentUser = useMemo<UserInfo>(() => readStored<UserInfo>("user"), []);
@@ -1151,6 +1131,7 @@ const ImplementationTasksPage: React.FC = () => {
             });
             if (searchTerm) params.set("search", searchTerm.trim());
             if (statusFilter) params.set("status", statusFilter);
+            if (selectedHospital) params.set("hospitalName", selectedHospital);
 
             const url = `${apiBase}?${params.toString()}`;
             const res = await fetch(url, { method: "GET", headers: authHeaders(), credentials: "include" });
@@ -1213,17 +1194,33 @@ const ImplementationTasksPage: React.FC = () => {
         }
     };
 
-    useEffect(() => { fetchList(); /* eslint-disable-line */ }, []);
-    useEffect(() => { fetchList(); /* eslint-disable-line */ }, [page, size]);
-    useEffect(() => { setPage(0); }, [searchTerm, statusFilter, sortBy, sortDir]);
+    // Initial: load hospital list instead of tasks
     useEffect(() => {
+        fetchHospitalsWithTasks();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // when page or size changes, refetch
+    useEffect(() => {
+        if (!showHospitalList && selectedHospital) fetchList();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page, size]);
+
+    // reset page when filters/sort/search change
+    useEffect(() => { setPage(0); }, [searchTerm, statusFilter, sortBy, sortDir]);
+
+    // debounce searchTerm changes and refetch
+    useEffect(() => {
+        if (showHospitalList) return;
         if (searchDebounce.current) window.clearTimeout(searchDebounce.current);
         searchDebounce.current = window.setTimeout(() => { fetchList(); }, 600);
         return () => { if (searchDebounce.current) window.clearTimeout(searchDebounce.current); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchTerm]);
-    useEffect(() => { fetchList(); /* eslint-disable-line */ }, [statusFilter]);
-    useEffect(() => { fetchList(); /* eslint-disable-line */ }, [sortBy, sortDir]);
+
+    // refetch when statusFilter or sort changes
+    useEffect(() => { if (!showHospitalList) fetchList(); /* eslint-disable-line */ }, [statusFilter]);
+    useEffect(() => { if (!showHospitalList) fetchList(); /* eslint-disable-line */ }, [sortBy, sortDir]);
 
     // Fetch pending tasks on mount so the badge shows without requiring a click.
     // Also refresh periodically (every 60s) to keep the count up-to-date.
@@ -1252,6 +1249,147 @@ const ImplementationTasksPage: React.FC = () => {
         return () => window.clearTimeout(id);
     }, [hospitalQuery]);
 
+    async function fetchHospitalsWithTasks() {
+        setLoadingHospitals(true);
+        setError(null);
+        try {
+            // Fetch a large page of tasks and aggregate by hospital
+            const params = new URLSearchParams({ page: "0", size: "2000", sortBy: "id", sortDir: "asc" });
+            const endpoint = `${API_ROOT}/api/v1/admin/maintenance/tasks?${params.toString()}`;
+            const res = await fetch(endpoint, {
+                method: "GET",
+                headers: authHeaders(),
+                credentials: "include",
+            });
+            if (!res.ok) throw new Error(`Failed to fetch hospitals: ${res.status}`);
+            const payload = await res.json();
+            const items: ImplementationTaskResponseDTO[] = Array.isArray(payload?.content) ? payload.content : Array.isArray(payload) ? payload : [];
+
+            // Aggregate by hospitalName
+            const acc = new Map<string, { id: number; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number }>();
+            for (const it of items) {
+                const name = (it.hospitalName || "").toString().trim() || "—";
+                const key = name;
+                const current = acc.get(key) || { id: acc.size + 1, label: name, subLabel: "", taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0 };
+                current.taskCount += 1;
+                if ((it.status || '').toUpperCase() === 'ACCEPTED') current.acceptedCount += 1;
+                // Count near due / overdue for non-accepted
+                const statusUp = String(it.status || '').toUpperCase();
+                if (statusUp !== 'ACCEPTED' && statusUp !== 'TRANSFERRED' && it.deadline) {
+                    const d = new Date(it.deadline);
+                    if (!Number.isNaN(d.getTime())) {
+                        d.setHours(0,0,0,0);
+                        const today = new Date();
+                        const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+                        const dayDiff = Math.round((d.getTime() - startToday) / (24 * 60 * 60 * 1000));
+                        if (dayDiff === -1 || dayDiff === 0) current.nearDueCount += 1; // yesterday or today
+                        if (dayDiff > 0) current.overdueCount += 1; // after today (the rule you set)
+                    }
+                }
+                acc.set(key, current);
+            }
+            const list = Array.from(acc.values());
+            // Enrich province/subLabel by querying hospitals search per name (best effort)
+            async function resolveProvinceByName(name: string): Promise<string> {
+                try {
+                    const res = await fetch(`${API_ROOT}/api/v1/admin/hospitals/search?name=${encodeURIComponent(name)}`, { headers: authHeaders(), credentials: 'include' });
+                    if (!res.ok) return '';
+                    const arr = await res.json();
+                    if (!Array.isArray(arr) || arr.length === 0) return '';
+                    // Prefer exact match by label/name
+                    const pick = (arr as any[]).find((x) => {
+                        const label = String(x?.label ?? x?.name ?? '').trim();
+                        return label.toLowerCase() === name.trim().toLowerCase();
+                    }) || arr[0];
+                    if (!pick || typeof pick !== 'object') return '';
+                    const obj: any = pick;
+                    const keys = ['province', 'provinceName', 'city', 'cityName', 'addressProvince', 'addressProvinceName', 'region', 'subLabel'];
+                    for (const k of keys) {
+                        const v = obj[k];
+                        if (typeof v === 'string' && v.trim()) {
+                            // If backend returns multiple provinces separated by comma, pick the first
+                            const value = String(v).split(',')[0].trim();
+                            // remove trailing task counts if mistakenly included (" - X tasks")
+                            return value.replace(/\s*-\s*\d+\s+tasks?/i, '').trim();
+                        }
+                    }
+                    // As last resort, attempt to parse from label formatted like "Province - Hospital"
+                    if (typeof obj.label === 'string') {
+                        const m = obj.label.split(' - ');
+                        if (m.length > 1) return m[0].split(',')[0].trim();
+                    }
+                    return '';
+                } catch { return ''; }
+            }
+
+            const withProvince = await Promise.all(list.map(async (h) => ({
+                ...h,
+                subLabel: h.subLabel && h.subLabel.trim() ? h.subLabel : await resolveProvinceByName(h.label),
+            })));
+            setHospitalsWithTasks(withProvince);
+        } catch (e: any) {
+            setError(e.message || "Lỗi tải danh sách bệnh viện");
+        } finally {
+            setLoadingHospitals(false);
+        }
+    }
+
+    const filteredHospitals = useMemo(() => {
+        let list = hospitalsWithTasks;
+        const q = hospitalSearch.trim().toLowerCase();
+        if (q) list = list.filter(h => h.label.toLowerCase().includes(q) || (h.subLabel || '').toLowerCase().includes(q));
+        if (hospitalStatusFilter === 'accepted') list = list.filter(h => (h.acceptedCount || 0) > 0);
+        else if (hospitalStatusFilter === 'incomplete') list = list.filter(h => (h.acceptedCount || 0) < (h.taskCount || 0));
+        else if (hospitalStatusFilter === 'unaccepted') list = list.filter(h => (h.acceptedCount || 0) === 0);
+
+        const dir = hospitalSortDir === 'desc' ? -1 : 1;
+        list = [...list].sort((a, b) => {
+            if (hospitalSortBy === 'taskCount') return ((a.taskCount || 0) - (b.taskCount || 0)) * dir;
+            if (hospitalSortBy === 'accepted') return ((a.acceptedCount || 0) - (b.acceptedCount || 0)) * dir;
+            if (hospitalSortBy === 'ratio') {
+                const ra = (a.taskCount || 0) > 0 ? (a.acceptedCount || 0) / (a.taskCount || 1) : 0;
+                const rb = (b.taskCount || 0) > 0 ? (b.acceptedCount || 0) / (b.taskCount || 1) : 0;
+                return (ra - rb) * dir;
+            }
+            // label
+            return a.label.localeCompare(b.label) * dir;
+        });
+        return list;
+    }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalSortBy, hospitalSortDir]);
+
+    useEffect(() => {
+        if (!showHospitalList && selectedHospital) {
+            fetchList();
+            // fetch accepted count for header summary
+            (async () => {
+                try {
+                    const params = new URLSearchParams({ page: "0", size: "1", status: "ACCEPTED", hospitalName: selectedHospital });
+                    const url = `${apiBase}?${params.toString()}`;
+                    const res = await fetch(url, { method: "GET", headers: authHeaders(), credentials: "include" });
+                    if (!res.ok) return setAcceptedCount(null);
+                    const resp = await res.json();
+                    if (resp && typeof resp.totalElements === 'number') setAcceptedCount(resp.totalElements);
+                    else if (Array.isArray(resp)) setAcceptedCount(resp.length);
+                    else setAcceptedCount(0);
+                } catch { setAcceptedCount(null); }
+            })();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedHospital, showHospitalList]);
+
+    async function resolveHospitalIdByName(name: string): Promise<number | null> {
+        try {
+            const res = await fetch(`${API_ROOT}/api/v1/admin/hospitals/search?name=${encodeURIComponent(name)}`, { headers: authHeaders(), credentials: 'include' });
+            if (!res.ok) return null;
+            const list = await res.json();
+            if (!Array.isArray(list)) return null;
+            const exact = list.find((h: any) => String(h?.label ?? h?.name ?? '').trim().toLowerCase() === name.trim().toLowerCase());
+            const item = exact || list[0];
+            const id = Number(item?.id);
+            return Number.isFinite(id) ? id : null;
+        } catch { return null; }
+    }
+
     const handleSubmit = async (payload: ImplementationTaskRequestDTO, id?: number) => {
         const isUpdate = Boolean(id);
         const url = isUpdate ? `${apiBase}/${id}` : apiBase;
@@ -1268,7 +1406,33 @@ const ImplementationTasksPage: React.FC = () => {
             toast.error(`${method} thất bại: ${msg || res.status}`);
             return;
         }
-        await fetchList();
+        // Update UI immediately without full page reload
+        if (showHospitalList) {
+            // We are on hospital table → refresh the aggregated list
+            await fetchHospitalsWithTasks();
+        } else {
+            // We are viewing tasks of a hospital → refresh tasks and accepted counter
+            await fetchList();
+            try {
+                const params = new URLSearchParams({ page: "0", size: "1", status: "ACCEPTED", hospitalName: selectedHospital || "" });
+                const urlCount = `${apiBase}?${params.toString()}`;
+                const r = await fetch(urlCount, { method: "GET", headers: authHeaders(), credentials: "include" });
+                if (r.ok) {
+                    const resp = await r.json();
+                    if (resp && typeof resp.totalElements === 'number') setAcceptedCount(resp.totalElements);
+                    else if (Array.isArray(resp)) setAcceptedCount(resp.length);
+                }
+            } catch { /* ignore */ }
+
+            // Optimistically bump hospital list counters so when user quay lại không cần reload
+            if (!isUpdate && selectedHospital) {
+                setHospitalsWithTasks((prev) => prev.map((h) => {
+                    if (h.label !== selectedHospital) return h;
+                    const incAccepted = String((payload as any)?.status || '').toUpperCase() === 'ACCEPTED' ? 1 : 0;
+                    return { ...h, taskCount: (h.taskCount || 0) + 1, acceptedCount: (h.acceptedCount || 0) + incAccepted };
+                }));
+            }
+        }
     };
 
     const handleDelete = async (id: number) => {
@@ -1290,18 +1454,19 @@ const ImplementationTasksPage: React.FC = () => {
     return (
         <div className="p-6 xl:p-10">
             <div className="mb-6 flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-extrabold">Tác vụ bảo trì</h1>
-                </div>
-                {/* project name shown inside card; removed duplicate header pill */}
+                <h1 className="text-3xl font-extrabold">{showHospitalList ? "Danh sách bệnh viện có task bảo trì" : `Danh sách công việc bảo trì - ${selectedHospital}`}</h1>
+                {!showHospitalList && (
+                    <button onClick={() => { setSelectedHospital(null); setShowHospitalList(true); setSearchTerm(""); setStatusFilter(""); setPage(0); setData([]); fetchHospitalsWithTasks(); }} className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-medium">← Quay lại danh sách bệnh viện</button>
+                )}
             </div>
 
             {error && <div className="text-red-600 mb-4">{error}</div>}
 
-            <div className="mb-6 rounded-xl border bg-white p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Thao tác</h3>
+            {!showHospitalList && (
+            <div className="mb-6 rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-5 shadow-sm">
+                <div className="flex items-start gap-4">
+                   <div className="flex-1 min-w-[320px]">
+                        <h3 className="text-lg font-semibold mb-3 ">Tìm kiếm & Thao tác</h3>
                         <div className="flex flex-wrap items-center gap-3">
                             <div className="relative">
                                 <input
@@ -1332,24 +1497,28 @@ const ImplementationTasksPage: React.FC = () => {
                                 ))}
                             </select>
                         </div>
-                        <div className="mt-3 text-sm text-gray-600 dark:text-gray-300">
-                            Tổng: <span className="font-semibold text-gray-800 dark:text-gray-100">{loading ? '...' : (totalCount ?? data.length)}</span>
+                        <div className="mt-3 text-sm text-gray-600 dark:text-gray-300 flex items-center gap-4">
+                            <span>Tổng: <span className="font-semibold text-gray-800 dark:text-gray-100">{loading ? '...' : (totalCount ?? data.length)}</span></span>
+                            {typeof acceptedCount === 'number' && (
+                                <span>Đã nghiệm thu: <span className="font-semibold text-gray-800 dark:text-gray-100">{acceptedCount}/{totalCount ?? data.length} task</span></span>
+                            )}
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3 ml-auto justify-end">
+                        {/* Sort */}
                         <div className="flex items-center gap-2">
                             <select
-                                className="rounded-lg border px-3 py-2 text-sm"
+                                className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
                                 value={sortBy}
                                 onChange={(e) => { setSortBy(e.target.value); setPage(0); }}
                             >
                                 <option value="id">Sắp xếp theo: id</option>
-                                <option value="hospitalName">Bệnh viện</option>
-                                <option value="deadline">Deadline</option>
+                                <option value="hospitalName">Sắp xếp theo: bệnh viện</option>
+                                <option value="deadline">Sắp xếp theo: deadline</option>
                             </select>
                             <select
-                                className="rounded-lg border px-3 py-2 text-sm"
+                                className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
                                 value={sortDir}
                                 onChange={(e) => setSortDir(e.target.value)}
                             >
@@ -1362,7 +1531,12 @@ const ImplementationTasksPage: React.FC = () => {
                         {isSuperAdmin || userTeam === "MAINTENANCE" ? (
                             <button
                                 className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700 flex items-center gap-2"
-                                onClick={() => { setEditing(null); setModalOpen(true); }}
+                                onClick={async () => { 
+                                    let hid: number | null = null;
+                                    if (selectedHospital) hid = await resolveHospitalIdByName(selectedHospital);
+                                    setEditing(hid ? ({ hospitalId: hid, hospitalName: selectedHospital } as any) : ({ hospitalName: selectedHospital } as any));
+                                    setModalOpen(true);
+                                }}
                             >
                                 <PlusIcon />
                                 <span>Thêm mới</span>
@@ -1378,22 +1552,10 @@ const ImplementationTasksPage: React.FC = () => {
                             </button>
                         )}
 
-                        {/* Công việc chờ */}
-                        <Button
-                            variant="ghost"
-                            className="relative flex items-center gap-2 border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300"
-                            onClick={() => { setPendingOpen(true); fetchPendingTasks(); }}
-                        >
-                            📨 Công việc chờ
-                            {pendingTasks.length > 0 && (
-                                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
-                                    {pendingTasks.length}
-                                </span>
-                            )}
-                        </Button>
                     </div>
                 </div>
             </div>
+            )}
 
             <div>
                 <style>{`
@@ -1401,9 +1563,145 @@ const ImplementationTasksPage: React.FC = () => {
         `}</style>
 
                 <div className="space-y-3">
-                    {loading && isInitialLoad ? (
+                    {loading && isInitialLoad && !showHospitalList ? (
                         <div className="flex items-center justify-center py-12">
                             <div className="text-blue-600 text-4xl font-extrabold tracking-wider animate-pulse" aria-hidden="true">TAG</div>
+                        </div>
+                    ) : showHospitalList ? (
+                        // hospital list table
+                        <div className="mb-6">
+                            <div className="mb-4 rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-5 shadow-sm">
+                                <div className="flex items-start justify-between gap-4">
+                                <div>
+                                    <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Lọc</h3>
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <input
+                                            type="text"
+                                            className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                                            placeholder="Tìm theo tên bệnh viện / tỉnh"
+                                            value={hospitalSearch}
+                                            onChange={(e) => { setHospitalSearch(e.target.value); setHospitalPage(0); }}
+                                        />
+                                        <select
+                                            className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[180px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                                            value={hospitalStatusFilter}
+                                            onChange={(e) => { setHospitalStatusFilter(e.target.value); setHospitalPage(0); }}
+                                        >
+                                            <option value="">— Tất cả —</option>
+                                            <option value="accepted">Có nghiệm thu</option>
+                                            <option value="incomplete">Chưa nghiệm thu hết</option>
+                                            <option value="unaccepted">Chưa có nghiệm thu</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                    <div className="flex items-center gap-2">
+                                        <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900" value={hospitalSortBy} onChange={(e) => { setHospitalSortBy(e.target.value); setHospitalPage(0); }}>
+                                            <option value="label">Sắp xếp theo: tên</option>
+                                            <option value="taskCount">Sắp xếp theo: tổng task</option>
+                                            <option value="accepted">Sắp xếp theo: đã nghiệm thu</option>
+                                            <option value="ratio">Sắp xếp theo: tỉ lệ nghiệm thu</option>
+                                        </select>
+                                        <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900" value={hospitalSortDir} onChange={(e) => setHospitalSortDir(e.target.value)}>
+                                            <option value="asc">Tăng dần</option>
+                                            <option value="desc">Giảm dần</option>
+                                        </select>
+                                        <Button
+                                            variant="ghost"
+                                            className="relative flex items-center gap-2 border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300"
+                                            onClick={() => { setPendingOpen(true); fetchPendingTasks(); }}
+                                        >
+                                            📨 Công việc chờ
+                                            {pendingTasks.length > 0 && (
+                                                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
+                                                    {pendingTasks.length}
+                                                </span>
+                                            )}
+                                        </Button>
+                                        {(isSuperAdmin || userTeam === "MAINTENANCE") && (
+                                            <button
+                                                className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
+                                                onClick={() => { setEditing(null); setModalOpen(true); }}
+                                                type="button"
+                                            >
+                                                + Thêm task mới
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            {loadingHospitals ? (
+                                <div className="flex items-center justify-center py-12">
+                                    <div className="text-blue-600 text-4xl font-extrabold tracking-wider animate-pulse" aria-hidden="true">TAG</div>
+                                </div>
+                            ) : filteredHospitals.length === 0 ? (
+                                <div className="px-4 py-6 text-center text-gray-500">Không có bệnh viện nào có task</div>
+                            ) : (
+                                <>
+                                    <div className="rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full">
+                                                <thead className="bg-gray-50 border-b border-gray-200">
+                                                    <tr>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/Thành phố</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượng task</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="bg-white divide-y divide-gray-200">
+                                                    {filteredHospitals
+                                                        .slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize)
+                                                        .map((hospital, index) => (
+                                                        <tr key={hospital.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => { setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }}>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospitalPage * hospitalSize + index + 1}</td>
+                                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                                                                        <FaHospital className="text-blue-600 text-lg" />
+                                                                    </div>
+                                                                    <div className="text-sm font-medium text-gray-900">{hospital.label}</div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.subLabel || "—"}</td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm align-top">
+                                                                <div className="flex flex-col items-start gap-1">
+                                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task</span>
+                                                                    {(hospital.nearDueCount ?? 0) > 0 && (
+                                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Sắp hạn: {hospital.nearDueCount}</span>
+                                                                    )}
+                                                                    {(hospital.overdueCount ?? 0) > 0 && (
+                                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Quá hạn: {hospital.overdueCount}</span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                                <button onClick={(e) => { e.stopPropagation(); setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }} className="text-blue-600 hover:text-blue-800 font-medium">Xem task</button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    <div className="mt-4 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <button className="px-3 py-1 border rounded" onClick={() => setHospitalPage((p) => Math.max(0, p - 1))} disabled={hospitalPage <= 0}>Prev</button>
+                                            <span className="text-sm">Trang {hospitalPage + 1} / {Math.max(1, Math.ceil(filteredHospitals.length / hospitalSize))}</span>
+                                            <button className="px-3 py-1 border rounded" onClick={() => setHospitalPage((p) => p + 1)} disabled={(hospitalPage + 1) * hospitalSize >= filteredHospitals.length}>Next</button>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <label className="text-sm">Số hàng:</label>
+                                            <select value={String(hospitalSize)} onChange={(e) => { setHospitalSize(Number(e.target.value)); setHospitalPage(0); }} className="border rounded px-2 py-1 text-sm">
+                                                <option value="10">10</option>
+                                                <option value="20">20</option>
+                                                <option value="50">50</option>
+                                                <option value="100">100</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     ) : (
                         filtered.length === 0 ? (
@@ -1427,6 +1725,7 @@ const ImplementationTasksPage: React.FC = () => {
                 </div>
             </div>
 
+            {!showHospitalList && (
             <div className="mt-4 flex items-center justify-between">
                 {/* Trái: phân trang */}
                 <div className="flex items-center gap-2">
@@ -1463,6 +1762,7 @@ const ImplementationTasksPage: React.FC = () => {
                     </div>
                 </div>
             </div>
+            )}
 
             <PendingTasksModal
                 open={pendingOpen}

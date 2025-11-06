@@ -67,7 +67,7 @@ function getDisplayStatus(status?: string) {
     integrating: "Đang tích hợp",
     waiting_for_dev: "Chờ cập nhật từ dev",
     waiting_for_developer: "Chờ cập nhật từ dev",
-    accepted: "Nghiệm thu",
+    accepted: "Hoàn thành",
   pending_transfer: "Chờ chuyển bảo trì",
   transferred: "Đã chuyển sang bảo trì",
     done: "Hoàn thành",
@@ -108,6 +108,32 @@ export default function TaskCardNew({
   const delayMs = typeof idx === "number" && idx > 0 ? 2000 + (idx - 1) * 80 : 0;
   const style = animate ? { animation: "fadeInUp 220ms both", animationDelay: `${delayMs}ms` } : undefined;
 
+  // Determine status by whole-day comparison (local time)
+  const { isDueSoon, isDueToday, isOverdue } = (() => {
+    try {
+      if (!task.deadline) return { isDueSoon: false, isDueToday: false, isOverdue: false };
+      const d = new Date(task.deadline);
+      if (Number.isNaN(d.getTime())) return { isDueSoon: false, isDueToday: false, isOverdue: false };
+      const today = new Date();
+      // normalize to start of day local
+      d.setHours(0,0,0,0);
+      const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+      const startDeadline = d.getTime();
+      const dayDiff = Math.round((startDeadline - startToday) / (24 * 60 * 60 * 1000));
+      return {
+        // According to requested rule: yesterday => due soon, tomorrow or later => overdue
+        isDueSoon: dayDiff === -1,
+        isDueToday: dayDiff === 0,
+        isOverdue: dayDiff > 0,
+      };
+    } catch {
+      return { isDueSoon: false, isDueToday: false, isOverdue: false };
+    }
+  })();
+
+  const statusUpper = String(task.status || '').toUpperCase();
+  const suppressAlerts = statusUpper === 'ACCEPTED' || statusUpper === 'TRANSFERRED';
+ 
   return (
     <div
       className="group w-full rounded-2xl bg-white dark:bg-gray-900 px-6 py-5 shadow-sm transition-all border border-gray-100 dark:border-gray-800 hover:border-blue-200 hover:shadow-lg"

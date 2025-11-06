@@ -160,6 +160,8 @@ export type HardwareResponseDTO = {
   notes?: string | null;
   supplier?: string | null;
   warrantyPeriod?: string | null;
+  // Price (serialized from backend BigDecimal)
+  price?: number | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 };
@@ -171,6 +173,7 @@ export type HardwareRequestDTO = {
   notes?: string | null;
   supplier?: string | null;
   warrantyPeriod?: string | null;
+  price?: number | null;
 };
 
 export type HardwareUpdateRequestDTO = Partial<HardwareRequestDTO>;

@@ -66,7 +66,7 @@ function statusLabel(status?: string | null) {
     API_TESTING: "Test API",
     INTEGRATING: "Đang tích hợp",
     WAITING_FOR_DEV: "Chờ dev build",
-    ACCEPTED: "Nghiệm thu",
+    ACCEPTED: "Hoàn thành",
   };
   const normalized = status.toUpperCase();
   return map[normalized] || status;
@@ -555,9 +555,9 @@ const ImplementSuperTaskPage: React.FC = () => {
                         onChange={(e) => { setHospitalStatusFilter(e.target.value); setHospitalPage(0); }}
                       >
                         <option value="">— Tất cả —</option>
-                        <option value="accepted">Có nghiệm thu</option>
-                        <option value="incomplete">Chưa nghiệm thu hết</option>
-                        <option value="unaccepted">Chưa có nghiệm thu</option>
+                        <option value="accepted">Có hoàn thành</option>
+                        <option value="incomplete">Chưa hoàn thành hết</option>
+                        <option value="unaccepted">Chưa có hoàn thành</option>
                       </select>
                     </div>
                   </div>
@@ -565,8 +565,8 @@ const ImplementSuperTaskPage: React.FC = () => {
                     <select className="rounded-lg border px-3 py-2 text-sm" value={hospitalSortBy} onChange={(e) => { setHospitalSortBy(e.target.value); setHospitalPage(0); }}>
                       <option value="label">Sắp xếp theo: tên</option>
                       <option value="taskCount">Sắp xếp theo: tổng task</option>
-                      <option value="accepted">Sắp xếp theo: đã nghiệm thu</option>
-                      <option value="ratio">Sắp xếp theo: tỉ lệ nghiệm thu</option>
+                      <option value="accepted">Sắp xếp theo: đã hoàn thành</option>
+                      <option value="ratio">Sắp xếp theo: tỉ lệ hoàn thành</option>
                     </select>
                     <select className="rounded-lg border px-3 py-2 text-sm" value={hospitalSortDir} onChange={(e) => setHospitalSortDir(e.target.value)}>
                       <option value="asc">Tăng dần</option>
@@ -745,7 +745,7 @@ const ImplementSuperTaskPage: React.FC = () => {
               <span> Tổng: <span className="font-semibold text-gray-800">{loading ? '...' : (totalCount ?? data.length)}</span></span>
               {typeof acceptedCount === 'number' && (totalCount ?? data.length) !== null && (
                 <span>
-                  Đã nghiệm thu: <span className="font-semibold text-gray-800">{acceptedCount}/{totalCount ?? data.length} task</span>
+                  Đã hoàn thành: <span className="font-semibold text-gray-800">{acceptedCount}/{totalCount ?? data.length} task</span>
                 </span>
               )}
             </div>
