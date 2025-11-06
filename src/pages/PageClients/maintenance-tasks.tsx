@@ -264,11 +264,11 @@ function Button(
 }
 
 const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
-    { value: "NOT_STARTED", label: "Chưa triển khai" },
-    { value: "IN_PROGRESS", label: "Đang triển khai" },
-    { value: "API_TESTING", label: "Test thông api" },
-    { value: "INTEGRATING", label: "Tích hợp với viện" },
-    { value: "WAITING_FOR_DEV", label: "Chờ dev build update" },
+    { value: "NOT_STARTED", label: "Đã tiếp nhận" },
+    { value: "IN_PROGRESS", label: "Chưa xử lý" },
+    { value: "API_TESTING", label: "Đang xử lý" },
+    { value: "INTEGRATING", label: "Gặp sự cố" },
+    { value: "WAITING_FOR_DEV", label: "Hoàn thành" },
     // NOTE: maintenance users should NOT be able to set 'ACCEPTED' (Nghiệm thu).
     // That status is controlled by the Implementation (DEPLOYMENT) team only.
 ];
@@ -277,21 +277,41 @@ const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
 function statusLabel(status?: string | null) {
     switch (status) {
         case "NOT_STARTED":
-            return "Chưa triển khai";
+            return "Đã tiếp nhận";
         case "IN_PROGRESS":
-            return "Đang triển khai";
+            return "Chưa xử lý";
         case "API_TESTING":
-            return "Test thông api";
+            return "Đang xử lý";
         case "INTEGRATING":
-            return "Tích hợp với viện";
+            return "Gặp sự cố";
         case "WAITING_FOR_DEV":
-            return "Chờ dev build update";
+            return "Hoàn thành";
         case "ACCEPTED":
             return "Nghiệm thu";
         case "TRANSFERRED":
             return "Đã chuyển sang bảo trì";
         default:
             return status || "";
+    }
+}
+
+function statusBadgeClassMaint(status?: string | null) {
+    const s = String(status || '').toUpperCase();
+    const base = ""; // classes are full below
+    switch (s) {
+        case "NOT_STARTED":
+            return `${base} bg-gray-100 text-gray-800`;
+        case "IN_PROGRESS":
+            return `${base} bg-yellow-100 text-yellow-800`;
+        case "API_TESTING":
+            return `${base} bg-blue-100 text-blue-800`;
+        case "INTEGRATING": // Gặp sự cố → đỏ
+            return `${base} bg-red-100 text-red-700`;
+        case "WAITING_FOR_DEV": // Hoàn thành → xanh lá
+        case "ACCEPTED":
+            return `${base} bg-green-100 text-green-700`;
+        default:
+            return `${base} bg-gray-100 text-gray-800`;
     }
 }
 
@@ -923,8 +943,7 @@ function DetailModal({
     // Badge màu trạng thái
     const statusBadge = (status?: string | null) => {
         const s = (status || "").toUpperCase();
-        const base =
-            "px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap";
+        const base = "px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap";
         switch (s) {
             case "NOT_STARTED":
                 return `${base} bg-gray-100 text-gray-800`;
@@ -933,11 +952,10 @@ function DetailModal({
             case "API_TESTING":
                 return `${base} bg-blue-100 text-blue-800`;
             case "INTEGRATING":
-                return `${base} bg-purple-100 text-purple-800`;
+                return `${base} bg-red-100 text-red-700`;
             case "WAITING_FOR_DEV":
-                return `${base} bg-orange-100 text-orange-800`;
             case "ACCEPTED":
-                return `${base} bg-green-100 text-green-800`;
+                return `${base} bg-green-100 text-green-700`;
             default:
                 return `${base} bg-gray-100 text-gray-800`;
         }
@@ -1713,6 +1731,8 @@ const ImplementationTasksPage: React.FC = () => {
                                     task={row as any}
                                     idx={enableItemAnimation ? idx : undefined}
                                     animate={enableItemAnimation}
+                                    statusLabelOverride={statusLabel}
+                                    statusClassOverride={statusBadgeClassMaint}
                                     onOpen={() => { setDetailItem(row); setDetailOpen(true); }}
                                     onEdit={() => { setEditing(row); setModalOpen(true); }}
                                     onDelete={(id: number) => { handleDelete(id); }}

@@ -70,11 +70,11 @@ function statusBadgeClasses(status?: string | null) {
 function statusLabel(status?: string | null) {
   if (!status) return "-";
   const map: Record<string, string> = {
-    NOT_STARTED: "Chưa triển khai",
-    IN_PROGRESS: "Đang triển khai",
-    API_TESTING: "Test API",
-    INTEGRATING: "Đang tích hợp",
-    WAITING_FOR_DEV: "Chờ dev build",
+    NOT_STARTED: "Đã tiếp nhận",
+    IN_PROGRESS: "Chưa xử lý",
+    API_TESTING: "Đang xử lý",
+    INTEGRATING: "Gặp sự cố",
+    WAITING_FOR_DEV: "Hoàn thành",
     ACCEPTED: "Nghiệm thu",
   };
   const normalized = status.toUpperCase();
@@ -718,11 +718,11 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
                 <option value="">— Chọn trạng thái —</option>
-                <option value="NOT_STARTED">Chưa triển khai</option>
-                <option value="IN_PROGRESS">Đang triển khai</option>
-                <option value="API_TESTING">Test thông API</option>
-                <option value="INTEGRATING">Tích hợp với viện</option>
-                <option value="WAITING_FOR_DEV">Chờ dev build update</option>
+                <option value="NOT_STARTED">Đã tiếp nhận</option>
+                <option value="IN_PROGRESS">Chưa xử lý</option>
+                <option value="API_TESTING">Đang xử lý</option>
+                <option value="INTEGRATING">Gặp sự cố</option>
+                <option value="WAITING_FOR_DEV">Hoàn thành</option>
                 {/* ACCEPTED intentionally omitted for maintenance UI */}
               </select>
             </div>

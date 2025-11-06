@@ -60,7 +60,7 @@ function getDisplayStatus(status?: string) {
   if (!status) return "-";
   const s = status.toLowerCase().replace(/[-\s]/g, "_");
   const map: Record<string, string> = {
-    not_started: "Chưa triển khai",
+    not_started: "Đã tiếp nhận",
     in_progress: "Đang triển khai",
     api_testing: "Kiểm tra API",
     api_test: "Kiểm tra API",
@@ -92,6 +92,8 @@ export default function TaskCardNew({
   canEdit = true,
   canDelete = true,
   hideHospitalName = false,
+  statusLabelOverride,
+  statusClassOverride,
 }: {
   task: ImplTask;
   onEdit: (t: ImplTask) => void;
@@ -104,35 +106,13 @@ export default function TaskCardNew({
   canEdit?: boolean;
   canDelete?: boolean;
   hideHospitalName?: boolean;
+  statusLabelOverride?: (status?: string) => string;
+  statusClassOverride?: (status?: string) => string;
 }) {
   const delayMs = typeof idx === "number" && idx > 0 ? 2000 + (idx - 1) * 80 : 0;
   const style = animate ? { animation: "fadeInUp 220ms both", animationDelay: `${delayMs}ms` } : undefined;
 
-  // Determine status by whole-day comparison (local time)
-  const { isDueSoon, isDueToday, isOverdue } = (() => {
-    try {
-      if (!task.deadline) return { isDueSoon: false, isDueToday: false, isOverdue: false };
-      const d = new Date(task.deadline);
-      if (Number.isNaN(d.getTime())) return { isDueSoon: false, isDueToday: false, isOverdue: false };
-      const today = new Date();
-      // normalize to start of day local
-      d.setHours(0,0,0,0);
-      const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-      const startDeadline = d.getTime();
-      const dayDiff = Math.round((startDeadline - startToday) / (24 * 60 * 60 * 1000));
-      return {
-        // According to requested rule: yesterday => due soon, tomorrow or later => overdue
-        isDueSoon: dayDiff === -1,
-        isDueToday: dayDiff === 0,
-        isOverdue: dayDiff > 0,
-      };
-    } catch {
-      return { isDueSoon: false, isDueToday: false, isOverdue: false };
-    }
-  })();
-
-  const statusUpper = String(task.status || '').toUpperCase();
-  const suppressAlerts = statusUpper === 'ACCEPTED' || statusUpper === 'TRANSFERRED';
+  // (Indicators removed; keep component lean and avoid unused vars)
  
   return (
     <div
@@ -163,11 +143,11 @@ export default function TaskCardNew({
 
                 {task.status && (
                   <span
-                    className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${statusBadgeClass(
-                      task.status
+                    className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${(statusClassOverride || statusBadgeClass)(
+                      task.status as string
                     )}`}
                   >
-                    {getDisplayStatus(task.status)}
+                    {statusLabelOverride ? statusLabelOverride(task.status) : getDisplayStatus(task.status)}
                   </span>
                 )}
               </div>
