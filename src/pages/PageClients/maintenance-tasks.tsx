@@ -1298,10 +1298,10 @@ const ImplementationTasksPage: React.FC = () => {
 
             {error && <div className="text-red-600 mb-4">{error}</div>}
 
-            <div className="mb-6 rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-5 shadow-sm">
-                <div className="flex items-start gap-4">
-                   <div className="flex-1 min-w-[320px]">
-                        <h3 className="text-lg font-semibold mb-3 ">Tìm kiếm & Thao tác</h3>
+            <div className="mb-6 rounded-xl border bg-white p-5 shadow-sm">
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Thao tác</h3>
                         <div className="flex flex-wrap items-center gap-3">
                             <div className="relative">
                                 <input
@@ -1332,23 +1332,24 @@ const ImplementationTasksPage: React.FC = () => {
                                 ))}
                             </select>
                         </div>
-                        <div className="mt-3 text-sm text-gray-600 dark:text-gray-300">Tổng: <span className="font-semibold text-gray-800 dark:text-gray-100">{loading ? '...' : (totalCount ?? data.length)}</span></div>
+                        <div className="mt-3 text-sm text-gray-600 dark:text-gray-300">
+                            Tổng: <span className="font-semibold text-gray-800 dark:text-gray-100">{loading ? '...' : (totalCount ?? data.length)}</span>
+                        </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3 ml-auto justify-end">
-                        {/* Sort */}
+                    <div className="flex items-center gap-3">
                         <div className="flex items-center gap-2">
                             <select
-                                className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                                className="rounded-lg border px-3 py-2 text-sm"
                                 value={sortBy}
                                 onChange={(e) => { setSortBy(e.target.value); setPage(0); }}
                             >
                                 <option value="id">Sắp xếp theo: id</option>
-                                <option value="hospitalName">Sắp xếp theo: bệnh viện</option>
-                                <option value="deadline">Sắp xếp theo: deadline</option>
+                                <option value="hospitalName">Bệnh viện</option>
+                                <option value="deadline">Deadline</option>
                             </select>
                             <select
-                                className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                                className="rounded-lg border px-3 py-2 text-sm"
                                 value={sortDir}
                                 onChange={(e) => setSortDir(e.target.value)}
                             >
@@ -1377,39 +1378,19 @@ const ImplementationTasksPage: React.FC = () => {
                             </button>
                         )}
 
-                        {/* Làm mới */}
-                        <button
-                            className="rounded-full border px-4 py-2 text-sm shadow-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 flex items-center gap-2"
-                            onClick={async () => {
-                                setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc'); setPage(0);
-                                setLoading(true);
-                                const start = Date.now();
-                                await fetchList();
-                                const minMs = 800;
-                                const elapsed = Date.now() - start;
-                                if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
-                                setLoading(false);
-                            }}
+                        {/* Công việc chờ */}
+                        <Button
+                            variant="ghost"
+                            className="relative flex items-center gap-2 border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300"
+                            onClick={() => { setPendingOpen(true); fetchPendingTasks(); }}
                         >
-                            <span>Làm mới</span>
-                        </button>
-
-                        {/* —— xuống dòng rồi mới hiện “Công việc chờ” —— */}
-                        <div className="basis-full" />
-                        <div className="w-full flex justify-end">
-                            <Button
-                                variant="ghost"
-                                className="relative flex items-center gap-2 border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300"
-                                onClick={() => { setPendingOpen(true); fetchPendingTasks(); }}
-                            >
-                                📨 Công việc chờ
-                                {pendingTasks.length > 0 && (
-                                    <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
-                                        {pendingTasks.length}
-                                    </span>
-                                )}
-                            </Button>
-                        </div>
+                            📨 Công việc chờ
+                            {pendingTasks.length > 0 && (
+                                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
+                                    {pendingTasks.length}
+                                </span>
+                            )}
+                        </Button>
                     </div>
                 </div>
             </div>

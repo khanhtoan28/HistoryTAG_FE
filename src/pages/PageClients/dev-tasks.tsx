@@ -1214,18 +1214,7 @@ const ImplementationTasksPage: React.FC = () => {
                                 <span>Thêm mới</span>
                             </button>
                         )}
-                        <button className="rounded-full border px-4 py-2 text-sm shadow-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 flex items-center gap-2" onClick={async () => {
-                            setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc'); setPage(0);
-                            setLoading(true);
-                            const start = Date.now();
-                            await fetchList();
-                            const minMs = 800;
-                            const elapsed = Date.now() - start;
-                            if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
-                            setLoading(false);
-                        }}>
-                            <span>Làm mới</span>
-                        </button>
+                        
                     </div>
                 </div>
             </div>

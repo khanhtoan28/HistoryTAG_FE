@@ -5,8 +5,27 @@ import { AiOutlineEdit, AiOutlineDelete, AiOutlineEye } from "react-icons/ai";
 import { FaTasks } from "react-icons/fa";
 import { ImplementationTaskResponseDTO } from "../PageClients/implementation-tasks";
 
-// 🔹 Dùng cùng type từ ImplementationTasksPage để đồng bộ kiểu dữ liệu
-type ImplTask = ImplementationTaskResponseDTO;
+// 🔹 Base type chung cho cả Implementation và Maintenance tasks
+type BaseTask = {
+  id: number;
+  name: string;
+  hospitalId?: number | null;
+  hospitalName?: string | null;
+  picDeploymentId?: number | null;
+  picDeploymentName?: string | null;
+  status?: string | null;
+  startDate?: string | null;
+  deadline?: string | null;
+  apiUrl?: string | null;
+  hisSystemName?: string | null;
+  readOnlyForDeployment?: boolean | null;
+  transferredToMaintenance?: boolean | null;
+  // Additional fields that may exist in either type
+  [key: string]: any;
+};
+
+// 🔹 Dùng union type để hỗ trợ cả Implementation và Maintenance tasks
+type ImplTask = BaseTask | ImplementationTaskResponseDTO;
 
 // ✅ Thay thế statusBadgeClass bằng bản có màu rõ ràng + dark mode
 function statusBadgeClass(status?: string) {
@@ -89,32 +108,6 @@ export default function TaskCardNew({
   const delayMs = typeof idx === "number" && idx > 0 ? 2000 + (idx - 1) * 80 : 0;
   const style = animate ? { animation: "fadeInUp 220ms both", animationDelay: `${delayMs}ms` } : undefined;
 
-  // Determine status by whole-day comparison (local time)
-  const { isDueSoon, isDueToday, isOverdue } = (() => {
-    try {
-      if (!task.deadline) return false;
-      const d = new Date(task.deadline);
-      if (Number.isNaN(d.getTime())) return { isDueSoon: false, isDueToday: false, isOverdue: false };
-      const today = new Date();
-      // normalize to start of day local
-      d.setHours(0,0,0,0);
-      const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-      const startDeadline = d.getTime();
-      const dayDiff = Math.round((startDeadline - startToday) / (24 * 60 * 60 * 1000));
-      return {
-        // According to requested rule: yesterday => due soon, tomorrow or later => overdue
-        isDueSoon: dayDiff === -1,
-        isDueToday: dayDiff === 0,
-        isOverdue: dayDiff > 0,
-      };
-    } catch {
-      return { isDueSoon: false, isDueToday: false, isOverdue: false };
-    }
-  })();
-
-  const statusUpper = String(task.status || '').toUpperCase();
-  const suppressAlerts = statusUpper === 'ACCEPTED' || statusUpper === 'TRANSFERRED';
-
   return (
     <div
       className="group w-full rounded-2xl bg-white dark:bg-gray-900 px-6 py-5 shadow-sm transition-all border border-gray-100 dark:border-gray-800 hover:border-blue-200 hover:shadow-lg"
@@ -191,18 +184,11 @@ export default function TaskCardNew({
                   : "-"}
               </div>
               <div className="text-sm text-gray-400 dark:text-gray-500 mt-2">Deadline</div>
-              <div className={`text-sm font-semibold ${(!suppressAlerts && (isDueSoon || isDueToday || isOverdue)) ? "text-red-600" : "text-gray-900 dark:text-gray-100"}`}>
-                {task.deadline ? new Date(task.deadline).toLocaleDateString("vi-VN") : "-"}
+              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {task.deadline
+                  ? new Date(task.deadline).toLocaleDateString("vi-VN")
+                  : "-"}
               </div>
-              {!suppressAlerts && isDueSoon && (
-                <div className="mt-1 text-xs font-medium text-red-600">Còn 1 ngày nữa là đến hạn công việc</div>
-              )}
-              {!suppressAlerts && isDueToday && (
-                <div className="mt-1 text-xs font-medium text-red-600">Đến hạn công việc</div>
-              )}
-              {!suppressAlerts && isOverdue && (
-                <div className="mt-1 text-xs font-medium text-red-600">Đã quá hạn</div>
-              )}
             </div>
           </div>
 
