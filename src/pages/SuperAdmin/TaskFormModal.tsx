@@ -220,6 +220,19 @@ export default function TaskFormModal({
         }
     }
 
+    function toLocalInputValue(v?: string | null) {
+        if (!v) return "";
+        const d = new Date(v);
+        if (Number.isNaN(d.getTime())) return "";
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const year = d.getFullYear();
+        const month = pad(d.getMonth() + 1);
+        const day = pad(d.getDate());
+        const hours = pad(d.getHours());
+        const minutes = pad(d.getMinutes());
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
     const [submitting, setSubmitting] = useState(false);
 
     if (!open) return null;
@@ -252,6 +265,8 @@ export default function TaskFormModal({
             return;
         }
 
+        const startDateIso = toISOOrNull(model.startDate) ?? (initial?.id ? null : new Date().toISOString());
+
         const payload: ImplementationTaskRequestDTO = {
             name: model.name!.trim(),
             hospitalId: hospitalOpt.id,
@@ -267,7 +282,7 @@ export default function TaskFormModal({
             deadline: toISOOrNull(model.deadline) ?? null,
             completionDate: toISOOrNull(model.completionDate) ?? null,
             status: model.status ?? null,
-            startDate: toISOOrNull(model.startDate) ?? null,
+            startDate: initial?.id ? startDateIso : new Date().toISOString(),
             acceptanceDate: toISOOrNull(model.acceptanceDate) ?? null,
         };
 
@@ -438,19 +453,19 @@ export default function TaskFormModal({
                                 </Field>
 
                                 <Field label="Deadline (ngày)">
-                                    <TextInput disabled={readOnly || isTransferred} type="datetime-local" value={model.deadline ? new Date(model.deadline).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, deadline: e.target.value }))} />
+                                    <TextInput disabled={readOnly || isTransferred} type="datetime-local" value={toLocalInputValue(model.deadline)} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, deadline: e.target.value }))} />
                                 </Field>
 
                                 <Field label="Ngày bắt đầu">
-                                    <TextInput disabled={readOnly || isTransferred} type="datetime-local" value={model.startDate ? new Date(model.startDate).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, startDate: e.target.value }))} />
+                                    <TextInput disabled={readOnly || isTransferred} type="datetime-local" value={toLocalInputValue(model.startDate)} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, startDate: e.target.value }))} />
                                 </Field>
 
                                 <Field label="Ngày nghiệm thu">
-                                    <TextInput disabled={readOnly || isTransferred} type="datetime-local" value={model.acceptanceDate ? new Date(model.acceptanceDate).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, acceptanceDate: e.target.value }))} />
+                                    <TextInput disabled={readOnly || isTransferred} type="datetime-local" value={toLocalInputValue(model.acceptanceDate)} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, acceptanceDate: e.target.value }))} />
                                 </Field>
 
                                 <Field label="Ngày hoàn thành">
-                                    <TextInput disabled={readOnly || isTransferred} type="datetime-local" value={model.completionDate ? new Date(model.completionDate).toISOString().slice(0, 16) : ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, completionDate: e.target.value }))} />
+                                    <TextInput disabled={readOnly || isTransferred} type="datetime-local" value={toLocalInputValue(model.completionDate)} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, completionDate: e.target.value }))} />
                                 </Field>
                             </div>
 

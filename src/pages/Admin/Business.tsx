@@ -37,7 +37,8 @@ const BusinessPage: React.FC = () => {
   type BusinessItem = {
     id: number;
     name?: string;
-    hospital?: { label?: string } | null;
+  hospital?: { id?: number; label?: string } | null;
+    hospitalPhone?: string | null;
     hardware?: { label?: string } | null;
     quantity?: number | null;
     unitPrice?: number | null;
@@ -105,6 +106,27 @@ const BusinessPage: React.FC = () => {
         } as BusinessItem;
       });
       setItems(normalized);
+      // fetch phone numbers for each hospital in the list (best-effort)
+      try {
+        const withPhones = await Promise.all((normalized as BusinessItem[]).map(async (it) => {
+          const out = { ...it } as BusinessItem;
+          const hid = it.hospital?.id;
+          if (hid) {
+            try {
+              const r = await api.get(`/api/v1/auth/hospitals/${hid}`);
+              const d = r.data || {};
+              out.hospitalPhone = d.contactNumber || d.contact_number || d.contactPhone || d.contact_phone || null;
+            } catch {
+              out.hospitalPhone = null;
+            }
+          } else out.hospitalPhone = null;
+          return out;
+        }));
+        setItems(withPhones);
+      } catch (e) {
+        // ignore phone enrichment failures
+        console.warn('Failed to enrich hospitals with phone', e);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -416,6 +438,7 @@ const BusinessPage: React.FC = () => {
                     <th className="text-center px-2 py-3">ID</th>
                     <th className="text-center px-2 py-3">Tên</th>
                     <th className="text-center px-2 py-3">Bệnh viện</th>
+                    <th className="text-center px-2 py-3">Điện thoại</th>
                     <th className="text-center px-2 py-3">Phần cứng</th>
                     <th className="text-center px-2 py-3">Bắt đầu</th>
                     <th className="text-center px-2 py-3">Deadline</th>
@@ -434,6 +457,7 @@ const BusinessPage: React.FC = () => {
                       <td className="text-center px-2 py-2">{it.id}</td>
                         <td className="text-center px-2 py-2">{it.name}</td>
                         <td className="text-center px-2 py-2">{it.hospital?.label ?? '—'}</td>
+                        <td className="text-center px-2 py-2">{it.hospitalPhone ?? '—'}</td>
                         <td className="text-center px-2 py-2">{it.hardware?.label ?? '—'}</td>
                         <td className="text-center px-2 py-2">{formatDateShort(it.startDate)}</td>
                         <td className="text-center px-2 py-2">{formatDateShort(it.deadline)}</td>
@@ -473,6 +497,7 @@ const BusinessPage: React.FC = () => {
               <div className="text-sm space-y-2">
               <div><strong>Tên:</strong> {viewItem.name}</div>
               <div><strong>Bệnh viện:</strong> {viewItem.hospital?.label ?? '—'}</div>
+              <div><strong>Điện thoại:</strong> {viewItem.hospitalPhone ?? '—'}</div>
               <div><strong>Phần cứng:</strong> {viewItem.hardware?.label ?? '—'}</div>
               <div><strong>Bắt đầu:</strong> {formatDateShort(viewItem.startDate)}</div>
               <div><strong>Deadline:</strong> {formatDateShort(viewItem.deadline)}</div>
