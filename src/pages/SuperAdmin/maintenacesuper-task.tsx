@@ -103,6 +103,12 @@ const MaintenanceSuperTaskPage: React.FC = () => {
   const [hospitalOptions, setHospitalOptions] = useState<
     Array<{ id: number; label: string }>
   >([]);
+
+  // Unused in some builds but kept for parity with implementation page — reference to avoid TS6133
+  void hospitalQuery;
+  void setHospitalQuery;
+  void hospitalOptions;
+  void setHospitalOptions;
   const [selectedHospital, setSelectedHospital] = useState<string | null>(null);
   const searchDebounce = useRef<number | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);

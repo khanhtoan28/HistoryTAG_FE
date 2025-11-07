@@ -26,7 +26,7 @@ const Pagination: React.FC<PaginationProps> = ({
 
   // Generate page numbers to display
   const getPageNumbers = () => {
-    const pages = [];
+  const pages: number[] = [];
     const maxVisiblePages = 5;
 
     if (totalPages <= maxVisiblePages) {
@@ -35,8 +35,8 @@ const Pagination: React.FC<PaginationProps> = ({
       }
     } else {
       const halfVisible = Math.floor(maxVisiblePages / 2);
-      let startPage = Math.max(0, currentPage - halfVisible);
-      let endPage = Math.min(totalPages - 1, startPage + maxVisiblePages - 1);
+  let startPage = Math.max(0, currentPage - halfVisible);
+  const endPage = Math.min(totalPages - 1, startPage + maxVisiblePages - 1);
 
       if (endPage - startPage < maxVisiblePages - 1) {
         startPage = Math.max(0, endPage - maxVisiblePages + 1);

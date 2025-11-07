@@ -53,6 +53,8 @@ function statusBadgeClasses(status?: string | null) {
       return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
     case "ACCEPTED":
       return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+    case "COMPLETED":
+      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
     default:
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
   }
@@ -67,6 +69,7 @@ function statusLabel(status?: string | null) {
     INTEGRATING: "Đang tích hợp",
     WAITING_FOR_DEV: "Chờ dev build",
     ACCEPTED: "Hoàn thành",
+    COMPLETED: "Hoàn thành",
   };
   const normalized = status.toUpperCase();
   return map[normalized] || status;
@@ -118,6 +121,31 @@ const ImplementSuperTaskPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ImplTask | null>(null);
   const [viewOnly, setViewOnly] = useState<boolean>(false);
+
+  // Convert to maintenance handler: called from DetailModal when user clicks convert.
+  async function handleConvert(id: number) {
+    if (!confirm("Chuyển tác vụ này sang bảo trì?")) return;
+    try {
+      const conv = await fetch(`${API_ROOT}/api/v1/admin/implementation/${id}/convert-to-maintenance`, {
+        method: "POST",
+        headers: authHeaders(),
+        credentials: "include",
+      });
+      if (!conv.ok) {
+        const t = await conv.text();
+        toast.error(`Chuyển sang bảo trì thất bại: ${t || conv.status}`);
+        return;
+      }
+      toast.success('Đã chuyển tác vụ sang bảo trì');
+      // refresh lists and current view
+      await fetchHospitalsWithTasks();
+      await fetchList();
+      setModalOpen(false);
+    } catch (e: unknown) {
+      const m = e instanceof Error ? e.message : String(e);
+      toast.error(m || 'Lỗi khi chuyển sang bảo trì');
+    }
+  }
 
   async function fetchList() {
     const start = Date.now();
@@ -273,14 +301,33 @@ const ImplementSuperTaskPage: React.FC = () => {
       const acceptedCounts = await Promise.all(
         baseList.map(async (h) => {
           try {
-            const params = new URLSearchParams({ page: "0", size: "1", status: "ACCEPTED", hospitalName: h.label });
-            const url = `${apiBase}?${params.toString()}`;
-            const r = await fetch(url, { method: "GET", headers: authHeaders(), credentials: "include" });
-            if (!r.ok) return 0;
-            const resp = await r.json();
-            if (resp && typeof resp.totalElements === 'number') return resp.totalElements as number;
-            if (Array.isArray(resp)) return resp.length;
-            return 0;
+            // count both ACCEPTED and COMPLETED as 'accepted' for hospital aggregation
+            const p1 = new URLSearchParams({ page: "0", size: "1", status: "ACCEPTED", hospitalName: h.label });
+            const p2 = new URLSearchParams({ page: "0", size: "1", status: "COMPLETED", hospitalName: h.label });
+            const u1 = `${apiBase}?${p1.toString()}`;
+            const u2 = `${apiBase}?${p2.toString()}`;
+            const [r1, r2] = await Promise.all([
+              fetch(u1, { method: 'GET', headers: authHeaders(), credentials: 'include' }),
+              fetch(u2, { method: 'GET', headers: authHeaders(), credentials: 'include' }),
+            ]);
+            if (!r1.ok && !r2.ok) return 0;
+            let c1 = 0;
+            let c2 = 0;
+            try {
+              const resp1 = r1.ok ? await r1.json() : null;
+              if (resp1 && typeof resp1.totalElements === 'number') c1 = resp1.totalElements as number;
+              else if (Array.isArray(resp1)) c1 = resp1.length;
+            } catch {
+              // ignore individual parse errors
+            }
+            try {
+              const resp2 = r2.ok ? await r2.json() : null;
+              if (resp2 && typeof resp2.totalElements === 'number') c2 = resp2.totalElements as number;
+              else if (Array.isArray(resp2)) c2 = resp2.length;
+            } catch {
+              // ignore individual parse errors
+            }
+            return c1 + c2;
           } catch {
             return 0;
           }
@@ -322,6 +369,70 @@ const ImplementSuperTaskPage: React.FC = () => {
     }
   }
 
+  // Convert all ACCEPTED implementation tasks for a hospital to maintenance
+  async function handleConvertHospital(hospital: { id: number; label: string; taskCount?: number; acceptedCount?: number }) {
+    if (!hospital || !hospital.label) return;
+    if (!confirm(`Chuyển tất cả tác vụ đã nghiệm thu của ${hospital.label} sang bảo trì?`)) return;
+    try {
+      // fetch ACCEPTED and COMPLETED tasks for this hospital (large page size)
+      const params1 = new URLSearchParams({ page: '0', size: '1000', status: 'ACCEPTED', hospitalName: hospital.label });
+      const params2 = new URLSearchParams({ page: '0', size: '1000', status: 'COMPLETED', hospitalName: hospital.label });
+      const url1 = `${apiBase}?${params1.toString()}`;
+      const url2 = `${apiBase}?${params2.toString()}`;
+      const [res1, res2] = await Promise.all([
+        fetch(url1, { method: 'GET', headers: authHeaders(), credentials: 'include' }),
+        fetch(url2, { method: 'GET', headers: authHeaders(), credentials: 'include' }),
+      ]);
+      if (!res1.ok && !res2.ok) {
+        const t1 = res1.ok ? null : await res1.text().catch(() => null);
+        const t2 = res2.ok ? null : await res2.text().catch(() => null);
+        toast.error(`Không thể tải danh sách tác vụ: ${t1 || t2 || res1.status || res2.status}`);
+        return;
+      }
+      const body1 = res1.ok ? await res1.json() : null;
+      const body2 = res2.ok ? await res2.json() : null;
+      const list1: Array<any> = body1 ? (Array.isArray(body1) ? body1 : Array.isArray(body1.content) ? body1.content : []) : [];
+      const list2: Array<any> = body2 ? (Array.isArray(body2) ? body2 : Array.isArray(body2.content) ? body2.content : []) : [];
+      // merge unique by id
+      const idMap = new Map<number, any>();
+      for (const t of [...list1, ...list2]) {
+        if (t && typeof t.id === 'number') idMap.set(t.id, t);
+      }
+      const tasks: Array<any> = Array.from(idMap.values());
+      if (!tasks.length) {
+        toast('Không có tác vụ nào để chuyển.');
+        return;
+      }
+
+      const convertPromises = tasks.map((tk) => fetch(`${API_ROOT}/api/v1/admin/implementation/${tk.id}/convert-to-maintenance`, {
+        method: 'POST', headers: authHeaders(), credentials: 'include'
+      }).then(r => ({ ok: r.ok, status: r.status, text: r.ok ? null : r.text() })));
+
+      const results = await Promise.allSettled(convertPromises);
+      let success = 0;
+      let failed = 0;
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          const v = r.value as any;
+          if (v && v.ok) success++; else failed++;
+        } else {
+          failed++;
+        }
+      }
+
+      if (success > 0) toast.success(`Chuyển thành công ${success} tác vụ sang bảo trì`);
+      if (failed > 0) toast.error(`Có ${failed} tác vụ chuyển thất bại`);
+      // refresh
+      await fetchHospitalsWithTasks();
+      if (!showHospitalList && selectedHospital === hospital.label) {
+        await fetchList();
+      }
+    } catch (e: unknown) {
+      const m = e instanceof Error ? e.message : String(e);
+      toast.error(m || 'Lỗi khi chuyển sang bảo trì');
+    }
+  }
+
   useEffect(() => {
     fetchHospitalsWithTasks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -350,18 +461,36 @@ const ImplementSuperTaskPage: React.FC = () => {
 
   async function fetchAcceptedCountForHospital(hospitalName: string) {
     try {
-      const params = new URLSearchParams({ page: "0", size: "1", status: "ACCEPTED", hospitalName });
-      const url = `${apiBase}?${params.toString()}`;
-      const res = await fetch(url, { method: "GET", headers: authHeaders(), credentials: "include" });
-      if (!res.ok) throw new Error(`GET ${url} failed: ${res.status}`);
-      const resp = await res.json();
-      if (resp && typeof resp.totalElements === 'number') {
-        setAcceptedCount(resp.totalElements);
-      } else if (Array.isArray(resp)) {
-        setAcceptedCount(resp.length);
-      } else {
-        setAcceptedCount(0);
+      // Count both ACCEPTED and COMPLETED as accepted for display
+      const p1 = new URLSearchParams({ page: "0", size: "1", status: "ACCEPTED", hospitalName });
+      const p2 = new URLSearchParams({ page: "0", size: "1", status: "COMPLETED", hospitalName });
+      const u1 = `${apiBase}?${p1.toString()}`;
+      const u2 = `${apiBase}?${p2.toString()}`;
+      const [r1, r2] = await Promise.all([
+        fetch(u1, { method: 'GET', headers: authHeaders(), credentials: 'include' }),
+        fetch(u2, { method: 'GET', headers: authHeaders(), credentials: 'include' }),
+      ]);
+      let c1 = 0;
+      let c2 = 0;
+      if (r1.ok) {
+        try {
+          const resp1 = await r1.json();
+          if (resp1 && typeof resp1.totalElements === 'number') c1 = resp1.totalElements as number;
+          else if (Array.isArray(resp1)) c1 = resp1.length;
+        } catch {
+          c1 = 0;
+        }
       }
+      if (r2.ok) {
+        try {
+          const resp2 = await r2.json();
+          if (resp2 && typeof resp2.totalElements === 'number') c2 = resp2.totalElements as number;
+          else if (Array.isArray(resp2)) c2 = resp2.length;
+        } catch {
+          c2 = 0;
+        }
+      }
+      setAcceptedCount(c1 + c2);
     } catch {
       setAcceptedCount(null);
     }
@@ -641,6 +770,15 @@ const ImplementSuperTaskPage: React.FC = () => {
                             >
                               Xem task 
                             </button>
+                            { (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) >= (hospital.taskCount || 0) && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleConvertHospital(hospital); }}
+                                className="ml-3 inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-sm hover:bg-indigo-100"
+                                title="Chuyển tất cả tác vụ đã nghiệm thu sang bảo trì"
+                              >
+                                ➜ Chuyển sang bảo trì
+                              </button>
+                            ) }
                           </td>
                         </tr>
                       ))}
@@ -851,7 +989,7 @@ const ImplementSuperTaskPage: React.FC = () => {
 
       {/* Modal - Always render regardless of view */}
       {viewOnly ? (
-        <DetailModal open={modalOpen} onClose={() => setModalOpen(false)} item={editing} />
+        <DetailModal open={modalOpen} onClose={() => setModalOpen(false)} item={editing} onConvert={handleConvert} />
       ) : (
         <TaskFormModal
           open={modalOpen}
@@ -870,10 +1008,12 @@ function DetailModal({
   open,
   onClose,
   item,
+  onConvert,
 }: {
   open: boolean;
   onClose: () => void;
   item: ImplTask | null;
+  onConvert?: (id: number) => void;
 }) {
   if (!open || !item) return null;
 
@@ -937,6 +1077,14 @@ function DetailModal({
 
         {/* Footer */}
         <div className="sticky bottom-0 flex justify-end px-6 py-4 border-t bg-white dark:bg-gray-900">
+          {(item.status?.toUpperCase() === 'ACCEPTED' || item.status?.toUpperCase() === 'COMPLETED') && !(item as any).transferredToMaintenance && onConvert && (
+            <button
+              onClick={() => onConvert && item.id && onConvert(item.id)}
+              className="mr-3 px-4 py-2 rounded-lg text-sm font-medium bg-green-50 text-green-700 border border-green-200 hover:bg-green-100"
+            >
+              ➜ Chuyển sang bảo trì
+            </button>
+          )}
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"

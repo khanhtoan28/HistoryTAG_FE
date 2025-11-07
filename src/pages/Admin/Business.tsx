@@ -25,11 +25,15 @@ const BusinessPage: React.FC = () => {
   const [selectedHardwareId, setSelectedHardwareId] = useState<number | null>(null);
   const [selectedHardwarePrice, setSelectedHardwarePrice] = useState<number | null>(null);
   const [selectedHospitalId, setSelectedHospitalId] = useState<number | null>(null);
+  const [selectedHospitalPhone, setSelectedHospitalPhone] = useState<string | null>(null);
   // commissionPercent is the user-facing input (entered as percent, e.g. 12 means 12%)
   const [commissionPercent, setCommissionPercent] = useState<number | null>(null);
   const [quantity, setQuantity] = useState<number>(1);
   const [name, setName] = useState<string>('');
   const [statusValue, setStatusValue] = useState<string>('CARING');
+  const [startDateValue, setStartDateValue] = useState<string>('');
+  const [deadlineValue, setDeadlineValue] = useState<string>('');
+  const [completionDateValue, setCompletionDateValue] = useState<string>('');
   type BusinessItem = {
     id: number;
     name?: string;
@@ -40,7 +44,23 @@ const BusinessPage: React.FC = () => {
     totalPrice?: number | null;
     commission?: number | null;
     status?: string | null;
+    startDate?: string | null;
+    deadline?: string | null;
+    completionDate?: string | null;
   };
+
+  function formatDateShort(value?: string | null) {
+    if (!value) return '—';
+    try {
+      const d = new Date(value);
+      const dd = d.getDate();
+      const mm = d.getMonth() + 1;
+      const yyyy = d.getFullYear();
+      return `${dd.toString().padStart(2,'0')}/${mm.toString().padStart(2,'0')}/${yyyy}`;
+    } catch {
+      return '—';
+    }
+  }
   const [items, setItems] = useState<BusinessItem[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [viewItem, setViewItem] = useState<BusinessItem | null>(null);
@@ -105,7 +125,12 @@ const BusinessPage: React.FC = () => {
 
     setSaving(true);
       try {
-        const payload: Record<string, unknown> = { name, hospitalId: selectedHospitalId, hardwareId: selectedHardwareId, quantity, status: statusValue };
+        const toLocalDateTimeStr = (v?: string | null) => v ? (v.length === 16 ? `${v}:00` : v) : undefined;
+        const payload: Record<string, unknown> = { name, hospitalId: selectedHospitalId, hardwareId: selectedHardwareId, quantity, status: statusValue,
+          startDate: toLocalDateTimeStr(startDateValue),
+          deadline: toLocalDateTimeStr(deadlineValue),
+          completionDate: toLocalDateTimeStr(completionDateValue),
+        };
         // compute commission amount from percent and total (backend expects absolute amount)
         const total = computeTotal();
         if (commissionPercent != null && total > 0) {
@@ -165,7 +190,18 @@ const BusinessPage: React.FC = () => {
       setEditingId(id);
       setName(res.name ?? '');
       setSelectedHospitalId(res.hospital?.id ?? null);
-      setSelectedHardwareId(res.hardware?.id ?? null);
+      if (res.hospital?.id) {
+        // use the auth/hospitals endpoint (works for non-superadmin roles too)
+        api.get(`/api/v1/auth/hospitals/${res.hospital.id}`).then(r => {
+          const d = r.data || {};
+          const phone = d.contactNumber || d.contact_number || d.contactPhone || d.contact_phone || null;
+          setSelectedHospitalPhone(phone);
+        }).catch(() => setSelectedHospitalPhone(null));
+      } else setSelectedHospitalPhone(null);
+  setSelectedHardwareId(res.hardware?.id ?? null);
+  setStartDateValue(res.startDate ? (res.startDate.length === 16 ? res.startDate : res.startDate.substring(0,16)) : '');
+  setDeadlineValue(res.deadline ? (res.deadline.length === 16 ? res.deadline : res.deadline.substring(0,16)) : '');
+  setCompletionDateValue(res.completionDate ? (res.completionDate.length === 16 ? res.completionDate : res.completionDate.substring(0,16)) : '');
       // convert existing commission amount to percentage for the input
       const existingTotal = res.totalPrice != null ? Number(res.totalPrice) : null;
       if (res.commission != null && existingTotal && existingTotal > 0) {
@@ -231,7 +267,7 @@ const BusinessPage: React.FC = () => {
 
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-extrabold mb-0">Quản lý Kinh doanh</h1>
-        <button type="button" onClick={() => { setEditingId(null); setName(''); setSelectedHardwareId(null); setQuantity(1); setStatusValue('CARING'); setShowModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-pink-500 text-white rounded shadow-lg">
+  <button type="button" onClick={() => { setEditingId(null); setName(''); setSelectedHardwareId(null); setQuantity(1); setStatusValue('CARING'); setStartDateValue(''); setDeadlineValue(''); setCompletionDateValue(''); setShowModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-pink-500 text-white rounded shadow-lg">
           <PlusIcon style={{ width: 18, height: 18, fill: 'white' }} />
           <span>Thêm mới</span>
         </button>
@@ -310,10 +346,21 @@ const BusinessPage: React.FC = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">Bệnh viện</label>
-                      <select value={selectedHospitalId ?? ''} onChange={(e) => { const v = e.target.value; setSelectedHospitalId(v ? Number(v) : null); }} className="w-full rounded border px-3 py-2">
+                      <select value={selectedHospitalId ?? ''} onChange={(e) => { const v = e.target.value; const id = v ? Number(v) : null; setSelectedHospitalId(id); if (id) {
+                          const found = hospitalOptions.find(h => Number(h.id) === id);
+                          if (found) {
+                            api.get(`/api/v1/auth/hospitals/${found.id}`).then(r => {
+                              const d = r.data || {};
+                              const phone = d.contactNumber || d.contact_number || d.contactPhone || d.contact_phone || null;
+                              setSelectedHospitalPhone(phone);
+                            }).catch(() => setSelectedHospitalPhone(null));
+                          } else setSelectedHospitalPhone(null);
+                        } else setSelectedHospitalPhone(null);
+                      }} className="w-full rounded border px-3 py-2">
                         <option value="">— Chọn bệnh viện —</option>
                         {hospitalOptions.map(h => <option key={h.id} value={h.id}>{h.label}</option>)}
                       </select>
+                      {selectedHospitalPhone && <div className="mt-1 text-sm text-gray-700">Số điện thoại bệnh viện: <span className="font-medium">{selectedHospitalPhone}</span></div>}
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">Trạng thái</label>
@@ -334,6 +381,18 @@ const BusinessPage: React.FC = () => {
                     <div>
                       <label className="block text-sm font-medium mb-1">Đơn giá</label>
                       <div className="p-2">{selectedHardwarePrice != null ? selectedHardwarePrice.toLocaleString() + ' ₫' : '—'}</div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Ngày bắt đầu</label>
+                      <input type="datetime-local" value={startDateValue} onChange={(e) => setStartDateValue(e.target.value)} className="w-full rounded border px-3 py-2" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Deadline</label>
+                      <input type="datetime-local" value={deadlineValue} onChange={(e) => setDeadlineValue(e.target.value)} className="w-full rounded border px-3 py-2" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium mb-1">Ngày hoàn thành</label>
+                      <input type="datetime-local" value={completionDateValue} onChange={(e) => setCompletionDateValue(e.target.value)} className="w-full rounded border px-3 py-2" />
                     </div>
                   </div>
                   <div className="flex items-center gap-3 justify-between">
@@ -358,6 +417,9 @@ const BusinessPage: React.FC = () => {
                     <th className="text-center px-2 py-3">Tên</th>
                     <th className="text-center px-2 py-3">Bệnh viện</th>
                     <th className="text-center px-2 py-3">Phần cứng</th>
+                    <th className="text-center px-2 py-3">Bắt đầu</th>
+                    <th className="text-center px-2 py-3">Deadline</th>
+                    <th className="text-center px-2 py-3">Hoàn thành</th>
                     <th className="text-center px-2 py-3">Số lượng</th>
                     <th className="text-center px-2 py-3">Đơn giá</th>
                     <th className="text-center px-2 py-3">Tổng</th>
@@ -373,6 +435,9 @@ const BusinessPage: React.FC = () => {
                         <td className="text-center px-2 py-2">{it.name}</td>
                         <td className="text-center px-2 py-2">{it.hospital?.label ?? '—'}</td>
                         <td className="text-center px-2 py-2">{it.hardware?.label ?? '—'}</td>
+                        <td className="text-center px-2 py-2">{formatDateShort(it.startDate)}</td>
+                        <td className="text-center px-2 py-2">{formatDateShort(it.deadline)}</td>
+                        <td className="text-center px-2 py-2">{formatDateShort(it.completionDate)}</td>
                         <td className="text-center px-2 py-2">{it.quantity ?? '—'}</td>
                         <td className="text-center px-2 py-2">{it.unitPrice != null ? it.unitPrice.toLocaleString() + ' ₫' : '—'}</td>
                         <td className="text-center px-2 py-2">{it.totalPrice != null ? it.totalPrice.toLocaleString() + ' ₫' : '—'}</td>
@@ -409,6 +474,9 @@ const BusinessPage: React.FC = () => {
               <div><strong>Tên:</strong> {viewItem.name}</div>
               <div><strong>Bệnh viện:</strong> {viewItem.hospital?.label ?? '—'}</div>
               <div><strong>Phần cứng:</strong> {viewItem.hardware?.label ?? '—'}</div>
+              <div><strong>Bắt đầu:</strong> {formatDateShort(viewItem.startDate)}</div>
+              <div><strong>Deadline:</strong> {formatDateShort(viewItem.deadline)}</div>
+              <div><strong>Hoàn thành:</strong> {formatDateShort(viewItem.completionDate)}</div>
               <div><strong>Số lượng:</strong> {viewItem.quantity ?? '—'}</div>
               <div><strong>Đơn giá:</strong> {viewItem.unitPrice != null ? viewItem.unitPrice.toLocaleString() + ' ₫' : '—'}</div>
               <div><strong>Tổng:</strong> {viewItem.totalPrice != null ? viewItem.totalPrice.toLocaleString() + ' ₫' : '—'}</div>

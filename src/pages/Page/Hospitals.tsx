@@ -5,7 +5,7 @@ import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
 // removed unused icons import (use react-icons instead)
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
-import { FiMapPin, FiMail, FiPhone, FiUser, FiClock, FiTag, FiImage, FiMap, FiCalendar } from "react-icons/fi";
+import { FiMapPin, FiMail, FiPhone, FiUser, FiClock, FiTag, FiImage, FiMap } from "react-icons/fi";
 import { FaHospitalAlt } from "react-icons/fa";
 
 export type Hospital = {
@@ -19,7 +19,7 @@ export type Hospital = {
   contactEmail?: string | null;
   contactNumber?: string | null;
   itDepartmentContact?: string | null;
-  itContactPhone?: string | null;
+  itContactPhone?: string | null; 
   hisSystemId?: number | null;
   hisSystemName?: string | null;
   bankName?: string | null;
@@ -57,14 +57,11 @@ export type HospitalForm = {
   hardwareId?: number;
   hardwareName?: string;
   projectStatus: string;
-  startDate?: string;
-  deadline?: string;
-  completionDate?: string;
   notes?: string;
   imageFile?: File | null;
   imageUrl?: string | null;
   priority: string;
-  assignedUserIds: number[];
+  // assignedUserIds removed from Hospital form UI; assignment managed elsewhere
 };
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
@@ -181,30 +178,7 @@ function getPriorityBg(priority?: string | null): string {
 
 
 
-function formatDateTimeLocal(value?: string | null) {
-  if (!value) return "";
-  const d = new Date(value);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function formatDateShort(value?: string | null) {
-  if (!value) return "—";
-  try {
-    const d = new Date(value);
-    const dd = d.getDate();
-    const mm = d.getMonth() + 1;
-    const yyyy = d.getFullYear();
-    return `${dd}/${mm}/${yyyy}`;
-  } catch {
-    return "—";
-  }
-}
-
-function toLocalDateTime(value?: string) {
-  if (!value) return undefined;
-  return value.length === 16 ? `${value}:00` : value;
-}
+// Date helpers removed or consolidated; Hospital UI uses fmt() for display
 
 // Helper function để format date time
 function fmt(dt?: string | null) {
@@ -332,9 +306,7 @@ function DetailModal({
             <Info label="Phần cứng" icon={<FiImage />} value={item.hardwareName || item.hardwareId || "—"} />
             <Info label="Đơn vị tài trợ" icon={<FiUser />} value={item.bankName || "—"} />
             <Info label="Liên hệ đơn vị tài trợ" icon={<FiUser />} value={item.bankContactPerson || "—"} />
-            <Info label="Ngày bắt đầu" icon={<FiCalendar />} value={fmt(item.startDate)} />
-            <Info label="Deadline" icon={<FiClock />} value={fmt(item.deadline)} />
-            <Info label="Ngày hoàn thành" icon={<FiCalendar />} value={fmt(item.completionDate)} />
+            {/* Project dates are managed by BusinessProject (master) and are not shown here */}
             <Info label="Tạo lúc" icon={<FiClock />} value={fmt(item.createdAt)} />
             <Info label="Cập nhật lúc" icon={<FiClock />} value={fmt(item.updatedAt)} />
           </div>
@@ -366,15 +338,7 @@ function DetailModal({
             </div>
           )}
 
-          {/* Assigned Users */}
-          {item.assignedUserIds && item.assignedUserIds.length > 0 && (
-            <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
-              <p className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Người phụ trách (IDs):</p>
-              <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300">
-                {item.assignedUserIds.join(", ")}
-              </div>
-            </div>
-          )}
+          {/* Assigned user info removed from Hospital detail view; assignment is managed elsewhere */}
         </div>
 
         {/* Footer */}
@@ -458,14 +422,11 @@ export default function HospitalsPage() {
     hardwareId: undefined,
     hardwareName: "",
     projectStatus: "IN_PROGRESS",
-    startDate: "",
-    deadline: "",
-    completionDate: "",
+  // Project dates are now managed by BusinessProject (master)
     notes: "",
     imageFile: null,
     imageUrl: null,
-    priority: "P2",
-    assignedUserIds: [],
+  priority: "P2",
   });
 
   const isEditing = !!editing?.id;
@@ -500,14 +461,12 @@ export default function HospitalsPage() {
       hardwareId: h.hardwareId ?? undefined,
       hardwareName: h.hardwareName ?? "",
       projectStatus: h.projectStatus ?? "IN_PROGRESS",
-      startDate: h.startDate ? formatDateTimeLocal(h.startDate) : "",
-      deadline: h.deadline ? formatDateTimeLocal(h.deadline) : "",
-      completionDate: h.completionDate ? formatDateTimeLocal(h.completionDate) : "",
+  // project dates are managed by BusinessProject
       notes: h.notes ?? "",
       imageFile: null,
       imageUrl: (h.imageUrl && h.imageUrl.trim()) ? h.imageUrl : null,
       priority: h.priority ?? "P2",
-      assignedUserIds: h.assignedUserIds ?? [],
+      // assignedUserIds removed from form; we don't populate it here
     });
   }
 
@@ -723,14 +682,12 @@ export default function HospitalsPage() {
       hardwareId: undefined,
       hardwareName: "",
       projectStatus: "IN_PROGRESS",
-      startDate: "",
-      deadline: "",
-      completionDate: "",
+  // project dates are managed by BusinessProject
       notes: "",
       imageFile: null,
       imageUrl: null,
       priority: "P2",
-      assignedUserIds: [],
+      // assignedUserIds removed from form
     });
     setOpen(true);
   }
@@ -822,13 +779,11 @@ export default function HospitalsPage() {
         hisSystemId: form.hisSystemId ?? undefined,
         hardwareId: form.hardwareId ?? undefined,
         projectStatus: form.projectStatus,
-        startDate: toLocalDateTime(form.startDate) || undefined,
-        deadline: toLocalDateTime(form.deadline) || undefined,
-        completionDate: toLocalDateTime(form.completionDate) || undefined,
+  // project dates are handled by BusinessProject; do not send from Hospital
         notes: form.notes?.trim() || undefined,
         imageFile: form.imageFile || undefined,
         priority: form.priority,
-        assignedUserIds: form.assignedUserIds,
+        // assignedUserIds intentionally not sent from Hospital form
       };
 
       const method = isEditing ? "PUT" : "POST";
@@ -890,7 +845,7 @@ export default function HospitalsPage() {
               onChange={(e) => setQStatus(e.target.value)}
             />
             <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 bg-white" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-              {["id", "name", "priority", "startDate", "deadline"].map((k) => (
+              {["id", "name", "priority"].map((k) => (
                 <option key={k} value={k}>Sắp xếp theo: {k}</option>
               ))}
             </select>
@@ -1052,13 +1007,6 @@ export default function HospitalsPage() {
                     </div>
 
                     <div className="flex flex-col items-end w-full md:w-1/3">
-                      <div className="text-right text-sm text-gray-600 mb-3">
-                        <div className="text-xs text-gray-400">Bắt đầu</div>
-                        <div className="text-sm font-semibold text-gray-900">{formatDateShort(h.startDate)}</div>
-                        <div className="mt-2 text-xs text-gray-400">Deadline</div>
-                        <div className="text-sm font-semibold text-gray-900">{formatDateShort(h.deadline)}</div>
-                      </div>
-
                       <div className="flex items-center gap-2">
                         <button onClick={(e) => { e.stopPropagation(); onView(h); }} title="Xem" aria-label={`Xem ${h.name}`} className="flex items-center gap-2 px-3 py-2 rounded-md bg-white border border-blue-100 text-blue-700 hover:bg-blue-50 transition transform text-xs font-medium">
                           <AiOutlineEye className="w-4 h-4" />
@@ -1206,26 +1154,7 @@ export default function HospitalsPage() {
                         disabled={isViewing || !canEdit}
                       />
                     </div>
-                    <div>
-                      <label className="mb-1 block text-sm">Người phụ trách</label>
-                      <input
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                        placeholder="ID users (cách nhau dấu phẩy)"
-                        value={(form.assignedUserIds ?? []).join(",")}
-                        onChange={(e) =>
-                          setForm((s) => ({
-                            ...s,
-                            assignedUserIds: e.target.value
-                              .split(",")
-                              .map((x) => x.trim())
-                              .filter(Boolean)
-                              .map((x) => Number(x))
-                              .filter((n) => !Number.isNaN(n)),
-                          }))
-                        }
-                        disabled={isViewing || !canEdit}
-                      />
-                    </div>
+                    {/* Người phụ trách field removed — assignment handled elsewhere */}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -1348,38 +1277,7 @@ export default function HospitalsPage() {
                     </select>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="mb-1 block text-sm">Bắt đầu</label>
-                      <input
-                        type="datetime-local"
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                        value={form.startDate || ""}
-                        onChange={(e) => setForm((s) => ({ ...s, startDate: e.target.value }))}
-                        disabled={isViewing || !canEdit}
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm">Deadline</label>
-                      <input
-                        type="datetime-local"
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                        value={form.deadline || ""}
-                        onChange={(e) => setForm((s) => ({ ...s, deadline: e.target.value }))}
-                        disabled={isViewing || !canEdit}
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm">Hoàn thành</label>
-                      <input
-                        type="datetime-local"
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                        value={form.completionDate || ""}
-                        onChange={(e) => setForm((s) => ({ ...s, completionDate: e.target.value }))}
-                        disabled={isViewing || !canEdit}
-                      />
-                    </div>
-                  </div>
+                        {/* Project dates are managed on BusinessProject now; inputs removed from Hospital form */}
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>

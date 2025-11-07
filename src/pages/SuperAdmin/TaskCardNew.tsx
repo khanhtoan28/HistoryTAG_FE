@@ -85,7 +85,6 @@ export default function TaskCardNew({
   onEdit,
   onDelete,
   onOpen,
-  onConvert,
   idx,
   animate = true,
   canView = true,
@@ -99,7 +98,6 @@ export default function TaskCardNew({
   onEdit: (t: ImplTask) => void;
   onDelete: (id: number) => void;
   onOpen: (t: ImplTask) => void;
-  onConvert?: (t: ImplTask) => void;
   idx?: number;
   animate?: boolean;
   canView?: boolean;
@@ -259,24 +257,11 @@ export default function TaskCardNew({
                 </button>
               )}
               {/* Non-clickable indicators shown next to Xem */}
-              {task.status?.toUpperCase() === "PENDING_TRANSFER" && (
-                <span className="inline-flex items-center ml-3 px-3 py-1 rounded-full text-sm font-medium bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-200">
-                  Chờ chuyển bảo trì
-                </span>
-              )}
-              {task.status?.toUpperCase() === "TRANSFERRED" && (
-                <span className="inline-flex items-center ml-3 px-3 py-1 rounded-full text-sm font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200">
-                  Đã chuyển sang bảo trì
-                </span>
-              )}
-              {onConvert && task.status?.toUpperCase() === "ACCEPTED" && !task.transferredToMaintenance && !task.readOnlyForDeployment && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onConvert(task); }}
-                  className="text-green-600 hover:underline text-sm ml-3"
-                >
-                  ➜ Chuyển sang bảo trì
-                </button>
-              )}
+              {/* Status badges for transfer are intentionally hidden in the implementation tasks list
+                  per UX: conversion actions/indicators are surfaced at the hospital list level only. */}
+              {/* Convert action intentionally removed from the list/card view.
+                  The convert-to-maintenance action should only be visible
+                  inside the task detail modal when the task is fully accepted. */}
             </div>
           </div>
         </div>

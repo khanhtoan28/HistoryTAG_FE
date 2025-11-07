@@ -207,6 +207,8 @@ function fmt(dt?: string | null) {
     if (Number.isNaN(d.getTime())) return "";
     return d.toLocaleString();
 }
+// mark fmt as referenced to avoid TS6133 in builds when this file does not use fmt directly
+void fmt;
 
 function clsx(...arr: Array<string | false | undefined>) {
     return arr.filter(Boolean).join(" ");
@@ -613,6 +615,15 @@ function TaskFormModal({
         const id = (initial?.hardwareId as number) || 0;
         return id ? { id, name: String(id) } : null;
     });
+
+    // These selection states are intentionally kept for future fields but may be unused
+    // in some builds; reference them to avoid TS6133 (declared but never read).
+    void agencyOpt;
+    void setAgencyOpt;
+    void hisOpt;
+    void setHisOpt;
+    void hardwareOpt;
+    void setHardwareOpt;
 
     useEffect(() => {
         if (open) {
