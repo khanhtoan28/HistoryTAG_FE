@@ -99,10 +99,10 @@ const MaintenanceSuperTaskPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [hospitalQuery, setHospitalQuery] = useState<string>("");
-  const [hospitalOptions, setHospitalOptions] = useState<
-    Array<{ id: number; label: string }>
-  >([]);
+  // const [hospitalQuery, setHospitalQuery] = useState<string>("");
+  // const [hospitalOptions, setHospitalOptions] = useState<
+  //   Array<{ id: number; label: string }>
+  // >([]);
   const [selectedHospital, setSelectedHospital] = useState<string | null>(null);
   const searchDebounce = useRef<number | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
@@ -916,7 +916,21 @@ function DetailModal({
   item: MaintTask | null;
 }) {
   if (!open || !item) return null;
-  const fmt = (d?: string | null) => (d ? new Date(d).toLocaleString("vi-VN") : "—");
+  const fmt = (d?: string | null) => {
+    if (!d) return "—";
+    const date = new Date(d);
+    if (Number.isNaN(date.getTime())) return "—";
+    return new Intl.DateTimeFormat("vi-VN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+      timeZone: "Asia/Ho_Chi_Minh",
+    }).format(date);
+  };
 
   return (
     <div

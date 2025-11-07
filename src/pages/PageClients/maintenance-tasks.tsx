@@ -201,13 +201,6 @@ function readStored<T = unknown>(key: string): T | null {
     }
 }
 
-function fmt(dt?: string | null) {
-    if (!dt) return "";
-    const d = new Date(dt);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleString();
-}
-
 function clsx(...arr: Array<string | false | undefined>) {
     return arr.filter(Boolean).join(" ");
 }
@@ -486,11 +479,13 @@ function TaskFormModal({
     onClose,
     initial,
     onSubmit,
+    userTeam,
 }: {
     open: boolean;
     onClose: () => void;
     initial?: Partial<ImplementationTaskRequestDTO> & { id?: number; hospitalName?: string | null; picDeploymentName?: string | null };
     onSubmit: (payload: ImplementationTaskRequestDTO, id?: number) => Promise<void>;
+    userTeam: string;
 }) {
     // ===== Fetchers cho RemoteSelect =====
     const searchHospitals = useMemo(
@@ -512,7 +507,15 @@ function TaskFormModal({
 
     const searchPICs = useMemo(
         () => async (term: string) => {
-            const url = `${API_ROOT}/api/v1/admin/users/search?name=${encodeURIComponent(term)}`;
+            const params = new URLSearchParams({ name: term });
+            // Lọc theo team dựa trên user đăng nhập
+            if (userTeam === "MAINTENANCE") {
+                params.set("team", "MAINTENANCE");
+            } else if (userTeam === "DEPLOYMENT") {
+                params.set("team", "DEPLOYMENT");
+            }
+            // Nếu SUPERADMIN, không lọc team để hiện tất cả
+            const url = `${API_ROOT}/api/v1/admin/users/search?${params.toString()}`;
             const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
             if (!res.ok) return [];
             const list = await res.json();
@@ -524,51 +527,51 @@ function TaskFormModal({
                 : [];
             return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
         },
-        []
+        [userTeam]
     );
 
     // Thêm loaders giống dev-tasks cho Agency/HIS/Hardware
-    const searchAgencies = useMemo(
-        () => async (term: string) => {
-            const url = `${API_ROOT}/api/v1/admin/agencies/search?search=${encodeURIComponent(term)}`;
-            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
-            if (!res.ok) return [];
-            const list = await res.json();
-            const mapped = Array.isArray(list)
-                ? list.map((a: { id?: number; label?: string; name?: string }) => ({ id: Number(a.id), name: String(a.label ?? a.name ?? a?.id) }))
-                : [];
-            return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
-        },
-        []
-    );
+    // const searchAgencies = useMemo(
+    //     () => async (term: string) => {
+    //         const url = `${API_ROOT}/api/v1/admin/agencies/search?search=${encodeURIComponent(term)}`;
+    //         const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+    //         if (!res.ok) return [];
+    //         const list = await res.json();
+    //         const mapped = Array.isArray(list)
+    //             ? list.map((a: { id?: number; label?: string; name?: string }) => ({ id: Number(a.id), name: String(a.label ?? a.name ?? a?.id) }))
+    //             : [];
+    //         return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
+    //     },
+    //     []
+    // );
 
-    const searchHisSystems = useMemo(
-        () => async (term: string) => {
-            const url = `${API_ROOT}/api/v1/admin/his/search?search=${encodeURIComponent(term)}`;
-            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
-            if (!res.ok) return [];
-            const list = await res.json();
-            const mapped = Array.isArray(list)
-                ? list.map((h: { id?: number; label?: string; name?: string }) => ({ id: Number(h.id), name: String(h.label ?? h.name ?? h?.id) }))
-                : [];
-            return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
-        },
-        []
-    );
+    // const searchHisSystems = useMemo(
+    //     () => async (term: string) => {
+    //         const url = `${API_ROOT}/api/v1/admin/his/search?search=${encodeURIComponent(term)}`;
+    //         const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+    //         if (!res.ok) return [];
+    //         const list = await res.json();
+    //         const mapped = Array.isArray(list)
+    //             ? list.map((h: { id?: number; label?: string; name?: string }) => ({ id: Number(h.id), name: String(h.label ?? h.name ?? h?.id) }))
+    //             : [];
+    //         return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
+    //     },
+    //     []
+    // );
 
-    const searchHardwares = useMemo(
-        () => async (term: string) => {
-            const url = `${API_ROOT}/api/v1/admin/hardware/search?search=${encodeURIComponent(term)}`;
-            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
-            if (!res.ok) return [];
-            const list = await res.json();
-            const mapped = Array.isArray(list)
-                ? list.map((h: { id?: number; label?: string; name?: string }) => ({ id: Number(h.id), name: String(h.label ?? h.name ?? h?.id) }))
-                : [];
-            return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
-        },
-        []
-    );
+    // const searchHardwares = useMemo(
+    //     () => async (term: string) => {
+    //         const url = `${API_ROOT}/api/v1/admin/hardware/search?search=${encodeURIComponent(term)}`;
+    //         const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+    //         if (!res.ok) return [];
+    //         const list = await res.json();
+    //         const mapped = Array.isArray(list)
+    //             ? list.map((h: { id?: number; label?: string; name?: string }) => ({ id: Number(h.id), name: String(h.label ?? h.name ?? h?.id) }))
+    //             : [];
+    //         return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
+    //     },
+    //     []
+    // );
 
     const [model, setModel] = useState<ImplementationTaskRequestDTO>(() => ({
         name: initial?.name || "",
@@ -601,19 +604,6 @@ function TaskFormModal({
         return id ? { id, name: nm || String(id) } : null;
     });
 
-    const [agencyOpt, setAgencyOpt] = useState<{ id: number; name: string } | null>(() => {
-        const id = (initial?.agencyId as number) || 0;
-        return id ? { id, name: String(id) } : null;
-    });
-    const [hisOpt, setHisOpt] = useState<{ id: number; name: string } | null>(() => {
-        const id = (initial?.hisSystemId as number) || 0;
-        return id ? { id, name: String(id) } : null;
-    });
-    const [hardwareOpt, setHardwareOpt] = useState<{ id: number; name: string } | null>(() => {
-        const id = (initial?.hardwareId as number) || 0;
-        return id ? { id, name: String(id) } : null;
-    });
-
     useEffect(() => {
         if (open) {
             setModel({
@@ -644,12 +634,12 @@ function TaskFormModal({
             setPicOpt(pid ? { id: pid, name: pnm || String(pid) } : null);
 
             // Prefill các select phụ
-            const aid = (initial?.agencyId as number) || 0;
-            setAgencyOpt(aid ? { id: aid, name: String(aid) } : null);
-            const hid2 = (initial?.hisSystemId as number) || 0;
-            setHisOpt(hid2 ? { id: hid2, name: String(hid2) } : null);
-            const hwid = (initial?.hardwareId as number) || 0;
-            setHardwareOpt(hwid ? { id: hwid, name: String(hwid) } : null);
+            // const aid = (initial?.agencyId as number) || 0;
+            // setAgencyOpt(aid ? { id: aid, name: String(aid) } : null);
+            // const hid2 = (initial?.hisSystemId as number) || 0;
+            // setHisOpt(hid2 ? { id: hid2, name: String(hid2) } : null);
+            // const hwid = (initial?.hardwareId as number) || 0;
+            // setHardwareOpt(hwid ? { id: hwid, name: String(hwid) } : null);
         }
     }, [open, initial]);
 
@@ -717,19 +707,12 @@ function TaskFormModal({
             }
 
             // 3) Fallback: use existing search loaders
-            try {
-                const fetcher = setOpt === setAgencyOpt ? searchAgencies : setOpt === setHisOpt ? searchHisSystems : searchHardwares;
-                const opts: Array<{ id: number; name: string }> = await fetcher("");
-                const found = opts.find((o: { id: number; name: string }) => o.id === id);
-                if (found) setOpt(found);
-            } catch {
-                /* ignore */
-            }
+            // const fetcher = setOpt === setAgencyOpt ? searchAgencies : setOpt === setHisOpt ? searchHisSystems : searchHardwares;
+            // const opts: Array<{ id: number; name: string }> = await fetcher("");
+            // const found = opts.find((o: { id: number; name: string }) => o.id === id);
+            // if (found) setOpt(found);
         }
 
-        resolveById((initial?.agencyId as number) || null, setAgencyOpt, "/api/v1/admin/agencies", ["name", "agencyName", "label"]);
-        resolveById((initial?.hisSystemId as number) || null, setHisOpt, "/api/v1/admin/his", ["name", "hisName", "label"]);
-        resolveById((initial?.hardwareId as number) || null, setHardwareOpt, "/api/v1/admin/hardware", ["name", "hardwareName", "label"]);
         // Resolve cho Hospital & PIC
         resolveById((initial?.hospitalId as number) || null, setHospitalOpt, "/api/v1/admin/hospitals", ["name", "hospitalName", "label", "code"]);
         resolveById((initial?.picDeploymentId as number) || null, setPicOpt, "/api/v1/admin/users", ["fullName", "fullname", "name", "username", "label"]);
@@ -1797,6 +1780,7 @@ const ImplementationTasksPage: React.FC = () => {
                 onClose={() => setModalOpen(false)}
                 initial={editing as any || undefined}
                 onSubmit={handleSubmit}
+                userTeam={userTeam}
             />
 
             <DetailModal open={detailOpen} onClose={() => setDetailOpen(false)} item={detailItem} />

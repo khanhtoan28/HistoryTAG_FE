@@ -9,16 +9,16 @@ import { getAuthToken } from "../api/client";
 // Optional STOMP support
 let StompClient: any | null = null;
 let SockJSClient: any | null = null;
-try {
-  // dynamically require so tests/other environments without the deps won't crash
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  StompClient = require("@stomp/stompjs").Client;
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  SockJSClient = require("sockjs-client");
-} catch {
-  StompClient = null;
-  SockJSClient = null;
-}
+// try {
+//   // dynamically require so tests/other environments without the deps won't crash
+//   // eslint-disable-next-line @typescript-eslint/no-var-requires
+//   StompClient = require("@stomp/stompjs").Client;
+//   // eslint-disable-next-line @typescript-eslint/no-var-requires
+//   SockJSClient = require("sockjs-client");
+// } catch {
+//   StompClient = null;
+//   SockJSClient = null;
+// }
 
 type Notification = any;
 
