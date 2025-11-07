@@ -7,7 +7,17 @@ import {
   TrashBinIcon,
   EyeIcon,
   DollarLineIcon,
+  UserCircleIcon,
+  GroupIcon,
+  EnvelopeIcon,
+  BoxCubeIcon,
+  CalenderIcon,
+  TimeIcon,
+  BoxIconLine,
+  CheckCircleIcon,
+  TaskIcon,
 } from '../../icons';
+import Pagination from '../../components/common/Pagination';
 
 const BusinessPage: React.FC = () => {
   const roles = JSON.parse(localStorage.getItem('roles') || '[]');
@@ -32,7 +42,6 @@ const BusinessPage: React.FC = () => {
   const [name, setName] = useState<string>('');
   const [statusValue, setStatusValue] = useState<string>('CARING');
   const [startDateValue, setStartDateValue] = useState<string>('');
-  const [deadlineValue, setDeadlineValue] = useState<string>('');
   const [completionDateValue, setCompletionDateValue] = useState<string>('');
   type BusinessItem = {
     id: number;
@@ -46,7 +55,6 @@ const BusinessPage: React.FC = () => {
     commission?: number | null;
     status?: string | null;
     startDate?: string | null;
-    deadline?: string | null;
     completionDate?: string | null;
   };
 
@@ -62,7 +70,21 @@ const BusinessPage: React.FC = () => {
       return '—';
     }
   }
+  function formatBusinessId(id?: number | null) {
+    if (id == null) return '—';
+    // Prefix 'HD' and pad to 2 digits (HD01, HD02, ...)
+    const n = Number(id);
+    if (Number.isNaN(n)) return String(id);
+    return `HD${String(n).padStart(2, '0')}`;
+  }
   const [items, setItems] = useState<BusinessItem[]>([]);
+  const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState<number>(0);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(10);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [totalItems, setTotalItems] = useState<number>(0);
+  const [filterStartFrom, setFilterStartFrom] = useState<string>('');
+  const [filterStartTo, setFilterStartTo] = useState<string>('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [viewItem, setViewItem] = useState<BusinessItem | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -89,9 +111,10 @@ const BusinessPage: React.FC = () => {
     }
   }
 
-  async function loadList() {
+  async function loadList(page = currentPage, size = itemsPerPage) {
     try {
-      const res = await getBusinesses({ page: 0, size: 50 });
+      const toParam = (v?: string | null) => v ? (v.length === 16 ? `${v}:00` : v) : undefined;
+      const res = await getBusinesses({ page, size, startDateFrom: toParam(filterStartFrom), startDateTo: toParam(filterStartTo) });
       const content = Array.isArray(res?.content) ? res.content : (Array.isArray(res) ? res : []);
       // ensure numeric fields are numbers
       const normalized = (content as Array<Record<string, unknown>>).map((c) => {
@@ -123,6 +146,10 @@ const BusinessPage: React.FC = () => {
           return out;
         }));
         setItems(withPhones);
+        // pagination metadata (when backend returns Page)
+        setTotalItems(res?.totalElements ?? (Array.isArray(res) ? res.length : content.length));
+        setTotalPages(res?.totalPages ?? 1);
+        setCurrentPage(res?.number ?? page);
       } catch (e) {
         // ignore phone enrichment failures
         console.warn('Failed to enrich hospitals with phone', e);
@@ -132,9 +159,22 @@ const BusinessPage: React.FC = () => {
     }
   }
 
-  // run on mount
+  // run on mount and when pagination changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  React.useEffect(() => { fetchHardwareOptions(''); fetchHospitalOptions(''); loadList(); }, []);
+  React.useEffect(() => { fetchHardwareOptions(''); fetchHospitalOptions(''); loadList(currentPage, itemsPerPage); }, []);
+  React.useEffect(() => { loadList(currentPage, itemsPerPage); }, [currentPage, itemsPerPage]);
+
+  function applyFilters() {
+    setCurrentPage(0);
+    loadList(0, itemsPerPage);
+  }
+
+  function clearFilters() {
+    setFilterStartFrom('');
+    setFilterStartTo('');
+    setCurrentPage(0);
+    loadList(0, itemsPerPage);
+  }
 
   async function handleSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault();
@@ -150,7 +190,6 @@ const BusinessPage: React.FC = () => {
         const toLocalDateTimeStr = (v?: string | null) => v ? (v.length === 16 ? `${v}:00` : v) : undefined;
         const payload: Record<string, unknown> = { name, hospitalId: selectedHospitalId, hardwareId: selectedHardwareId, quantity, status: statusValue,
           startDate: toLocalDateTimeStr(startDateValue),
-          deadline: toLocalDateTimeStr(deadlineValue),
           completionDate: toLocalDateTimeStr(completionDateValue),
         };
         // compute commission amount from percent and total (backend expects absolute amount)
@@ -171,7 +210,9 @@ const BusinessPage: React.FC = () => {
   setStatusValue('CARING'); setCommissionPercent(null);
       setEditingId(null);
       setShowModal(false);
-      await loadList();
+      // reload the first page so the new item is visible
+      setCurrentPage(0);
+      await loadList(0, itemsPerPage);
     } catch (err: unknown) {
       console.error(err);
       setToast({ message: 'Lỗi khi lưu dữ liệu', type: 'error' });
@@ -222,7 +263,6 @@ const BusinessPage: React.FC = () => {
       } else setSelectedHospitalPhone(null);
   setSelectedHardwareId(res.hardware?.id ?? null);
   setStartDateValue(res.startDate ? (res.startDate.length === 16 ? res.startDate : res.startDate.substring(0,16)) : '');
-  setDeadlineValue(res.deadline ? (res.deadline.length === 16 ? res.deadline : res.deadline.substring(0,16)) : '');
   setCompletionDateValue(res.completionDate ? (res.completionDate.length === 16 ? res.completionDate : res.completionDate.substring(0,16)) : '');
       // convert existing commission amount to percentage for the input
       const existingTotal = res.totalPrice != null ? Number(res.totalPrice) : null;
@@ -289,10 +329,25 @@ const BusinessPage: React.FC = () => {
 
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-extrabold mb-0">Quản lý Kinh doanh</h1>
-  <button type="button" onClick={() => { setEditingId(null); setName(''); setSelectedHardwareId(null); setQuantity(1); setStatusValue('CARING'); setStartDateValue(''); setDeadlineValue(''); setCompletionDateValue(''); setShowModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-pink-500 text-white rounded shadow-lg">
+  <button type="button" onClick={() => { setEditingId(null); setName(''); setSelectedHardwareId(null); setQuantity(1); setStatusValue('CARING'); setStartDateValue(''); setCompletionDateValue(''); setShowModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-pink-500 text-white rounded shadow-lg">
           <PlusIcon style={{ width: 18, height: 18, fill: 'white' }} />
           <span>Thêm mới</span>
         </button>
+      </div>
+      {/* Filters: start date range */}
+      <div className="mb-4 flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <label className="text-sm">Bắt đầu từ</label>
+          <input type="datetime-local" value={filterStartFrom} onChange={(e) => setFilterStartFrom(e.target.value)} className="rounded border px-2 py-1" />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm">Đến</label>
+          <input type="datetime-local" value={filterStartTo} onChange={(e) => setFilterStartTo(e.target.value)} className="rounded border px-2 py-1" />
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <button onClick={applyFilters} className="px-3 py-1 bg-blue-600 text-white rounded">Lọc</button>
+          <button onClick={clearFilters} className="px-3 py-1 border rounded">Xóa</button>
+        </div>
       </div>
       {!isAdmin ? (
         <div className="text-red-600">Bạn không có quyền truy cập trang này.</div>
@@ -408,10 +463,6 @@ const BusinessPage: React.FC = () => {
                       <label className="block text-sm font-medium mb-1">Ngày bắt đầu</label>
                       <input type="datetime-local" value={startDateValue} onChange={(e) => setStartDateValue(e.target.value)} className="w-full rounded border px-3 py-2" />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Deadline</label>
-                      <input type="datetime-local" value={deadlineValue} onChange={(e) => setDeadlineValue(e.target.value)} className="w-full rounded border px-3 py-2" />
-                    </div>
                     <div className="col-span-2">
                       <label className="block text-sm font-medium mb-1">Ngày hoàn thành</label>
                       <input type="datetime-local" value={completionDateValue} onChange={(e) => setCompletionDateValue(e.target.value)} className="w-full rounded border px-3 py-2" />
@@ -441,7 +492,6 @@ const BusinessPage: React.FC = () => {
                     <th className="text-center px-2 py-3">Điện thoại</th>
                     <th className="text-center px-2 py-3">Phần cứng</th>
                     <th className="text-center px-2 py-3">Bắt đầu</th>
-                    <th className="text-center px-2 py-3">Deadline</th>
                     <th className="text-center px-2 py-3">Hoàn thành</th>
                     <th className="text-center px-2 py-3">Số lượng</th>
                     <th className="text-center px-2 py-3">Đơn giá</th>
@@ -453,14 +503,16 @@ const BusinessPage: React.FC = () => {
                 </thead>
                 <tbody>
                   {items.map((it) => (
-                    <tr key={it.id}>
-                      <td className="text-center px-2 py-2">{it.id}</td>
+                    <tr key={it.id}
+                        onMouseEnter={() => setHoveredId(it.id)}
+                        onMouseLeave={() => setHoveredId(null)}
+                        className={`transform transition duration-200 ${hoveredId === it.id ? 'scale-101 shadow-lg bg-gradient-to-r from-indigo-50 to-pink-50' : 'hover:shadow hover:bg-gray-50'}`}>
+                      <td className="text-center px-2 py-2">{formatBusinessId(it.id)}</td>
                         <td className="text-center px-2 py-2">{it.name}</td>
                         <td className="text-center px-2 py-2">{it.hospital?.label ?? '—'}</td>
                         <td className="text-center px-2 py-2">{it.hospitalPhone ?? '—'}</td>
                         <td className="text-center px-2 py-2">{it.hardware?.label ?? '—'}</td>
                         <td className="text-center px-2 py-2">{formatDateShort(it.startDate)}</td>
-                        <td className="text-center px-2 py-2">{formatDateShort(it.deadline)}</td>
                         <td className="text-center px-2 py-2">{formatDateShort(it.completionDate)}</td>
                         <td className="text-center px-2 py-2">{it.quantity ?? '—'}</td>
                         <td className="text-center px-2 py-2">{it.unitPrice != null ? it.unitPrice.toLocaleString() + ' ₫' : '—'}</td>
@@ -485,6 +537,15 @@ const BusinessPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              itemsPerPage={itemsPerPage}
+              onPageChange={(p) => setCurrentPage(p)}
+              onItemsPerPageChange={(s) => { setItemsPerPage(s); setCurrentPage(0); }}
+              showItemsPerPage={true}
+            />
           </div>
         </div>
       )}
@@ -492,21 +553,118 @@ const BusinessPage: React.FC = () => {
       {viewItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={closeView} />
-          <div className="relative bg-white rounded p-6 w-96 shadow-lg">
-            <h3 className="text-lg font-semibold mb-2">Chi tiết Kinh doanh #{viewItem.id}</h3>
-              <div className="text-sm space-y-2">
-              <div><strong>Tên:</strong> {viewItem.name}</div>
-              <div><strong>Bệnh viện:</strong> {viewItem.hospital?.label ?? '—'}</div>
-              <div><strong>Điện thoại:</strong> {viewItem.hospitalPhone ?? '—'}</div>
-              <div><strong>Phần cứng:</strong> {viewItem.hardware?.label ?? '—'}</div>
-              <div><strong>Bắt đầu:</strong> {formatDateShort(viewItem.startDate)}</div>
-              <div><strong>Deadline:</strong> {formatDateShort(viewItem.deadline)}</div>
-              <div><strong>Hoàn thành:</strong> {formatDateShort(viewItem.completionDate)}</div>
-              <div><strong>Số lượng:</strong> {viewItem.quantity ?? '—'}</div>
-              <div><strong>Đơn giá:</strong> {viewItem.unitPrice != null ? viewItem.unitPrice.toLocaleString() + ' ₫' : '—'}</div>
-              <div><strong>Tổng:</strong> {viewItem.totalPrice != null ? viewItem.totalPrice.toLocaleString() + ' ₫' : '—'}</div>
-              <div><strong>Hoa hồng:</strong> {viewItem.commission != null ? (Number(viewItem.commission).toLocaleString() + ' ₫') : '—'} {viewItem.commission != null && viewItem.totalPrice ? `(${((Number(viewItem.commission) / Number(viewItem.totalPrice)) * 100).toFixed(2).replace(/\.00$/,'')}%)` : ''}</div>
-              <div><strong>Trạng thái:</strong> {viewItem.status ?? '—'}</div>
+          <div className="relative bg-white rounded p-6 w-[640px] shadow-lg">
+            <h3 className="text-lg font-semibold mb-4">Chi tiết Kinh doanh {formatBusinessId(viewItem.id)}</h3>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
+                  <UserCircleIcon style={{ width: 18, height: 18 }} />
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Tên</div>
+                  <div className="font-medium">{viewItem.name ?? '—'}</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
+                  <GroupIcon style={{ width: 18, height: 18 }} />
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Bệnh viện</div>
+                  <div className="font-medium">{viewItem.hospital?.label ?? '—'}</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
+                  <EnvelopeIcon style={{ width: 16, height: 16 }} />
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Điện thoại</div>
+                  <div className="font-medium">{viewItem.hospitalPhone ?? '—'}</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
+                  <BoxCubeIcon style={{ width: 16, height: 16 }} />
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Phần cứng</div>
+                  <div className="font-medium">{viewItem.hardware?.label ?? '—'}</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
+                  <CalenderIcon style={{ width: 16, height: 16 }} />
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Bắt đầu</div>
+                  <div className="font-medium">{formatDateShort(viewItem.startDate)}</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
+                  <TimeIcon style={{ width: 16, height: 16 }} />
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Hoàn thành</div>
+                  <div className="font-medium">{formatDateShort(viewItem.completionDate)}</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
+                  <BoxIconLine style={{ width: 16, height: 16 }} />
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Số lượng</div>
+                  <div className="font-medium">{viewItem.quantity ?? '—'}</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
+                  <DollarLineIcon style={{ width: 16, height: 16 }} />
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Đơn giá</div>
+                  <div className="font-medium">{viewItem.unitPrice != null ? viewItem.unitPrice.toLocaleString() + ' ₫' : '—'}</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
+                  <DollarLineIcon style={{ width: 16, height: 16 }} />
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Tổng</div>
+                  <div className="font-medium">{viewItem.totalPrice != null ? viewItem.totalPrice.toLocaleString() + ' ₫' : '—'}</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
+                  <CheckCircleIcon style={{ width: 16, height: 16 }} />
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Hoa hồng</div>
+                  <div className="font-medium">{viewItem.commission != null ? (Number(viewItem.commission).toLocaleString() + ' ₫') : '—'} {viewItem.commission != null && viewItem.totalPrice ? `(${((Number(viewItem.commission) / Number(viewItem.totalPrice)) * 100).toFixed(2).replace(/\.00$/,'')}%)` : ''}</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
+                  <TaskIcon style={{ width: 16, height: 16 }} />
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Trạng thái</div>
+                  <div className="font-medium">{viewItem.status ?? '—'}</div>
+                </div>
+              </div>
             </div>
             <div className="mt-4 text-right">
               <button onClick={closeView} className="px-3 py-1 bg-indigo-600 text-white rounded">Đóng</button>
