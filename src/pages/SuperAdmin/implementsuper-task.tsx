@@ -605,7 +605,11 @@ const ImplementSuperTaskPage: React.FC = () => {
     toast.success(isUpdate ? "Cập nhật thành công" : "Tạo mới thành công");
   };
 
-  
+  const handleModalClose = () => {
+    setModalOpen(false);
+    setViewOnly(false);
+    setEditing(null);
+  };
 
   if (!isSuper) {
     return <div className="p-6 text-red-600">Bạn không có quyền truy cập trang SuperAdmin.</div>;
@@ -698,7 +702,11 @@ const ImplementSuperTaskPage: React.FC = () => {
                     </select>
                     <button 
                       className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
-                      onClick={() => { setEditing(null); setModalOpen(true); }}
+                      onClick={() => {
+                        setViewOnly(false);
+                        setEditing(null);
+                        setModalOpen(true);
+                      }}
                       type="button"
                     >
                       + Thêm task mới
@@ -914,6 +922,7 @@ const ImplementSuperTaskPage: React.FC = () => {
               onClick={() => { 
                 // Pre-fill hospital if we're viewing tasks for a specific hospital
                 const hospitalId = selectedHospital ? hospitalsWithTasks.find(h => h.label === selectedHospital)?.id : undefined;
+                setViewOnly(false);
                 setEditing(hospitalId ? { hospitalId, hospitalName: selectedHospital } as any : null); 
                 setModalOpen(true); 
               }}
@@ -996,11 +1005,11 @@ const ImplementSuperTaskPage: React.FC = () => {
 
       {/* Modal - Always render regardless of view */}
       {viewOnly ? (
-        <DetailModal open={modalOpen} onClose={() => setModalOpen(false)} item={editing} />
+        <DetailModal open={modalOpen} onClose={handleModalClose} item={editing} />
       ) : (
         <TaskFormModal
           open={modalOpen}
-          onClose={() => setModalOpen(false)}
+          onClose={handleModalClose}
           initial={editing ?? undefined}
           onSubmit={handleSubmit}
           readOnly={false}

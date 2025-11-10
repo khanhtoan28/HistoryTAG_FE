@@ -30,39 +30,78 @@ function authHeaders() {
   };
 }
 
-function statusBadgeClasses(status?: string | null) {
-  if (!status)
-    return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
-  const s = status.toUpperCase();
-  switch (s) {
-    case "NOT_STARTED":
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
-    case "IN_PROGRESS":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
-    case "API_TESTING":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
-    case "INTEGRATING":
-      return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
-    case "WAITING_FOR_DEV":
-      return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
-    case "ACCEPTED":
-      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-    default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
-  }
+type CanonicalStatus = "RECEIVED" | "IN_PROCESS" | "COMPLETED" | "ISSUE" | "CANCELLED";
+
+const CANONICAL_STATUS_CLASSES: Record<CanonicalStatus, string> = {
+  RECEIVED: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  IN_PROCESS: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  COMPLETED: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  ISSUE: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  CANCELLED: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  NOT_STARTED: "Chưa bắt đầu",
+  RECEIVED: "Chưa bắt đầu",
+  IN_PROGRESS: "Đang làm",
+  API_TESTING: "Test thông api",
+  INTEGRATING: "Tích hợp với viện",
+  WAITING_FOR_DEV: "Chờ cập nhật",
+  IN_PROCESS: "Đang làm",
+  ACCEPTED: "Hoàn thành",
+  COMPLETED: "Hoàn thành",
+  DONE: "Hoàn thành",
+  FINISHED: "Hoàn thành",
+  HOAN_THANH: "Hoàn thành",
+  HOÀN_THÀNH: "Hoàn thành",
+  ISSUE: "Gặp sự cố",
+  FAILED: "Gặp sự cố",
+  ERROR: "Gặp sự cố",
+  CANCELLED: "Đã hủy",
+  CANCELED: "Đã hủy",
+};
+
+const STATUS_CANONICAL_MAP: Record<string, CanonicalStatus> = {
+  NOT_STARTED: "RECEIVED",
+  RECEIVED: "RECEIVED",
+  PENDING: "RECEIVED",
+  IN_PROGRESS: "IN_PROCESS",
+  API_TESTING: "IN_PROCESS",
+  INTEGRATING: "IN_PROCESS",
+  WAITING_FOR_DEV: "IN_PROCESS",
+  IN_PROCESS: "IN_PROCESS",
+  ACCEPTED: "COMPLETED",
+  COMPLETED: "COMPLETED",
+  DONE: "COMPLETED",
+  FINISHED: "COMPLETED",
+  HOAN_THANH: "COMPLETED",
+  HOÀN_THÀNH: "COMPLETED",
+  ISSUE: "ISSUE",
+  FAILED: "ISSUE",
+  ERROR: "ISSUE",
+  CANCELLED: "CANCELLED",
+  CANCELED: "CANCELLED",
+};
+
+function formatStatusKey(status?: string | null) {
+  if (!status) return "";
+  return status.toString().trim().toUpperCase().replace(/\s+/g, "_");
+}
+
+function normalizeStatus(status?: string | null): CanonicalStatus | undefined {
+  const key = formatStatusKey(status);
+  return (key && STATUS_CANONICAL_MAP[key]) || undefined;
 }
 
 function statusLabel(status?: string | null) {
-  if (!status) return "-";
-  const map: Record<string, string> = {
-    NOT_STARTED: "Chưa bắt đầu",
-    IN_PROGRESS: "Đang Làm",
-    API_TESTING: "Test thông api",
-    INTEGRATING: "Tích hợp với viện",
-    WAITING_FOR_DEV: "Chờ update",
-    ACCEPTED: "Hoàn thành",
-  };
-  return map[status.toUpperCase()] || status;
+  const key = formatStatusKey(status);
+  if (!key) return status ? String(status) : "-";
+  return STATUS_LABELS[key] || String(status);
+}
+
+function statusBadgeClasses(status?: string | null) {
+  const normalized = normalizeStatus(status);
+  return normalized ? CANONICAL_STATUS_CLASSES[normalized] : CANONICAL_STATUS_CLASSES.CANCELLED;
 }
 
 const DevSuperTaskPage: React.FC = () => {
@@ -253,12 +292,9 @@ const DevSuperTaskPage: React.FC = () => {
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
                 <option value="">— Chọn trạng thái —</option>
-                <option value="NOT_STARTED">Chưa bắt đầu</option>
-                <option value="IN_PROGRESS">Đang triển khai</option>
-                <option value="API_TESTING">Test thông API</option>
-                <option value="INTEGRATING">Tích hợp</option>
-                <option value="WAITING_FOR_DEV">Chờ dev build</option>
-                <option value="ACCEPTED">Hoàn tất</option>
+            {["NOT_STARTED", "IN_PROGRESS", "API_TESTING", "INTEGRATING", "WAITING_FOR_DEV", "ACCEPTED"].map((value) => (
+              <option key={value} value={value}>{statusLabel(value)}</option>
+            ))}
               </select>
             </div>
             <div className="mt-3 text-sm text-gray-600">
@@ -334,6 +370,8 @@ const DevSuperTaskPage: React.FC = () => {
                 setModalOpen(true);
               }}
               onDelete={(id) => handleDelete(id)}
+              statusLabelOverride={statusLabel}
+              statusClassOverride={statusBadgeClasses}
             />
           ))
         )}
