@@ -656,65 +656,67 @@ const ImplementSuperTaskPage: React.FC = () => {
 
       {/* Hospital List View */}
       {showHospitalList && (
-        <div className="mb-6">
+        <div className="mb-6 space-y-4">
+          <div className="rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Lọc</h3>
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    type="text"
+                    className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px]"
+                    placeholder="Tìm theo tên bệnh viện / tỉnh"
+                    value={hospitalSearch}
+                    onChange={(e) => { setHospitalSearch(e.target.value); setHospitalPage(0); }}
+                  />
+                  <select
+                    className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[180px]"
+                    value={hospitalStatusFilter}
+                    onChange={(e) => { setHospitalStatusFilter(e.target.value); setHospitalPage(0); }}
+                  >
+                    <option value="">— Tất cả —</option>
+                    <option value="accepted">Có hoàn thành</option>
+                    <option value="incomplete">Chưa hoàn thành hết</option>
+                    <option value="unaccepted">Chưa có hoàn thành</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <select className="rounded-lg border px-3 py-2 text-sm" value={hospitalSortBy} onChange={(e) => { setHospitalSortBy(e.target.value); setHospitalPage(0); }}>
+                  <option value="label">Sắp xếp theo: tên</option>
+                  <option value="taskCount">Sắp xếp theo: tổng task</option>
+                  <option value="accepted">Sắp xếp theo: đã hoàn thành</option>
+                  <option value="ratio">Sắp xếp theo: tỉ lệ hoàn thành</option>
+                </select>
+                <select className="rounded-lg border px-3 py-2 text-sm" value={hospitalSortDir} onChange={(e) => setHospitalSortDir(e.target.value)}>
+                  <option value="asc">Tăng dần</option>
+                  <option value="desc">Giảm dần</option>
+                </select>
+                <button 
+                  className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
+                  onClick={() => {
+                    setViewOnly(false);
+                    setEditing(null);
+                    setModalOpen(true);
+                  }}
+                  type="button"
+                >
+                  + Thêm task mới
+                </button>
+              </div>
+            </div>
+          </div>
+
           {loadingHospitals ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-blue-600 text-4xl font-extrabold tracking-wider animate-pulse" aria-hidden="true">TAG</div>
             </div>
           ) : filteredHospitals.length === 0 ? (
-            <div className="px-4 py-6 text-center text-gray-500">Không có bệnh viện nào có task</div>
+            <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center text-gray-500">
+              Không có bệnh viện nào có task
+            </div>
           ) : (
-            <>
-              <div className="mb-4 rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Lọc</h3>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <input
-                        type="text"
-                        className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px]"
-                        placeholder="Tìm theo tên bệnh viện / tỉnh"
-                        value={hospitalSearch}
-                        onChange={(e) => { setHospitalSearch(e.target.value); setHospitalPage(0); }}
-                      />
-                      <select
-                        className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[180px]"
-                        value={hospitalStatusFilter}
-                        onChange={(e) => { setHospitalStatusFilter(e.target.value); setHospitalPage(0); }}
-                      >
-                        <option value="">— Tất cả —</option>
-                        <option value="accepted">Có hoàn thành</option>
-                        <option value="incomplete">Chưa hoàn thành hết</option>
-                        <option value="unaccepted">Chưa có hoàn thành</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <select className="rounded-lg border px-3 py-2 text-sm" value={hospitalSortBy} onChange={(e) => { setHospitalSortBy(e.target.value); setHospitalPage(0); }}>
-                      <option value="label">Sắp xếp theo: tên</option>
-                      <option value="taskCount">Sắp xếp theo: tổng task</option>
-                      <option value="accepted">Sắp xếp theo: đã hoàn thành</option>
-                      <option value="ratio">Sắp xếp theo: tỉ lệ hoàn thành</option>
-                    </select>
-                    <select className="rounded-lg border px-3 py-2 text-sm" value={hospitalSortDir} onChange={(e) => setHospitalSortDir(e.target.value)}>
-                      <option value="asc">Tăng dần</option>
-                      <option value="desc">Giảm dần</option>
-                    </select>
-                    <button 
-                      className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
-                      onClick={() => {
-                        setViewOnly(false);
-                        setEditing(null);
-                        setModalOpen(true);
-                      }}
-                      type="button"
-                    >
-                      + Thêm task mới
-                    </button>
-                  </div>
-                </div>
-              </div>
-
+            <div className="space-y-4">
               <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -803,9 +805,9 @@ const ImplementSuperTaskPage: React.FC = () => {
                   </table>
                 </div>
               </div>
-              
+
               {/* Pagination for hospitals */}
-              <div className="mt-4 flex items-center justify-between">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <button 
                     className="px-3 py-1 border rounded" 
@@ -842,7 +844,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                   </select>
                 </div>
               </div>
-            </>
+            </div>
           )}
         </div>
       )}
