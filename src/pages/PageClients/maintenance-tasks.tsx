@@ -950,7 +950,7 @@ function TaskFormModal({
 
                                 {/* PIC theo TÊN */}
                                 <RemoteSelect
-                                    label="Người phụ trách (PIC)"
+                                    label="Người làm"
                                     required
                                     placeholder="Nhập tên người phụ trách để tìm…"
                                     fetchOptions={searchPICs}
@@ -1104,7 +1104,7 @@ function DetailModal({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3">
                         <Info icon={<FiTag />} label="Tên" value={item.name} />
                         <Info icon={<FaHospital />} label="Bệnh viện" value={item.hospitalName} />
-                        <Info icon={<FiUser />} label="Người phụ trách" value={item.picDeploymentName} />
+                        <Info icon={<FiUser />} label="Người làm" value={item.picDeploymentName} />
 
                         <Info
                             icon={<FiTag />}
@@ -1649,7 +1649,7 @@ const ImplementationTasksPage: React.FC = () => {
                         <div className="mt-3 text-sm text-gray-600 dark:text-gray-300 flex items-center gap-4">
                             <span>Tổng: <span className="font-semibold text-gray-800 dark:text-gray-100">{loading ? '...' : (totalCount ?? data.length)}</span></span>
                             {typeof acceptedCount === 'number' && (
-                                <span>Đã nghiệm thu: <span className="font-semibold text-gray-800 dark:text-gray-100">{acceptedCount}/{totalCount ?? data.length} task</span></span>
+                                <span>Đã hoàn thành: <span className="font-semibold text-gray-800 dark:text-gray-100">{acceptedCount}/{totalCount ?? data.length} task</span></span>
                             )}
                         </div>
                     </div>
