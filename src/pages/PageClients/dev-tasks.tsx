@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import TaskCardNew from "../SuperAdmin/TaskCardNew";
@@ -1119,6 +1119,8 @@ const ImplementationTasksPage: React.FC = () => {
     const [hospitalOptions, setHospitalOptions] = useState<Array<{ id: number; label: string }>>([]);
     const [detailOpen, setDetailOpen] = useState(false);
     const [detailItem, setDetailItem] = useState<ImplementationTaskResponseDTO | null>(null);
+    const [hospitalCount, setHospitalCount] = useState<number | null>(null);
+    const [hospitalCountLoading, setHospitalCountLoading] = useState<boolean>(false);
     const searchDebounce = useRef<number | null>(null);
 
     const readStored = <T = unknown>(key: string): T | null => {
@@ -1180,9 +1182,63 @@ const ImplementationTasksPage: React.FC = () => {
         }
     }
 
+    const fetchHospitalCount = useCallback(async () => {
+        setHospitalCountLoading(true);
+        try {
+            const pageSize = 500;
+            const maxPages = 40; // safety guard (~20k records)
+            const unique = new Set<string>();
+            let pageCursor = 0;
+
+            while (pageCursor < maxPages) {
+                const params = new URLSearchParams({
+                    page: String(pageCursor),
+                    size: String(pageSize),
+                    sortBy: "id",
+                    sortDir: "asc",
+                });
+                const url = `${apiBase}?${params.toString()}`;
+                const res = await fetch(url, {
+                    method: "GET",
+                    headers: authHeaders(),
+                    credentials: "include",
+                });
+                if (!res.ok) break;
+                const payload = await res.json();
+                const items = Array.isArray(payload?.content)
+                    ? payload.content
+                    : Array.isArray(payload)
+                    ? payload
+                    : [];
+                for (const item of items as Array<Record<string, unknown>>) {
+                    const name = String(item?.hospitalName ?? "").trim();
+                    if (name) unique.add(name);
+                }
+                const totalElements =
+                    typeof payload?.totalElements === "number"
+                        ? (payload.totalElements as number)
+                        : null;
+                if (items.length < pageSize) {
+                    break;
+                }
+                if (totalElements !== null && (pageCursor + 1) * pageSize >= totalElements) {
+                    break;
+                }
+                pageCursor += 1;
+            }
+
+            setHospitalCount(unique.size);
+        } catch {
+            setHospitalCount(null);
+        } finally {
+            setHospitalCountLoading(false);
+        }
+    }, []);
+
     useEffect(() => { fetchList(); /* eslint-disable-line */ }, []);
     useEffect(() => { fetchList(); /* eslint-disable-line */ }, [page, size]);
     useEffect(() => { setPage(0); }, [searchTerm, statusFilter, sortBy, sortDir]);
+    useEffect(() => { fetchHospitalCount(); }, [fetchHospitalCount]);
     useEffect(() => {
         if (searchDebounce.current) window.clearTimeout(searchDebounce.current);
         searchDebounce.current = window.setTimeout(() => { fetchList(); }, 600);
@@ -1226,6 +1282,7 @@ const ImplementationTasksPage: React.FC = () => {
             return;
         }
         await fetchList();
+        await fetchHospitalCount();
     };
 
     const handleDelete = async (id: number) => {
@@ -1242,6 +1299,7 @@ const ImplementationTasksPage: React.FC = () => {
         }
         setData((s) => s.filter((x) => x.id !== id));
         toast.success("Đã xóa");
+        await fetchHospitalCount();
     };
 
     return (
@@ -1253,7 +1311,7 @@ const ImplementationTasksPage: React.FC = () => {
                 {/* project name shown inside card; removed duplicate header pill */}
             </div>
 
-            {error && <div className="text-red-600 mb-4">{error}</div>}
+            {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>}
 
             <div className="mb-6 rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-4">
@@ -1289,7 +1347,20 @@ const ImplementationTasksPage: React.FC = () => {
                                 ))}
                             </select>
                         </div>
-                        <div className="mt-3 text-sm text-gray-600 dark:text-gray-300">Tổng: <span className="font-semibold text-gray-800 dark:text-gray-100">{loading ? '...' : (totalCount ?? data.length)}</span></div>
+                        <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
+                            <span className="font-semibold text-gray-800 dark:text-gray-200">
+                                Tổng task:
+                                <span className="ml-1 font-bold text-gray-900 dark:text-gray-100">
+                                    {loading ? "..." : totalCount ?? data.length}
+                                </span>
+                            </span>
+                            <span className="font-semibold text-gray-800 dark:text-gray-200">
+                                Tổng bệnh viện:
+                                <span className="ml-1 font-bold text-gray-900 dark:text-gray-100">
+                                    {hospitalCountLoading ? "..." : hospitalCount ?? 0}
+                                </span>
+                            </span>
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-3">
