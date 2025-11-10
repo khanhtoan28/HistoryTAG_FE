@@ -216,10 +216,7 @@ export default function TaskCardNew({
             </div>
 
             <div className="flex items-center gap-3">
-              {/**
-               * If the implementation task has been marked readOnlyForDeployment or
-               * already transferred, disable edit/delete and hide convert action.
-               */}
+              
               {canEdit && !task.readOnlyForDeployment && (
                 <button
                   onClick={(e) => {
