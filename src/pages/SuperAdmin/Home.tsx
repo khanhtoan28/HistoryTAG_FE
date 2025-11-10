@@ -452,7 +452,7 @@ export default function SuperAdminHome() {
                       chart: { toolbar: { show: false }, type: 'bar' },
                       plotOptions: { bar: { horizontal: false, columnWidth: '40%', borderRadius: 6 } },
                       xaxis: { categories: aggLabels },
-                      dataLabels: { enabled: true, offsetY: -6, formatter: (val: number) => (val ? `${val.toLocaleString()}` : '0'), style: { fontSize: '12px', colors: ['#111'] } },
+                      dataLabels: { enabled: false },
                       tooltip: { y: { formatter: (v: number) => `${v.toLocaleString()} ₫` } },
                       legend: { position: 'top' },
                       colors: ['#7c3aed', '#10b981', '#ef4444'],
