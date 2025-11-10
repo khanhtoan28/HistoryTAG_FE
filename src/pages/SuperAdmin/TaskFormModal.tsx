@@ -83,14 +83,39 @@ function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
     );
 }
 
-const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
-    { value: "NOT_STARTED", label: "Chưa triển khai" },
-    { value: "IN_PROGRESS", label: "Đang triển khai" },
-    { value: "API_TESTING", label: "Test thông api" },
-    { value: "INTEGRATING", label: "Tích hợp với viện" },
-    { value: "WAITING_FOR_DEV", label: "Chờ dev build update" },
-    { value: "ACCEPTED", label: "Nghiệm thu" },
-];
+const STATUS_LABELS: Record<"RECEIVED" | "IN_PROCESS" | "COMPLETED" | "ISSUE" | "CANCELLED", string> = {
+    RECEIVED: "Đã tiếp nhận",
+    IN_PROCESS: "Đang xử lý",
+    COMPLETED: "Hoàn thành",
+    ISSUE: "Gặp sự cố",
+    CANCELLED: "Hủy",
+};
+
+const STATUS_OPTIONS: Array<{ value: keyof typeof STATUS_LABELS; label: string }> = (
+    Object.entries(STATUS_LABELS) as Array<[keyof typeof STATUS_LABELS, string]>
+).map(([value, label]) => ({ value, label }));
+
+const STATUS_CANONICAL_MAP: Record<string, "RECEIVED" | "IN_PROCESS" | "COMPLETED" | "ISSUE" | "CANCELLED"> = {
+    RECEIVED: "RECEIVED",
+    IN_PROCESS: "IN_PROCESS",
+    COMPLETED: "COMPLETED",
+    ISSUE: "ISSUE",
+    CANCELLED: "CANCELLED",
+    NOT_STARTED: "RECEIVED",
+    IN_PROGRESS: "IN_PROCESS",
+    API_TESTING: "IN_PROCESS",
+    INTEGRATING: "IN_PROCESS",
+    WAITING_FOR_DEV: "IN_PROCESS",
+    ACCEPTED: "COMPLETED",
+    PENDING_TRANSFER: "COMPLETED",
+    TRANSFERRED: "COMPLETED",
+};
+
+function normalizeStatus(status?: string | null): "RECEIVED" | "IN_PROCESS" | "COMPLETED" | "ISSUE" | "CANCELLED" | undefined {
+    if (!status) return undefined;
+    const upper = status.toString().toUpperCase();
+    return STATUS_CANONICAL_MAP[upper] || (upper as any);
+}
 
 export default function TaskFormModal({
     open,
@@ -182,7 +207,7 @@ export default function TaskFormModal({
                 // removed from form
                 deadline: initial?.deadline ?? "",
                 completionDate: initial?.completionDate ?? "",
-                status: initial?.status ?? "",
+                status: initial?.status ?? "RECEIVED",
                 startDate: initial?.startDate ?? "",
                 acceptanceDate: initial?.acceptanceDate ?? "",
             });

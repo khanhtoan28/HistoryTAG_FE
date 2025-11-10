@@ -34,22 +34,16 @@ function statusBadgeClass(status?: string) {
   const normalized = status.toUpperCase();
 
   switch (normalized) {
-    case "NOT_STARTED":
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
-    case "IN_PROGRESS":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
-    case "API_TESTING":
+    case "RECEIVED":
       return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
-    case "INTEGRATING":
-      return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
-    case "WAITING_FOR_DEV":
-      return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
-    case "ACCEPTED":
+    case "IN_PROCESS":
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
+    case "COMPLETED":
       return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-    case "PENDING_TRANSFER":
-      return "bg-indigo-50 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200";
-    case "TRANSFERRED":
-      return "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200";
+    case "ISSUE":
+      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+    case "CANCELLED":
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
     default:
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
   }
@@ -60,20 +54,17 @@ function getDisplayStatus(status?: string) {
   if (!status) return "-";
   const s = status.toLowerCase().replace(/[-\s]/g, "_");
   const map: Record<string, string> = {
-    not_started: "Đã tiếp nhận",
-    in_progress: "Đang triển khai",
-    api_testing: "Kiểm tra API",
-    api_test: "Kiểm tra API",
-    integrating: "Đang tích hợp",
-    waiting_for_dev: "Chờ cập nhật từ dev",
-    waiting_for_developer: "Chờ cập nhật từ dev",
-    accepted: "Hoàn thành",
-  pending_transfer: "Chờ chuyển bảo trì",
-  transferred: "Đã chuyển sang bảo trì",
-    done: "Hoàn thành",
+    received: "Đã tiếp nhận",
+    in_process: "Đang xử lý",
     completed: "Hoàn thành",
+    issue: "Gặp sự cố",
+    cancelled: "Hủy",
+    // Legacy support (backward compatibility)
+    not_started: "Đã tiếp nhận",
+    in_progress: "Đang xử lý",
+    accepted: "Hoàn thành",
+    done: "Hoàn thành",
     pending: "Đang chờ",
-    cancelled: "Đã hủy",
     failed: "Thất bại",
   };
   if (map[s]) return map[s];
@@ -111,7 +102,19 @@ export default function TaskCardNew({
   const style = animate ? { animation: "fadeInUp 220ms both", animationDelay: `${delayMs}ms` } : undefined;
 
   // (Indicators removed; keep component lean and avoid unused vars)
- 
+
+  const transferredToMaintenance = Boolean((task as any)?.transferredToMaintenance);
+  const statusValue = typeof task.status === "string" ? task.status : undefined;
+  const fallbackStatus = statusValue ?? "";
+  const badgeClass = transferredToMaintenance
+    ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200"
+    : (statusClassOverride || statusBadgeClass)(fallbackStatus);
+  const badgeLabel = transferredToMaintenance
+    ? "Chờ bảo trì"
+    : statusLabelOverride
+      ? statusLabelOverride(statusValue)
+      : getDisplayStatus(statusValue);
+
   return (
     <div
       className="group w-full rounded-2xl bg-white dark:bg-gray-900 px-6 py-5 shadow-sm transition-all border border-gray-100 dark:border-gray-800 hover:border-blue-200 hover:shadow-lg"
@@ -139,13 +142,11 @@ export default function TaskCardNew({
                   { task.name}
                 </h3>
 
-                {task.status && (
+                {(statusValue || transferredToMaintenance) && (
                   <span
-                    className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${(statusClassOverride || statusBadgeClass)(
-                      task.status as string
-                    )}`}
+                    className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${badgeClass}`}
                   >
-                    {statusLabelOverride ? statusLabelOverride(task.status) : getDisplayStatus(task.status)}
+                    {badgeLabel}
                   </span>
                 )}
               </div>

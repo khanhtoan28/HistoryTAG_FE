@@ -161,10 +161,68 @@ function statusLabel(status?: string | null) {
             return "Tích hợp với viện";
         case "WAITING_FOR_DEV":
             return "Chờ dev build update";
+        case "COMPLETED":
+        case "DONE":
+        case "FINISHED":
+            return "Hoàn thành";
         case "ACCEPTED":
             return "Nghiệm thu";
         default:
             return status || "";
+    }
+}
+
+function isCompletionStatus(status?: string | null) {
+    if (!status) return false;
+    const upper = status.toString().trim().toUpperCase();
+    const normalized = upper.replace(/\s+/g, "_");
+    return normalized === "ACCEPTED"
+        || normalized === "COMPLETED"
+        || normalized === "DONE"
+        || normalized === "FINISHED"
+        || normalized === "HOAN_THANH"
+        || normalized === "HOÀN_THÀNH";
+}
+
+function toDatetimeLocalInput(value?: string | null) {
+    if (!value) return "";
+    try {
+        const raw = String(value).trim();
+        if (!raw) return "";
+        const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(raw);
+        let date: Date;
+        if (hasTimezone) {
+            date = new Date(raw);
+        } else {
+            const match = raw.match(
+                /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?/
+            );
+            if (match) {
+                const [, y, m, d, hh = "00", mm = "00", ss = "00"] = match;
+                date = new Date(
+                    Date.UTC(
+                        Number(y),
+                        Number(m) - 1,
+                        Number(d),
+                        Number(hh),
+                        Number(mm),
+                        Number(ss)
+                    )
+                );
+            } else {
+                date = new Date(raw);
+            }
+        }
+        if (Number.isNaN(date.getTime())) return raw.slice(0, 16);
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const year = date.getFullYear();
+        const month = pad(date.getMonth() + 1);
+        const day = pad(date.getDate());
+        const hours = pad(date.getHours());
+        const minutes = pad(date.getMinutes());
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch {
+        return "";
     }
 }
 
@@ -426,24 +484,33 @@ function TaskFormModal({
         []
     );
 
-    const [model, setModel] = useState<ImplementationTaskRequestDTO>(() => ({
-        name: initial?.name || "",
-        hospitalId: (initial?.hospitalId as number) || 0,
-        picDeploymentId: (initial?.picDeploymentId as number) || 0,
-        agencyId: initial?.agencyId ?? null,
-        hisSystemId: initial?.hisSystemId ?? null,
-        hardwareId: initial?.hardwareId ?? null,
-        quantity: initial?.quantity ?? null,
-        apiTestStatus: initial?.apiTestStatus ?? "",
-        bhytPortCheckInfo: initial?.bhytPortCheckInfo ?? "",
-        additionalRequest: initial?.additionalRequest ?? "",
-        apiUrl: initial?.apiUrl ?? "",
-        deadline: initial?.deadline ?? "",
-        completionDate: initial?.completionDate ?? "",
-        status: initial?.status ?? "",
-        startDate: initial?.startDate ?? "",
-        acceptanceDate: initial?.acceptanceDate ?? "",
-    }));
+    const [model, setModel] = useState<ImplementationTaskRequestDTO>(() => {
+        const isNew = !(initial?.id);
+        const nowIso = new Date().toISOString();
+        const rawStatus = typeof initial?.status === "string" && initial.status.trim() ? initial.status : "NOT_STARTED";
+        const normalizedStatus = rawStatus.toString().trim().toUpperCase();
+        const completionDefault = isCompletionStatus(rawStatus)
+            ? (initial?.completionDate ?? nowIso)
+            : (initial?.completionDate ?? "");
+        return {
+            name: initial?.name || "",
+            hospitalId: (initial?.hospitalId as number) || 0,
+            picDeploymentId: (initial?.picDeploymentId as number) || 0,
+            agencyId: initial?.agencyId ?? null,
+            hisSystemId: initial?.hisSystemId ?? null,
+            hardwareId: initial?.hardwareId ?? null,
+            quantity: initial?.quantity ?? null,
+            apiTestStatus: initial?.apiTestStatus ?? "",
+            bhytPortCheckInfo: initial?.bhytPortCheckInfo ?? "",
+            additionalRequest: initial?.additionalRequest ?? "",
+            apiUrl: initial?.apiUrl ?? "",
+            deadline: initial?.deadline ?? "",
+            completionDate: completionDefault,
+            status: normalizedStatus,
+            startDate: initial?.startDate ?? (isNew ? nowIso : ""),
+            acceptanceDate: initial?.acceptanceDate ?? "",
+        };
+    });
 
     // Lưu selection theo {id, name} để hiển thị tên
     const [hospitalOpt, setHospitalOpt] = useState<{ id: number; name: string } | null>(() => {
@@ -471,6 +538,14 @@ function TaskFormModal({
 
     useEffect(() => {
         if (open) {
+            const isNew = !(initial?.id);
+            const nowIso = new Date().toISOString();
+            const rawStatus = typeof initial?.status === "string" && initial.status.trim() ? initial.status : "NOT_STARTED";
+            const normalizedStatus = rawStatus.toString().trim().toUpperCase();
+            const completionDefault = isCompletionStatus(rawStatus)
+                ? (initial?.completionDate ?? nowIso)
+                : (initial?.completionDate ?? "");
+
             setModel({
                 name: initial?.name || "",
                 hospitalId: (initial?.hospitalId as number) || 0,
@@ -484,9 +559,9 @@ function TaskFormModal({
                 additionalRequest: initial?.additionalRequest ?? "",
                 apiUrl: initial?.apiUrl ?? "",
                 deadline: initial?.deadline ?? "",
-                completionDate: initial?.completionDate ?? "",
-                status: initial?.status ?? "",
-                startDate: initial?.startDate ?? "",
+                completionDate: completionDefault,
+                status: normalizedStatus,
+                startDate: initial?.startDate ?? (isNew ? nowIso : ""),
                 acceptanceDate: initial?.acceptanceDate ?? "",
             });
 
@@ -619,24 +694,22 @@ function TaskFormModal({
             return;
         }
 
-        if ((model.status || '').toUpperCase() === 'ACCEPTED') {
-            if (!model.acceptanceDate || String(model.acceptanceDate).trim() === '') {
-                toast.error("Vui lòng nhập ngày nghiệm thu");
-                return;
-            }
-            if (!model.completionDate || String(model.completionDate).trim() === '') {
-                toast.error("Vui lòng nhập ngày hoàn thành");
-                return;
-            }
-        }
+        const normalizedStatus = (model.status || "NOT_STARTED").toString().trim().toUpperCase();
+
+        const isNew = !(initial?.id);
+        const startDateRaw = model.startDate || (isNew ? new Date().toISOString() : "");
+        const completionRaw = isCompletionStatus(normalizedStatus)
+            ? (model.completionDate && String(model.completionDate).trim() ? model.completionDate : new Date().toISOString())
+            : "";
 
         const payload: ImplementationTaskRequestDTO = {
             ...model,
             hospitalId: hospitalOpt.id,
             picDeploymentId: picOpt.id,
+            status: normalizedStatus,
             deadline: toISOOrNull(model.deadline) || undefined,
-            completionDate: toISOOrNull(model.completionDate) || undefined,
-            startDate: toISOOrNull(model.startDate) || undefined,
+            completionDate: completionRaw ? toISOOrNull(completionRaw) || undefined : undefined,
+            startDate: toISOOrNull(startDateRaw) || undefined,
             acceptanceDate: toISOOrNull(model.acceptanceDate) || undefined,
         };
 
@@ -762,7 +835,23 @@ function TaskFormModal({
                                             "focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
                                         )}
                                         value={model.status ?? ""}
-                                        onChange={(e) => setModel((s) => ({ ...s, status: (e.target as HTMLSelectElement).value || "" }))}
+                                        onChange={(e) => {
+                                            const rawValue = (e.target as HTMLSelectElement).value || "NOT_STARTED";
+                                            setModel((s) => {
+                                                const nextStatus = rawValue || "NOT_STARTED";
+                                                const nowIso = new Date().toISOString();
+                                                const wasCompleted = isCompletionStatus(s.status);
+                                                const willBeCompleted = isCompletionStatus(nextStatus);
+                                                const nextCompletion = willBeCompleted
+                                                    ? (s.completionDate && s.completionDate.toString().trim() ? s.completionDate : nowIso)
+                                                    : (!willBeCompleted && wasCompleted ? "" : s.completionDate ?? "");
+                                                return {
+                                                    ...s,
+                                                    status: nextStatus,
+                                                    completionDate: nextCompletion,
+                                                };
+                                            });
+                                        }}
                                     >
                                         <option value="">— Chọn trạng thái —</option>
                                         {STATUS_OPTIONS.map((opt) => (
@@ -773,28 +862,21 @@ function TaskFormModal({
                                 <Field label="Deadline (ngày)">
                                     <TextInput
                                         type="datetime-local"
-                                        value={model.deadline ? new Date(model.deadline).toISOString().slice(0, 16) : ""}
+                                        value={toDatetimeLocalInput(model.deadline)}
                                         onChange={(e) => setModel((s) => ({ ...s, deadline: e.target.value }))}
                                     />
                                 </Field>
                                 <Field label="Ngày bắt đầu">
                                     <TextInput
                                         type="datetime-local"
-                                        value={model.startDate ? new Date(model.startDate).toISOString().slice(0, 16) : ""}
+                                        value={toDatetimeLocalInput(model.startDate)}
                                         onChange={(e) => setModel((s) => ({ ...s, startDate: e.target.value }))}
-                                    />
-                                </Field>
-                                <Field label="Ngày nghiệm thu" required={model.status === 'ACCEPTED'}>
-                                    <TextInput
-                                        type="datetime-local"
-                                        value={model.acceptanceDate ? new Date(model.acceptanceDate).toISOString().slice(0, 16) : ""}
-                                        onChange={(e) => setModel((s) => ({ ...s, acceptanceDate: e.target.value }))}
                                     />
                                 </Field>
                                 <Field label="Ngày hoàn thành">
                                     <TextInput
                                         type="datetime-local"
-                                        value={model.completionDate ? new Date(model.completionDate).toISOString().slice(0, 16) : ""}
+                                        value={toDatetimeLocalInput(model.completionDate)}
                                         onChange={(e) => setModel((s) => ({ ...s, completionDate: e.target.value }))}
                                     />
                                 </Field>

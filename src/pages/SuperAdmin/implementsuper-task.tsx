@@ -30,31 +30,44 @@ type ImplTask = {
 };
 
 function authHeaders() {
-  const token = localStorage.getItem("access_token");
-  return {
+  // Try to get token from multiple sources (same as client.tsx)
+  const getCookie = (name: string) => {
+    const m = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
+    return m ? decodeURIComponent(m[2]) : null;
+  };
+  
+  const token = getCookie("access_token") 
+    || localStorage.getItem("access_token") 
+    || sessionStorage.getItem("access_token")
+    || localStorage.getItem("token");
+  
+  const headers: Record<string, string> = {
     Accept: "application/json",
     "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
+  
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  } else {
+    console.error("❌ No authentication token found! Check localStorage/sessionStorage/cookies");
+  }
+  
+  return headers;
 }
 function statusBadgeClasses(status?: string | null) {
   if (!status) return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
   const s = status.toUpperCase();
   switch (s) {
-    case "NOT_STARTED":
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
-    case "IN_PROGRESS":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
-    case "API_TESTING":
+    case "RECEIVED":
       return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
-    case "INTEGRATING":
-      return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
-    case "WAITING_FOR_DEV":
-      return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
-    case "ACCEPTED":
-      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+    case "IN_PROCESS":
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
     case "COMPLETED":
       return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+    case "ISSUE":
+      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+    case "CANCELLED":
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
     default:
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
   }
@@ -63,13 +76,11 @@ function statusBadgeClasses(status?: string | null) {
 function statusLabel(status?: string | null) {
   if (!status) return "-";
   const map: Record<string, string> = {
-    NOT_STARTED: "Chưa triển khai",
-    IN_PROGRESS: "Đang triển khai",
-    API_TESTING: "Test API",
-    INTEGRATING: "Đang tích hợp",
-    WAITING_FOR_DEV: "Chờ dev build",
-    ACCEPTED: "Hoàn thành",
+    RECEIVED: "Đã tiếp nhận",
+    IN_PROCESS: "Đang xử lý",
     COMPLETED: "Hoàn thành",
+    ISSUE: "Gặp sự cố",
+    CANCELLED: "Hủy",
   };
   const normalized = status.toUpperCase();
   return map[normalized] || status;
@@ -122,31 +133,6 @@ const ImplementSuperTaskPage: React.FC = () => {
   const [editing, setEditing] = useState<ImplTask | null>(null);
   const [viewOnly, setViewOnly] = useState<boolean>(false);
 
-  // Convert to maintenance handler: called from DetailModal when user clicks convert.
-  async function handleConvert(id: number) {
-    if (!confirm("Chuyển tác vụ này sang bảo trì?")) return;
-    try {
-      const conv = await fetch(`${API_ROOT}/api/v1/admin/implementation/${id}/convert-to-maintenance`, {
-        method: "POST",
-        headers: authHeaders(),
-        credentials: "include",
-      });
-      if (!conv.ok) {
-        const t = await conv.text();
-        toast.error(`Chuyển sang bảo trì thất bại: ${t || conv.status}`);
-        return;
-      }
-      toast.success('Đã chuyển tác vụ sang bảo trì');
-      // refresh lists and current view
-      await fetchHospitalsWithTasks();
-      await fetchList();
-      setModalOpen(false);
-    } catch (e: unknown) {
-      const m = e instanceof Error ? e.message : String(e);
-      toast.error(m || 'Lỗi khi chuyển sang bảo trì');
-    }
-  }
-
   async function fetchList() {
     const start = Date.now();
     setLoading(true);
@@ -173,12 +159,19 @@ const ImplementSuperTaskPage: React.FC = () => {
       if (selectedHospital) params.set("hospitalName", selectedHospital);
 
       const url = `${apiBase}?${params.toString()}`;
+      const headers = authHeaders();
+      console.debug("[fetchList] Requesting", url, "with Authorization", headers.Authorization ? "present" : "missing");
       const res = await fetch(url, {
         method: "GET",
-        headers: authHeaders(),
+        headers,
         credentials: "include",
       });
-      if (!res.ok) throw new Error(`GET ${url} failed: ${res.status}`);
+      if (!res.ok) {
+        if (res.status === 401) {
+          throw new Error(`Unauthorized (401): Token may be expired or invalid. Please login again.`);
+        }
+        throw new Error(`GET ${url} failed: ${res.status}`);
+      }
   const resp = await res.json();
   const items = Array.isArray(resp?.content) ? resp.content : Array.isArray(resp) ? resp : [];
       setData(items);
@@ -265,12 +258,19 @@ const ImplementSuperTaskPage: React.FC = () => {
     setError(null);
     try {
       // Fetch hospitals (backend now includes task count in subLabel)
+      const headers = authHeaders();
+      console.debug("[fetchHospitalsWithTasks] Authorization header", headers.Authorization ? "present" : "missing");
       const res = await fetch(`${API_ROOT}/api/v1/superadmin/implementation/tasks/hospitals`, {
         method: "GET",
-        headers: authHeaders(),
+        headers,
         credentials: "include",
       });
-      if (!res.ok) throw new Error(`Failed to fetch hospitals: ${res.status}`);
+      if (!res.ok) {
+        if (res.status === 401) {
+          throw new Error(`Unauthorized (401): Token may be expired or invalid. Please login again.`);
+        }
+        throw new Error(`Failed to fetch hospitals: ${res.status}`);
+      }
       const hospitals = await res.json();
       
       // Parse task count from subLabel (format: "Province - X tasks" or "X tasks")
@@ -297,37 +297,23 @@ const ImplementSuperTaskPage: React.FC = () => {
         };
       });
 
-      // Fetch accepted counts + near due/overdue for each hospital in parallel
-      const acceptedCounts = await Promise.all(
+      // Fetch completed counts + near due/overdue for each hospital in parallel
+      const completedCounts = await Promise.all(
         baseList.map(async (h) => {
           try {
-            // count both ACCEPTED and COMPLETED as 'accepted' for hospital aggregation
-            const p1 = new URLSearchParams({ page: "0", size: "1", status: "ACCEPTED", hospitalName: h.label });
-            const p2 = new URLSearchParams({ page: "0", size: "1", status: "COMPLETED", hospitalName: h.label });
-            const u1 = `${apiBase}?${p1.toString()}`;
-            const u2 = `${apiBase}?${p2.toString()}`;
-            const [r1, r2] = await Promise.all([
-              fetch(u1, { method: 'GET', headers: authHeaders(), credentials: 'include' }),
-              fetch(u2, { method: 'GET', headers: authHeaders(), credentials: 'include' }),
-            ]);
-            if (!r1.ok && !r2.ok) return 0;
-            let c1 = 0;
-            let c2 = 0;
+            // count only COMPLETED as 'completed' for hospital aggregation
+            const p = new URLSearchParams({ page: "0", size: "1", status: "COMPLETED", hospitalName: h.label });
+            const u = `${apiBase}?${p.toString()}`;
+            const r = await fetch(u, { method: 'GET', headers: authHeaders(), credentials: 'include' });
+            if (!r.ok) return 0;
             try {
-              const resp1 = r1.ok ? await r1.json() : null;
-              if (resp1 && typeof resp1.totalElements === 'number') c1 = resp1.totalElements as number;
-              else if (Array.isArray(resp1)) c1 = resp1.length;
+              const resp = await r.json();
+              if (resp && typeof resp.totalElements === 'number') return resp.totalElements as number;
+              else if (Array.isArray(resp)) return resp.length;
             } catch {
               // ignore individual parse errors
             }
-            try {
-              const resp2 = r2.ok ? await r2.json() : null;
-              if (resp2 && typeof resp2.totalElements === 'number') c2 = resp2.totalElements as number;
-              else if (Array.isArray(resp2)) c2 = resp2.length;
-            } catch {
-              // ignore individual parse errors
-            }
-            return c1 + c2;
+            return 0;
           } catch {
             return 0;
           }
@@ -347,20 +333,21 @@ const ImplementSuperTaskPage: React.FC = () => {
           const label = String(it?.hospitalName || '').trim();
           const target = list.find(x => x.label === label);
           if (!target) continue;
-          if (statusUp === 'ACCEPTED' || statusUp === 'TRANSFERRED') continue;
+          // Skip completed tasks when counting near due/overdue
+          if (statusUp === 'COMPLETED' || (it as any).transferredToMaintenance) continue;
           if (!it?.deadline) continue;
           const d = new Date(it.deadline);
           if (Number.isNaN(d.getTime())) continue;
           d.setHours(0,0,0,0);
           const dayDiff = Math.round((d.getTime() - startToday) / (24 * 60 * 60 * 1000));
           if (dayDiff === -1 || dayDiff === 0) target.nearDueCount = (target.nearDueCount || 0) + 1;
-          if (dayDiff > 0) target.overdueCount = (target.overdueCount || 0) + 1;
+          if (dayDiff < 0) target.overdueCount = (target.overdueCount || 0) + 1;
         }
       };
 
-      const withAccepted = baseList.map((h, idx) => ({ ...h, acceptedCount: acceptedCounts[idx] ?? 0 }));
-      augment(withAccepted);
-      setHospitalsWithTasks(withAccepted);
+      const withCompleted = baseList.map((h, idx) => ({ ...h, acceptedCount: completedCounts[idx] ?? 0 }));
+      augment(withCompleted);
+      setHospitalsWithTasks(withCompleted);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg || "Lỗi tải danh sách bệnh viện");
@@ -372,56 +359,69 @@ const ImplementSuperTaskPage: React.FC = () => {
   // Convert all ACCEPTED implementation tasks for a hospital to maintenance
   async function handleConvertHospital(hospital: { id: number; label: string; taskCount?: number; acceptedCount?: number }) {
     if (!hospital || !hospital.label) return;
-    if (!confirm(`Chuyển tất cả tác vụ đã nghiệm thu của ${hospital.label} sang bảo trì?`)) return;
+    
+    const taskCount = hospital.taskCount ?? 0;
+    const acceptedCount = hospital.acceptedCount ?? 0;
+    const remainingCount = taskCount - acceptedCount;
+    
+    // Validate: chỉ cho phép chuyển khi tất cả task đã hoàn thành
+    if (taskCount === 0) {
+      toast.error(`Bệnh viện ${hospital.label} chưa có task nào.`);
+      return;
+    }
+    
+    if (acceptedCount < taskCount) {
+      toast.error(
+        `Không thể chuyển! Bạn vẫn còn ${remainingCount} công việc chưa hoàn thành (${acceptedCount}/${taskCount} task đã hoàn thành).`,
+        { duration: 5000 }
+      );
+      return;
+    }
+    
+    if (!confirm(`Chuyển tất cả tác vụ đã hoàn thành (${acceptedCount}/${taskCount}) của ${hospital.label} sang bảo trì?`)) return;
+    
     try {
-      // fetch ACCEPTED and COMPLETED tasks for this hospital (large page size)
-      const params1 = new URLSearchParams({ page: '0', size: '1000', status: 'ACCEPTED', hospitalName: hospital.label });
-      const params2 = new URLSearchParams({ page: '0', size: '1000', status: 'COMPLETED', hospitalName: hospital.label });
-      const url1 = `${apiBase}?${params1.toString()}`;
-      const url2 = `${apiBase}?${params2.toString()}`;
-      const [res1, res2] = await Promise.all([
-        fetch(url1, { method: 'GET', headers: authHeaders(), credentials: 'include' }),
-        fetch(url2, { method: 'GET', headers: authHeaders(), credentials: 'include' }),
-      ]);
-      if (!res1.ok && !res2.ok) {
-        const t1 = res1.ok ? null : await res1.text().catch(() => null);
-        const t2 = res2.ok ? null : await res2.text().catch(() => null);
-        toast.error(`Không thể tải danh sách tác vụ: ${t1 || t2 || res1.status || res2.status}`);
-        return;
-      }
-      const body1 = res1.ok ? await res1.json() : null;
-      const body2 = res2.ok ? await res2.json() : null;
-      const list1: Array<any> = body1 ? (Array.isArray(body1) ? body1 : Array.isArray(body1.content) ? body1.content : []) : [];
-      const list2: Array<any> = body2 ? (Array.isArray(body2) ? body2 : Array.isArray(body2.content) ? body2.content : []) : [];
-      // merge unique by id
-      const idMap = new Map<number, any>();
-      for (const t of [...list1, ...list2]) {
-        if (t && typeof t.id === 'number') idMap.set(t.id, t);
-      }
-      const tasks: Array<any> = Array.from(idMap.values());
-      if (!tasks.length) {
-        toast('Không có tác vụ nào để chuyển.');
-        return;
-      }
-
-      const convertPromises = tasks.map((tk) => fetch(`${API_ROOT}/api/v1/admin/implementation/${tk.id}/convert-to-maintenance`, {
-        method: 'POST', headers: authHeaders(), credentials: 'include'
-      }).then(r => ({ ok: r.ok, status: r.status, text: r.ok ? null : r.text() })));
-
-      const results = await Promise.allSettled(convertPromises);
-      let success = 0;
-      let failed = 0;
-      for (const r of results) {
-        if (r.status === 'fulfilled') {
-          const v = r.value as any;
-          if (v && v.ok) success++; else failed++;
-        } else {
-          failed++;
+      const res = await fetch(
+        `${API_ROOT}/api/v1/admin/implementation/hospital/${hospital.id}/convert-to-maintenance`,
+        {
+          method: 'POST',
+          headers: authHeaders(),
+          credentials: 'include'
         }
+      );
+      if (!res.ok) {
+        const t = await res.text().catch(() => null);
+        toast.error(`Không thể chuyển sang bảo trì: ${t || res.status}`);
+        return;
+      }
+      let payload: {
+        convertedCount?: number;
+        failedTaskIds?: number[];
+        failedMessages?: string[];
+        alreadyTransferredCount?: number;
+        skippedCount?: number;
+      } | null = null;
+
+      try {
+        payload = await res.json();
+      } catch {
+        payload = null;
       }
 
-      if (success > 0) toast.success(`Chuyển thành công ${success} tác vụ sang bảo trì`);
-      if (failed > 0) toast.error(`Có ${failed} tác vụ chuyển thất bại`);
+      const converted = payload?.convertedCount ?? acceptedCount;
+      const already = payload?.alreadyTransferredCount ?? 0;
+      const failedList = Array.isArray(payload?.failedTaskIds) ? payload?.failedTaskIds ?? [] : [];
+      const failed = failedList.length;
+
+      let successMsg = `Đã yêu cầu chuyển ${converted} tác vụ của ${hospital.label} sang bảo trì`;
+      if (already > 0) successMsg += ` (đã chuyển trước đó: ${already})`;
+      toast.success(`${successMsg}.`);
+
+      if (failed > 0) {
+        const detail = (payload?.failedMessages || []).filter(Boolean).join('; ');
+        toast.error(`Có ${failed} tác vụ chuyển thất bại${detail ? `: ${detail}` : ''}`);
+      }
+
       // refresh
       await fetchHospitalsWithTasks();
       if (!showHospitalList && selectedHospital === hospital.label) {
@@ -461,36 +461,21 @@ const ImplementSuperTaskPage: React.FC = () => {
 
   async function fetchAcceptedCountForHospital(hospitalName: string) {
     try {
-      // Count both ACCEPTED and COMPLETED as accepted for display
-      const p1 = new URLSearchParams({ page: "0", size: "1", status: "ACCEPTED", hospitalName });
-      const p2 = new URLSearchParams({ page: "0", size: "1", status: "COMPLETED", hospitalName });
-      const u1 = `${apiBase}?${p1.toString()}`;
-      const u2 = `${apiBase}?${p2.toString()}`;
-      const [r1, r2] = await Promise.all([
-        fetch(u1, { method: 'GET', headers: authHeaders(), credentials: 'include' }),
-        fetch(u2, { method: 'GET', headers: authHeaders(), credentials: 'include' }),
-      ]);
-      let c1 = 0;
-      let c2 = 0;
-      if (r1.ok) {
+      // Count only COMPLETED as completed for display
+      const p = new URLSearchParams({ page: "0", size: "1", status: "COMPLETED", hospitalName });
+      const u = `${apiBase}?${p.toString()}`;
+      const r = await fetch(u, { method: 'GET', headers: authHeaders(), credentials: 'include' });
+      let count = 0;
+      if (r.ok) {
         try {
-          const resp1 = await r1.json();
-          if (resp1 && typeof resp1.totalElements === 'number') c1 = resp1.totalElements as number;
-          else if (Array.isArray(resp1)) c1 = resp1.length;
+          const resp = await r.json();
+          if (resp && typeof resp.totalElements === 'number') count = resp.totalElements as number;
+          else if (Array.isArray(resp)) count = resp.length;
         } catch {
-          c1 = 0;
+          count = 0;
         }
       }
-      if (r2.ok) {
-        try {
-          const resp2 = await r2.json();
-          if (resp2 && typeof resp2.totalElements === 'number') c2 = resp2.totalElements as number;
-          else if (Array.isArray(resp2)) c2 = resp2.length;
-        } catch {
-          c2 = 0;
-        }
-      }
-      setAcceptedCount(c1 + c2);
+      setAcceptedCount(count);
     } catch {
       setAcceptedCount(null);
     }
@@ -552,58 +537,68 @@ const ImplementSuperTaskPage: React.FC = () => {
     });
     if (!res.ok) {
       const msg = await res.text();
-      alert(`Xóa thất bại: ${msg || res.status}`);
+      toast.error(`Xóa thất bại: ${msg || res.status}`);
       return;
     }
-    setData((s) => s.filter((x) => x.id !== id));
+    // Refresh hospital list to update task counts
+    await fetchHospitalsWithTasks();
+    // Refresh task list if viewing tasks
+    if (!showHospitalList) {
+      await fetchList();
+    } else {
+      setData((s) => s.filter((x) => x.id !== id));
+    }
+    toast.success("Xóa thành công");
   };
-
-  // removed manual convert action (auto-convert happens on ACCEPTED status update)
 
   const handleSubmit = async (payload: Record<string, unknown>, id?: number) => {
     const isUpdate = Boolean(id);
     const url = isUpdate ? `${apiBase}/${id}` : apiBase;
     const method = isUpdate ? "PUT" : "POST";
+    
+    const headers = authHeaders();
+    
     const res = await fetch(url, {
       method,
-      headers: authHeaders(),
+      headers,
       body: JSON.stringify(payload),
       credentials: "include",
     });
+    
     if (!res.ok) {
-      const msg = await res.text();
-      toast.error(`${method} thất bại: ${msg || res.status}`);
+      let errorMsg = `Status ${res.status}`;
+      try {
+        const text = await res.text();
+        if (text) {
+          try {
+            const json = JSON.parse(text);
+            errorMsg = json.message || json.error || text;
+          } catch {
+            errorMsg = text;
+          }
+        }
+      } catch {
+        // Ignore parse errors
+      }
+      
+      if (res.status === 401) {
+        toast.error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+        setTimeout(() => {
+          window.location.href = "/signin";
+        }, 2000);
+        return;
+      }
+      
+      // Show user-friendly error message
+      toast.error(errorMsg || `${method} thất bại: ${res.status}`);
       return;
     }
-    // Auto-convert to maintenance if status becomes ACCEPTED on update
-    try {
-      const newStatus = String((payload as any)?.status ?? '').toUpperCase();
-      if (isUpdate && newStatus === 'ACCEPTED' && id) {
-        const conv = await fetch(`${API_ROOT}/api/v1/admin/implementation/${id}/convert-to-maintenance`, {
-          method: 'POST',
-          headers: authHeaders(),
-          credentials: 'include',
-        });
-        if (!conv.ok) {
-          const t = await conv.text();
-          toast.error(`Chuyển sang bảo trì thất bại: ${t || conv.status}`);
-        } else {
-          toast.success('Đã chuyển tác vụ sang bảo trì');
-        }
-      }
-    } catch {
-      // ignore, already notified when possible
-    }
 
-    // If creating new task, always refresh hospital list to update task count
-    if (!isUpdate) {
-      await fetchHospitalsWithTasks();
-      // Also refresh task list if we're viewing tasks for a specific hospital
-      if (selectedHospital && !showHospitalList) {
-        await fetchList();
-      }
-    } else {
-      // If updating, just refresh task list
+    // Refresh hospital list to update task counts (especially acceptedCount)
+    await fetchHospitalsWithTasks();
+    
+    // If creating new task or updating task for a specific hospital, refresh task list
+    if (!isUpdate || (selectedHospital && !showHospitalList)) {
       await fetchList();
     }
     
@@ -761,24 +756,38 @@ const ImplementSuperTaskPage: React.FC = () => {
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleHospitalClick(hospital.label);
-                              }}
-                              className="text-blue-600 hover:text-blue-800 font-medium"
-                            >
-                              Xem task 
-                            </button>
-                            { (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) >= (hospital.taskCount || 0) && (
+                            <div className="flex items-center gap-3">
                               <button
-                                onClick={(e) => { e.stopPropagation(); handleConvertHospital(hospital); }}
-                                className="ml-3 inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-sm hover:bg-indigo-100"
-                                title="Chuyển tất cả tác vụ đã nghiệm thu sang bảo trì"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleHospitalClick(hospital.label);
+                                }}
+                                className="text-blue-600 hover:text-blue-800 font-medium"
                               >
-                                ➜ Chuyển sang bảo trì
+                                Xem task 
                               </button>
-                            ) }
+                              { (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) === (hospital.taskCount || 0) && (
+                                <button
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    handleConvertHospital(hospital); 
+                                  }}
+                                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-medium hover:bg-indigo-100 transition-colors"
+                                  title="Chuyển tất cả tác vụ đã nghiệm thu sang bảo trì"
+                                >
+                                  ➜ Chuyển sang bảo trì
+                                </button>
+                              ) }
+                              { (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) < (hospital.taskCount || 0) && (
+                                <span 
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-sm"
+                                  title={`Còn ${(hospital.taskCount || 0) - (hospital.acceptedCount || 0)} task chưa hoàn thành`}
+                                >
+                                  <span className="text-orange-500">⚠</span>
+                                  Chưa thể chuyển
+                                </span>
+                              ) }
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -870,13 +879,11 @@ const ImplementSuperTaskPage: React.FC = () => {
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
                 <option value="">— Chọn trạng thái —</option>
-                <option value="NOT_STARTED">Chưa triển khai</option>
-                <option value="IN_PROGRESS">Đang triển khai</option>
-                <option value="API_TESTING">Test thông api</option>
-                <option value="INTEGRATING">Tích hợp với viện</option>
-                <option value="WAITING_FOR_DEV">Chờ dev build update</option>
-                <option value="PENDING_TRANSFER">Chờ chuyển bảo trì</option>
-                <option value="TRANSFERRED">Đã chuyển sang bảo trì</option>
+                <option value="RECEIVED">Đã tiếp nhận</option>
+                <option value="IN_PROCESS">Đang xử lý</option>
+                <option value="COMPLETED">Hoàn thành</option>
+                <option value="ISSUE">Gặp sự cố</option>
+                <option value="CANCELLED">Hủy</option>
               </select>
             </div>
             <div className="mt-3 text-sm text-gray-600 flex items-center gap-4">
@@ -989,7 +996,7 @@ const ImplementSuperTaskPage: React.FC = () => {
 
       {/* Modal - Always render regardless of view */}
       {viewOnly ? (
-        <DetailModal open={modalOpen} onClose={() => setModalOpen(false)} item={editing} onConvert={handleConvert} />
+        <DetailModal open={modalOpen} onClose={() => setModalOpen(false)} item={editing} />
       ) : (
         <TaskFormModal
           open={modalOpen}
@@ -1008,12 +1015,10 @@ function DetailModal({
   open,
   onClose,
   item,
-  onConvert,
 }: {
   open: boolean;
   onClose: () => void;
   item: ImplTask | null;
-  onConvert?: (id: number) => void;
 }) {
   if (!open || !item) return null;
 
@@ -1077,14 +1082,6 @@ function DetailModal({
 
         {/* Footer */}
         <div className="sticky bottom-0 flex justify-end px-6 py-4 border-t bg-white dark:bg-gray-900">
-          {(item.status?.toUpperCase() === 'ACCEPTED' || item.status?.toUpperCase() === 'COMPLETED') && !(item as any).transferredToMaintenance && onConvert && (
-            <button
-              onClick={() => onConvert && item.id && onConvert(item.id)}
-              className="mr-3 px-4 py-2 rounded-lg text-sm font-medium bg-green-50 text-green-700 border border-green-200 hover:bg-green-100"
-            >
-              ➜ Chuyển sang bảo trì
-            </button>
-          )}
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"

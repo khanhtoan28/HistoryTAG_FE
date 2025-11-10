@@ -56,67 +56,59 @@ export type ImplementationTaskRequestDTO = {
 
 export type ImplementationTaskUpdateDTO = Partial<ImplementationTaskRequestDTO>;
 
-const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "NOT_STARTED", label: "Chưa triển khai" },
-  { value: "IN_PROGRESS", label: "Đang triển khai" },
-  { value: "API_TESTING", label: "Test thông api" },
-  { value: "INTEGRATING", label: "Tích hợp với viện" },
-  { value: "WAITING_FOR_DEV", label: "Chờ dev build update" },
-  { value: "ACCEPTED", label: "Nghiệm thu" },
-];
+const STATUS_LABELS: Record<"RECEIVED" | "IN_PROCESS" | "COMPLETED" | "ISSUE" | "CANCELLED", string> = {
+  RECEIVED: "Đã tiếp nhận",
+  IN_PROCESS: "Đang xử lý",
+  COMPLETED: "Hoàn thành",
+  ISSUE: "Gặp sự cố",
+  CANCELLED: "Hủy",
+};
 
-// Using shared TaskCardNew for visuals — local statusBadgeClasses removed
+const STATUS_OPTIONS: Array<{ value: keyof typeof STATUS_LABELS; label: string }> = (
+  Object.entries(STATUS_LABELS) as Array<[keyof typeof STATUS_LABELS, string]>
+).map(([value, label]) => ({ value, label }));
+
+const STATUS_CANONICAL_MAP: Record<string, "RECEIVED" | "IN_PROCESS" | "COMPLETED" | "ISSUE" | "CANCELLED"> = {
+  RECEIVED: "RECEIVED",
+  IN_PROCESS: "IN_PROCESS",
+  COMPLETED: "COMPLETED",
+  ISSUE: "ISSUE",
+  CANCELLED: "CANCELLED",
+  NOT_STARTED: "RECEIVED",
+  IN_PROGRESS: "IN_PROCESS",
+  API_TESTING: "IN_PROCESS",
+  INTEGRATING: "IN_PROCESS",
+  WAITING_FOR_DEV: "IN_PROCESS",
+  ACCEPTED: "COMPLETED",
+  PENDING_TRANSFER: "COMPLETED",
+  TRANSFERRED: "COMPLETED",
+};
+
+function normalizeStatus(status?: string | null): "RECEIVED" | "IN_PROCESS" | "COMPLETED" | "ISSUE" | "CANCELLED" | undefined {
+  if (!status) return undefined;
+  const upper = status.toUpperCase();
+  return STATUS_CANONICAL_MAP[upper] || (upper as any);
+}
 
 function statusLabel(status?: string | null) {
-  switch (status) {
-    case "NOT_STARTED":
-      return "Chưa triển khai";
-    case "IN_PROGRESS":
-      return "Đang triển khai";
-    case "API_TESTING":
-      return "Test thông api";
-    case "INTEGRATING":
-      return "Tích hợp với viện";
-    case "WAITING_FOR_DEV":
-      return "Chờ DEV build";
-    case "ACCEPTED":
-      return "Nghiệm thu";
-    case "TRANSFERRED":
-      return "Đã chuyển sang bảo trì";
-    default:
-      return status || "";
-  }
+  const normalized = normalizeStatus(status);
+  if (!normalized) return status || "";
+  return STATUS_LABELS[normalized];
 }
 
 function statusBadgeClasses(status?: string | null) {
-  switch (status) {
-    case "NOT_STARTED":
-      // ⛔ Chưa bắt đầu → xám
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
-
-    case "IN_PROGRESS":
-      // 🟡 Đang thực hiện → vàng
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
-
-    case "API_TESTING":
-      // 🔵 Đang test API → xanh dương
+  const normalized = normalizeStatus(status);
+  switch (normalized) {
+    case "RECEIVED":
       return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
-
-    case "INTEGRATING":
-      // 🟣 Đang tích hợp → tím
-      return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
-
-    case "WAITING_FOR_DEV":
-      // 🟠 Chờ dev → cam
-      return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
-
-    case "ACCEPTED":
-      // ✅ Đã nghiệm thu → xanh lá
+    case "IN_PROCESS":
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
+    case "COMPLETED":
       return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-    case "TRANSFERRED":
-      // 🔷 Đã chuyển sang bảo trì → indigo
-      return "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200";
-
+    case "ISSUE":
+      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+    case "CANCELLED":
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
     default:
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
   }
@@ -145,6 +137,48 @@ function toISOOrNull(v?: string | Date | null) {
     return typeof v === "string" ? (v.trim() ? new Date(v).toISOString() : null) : v.toISOString();
   } catch {
     return null;
+  }
+}
+
+function toDatetimeLocalInput(value?: string | null) {
+  if (!value) return "";
+  try {
+    const raw = String(value).trim();
+    if (!raw) return "";
+    const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(raw);
+    let date: Date;
+    if (hasTimezone) {
+      date = new Date(raw);
+    } else {
+      const match = raw.match(
+        /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?/
+      );
+      if (match) {
+        const [, y, m, d, hh = "00", mm = "00", ss = "00"] = match;
+        date = new Date(
+          Date.UTC(
+            Number(y),
+            Number(m) - 1,
+            Number(d),
+            Number(hh),
+            Number(mm),
+            Number(ss)
+          )
+        );
+      } else {
+        date = new Date(raw);
+      }
+    }
+    if (Number.isNaN(date.getTime())) return raw.slice(0, 16);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const year = date.getFullYear();
+    const month = pad(date.getMonth() + 1);
+    const day = pad(date.getDate());
+    const hours = pad(date.getHours());
+    const minutes = pad(date.getMinutes());
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  } catch {
+    return "";
   }
 }
 
@@ -433,21 +467,21 @@ function TaskFormModal({
 
   // Removed loaders for Agency/HIS/Hardware (fields hidden)
 
-  const [model, setModel] = useState<ImplementationTaskRequestDTO>(() => ({
-    name: initial?.name || "",
-    hospitalId: (initial?.hospitalId as number) || 0,
-    picDeploymentId: (initial?.picDeploymentId as number) || 0,
-    // removed optional fields from form
-    apiTestStatus: initial?.apiTestStatus ?? "",
-    // removed from form
-    additionalRequest: initial?.additionalRequest ?? "",
-    // removed from form
-    deadline: initial?.deadline ?? "",
-    completionDate: initial?.completionDate ?? "",
-    status: initial?.status ?? "",
-    startDate: initial?.startDate ?? "",
-    acceptanceDate: initial?.acceptanceDate ?? "",
-  }));
+  const [model, setModel] = useState<ImplementationTaskRequestDTO>(() => {
+    const normalized = normalizeStatus(initial?.status)?.toString() ?? "RECEIVED";
+    const isNew = !initial?.id;
+    return {
+      name: initial?.name || "",
+      hospitalId: Number(initial?.hospitalId) || 0,
+      picDeploymentId: Number(initial?.picDeploymentId) || 0,
+      apiTestStatus: initial?.apiTestStatus ?? "",
+      additionalRequest: initial?.additionalRequest ?? "",
+      deadline: initial?.deadline ?? "",
+      completionDate: initial?.completionDate ?? "",
+      status: normalized,
+      startDate: initial?.startDate ?? (isNew ? new Date().toISOString() : ""),
+    };
+  });
 
   const [hospitalOpt, setHospitalOpt] = useState<{ id: number; name: string } | null>(() => {
     const id = (initial?.hospitalId as number) || 0;
@@ -466,21 +500,19 @@ function TaskFormModal({
   useEffect(() => {
     if (!open) return;
 
-    // Khởi tạo model khi mở modal: nếu có initial thì đổ dữ liệu, nếu không thì reset trắng
+    const normalized = normalizeStatus(initial?.status)?.toString() ?? "RECEIVED";
+    const isNew = !initial?.id;
+    const nowIso = new Date().toISOString();
     setModel({
       name: initial?.name || "",
       hospitalId: Number(initial?.hospitalId) || 0,
       picDeploymentId: Number(initial?.picDeploymentId) || 0,
-      // removed optional fields
       apiTestStatus: initial?.apiTestStatus ?? "",
-      // removed from form
       additionalRequest: initial?.additionalRequest ?? "",
-      // removed from form
       deadline: initial?.deadline ?? "",
       completionDate: initial?.completionDate ?? "",
-      status: initial?.status ?? "",
-      startDate: initial?.startDate ?? "",
-      acceptanceDate: initial?.acceptanceDate ?? "",
+      status: normalized,
+      startDate: initial?.startDate ?? (isNew ? nowIso : ""),
     });
 
     // Setup selects: nếu có tên truyền vào thì dùng, không thì null (và sẽ resolve theo ID phía dưới)
@@ -563,18 +595,12 @@ function TaskFormModal({
       return;
     }
 
-    // Extra validation: When status is ACCEPTED, require acceptanceDate and completionDate
-    if ((model.status || '').toUpperCase() === 'ACCEPTED') {
-      if (!model.acceptanceDate || String(model.acceptanceDate).trim() === '') {
-        toast.error("Vui lòng nhập ngày nghiệm thu");
-        return;
-      }
-      if (!model.completionDate || String(model.completionDate).trim() === '') {
-        toast.error("Vui lòng nhập ngày hoàn thành");
-        return;
-      }
-    }
-
+    const normalizedStatus = normalizeStatus(model.status);
+    const isNew = !(initial as any)?.id;
+    const startDateRaw = model.startDate || (isNew ? new Date().toISOString() : "");
+    const completionRaw = normalizedStatus === "COMPLETED"
+      ? (model.completionDate || new Date().toISOString())
+      : "";
     const payload: ImplementationTaskRequestDTO = {
       ...model,
       hospitalId: hospitalOpt.id,
@@ -586,9 +612,9 @@ function TaskFormModal({
       bhytPortCheckInfo: null,
       apiUrl: null,
       deadline: toISOOrNull(model.deadline) || undefined,
-      completionDate: toISOOrNull(model.completionDate) || undefined,
-      startDate: toISOOrNull(model.startDate) || undefined,
-      acceptanceDate: toISOOrNull(model.acceptanceDate) || undefined,
+      completionDate: toISOOrNull(completionRaw) || undefined,
+      startDate: toISOOrNull(startDateRaw) || undefined,
+      status: normalizedStatus || "RECEIVED",
     } as any;
 
     try {
@@ -666,8 +692,19 @@ function TaskFormModal({
                     "h-10 w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 outline-none",
                     "focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
                   )}
-                  value={model.status ?? ""}
-                  onChange={(e) => setModel((s) => ({ ...s, status: (e.target as HTMLSelectElement).value || "" }))}
+                  value={normalizeStatus(model.status)?.toString() ?? "RECEIVED"}
+                  onChange={(e) => {
+                    const value = (e.target as HTMLSelectElement).value;
+                    setModel((s) => {
+                      const normalized = normalizeStatus(value);
+                      const isCompleted = normalized === "COMPLETED";
+                      return {
+                        ...s,
+                        status: value,
+                        completionDate: isCompleted ? (s.completionDate || new Date().toISOString()) : "",
+                      };
+                    });
+                  }}
                 >
                   <option value="">— Chọn trạng thái —</option>
                   {STATUS_OPTIONS.map((opt) => (
@@ -681,29 +718,21 @@ function TaskFormModal({
               <Field label="Deadline (ngày)">
                 <TextInput
                   type="datetime-local"
-                  value={model.deadline ? new Date(model.deadline).toISOString().slice(0, 16) : ""}
+                  value={toDatetimeLocalInput(model.deadline)}
                   onChange={(e) => setModel((s) => ({ ...s, deadline: e.target.value }))}
                 />
               </Field>
               <Field label="Ngày bắt đầu">
                 <TextInput
                   type="datetime-local"
-                  value={model.startDate ? new Date(model.startDate).toISOString().slice(0, 16) : ""}
+                  value={toDatetimeLocalInput(model.startDate)}
                   onChange={(e) => setModel((s) => ({ ...s, startDate: e.target.value }))}
                 />
               </Field>
-              <Field label="Ngày nghiệm thu" required={model.status === 'ACCEPTED'}>
-                <TextInput
-                  type="datetime-local"
-                  value={model.acceptanceDate ? new Date(model.acceptanceDate).toISOString().slice(0, 16) : ""}
-                  onChange={(e) => setModel((s) => ({ ...s, acceptanceDate: e.target.value }))}
-                />
-              </Field>
               <Field label="Ngày hoàn thành">
-
                 <TextInput
                   type="datetime-local"
-                  value={model.completionDate ? new Date(model.completionDate).toISOString().slice(0, 16) : ""}
+                  value={toDatetimeLocalInput(model.completionDate)}
                   onChange={(e) => setModel((s) => ({ ...s, completionDate: e.target.value }))}
                 />
               </Field>
@@ -807,7 +836,6 @@ function DetailModal({
             <Info icon={<FiPhone />} label="Số lượng" value={item.quantity ?? "—"} />
             <Info icon={<FiClock />} label="Deadline" value={fmt(item.deadline)} />
             <Info icon={<FiClock />} label="Ngày bắt đầu" value={fmt(item.startDate)} />
-            <Info icon={<FiClock />} label="Ngày nghiệm thu" value={fmt(item.acceptanceDate)} />
             <Info icon={<FiClock />} label="Ngày hoàn thành" value={fmt(item.completionDate)} />
             <Info icon={<FiClock />} label="Tạo lúc" value={fmt(item.createdAt)} />
             <Info icon={<FiClock />} label="Cập nhật lúc" value={fmt(item.updatedAt)} />
@@ -823,10 +851,10 @@ function DetailModal({
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40">
+        <div className="flex justify-end px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+            className="px-4 py-2 rounded-lg text-sm font-medium text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             Đóng
           </button>
@@ -892,7 +920,7 @@ const ImplementationTasksPage: React.FC = () => {
   const [detailItem, setDetailItem] = useState<ImplementationTaskResponseDTO | null>(null);
   // hospital list view state (like SuperAdmin page)
   const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
-  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number }>>([]);
+  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number | null; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number }>>([]);
   const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
   const [hospitalPage, setHospitalPage] = useState<number>(0);
   const [hospitalSize, setHospitalSize] = useState<number>(20);
@@ -920,6 +948,7 @@ const ImplementationTasksPage: React.FC = () => {
   const isSuperAdmin = userRoles.some(
     (r: any) => (typeof r === "string" ? r : r.roleName)?.toUpperCase() === "SUPERADMIN"
   );
+  const canManage = isSuperAdmin || userTeam === "DEPLOYMENT";
   const filtered = useMemo(() => data, [data]);
 
   async function fetchList() {
@@ -942,7 +971,11 @@ const ImplementationTasksPage: React.FC = () => {
       if (!res.ok) throw new Error(`GET ${url} failed: ${res.status}`);
       const resp = await res.json();
       const items = Array.isArray(resp?.content) ? resp.content : Array.isArray(resp) ? resp : [];
-      setData(items);
+      const normalizedItems = items.map((item: ImplementationTaskResponseDTO) => ({
+        ...item,
+        status: normalizeStatus(item.status) || item.status || "RECEIVED",
+      }));
+      setData(normalizedItems);
       if (resp && typeof resp.totalElements === "number") setTotalCount(resp.totalElements);
       else setTotalCount(Array.isArray(resp) ? resp.length : null);
 
@@ -1041,16 +1074,19 @@ const ImplementationTasksPage: React.FC = () => {
       const items: ImplementationTaskResponseDTO[] = Array.isArray(payload?.content) ? payload.content : Array.isArray(payload) ? payload : [];
 
       // Aggregate by hospitalName
-      const acc = new Map<string, { id: number; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number }>();
+      const acc = new Map<string, { id: number | null; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number }>();
       for (const it of items) {
         const name = (it.hospitalName || "").toString().trim() || "—";
-        const key = name;
-        const current = acc.get(key) || { id: acc.size + 1, label: name, subLabel: "", taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0 };
+        const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
+        const key = hospitalId != null ? `id-${hospitalId}` : `name-${name}`;
+        const current = acc.get(key) || { id: hospitalId, label: name, subLabel: "", taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0 };
+        if (current.id == null && hospitalId != null) current.id = hospitalId;
+        if (!current.label && name) current.label = name;
         current.taskCount += 1;
-        if ((it.status || '').toUpperCase() === 'ACCEPTED') current.acceptedCount += 1;
-        // Count near due / overdue for non-accepted
-        const statusUp = String(it.status || '').toUpperCase();
-        if (statusUp !== 'ACCEPTED' && statusUp !== 'TRANSFERRED' && it.deadline) {
+        const taskStatus = normalizeStatus(it.status);
+        if (taskStatus === 'COMPLETED') current.acceptedCount += 1;
+        // Count near due / overdue for non-completed
+        if (taskStatus !== 'COMPLETED' && it.deadline) {
           const d = new Date(it.deadline);
           if (!Number.isNaN(d.getTime())) {
             d.setHours(0,0,0,0);
@@ -1065,19 +1101,20 @@ const ImplementationTasksPage: React.FC = () => {
       }
       const list = Array.from(acc.values());
       // Enrich province/subLabel by querying hospitals search per name (best effort)
-      async function resolveProvinceByName(name: string): Promise<string> {
+      async function resolveHospitalMeta(name: string): Promise<{ province: string; id: number | null }> {
         try {
           const res = await fetch(`${API_ROOT}/api/v1/admin/hospitals/search?name=${encodeURIComponent(name)}`, { headers: authHeaders(), credentials: 'include' });
-          if (!res.ok) return '';
+          if (!res.ok) return { province: '', id: null };
           const arr = await res.json();
-          if (!Array.isArray(arr) || arr.length === 0) return '';
+          if (!Array.isArray(arr) || arr.length === 0) return { province: '', id: null };
           // Prefer exact match by label/name
           const pick = (arr as any[]).find((x) => {
             const label = String(x?.label ?? x?.name ?? '').trim();
             return label.toLowerCase() === name.trim().toLowerCase();
           }) || arr[0];
-          if (!pick || typeof pick !== 'object') return '';
+          if (!pick || typeof pick !== 'object') return { province: '', id: null };
           const obj: any = pick;
+          const resolvedId = typeof obj?.id === 'number' ? obj.id : obj?.id != null ? Number(obj.id) : null;
           const keys = ['province', 'provinceName', 'city', 'cityName', 'addressProvince', 'addressProvinceName', 'region', 'subLabel'];
           for (const k of keys) {
             const v = obj[k];
@@ -1085,22 +1122,26 @@ const ImplementationTasksPage: React.FC = () => {
               // If backend returns multiple provinces separated by comma, pick the first
               const value = String(v).split(',')[0].trim();
               // remove trailing task counts if mistakenly included (" - X tasks")
-              return value.replace(/\s*-\s*\d+\s+tasks?/i, '').trim();
+              return { province: value.replace(/\s*-\s*\d+\s+tasks?/i, '').trim(), id: resolvedId };
             }
           }
           // As last resort, attempt to parse from label formatted like "Province - Hospital"
           if (typeof obj.label === 'string') {
             const m = obj.label.split(' - ');
-            if (m.length > 1) return m[0].split(',')[0].trim();
+            if (m.length > 1) return { province: m[0].split(',')[0].trim(), id: resolvedId };
           }
-          return '';
-        } catch { return ''; }
+          return { province: '', id: resolvedId };
+        } catch { return { province: '', id: null }; }
       }
 
-      const withProvince = await Promise.all(list.map(async (h) => ({
-        ...h,
-        subLabel: h.subLabel && h.subLabel.trim() ? h.subLabel : await resolveProvinceByName(h.label),
-      })));
+      const withProvince = await Promise.all(list.map(async (h) => {
+        const meta = await resolveHospitalMeta(h.label);
+        return {
+          ...h,
+          id: h.id ?? meta.id ?? null,
+          subLabel: h.subLabel && h.subLabel.trim() ? h.subLabel : meta.province,
+        };
+      }));
       setHospitalsWithTasks(withProvince);
     } catch (e: any) {
       setError(e.message || "Lỗi tải danh sách bệnh viện");
@@ -1138,7 +1179,7 @@ const ImplementationTasksPage: React.FC = () => {
       // fetch accepted count for header summary
       (async () => {
         try {
-          const params = new URLSearchParams({ page: "0", size: "1", status: "ACCEPTED", hospitalName: selectedHospital });
+          const params = new URLSearchParams({ page: "0", size: "1", status: "COMPLETED", hospitalName: selectedHospital });
           const url = `${apiBase}?${params.toString()}`;
           const res = await fetch(url, { method: "GET", headers: authHeaders(), credentials: "include" });
           if (!res.ok) return setAcceptedCount(null);
@@ -1176,7 +1217,7 @@ const ImplementationTasksPage: React.FC = () => {
       // We are viewing tasks of a hospital → refresh tasks and accepted counter
       await fetchList();
       try {
-        const params = new URLSearchParams({ page: "0", size: "1", status: "ACCEPTED", hospitalName: selectedHospital || "" });
+        const params = new URLSearchParams({ page: "0", size: "1", status: "COMPLETED", hospitalName: selectedHospital || "" });
         const urlCount = `${apiBase}?${params.toString()}`;
         const r = await fetch(urlCount, { method: "GET", headers: authHeaders(), credentials: "include" });
         if (r.ok) {
@@ -1190,7 +1231,7 @@ const ImplementationTasksPage: React.FC = () => {
       if (!isUpdate && selectedHospital) {
         setHospitalsWithTasks((prev) => prev.map((h) => {
           if (h.label !== selectedHospital) return h;
-          const incAccepted = String((payload as any)?.status || '').toUpperCase() === 'ACCEPTED' ? 1 : 0;
+          const incAccepted = normalizeStatus((payload as any)?.status) === 'COMPLETED' ? 1 : 0;
           return { ...h, taskCount: (h.taskCount || 0) + 1, acceptedCount: (h.acceptedCount || 0) + incAccepted };
         }));
       }
@@ -1212,7 +1253,76 @@ const ImplementationTasksPage: React.FC = () => {
     setData((s) => s.filter((x) => x.id !== id));
     toast.success("Đã xóa");
   };
-  // remove manual convert action on admin page
+
+  const handleConvertHospital = async (hospital: { label: string; taskCount?: number; acceptedCount?: number; id?: number | null }) => {
+    if (!canManage) return;
+    const total = hospital.taskCount || 0;
+    const accepted = hospital.acceptedCount || 0;
+    if (total === 0 || accepted < total) {
+      toast.error("Bệnh viện còn tác vụ chưa hoàn thành nên chưa thể chuyển.");
+      return;
+    }
+    const hospitalIdRaw =
+      hospital.id ??
+      hospitalsWithTasks.find((h) => h.label === hospital.label)?.id ??
+      null;
+    const hospitalId = hospitalIdRaw != null ? Number(hospitalIdRaw) : null;
+    if (!hospitalId) {
+      toast.error("Không xác định được bệnh viện để chuyển sang bảo trì.");
+      return;
+    }
+    if (!confirm(`Chuyển ${accepted}/${total} tác vụ của ${hospital.label} sang bảo trì?`)) return;
+    try {
+      const res = await fetch(
+        `${API_ROOT}/api/v1/admin/implementation/hospital/${hospitalId}/convert-to-maintenance`,
+        {
+          method: "POST",
+          headers: authHeaders(),
+          credentials: "include",
+        },
+      );
+      if (!res.ok) {
+        const text = await res.text();
+        toast.error(`Chuyển sang bảo trì thất bại: ${text || res.status}`);
+        return;
+      }
+      let payload: {
+        convertedCount?: number;
+        failedTaskIds?: number[];
+        failedMessages?: string[];
+        alreadyTransferredCount?: number;
+        skippedCount?: number;
+      } | null = null;
+
+      try {
+        payload = await res.json();
+      } catch {
+        payload = null;
+      }
+
+      const converted = payload?.convertedCount ?? accepted;
+      const already = payload?.alreadyTransferredCount ?? 0;
+      const failedList = Array.isArray(payload?.failedTaskIds) ? payload?.failedTaskIds ?? [] : [];
+      const failed = failedList.length;
+
+      let successMsg = `Đã yêu cầu chuyển ${converted} công việc của ${hospital.label} sang bảo trì`;
+      if (already > 0) successMsg += ` (đã đánh dấu trước đó: ${already})`;
+      toast.success(`${successMsg}.`);
+
+      if (failed > 0) {
+        const detail = (payload?.failedMessages || []).filter(Boolean).join("; ");
+        toast.error(`Có ${failed} công việc chuyển thất bại${detail ? `: ${detail}` : ""}`);
+      }
+
+      await fetchHospitalsWithTasks();
+      if (!showHospitalList && selectedHospital === hospital.label) {
+        await fetchList();
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(msg || "Lỗi khi chuyển sang bảo trì");
+    }
+  };
 
   return (
     <div className="p-6 xl:p-10">
@@ -1244,7 +1354,7 @@ const ImplementationTasksPage: React.FC = () => {
                 />
                 <datalist id="hospital-list">
                   {hospitalOptions.map((h) => (
-                    <option key={h.id} value={h.label} />
+                    <option key={h.id ?? h.label} value={h.label} />
                   ))}
                 </datalist>
               </div>
@@ -1281,7 +1391,7 @@ const ImplementationTasksPage: React.FC = () => {
               </select>
             </div>
 
-            {isSuperAdmin || userTeam === "DEPLOYMENT" ? (
+            {canManage ? (
               <button
                 className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700 flex items-center gap-2"
                 onClick={async () => { 
@@ -1366,7 +1476,7 @@ const ImplementationTasksPage: React.FC = () => {
                       <option value="asc">Tăng dần</option>
                       <option value="desc">Giảm dần</option>
                     </select>
-                    {(isSuperAdmin || userTeam === "DEPLOYMENT") && (
+                    {canManage && (
                       <button
                         className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
                         onClick={() => { setEditing(null); setModalOpen(true); }}
@@ -1402,7 +1512,7 @@ const ImplementationTasksPage: React.FC = () => {
                           {filteredHospitals
                             .slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize)
                             .map((hospital, index) => (
-                            <tr key={hospital.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => { setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }}>
+                            <tr key={hospital.id ?? `${hospital.label}-${index}`} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => { setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }}>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospitalPage * hospitalSize + index + 1}</td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="flex items-center gap-3">
@@ -1425,7 +1535,40 @@ const ImplementationTasksPage: React.FC = () => {
                                 </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                <button onClick={(e) => { e.stopPropagation(); setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }} className="text-blue-600 hover:text-blue-800 font-medium">Xem task</button>
+                                <div className="flex items-center gap-3">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedHospital(hospital.label);
+                                      setShowHospitalList(false);
+                                      setPage(0);
+                                    }}
+                                    className="text-blue-600 hover:text-blue-800 font-medium"
+                                  >
+                                    Xem task
+                                  </button>
+                                  {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) === (hospital.taskCount || 0) && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleConvertHospital(hospital);
+                                      }}
+                                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-medium hover:bg-indigo-100 transition-colors"
+                                      title="Chuyển tất cả tác vụ đã hoàn thành sang bảo trì"
+                                    >
+                                      ➜ Chuyển sang bảo trì
+                                    </button>
+                                  )}
+                                  {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) < (hospital.taskCount || 0) && (
+                                    <span
+                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-sm"
+                                      title={`Còn ${(hospital.taskCount || 0) - (hospital.acceptedCount || 0)} task chưa hoàn thành`}
+                                    >
+                                      <span className="text-orange-500">⚠</span>
+                                      Chưa thể chuyển
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -1465,8 +1608,8 @@ const ImplementationTasksPage: React.FC = () => {
                   onOpen={() => { setDetailItem(row); setDetailOpen(true); }}
                   onEdit={() => { setEditing(row); setModalOpen(true); }}
                   onDelete={(id: number) => { handleDelete(id); }}
-                  canEdit={isSuperAdmin || (userTeam === "DEPLOYMENT" && String(row.status || '').toUpperCase() !== 'ACCEPTED')}
-                  canDelete={isSuperAdmin || (userTeam === "DEPLOYMENT" && String(row.status || '').toUpperCase() !== 'ACCEPTED')}
+                  canEdit={canManage}
+                  canDelete={canManage}
                 />
 
               ))
@@ -1507,7 +1650,11 @@ const ImplementationTasksPage: React.FC = () => {
         onSubmit={handleSubmit}
       />
 
-      <DetailModal open={detailOpen} onClose={() => setDetailOpen(false)} item={detailItem} />
+      <DetailModal
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        item={detailItem}
+      />
     </div>
   );
 };
