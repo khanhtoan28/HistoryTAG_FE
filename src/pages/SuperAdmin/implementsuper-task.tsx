@@ -25,6 +25,7 @@ type ImplTask = {
   deadline?: string | null;
   startDate?: string | null;
   acceptanceDate?: string | null;
+  completionDate?: string | null;
   finishDate?: string | null;
   notes?: string | null;
 };
@@ -118,7 +119,7 @@ const ImplementSuperTaskPage: React.FC = () => {
   
   // New state for hospital list view
   const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
-  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number }>>([]);
+  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean }>>([]);
   const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
   const [hospitalPage, setHospitalPage] = useState<number>(0);
   const [hospitalSize, setHospitalSize] = useState<number>(20);
@@ -294,6 +295,7 @@ const ImplementSuperTaskPage: React.FC = () => {
           taskCount: taskCount,
           nearDueCount: 0,
           overdueCount: 0,
+          transferredCount: 0,
         };
       });
 
@@ -325,7 +327,7 @@ const ImplementSuperTaskPage: React.FC = () => {
       const allRes = await fetch(`${apiBase}?${allParams.toString()}`, { method: 'GET', headers: authHeaders(), credentials: 'include' });
       const allPayload = allRes.ok ? await allRes.json() : [];
       const allItems = Array.isArray(allPayload?.content) ? allPayload.content : Array.isArray(allPayload) ? allPayload : [];
-      const augment = (list: typeof baseList) => {
+      const augment = (list: Array<typeof baseList[number] & { acceptedCount?: number }>) => {
         const today = new Date();
         const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
         for (const it of allItems as any[]) {
@@ -333,8 +335,15 @@ const ImplementSuperTaskPage: React.FC = () => {
           const label = String(it?.hospitalName || '').trim();
           const target = list.find(x => x.label === label);
           if (!target) continue;
+          const isTransferred = Boolean((it as any)?.transferredToMaintenance) || statusUp === 'TRANSFERRED';
+          if (isTransferred) {
+            target.transferredCount = (target.transferredCount || 0) + 1;
+          }
+          if (statusUp === 'TRANSFERRED') {
+            target.acceptedCount = (target.acceptedCount || 0) + 1;
+          }
           // Skip completed tasks when counting near due/overdue
-          if (statusUp === 'COMPLETED' || (it as any).transferredToMaintenance) continue;
+          if (statusUp === 'COMPLETED' || isTransferred) continue;
           if (!it?.deadline) continue;
           const d = new Date(it.deadline);
           if (Number.isNaN(d.getTime())) continue;
@@ -345,8 +354,13 @@ const ImplementSuperTaskPage: React.FC = () => {
         }
       };
 
-      const withCompleted = baseList.map((h, idx) => ({ ...h, acceptedCount: completedCounts[idx] ?? 0 }));
+      const withCompleted = baseList.map((h, idx) => ({ ...h, acceptedCount: completedCounts[idx] ?? 0, allTransferred: false }));
       augment(withCompleted);
+      for (const item of withCompleted) {
+        const total = item.taskCount ?? 0;
+        const transferredCount = item.transferredCount ?? 0;
+        item.allTransferred = total > 0 && transferredCount >= total;
+      }
       setHospitalsWithTasks(withCompleted);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -459,6 +473,18 @@ const ImplementSuperTaskPage: React.FC = () => {
     return list;
   }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalSortBy, hospitalSortDir]);
 
+  const hospitalSummary = React.useMemo(() => {
+    const total = hospitalsWithTasks.length;
+    const filteredCount = filteredHospitals.length;
+    let completed = 0;
+    for (const h of hospitalsWithTasks) {
+      if ((h.taskCount || 0) > 0 && (h.acceptedCount || 0) === (h.taskCount || 0)) {
+        completed += 1;
+      }
+    }
+    return { total, filteredCount, completed };
+  }, [hospitalsWithTasks, filteredHospitals]);
+
   async function fetchAcceptedCountForHospital(hospitalName: string) {
     try {
       // Count only COMPLETED as completed for display
@@ -545,6 +571,9 @@ const ImplementSuperTaskPage: React.FC = () => {
     // Refresh task list if viewing tasks
     if (!showHospitalList) {
       await fetchList();
+      if (selectedHospital) {
+        await fetchAcceptedCountForHospital(selectedHospital);
+      }
     } else {
       setData((s) => s.filter((x) => x.id !== id));
     }
@@ -600,6 +629,9 @@ const ImplementSuperTaskPage: React.FC = () => {
     // If creating new task or updating task for a specific hospital, refresh task list
     if (!isUpdate || (selectedHospital && !showHospitalList)) {
       await fetchList();
+      if (selectedHospital && !showHospitalList) {
+        await fetchAcceptedCountForHospital(selectedHospital);
+      }
     }
     
     toast.success(isUpdate ? "Cập nhật thành công" : "Tạo mới thành công");
@@ -679,6 +711,26 @@ const ImplementSuperTaskPage: React.FC = () => {
                     <option value="incomplete">Chưa hoàn thành hết</option>
                     <option value="unaccepted">Chưa có hoàn thành</option>
                   </select>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
+                  <span className="font-semibold text-gray-800 dark:text-gray-200">
+                    Tổng bệnh viện:
+                    <span className="ml-1 font-bold text-gray-900 dark:text-gray-100">
+                      {loadingHospitals ? "..." : hospitalSummary.total}
+                    </span>
+                  </span>
+                  <span className="font-semibold text-gray-800 dark:text-gray-200">
+                    Đang hiển thị:
+                    <span className="ml-1 font-bold text-gray-900 dark:text-gray-100">
+                      {loadingHospitals ? "..." : hospitalSummary.filteredCount}
+                    </span>
+                  </span>
+                  <span className="font-semibold text-gray-800 dark:text-gray-200">
+                    Đã hoàn thành 100%:
+                    <span className="ml-1 font-bold text-gray-900 dark:text-gray-100">
+                      {loadingHospitals ? "..." : hospitalSummary.completed}
+                    </span>
+                  </span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -776,7 +828,13 @@ const ImplementSuperTaskPage: React.FC = () => {
                               >
                                 Xem task 
                               </button>
-                              { (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) === (hospital.taskCount || 0) && (
+                              { (hospital.taskCount || 0) > 0 && hospital.allTransferred ? (
+                                <span 
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-sm"
+                                >
+                                  Đã chuyển sang bảo trì
+                                </span>
+                              ) : (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) === (hospital.taskCount || 0) ? (
                                 <button
                                   onClick={(e) => { 
                                     e.stopPropagation(); 
@@ -787,8 +845,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                                 >
                                   ➜ Chuyển sang bảo trì
                                 </button>
-                              ) }
-                              { (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) < (hospital.taskCount || 0) && (
+                              ) : (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) < (hospital.taskCount || 0) && (
                                 <span 
                                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-sm"
                                   title={`Còn ${(hospital.taskCount || 0) - (hospital.acceptedCount || 0)} task chưa hoàn thành`}
@@ -905,7 +962,7 @@ const ImplementSuperTaskPage: React.FC = () => {
               )}
             </div>
           </div>
-
+ 
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <select className="rounded-lg border px-3 py-2 text-sm" value={sortBy} onChange={(e) => { setSortBy(e.target.value); setPage(0); }}>
@@ -1022,6 +1079,7 @@ const ImplementSuperTaskPage: React.FC = () => {
     </div>
   );
 };
+
 function DetailModal({
   open,
   onClose,
@@ -1078,8 +1136,7 @@ function DetailModal({
             <Info icon={<FiInfo />} label="Số lượng" value={item.quantity ?? "—"} />
             <Info icon={<FiClock />} label="Deadline" value={fmt(item.deadline)} />
             <Info icon={<FiCalendar />} label="Ngày bắt đầu" value={fmt(item.startDate)} />
-            <Info icon={<FiCalendar />} label="Ngày nghiệm thu" value={fmt(item.acceptanceDate)} />
-            <Info icon={<FiCalendar />} label="Ngày hoàn thành" value={fmt(item.finishDate)} />
+            <Info icon={<FiCalendar />} label="Ngày hoàn thành" value={fmt(item.finishDate ?? item.completionDate)} />
             <Info icon={<FiCalendar />} label="Tạo lúc" value={fmt(item.createdAt)} />
           </div>
 

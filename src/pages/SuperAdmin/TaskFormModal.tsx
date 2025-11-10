@@ -179,7 +179,6 @@ export default function TaskFormModal({
         completionDate: initial?.completionDate ?? "",
         status: initial?.status ?? "",
         startDate: initial?.startDate ?? "",
-        acceptanceDate: initial?.acceptanceDate ?? "",
     }));
 
     const [hospitalOpt, setHospitalOpt] = useState<{ id: number; name: string } | null>(() => {
@@ -209,7 +208,6 @@ export default function TaskFormModal({
                 completionDate: initial?.completionDate ?? "",
                 status: initial?.status ?? "RECEIVED",
                 startDate: initial?.startDate ?? "",
-                acceptanceDate: initial?.acceptanceDate ?? "",
             });
 
             const hid = initial?.hospitalId || 0;
@@ -236,26 +234,42 @@ export default function TaskFormModal({
         return () => window.removeEventListener("keydown", onKey);
     }, [open, onClose]);
 
+    const pad = (n: number) => String(n).padStart(2, "0");
+
+    function localInputFromDate(date: Date) {
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function parseLocalInput(value: string) {
+        const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+        if (!match) return null;
+        const [, y, m, d, h, min] = match;
+        const date = new Date();
+        date.setFullYear(Number(y), Number(m) - 1, Number(d));
+        date.setHours(Number(h), Number(min), 0, 0);
+        return date;
+    }
+
     function toISOOrNull(v?: string | Date | null) {
         if (!v) return null;
-        try {
-            return typeof v === "string" ? (v.trim() ? new Date(v).toISOString() : null) : v.toISOString();
-        } catch {
-            return null;
+        if (v instanceof Date) {
+            return Number.isNaN(v.getTime()) ? null : v.toISOString();
         }
+        if (typeof v === "string") {
+            const trimmed = v.trim();
+            if (!trimmed) return null;
+            const parsed = parseLocalInput(trimmed) ?? new Date(trimmed);
+            return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+        }
+        return null;
     }
 
     function toLocalInputValue(v?: string | null) {
         if (!v) return "";
-        const d = new Date(v);
-        if (Number.isNaN(d.getTime())) return "";
-        const pad = (n: number) => String(n).padStart(2, "0");
-        const year = d.getFullYear();
-        const month = pad(d.getMonth() + 1);
-        const day = pad(d.getDate());
-        const hours = pad(d.getHours());
-        const minutes = pad(d.getMinutes());
-        return `${year}-${month}-${day}T${hours}:${minutes}`;
+        const parsed = new Date(v);
+        if (Number.isNaN(parsed.getTime())) return "";
+        return localInputFromDate(parsed);
     }
 
     const [submitting, setSubmitting] = useState(false);
@@ -292,6 +306,10 @@ export default function TaskFormModal({
 
         const startDateIso = toISOOrNull(model.startDate) ?? (initial?.id ? null : new Date().toISOString());
 
+        const statusUpper = String(model.status || "").toUpperCase();
+        const completionIso = toISOOrNull(model.completionDate);
+        const derivedCompletion = completionIso ?? (statusUpper === "COMPLETED" ? new Date().toISOString() : null);
+
         const payload: ImplementationTaskRequestDTO = {
             name: model.name!.trim(),
             hospitalId: hospitalOpt.id,
@@ -305,10 +323,9 @@ export default function TaskFormModal({
             additionalRequest: model.additionalRequest ?? null,
             apiUrl: null,
             deadline: toISOOrNull(model.deadline) ?? null,
-            completionDate: toISOOrNull(model.completionDate) ?? null,
+            completionDate: derivedCompletion,
             status: model.status ?? null,
             startDate: initial?.id ? startDateIso : new Date().toISOString(),
-            acceptanceDate: toISOOrNull(model.acceptanceDate) ?? null,
         };
 
         try {
@@ -466,9 +483,25 @@ export default function TaskFormModal({
                                 {/* Removed fields: Số lượng, Agency, HIS, Hardware, API URL, BHYT */}
 
                                 <Field label="Trạng thái" required>
-                                    <Select disabled={readOnly || isTransferred}
+                                <Select
+                                        disabled={readOnly || isTransferred}
                                         value={model.status ?? ""}
-                                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setModel((s) => ({ ...s, status: e.target.value || null }))}
+                                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                                            const nextStatus = e.target.value || null;
+                                            setModel((s) => {
+                                                const upper = (nextStatus || "").toUpperCase();
+                                                let nextCompletion = s.completionDate;
+                                                if (upper === "COMPLETED") {
+                                                    const existingLocal = toLocalInputValue(s.completionDate);
+                                                    nextCompletion = existingLocal || localInputFromDate(new Date());
+                                                }
+                                                return {
+                                                    ...s,
+                                                    status: nextStatus,
+                                                    completionDate: nextCompletion,
+                                                };
+                                            });
+                                        }}
                                     >
                                         <option value="">— Chọn trạng thái —</option>
                                         {(excludeAccepted ? STATUS_OPTIONS.filter(o => o.value !== 'ACCEPTED') : STATUS_OPTIONS).map((opt) => (
@@ -483,10 +516,6 @@ export default function TaskFormModal({
 
                                 <Field label="Ngày bắt đầu">
                                     <TextInput disabled={readOnly || isTransferred} type="datetime-local" value={toLocalInputValue(model.startDate)} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, startDate: e.target.value }))} />
-                                </Field>
-
-                                <Field label="Ngày nghiệm thu">
-                                    <TextInput disabled={readOnly || isTransferred} type="datetime-local" value={toLocalInputValue(model.acceptanceDate)} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, acceptanceDate: e.target.value }))} />
                                 </Field>
 
                                 <Field label="Ngày hoàn thành">

@@ -103,17 +103,15 @@ export default function TaskCardNew({
 
   // (Indicators removed; keep component lean and avoid unused vars)
 
-  const transferredToMaintenance = Boolean((task as any)?.transferredToMaintenance);
+  const transferredToMaintenance =
+    Boolean((task as any)?.transferredToMaintenance) ||
+    String(task.status ?? "").toUpperCase() === "TRANSFERRED";
   const statusValue = typeof task.status === "string" ? task.status : undefined;
-  const fallbackStatus = statusValue ?? "";
-  const badgeClass = transferredToMaintenance
-    ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200"
-    : (statusClassOverride || statusBadgeClass)(fallbackStatus);
-  const badgeLabel = transferredToMaintenance
-    ? "Chờ bảo trì"
-    : statusLabelOverride
-      ? statusLabelOverride(statusValue)
-      : getDisplayStatus(statusValue);
+  const effectiveStatus = transferredToMaintenance ? "COMPLETED" : (statusValue ?? "");
+  const badgeClass = (statusClassOverride || statusBadgeClass)(effectiveStatus);
+  const badgeLabel = statusLabelOverride
+    ? statusLabelOverride(effectiveStatus)
+    : getDisplayStatus(effectiveStatus);
 
   return (
     <div

@@ -245,6 +245,12 @@ const DevSuperTaskPage: React.FC = () => {
     toast.success(isUpdate ? "Cập nhật thành công" : "Tạo mới thành công");
   };
 
+  const handleModalClose = () => {
+    setModalOpen(false);
+    setViewOnly(false);
+    setEditing(null);
+  };
+
   if (!isSuper) {
     return (
       <div className="p-6 text-red-600">
@@ -425,13 +431,13 @@ const DevSuperTaskPage: React.FC = () => {
       {viewOnly ? (
         <DetailModal
           open={modalOpen}
-          onClose={() => setModalOpen(false)}
+          onClose={handleModalClose}
           item={editing}
         />
       ) : (
         <TaskFormModal
           open={modalOpen}
-          onClose={() => setModalOpen(false)}
+          onClose={handleModalClose}
           initial={editing ?? undefined}
           onSubmit={handleSubmit}
           readOnly={false}
