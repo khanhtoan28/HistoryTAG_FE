@@ -15,12 +15,14 @@ import {
 const VN_DEPARTMENT: Record<string, string> = {
   IT: "Phòng Kỹ Thuật",
   ACCOUNTING: "Phòng Kế Toán",
+  BUSINESS: "Phòng Kinh Doanh",
 };
 
 const VN_TEAM: Record<string, string> = {
   DEV: "Lập Trình Viên",
   DEPLOYMENT: "Triển Khai",
   MAINTENANCE: "Bảo Hành, Bảo Trì",
+  SALES: "Kinh Doanh",
 };
 
 export default function UserInfoCard() {
@@ -338,6 +340,7 @@ export default function UserInfoCard() {
                         <option value="">-- Chọn phòng ban --</option>
                         <option value="IT">Phòng Kỹ Thuật</option>
                         <option value="ACCOUNTING">Phòng Kế Toán</option>
+                        <option value="BUSINESS">Phòng Kinh Doanh</option>
                       </select>
                     </div>
 
@@ -352,6 +355,7 @@ export default function UserInfoCard() {
                         <option value="DEV">Team Lập Trình Viên</option>
                         <option value="DEPLOYMENT">Team Triển Khai</option>
                         <option value="MAINTENANCE">Team Bảo Hành, Bảo Trì</option>
+                        <option value="SALES">Team Kinh Doanh</option>
                       </select>
                     </div>
                   </div>

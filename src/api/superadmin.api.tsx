@@ -18,6 +18,8 @@ export type UserResponseDTO = {
   department?: string | null;
   team?: string | null;
   roles?: { roleId: number; roleName: string }[];
+  businessProjectId?: number | null;
+  businessProjectName?: string | null;
 };
 
 export type SuperAdminUserCreateDTO = {
@@ -31,6 +33,7 @@ export type SuperAdminUserCreateDTO = {
   department: string;
   team?: string;
   roles: string[];
+  businessProjectId?: number | null;
 };
 
 export type UserUpdateRequestDTO = {
@@ -41,9 +44,10 @@ export type UserUpdateRequestDTO = {
   avatar?: File | null;
   assignedHospitalIds?: number[];
   workStatus?: string;
-  department?: "IT" | "ACCOUNTING" | null;
-  team?: "DEV" | "DEPLOYMENT" | "MAINTENANCE" | null;
+  department?: "IT" | "ACCOUNTING" | "BUSINESS" | null;
+  team?: "DEV" | "DEPLOYMENT" | "MAINTENANCE" | "SALES" | null;
   roles?: string[];
+  businessProjectId?: number | null;
 };
 
 // User Management APIs
