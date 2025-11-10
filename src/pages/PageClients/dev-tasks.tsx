@@ -139,49 +139,97 @@ function Button(
 
 // (removed legacy Select wrapper; use native select with classes for consistency)
 
-const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
-    { value: "NOT_STARTED", label: "Chưa triển khai" },
-    { value: "IN_PROGRESS", label: "Đang triển khai" },
-    { value: "API_TESTING", label: "Test thông api" },
-    { value: "INTEGRATING", label: "Tích hợp với viện" },
-    { value: "WAITING_FOR_DEV", label: "Chờ dev build update" },
-    { value: "ACCEPTED", label: "Nghiệm thu" },
-];
+type CanonicalStatus = "RECEIVED" | "IN_PROCESS" | "COMPLETED" | "ISSUE" | "CANCELLED";
 
+const CANONICAL_STATUS_CLASSES: Record<CanonicalStatus, string> = {
+    RECEIVED: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+    IN_PROCESS: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+    COMPLETED: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+    ISSUE: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+    CANCELLED: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+    NOT_STARTED: "Chưa triển khai",
+    RECEIVED: "Chưa triển khai",
+    IN_PROGRESS: "Đang triển khai",
+    API_TESTING: "Test thông api",
+    INTEGRATING: "Tích hợp với viện",
+    WAITING_FOR_DEV: "Chờ dev build update",
+    ACCEPTED: "Nghiệm thu",
+    COMPLETED: "Hoàn thành",
+    DONE: "Hoàn thành",
+    FINISHED: "Hoàn thành",
+    HOAN_THANH: "Hoàn thành",
+    HOÀN_THÀNH: "Hoàn thành",
+    ISSUE: "Gặp sự cố",
+    FAILED: "Gặp sự cố",
+    ERROR: "Gặp sự cố",
+    PENDING: "Chờ xử lý",
+    CANCELLED: "Hủy",
+    CANCELED: "Hủy",
+};
+
+const STATUS_CANONICAL_MAP: Record<string, CanonicalStatus> = {
+    NOT_STARTED: "RECEIVED",
+    RECEIVED: "RECEIVED",
+    PENDING: "RECEIVED",
+    IN_PROGRESS: "IN_PROCESS",
+    API_TESTING: "IN_PROCESS",
+    INTEGRATING: "IN_PROCESS",
+    WAITING_FOR_DEV: "IN_PROCESS",
+    IN_PROCESS: "IN_PROCESS",
+    ACCEPTED: "COMPLETED",
+    COMPLETED: "COMPLETED",
+    DONE: "COMPLETED",
+    FINISHED: "COMPLETED",
+    HOAN_THANH: "COMPLETED",
+    HOÀN_THÀNH: "COMPLETED",
+    TRANSFERRED: "COMPLETED",
+    ISSUE: "ISSUE",
+    FAILED: "ISSUE",
+    ERROR: "ISSUE",
+    CANCELLED: "CANCELLED",
+    CANCELED: "CANCELLED",
+};
+
+const STATUS_FILTER_VALUES = [
+    "NOT_STARTED",
+    "IN_PROGRESS",
+    "API_TESTING",
+    "INTEGRATING",
+    "WAITING_FOR_DEV",
+    "ACCEPTED",
+] as const;
+
+function formatStatusKey(status?: string | null) {
+    if (!status) return "";
+    return status.toString().trim().toUpperCase().replace(/\s+/g, "_");
+}
+
+function normalizeStatus(status?: string | null): CanonicalStatus | undefined {
+    const key = formatStatusKey(status);
+    return (key && STATUS_CANONICAL_MAP[key]) || undefined;
+}
 
 function statusLabel(status?: string | null) {
-    switch (status) {
-        case "NOT_STARTED":
-            return "Chưa triển khai";
-        case "IN_PROGRESS":
-            return "Đang triển khai";
-        case "API_TESTING":
-            return "Test thông api";
-        case "INTEGRATING":
-            return "Tích hợp với viện";
-        case "WAITING_FOR_DEV":
-            return "Chờ dev build update";
-        case "COMPLETED":
-        case "DONE":
-        case "FINISHED":
-            return "Hoàn thành";
-        case "ACCEPTED":
-            return "Nghiệm thu";
-        default:
-            return status || "";
-    }
+    const key = formatStatusKey(status);
+    if (!key) return status ? String(status) : "";
+    return STATUS_LABELS[key] || String(status);
+}
+
+const STATUS_OPTIONS: Array<{ value: string; label: string }> = STATUS_FILTER_VALUES.map((value) => ({
+    value,
+    label: statusLabel(value),
+}));
+
+function statusBadgeClasses(status?: string | null) {
+    const normalized = normalizeStatus(status);
+    return normalized ? CANONICAL_STATUS_CLASSES[normalized] : CANONICAL_STATUS_CLASSES.CANCELLED;
 }
 
 function isCompletionStatus(status?: string | null) {
-    if (!status) return false;
-    const upper = status.toString().trim().toUpperCase();
-    const normalized = upper.replace(/\s+/g, "_");
-    return normalized === "ACCEPTED"
-        || normalized === "COMPLETED"
-        || normalized === "DONE"
-        || normalized === "FINISHED"
-        || normalized === "HOAN_THANH"
-        || normalized === "HOÀN_THÀNH";
+    return normalizeStatus(status) === "COMPLETED";
 }
 
 function toDatetimeLocalInput(value?: string | null) {
@@ -921,27 +969,8 @@ function DetailModal({
         d ? new Date(d).toLocaleString("vi-VN") : "—";
 
     // Tô màu badge theo trạng thái
-    const statusBadge = (status?: string | null) => {
-        const s = (status || "").toUpperCase();
-        const base =
-            "px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap";
-        switch (s) {
-            case "NOT_STARTED":
-                return `${base} bg-gray-100 text-gray-800`;
-            case "IN_PROGRESS":
-                return `${base} bg-yellow-100 text-yellow-800`;
-            case "API_TESTING":
-                return `${base} bg-blue-100 text-blue-800`;
-            case "INTEGRATING":
-                return `${base} bg-purple-100 text-purple-800`;
-            case "WAITING_FOR_DEV":
-                return `${base} bg-orange-100 text-orange-800`;
-            case "ACCEPTED":
-                return `${base} bg-green-100 text-green-800`;
-            default:
-                return `${base} bg-gray-100 text-gray-800`;
-        }
-    };
+    const statusBadge = (status?: string | null) =>
+        `px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap ${statusBadgeClasses(status)}`;
 
     return (
         <div
@@ -1320,6 +1349,8 @@ const ImplementationTasksPage: React.FC = () => {
                                     onDelete={(id) => handleDelete(id)}
                                     canEdit={isSuperAdmin || userTeam === "DEV"}
                                     canDelete={isSuperAdmin || userTeam === "DEV"}
+                                    statusLabelOverride={statusLabel}
+                                    statusClassOverride={statusBadgeClasses}
                                 />
                             ))
                         )
