@@ -820,7 +820,7 @@ function TaskFormModal({
 
                                 {/* PIC theo TÊN */}
                                 <RemoteSelect
-                                    label="Người phụ trách (PIC)"
+                                    label="Người phụ trách ("
                                     required
                                     placeholder="Nhập tên người phụ trách để tìm…"
                                     fetchOptions={searchPICs}
