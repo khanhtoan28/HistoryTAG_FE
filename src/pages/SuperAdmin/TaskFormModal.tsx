@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
@@ -95,27 +96,9 @@ const STATUS_OPTIONS: Array<{ value: keyof typeof STATUS_LABELS; label: string }
     Object.entries(STATUS_LABELS) as Array<[keyof typeof STATUS_LABELS, string]>
 ).map(([value, label]) => ({ value, label }));
 
-const STATUS_CANONICAL_MAP: Record<string, "RECEIVED" | "IN_PROCESS" | "COMPLETED" | "ISSUE" | "CANCELLED"> = {
-    RECEIVED: "RECEIVED",
-    IN_PROCESS: "IN_PROCESS",
-    COMPLETED: "COMPLETED",
-    ISSUE: "ISSUE",
-    CANCELLED: "CANCELLED",
-    NOT_STARTED: "RECEIVED",
-    IN_PROGRESS: "IN_PROCESS",
-    API_TESTING: "IN_PROCESS",
-    INTEGRATING: "IN_PROCESS",
-    WAITING_FOR_DEV: "IN_PROCESS",
-    ACCEPTED: "COMPLETED",
-    PENDING_TRANSFER: "COMPLETED",
-    TRANSFERRED: "COMPLETED",
-};
+// canonical map is defined elsewhere; avoid duplicate constants in this module
 
-function normalizeStatus(status?: string | null): "RECEIVED" | "IN_PROCESS" | "COMPLETED" | "ISSUE" | "CANCELLED" | undefined {
-    if (!status) return undefined;
-    const upper = status.toString().toUpperCase();
-    return STATUS_CANONICAL_MAP[upper] || (upper as any);
-}
+// Note: normalizeStatus is defined in other shared modules; avoid duplicate definition here to prevent unused symbol
 
 export default function TaskFormModal({
     open,
@@ -504,7 +487,7 @@ export default function TaskFormModal({
                                         }}
                                     >
                                         <option value="">— Chọn trạng thái —</option>
-                                        {(excludeAccepted ? STATUS_OPTIONS.filter(o => o.value !== 'ACCEPTED') : STATUS_OPTIONS).map((opt) => (
+                                        {(excludeAccepted ? STATUS_OPTIONS.filter(o => String(o.value) !== 'ACCEPTED') : STATUS_OPTIONS).map((opt) => (
                                             <option key={opt.value} value={opt.value}>{opt.label}</option>
                                         ))}
                                     </Select>

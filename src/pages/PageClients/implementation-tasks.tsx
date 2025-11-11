@@ -1511,8 +1511,6 @@ const ImplementationTasksPage: React.FC = () => {
               if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
               setLoading(false);
             }}>
-
-              <span>Làm mới</span>
             </button>
           </div>
         </div>

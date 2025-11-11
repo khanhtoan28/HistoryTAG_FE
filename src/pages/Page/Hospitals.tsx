@@ -7,19 +7,17 @@ import Pagination from "../../components/common/Pagination";
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
 import { FiMapPin, FiMail, FiPhone, FiUser, FiClock, FiTag, FiImage, FiMap } from "react-icons/fi";
 import { FaHospitalAlt } from "react-icons/fa";
+import toast from "react-hot-toast";
 
 export type Hospital = {
   id: number;
   hospitalCode?: string | null;
   name: string;
   address?: string | null;
-  taxCode?: string | null;
   contactPerson?: string | null;
-  contactPosition?: string | null;
   contactEmail?: string | null;
   contactNumber?: string | null;
-  itDepartmentContact?: string | null;
-  itContactPhone?: string | null; 
+  // taxCode, contactPosition, and IT contact fields removed from this page model
   hisSystemId?: number | null;
   hisSystemName?: string | null;
   bankName?: string | null;
@@ -32,7 +30,6 @@ export type Hospital = {
   notes?: string | null;
   imageUrl?: string | null;
   priority?: string | null;
-  createdAt?: string;
   updatedAt?: string | null;
   assignedUserIds?: number[];
   hardwareId?: number | null;
@@ -43,13 +40,9 @@ export type HospitalForm = {
   hospitalCode?: string;
   name: string;
   address?: string;
-  taxCode?: string;
   contactPerson?: string;
-  contactPosition?: string;
   contactEmail?: string;
   contactNumber?: string;
-  itDepartmentContact?: string;
-  itContactPhone?: string;
   bankName?: string;
   bankContactPerson?: string;
   province?: string;
@@ -274,7 +267,6 @@ function DetailModal({
             <Info label="Tên bệnh viện" icon={<FaHospitalAlt />} value={item.name} />
             <Info label="Địa chỉ" icon={<FiMapPin />} value={item.address || "—"} />
             <Info label="Tỉnh/Thành" icon={<FiMap />} value={item.province || "—"} />
-            <Info label="Mã số thuế" icon={<FiTag />} value={item.taxCode || "—"} />
 
             <Info
               label="Trạng thái"
@@ -297,17 +289,14 @@ function DetailModal({
             />
 
             <Info label="Người liên hệ" icon={<FiUser />} value={item.contactPerson || "—"} />
-            <Info label="Vị trí liên hệ" icon={<FiTag />} value={item.contactPosition || "—"} />
-            <Info label="Email liên hệ" icon={<FiMail />} value={item.contactEmail || "—"} />
-            <Info label="Số điện thoại" icon={<FiPhone />} value={item.contactNumber || "—"} />
-            <Info label="Phòng IT - Người liên hệ" icon={<FiUser />} value={item.itDepartmentContact || "—"} />
-            <Info label="Phòng IT - Số điện thoại" icon={<FiPhone />} value={item.itContactPhone || "—"} />
+            <Info label="Email người phụ trách" icon={<FiMail />} value={item.contactEmail || "—"} />
+            <Info label="Đầu mối liên hệ viện" icon={<FiPhone />} value={item.contactNumber || "—"} />
             <Info label="Đơn vị HIS" icon={<FiMapPin />} value={item.hisSystemName || item.hisSystemId || "—"} />
             <Info label="Phần cứng" icon={<FiImage />} value={item.hardwareName || item.hardwareId || "—"} />
             <Info label="Đơn vị tài trợ" icon={<FiUser />} value={item.bankName || "—"} />
             <Info label="Liên hệ đơn vị tài trợ" icon={<FiUser />} value={item.bankContactPerson || "—"} />
             {/* Project dates are managed by BusinessProject (master) and are not shown here */}
-            <Info label="Tạo lúc" icon={<FiClock />} value={fmt(item.createdAt)} />
+            {/* Removed: Mã số thuế, Vị trí liên hệ, Phòng IT contact, and Tạo lúc per request */}
             <Info label="Cập nhật lúc" icon={<FiClock />} value={fmt(item.updatedAt)} />
           </div>
 
@@ -408,13 +397,9 @@ export default function HospitalsPage() {
     hospitalCode: "",
     name: "",
     address: "",
-    taxCode: "",
     contactPerson: "",
-    contactPosition: "",
     contactEmail: "",
     contactNumber: "",
-    itDepartmentContact: "",
-    itContactPhone: "",
     bankName: "",
     bankContactPerson: "",
     province: "",
@@ -447,13 +432,9 @@ export default function HospitalsPage() {
       hospitalCode: h.hospitalCode ?? "",
       name: h.name ?? "",
       address: h.address ?? "",
-      taxCode: h.taxCode ?? "",
       contactPerson: h.contactPerson ?? "",
-      contactPosition: h.contactPosition ?? "",
       contactEmail: h.contactEmail ?? "",
       contactNumber: h.contactNumber ?? "",
-      itDepartmentContact: h.itDepartmentContact ?? "",
-      itContactPhone: h.itContactPhone ?? "",
       bankName: h.bankName ?? "",
       bankContactPerson: h.bankContactPerson ?? "",
       province: h.province ?? "",
@@ -583,6 +564,28 @@ export default function HospitalsPage() {
 
   const [hardwareOpt, setHardwareOpt] = useState<{ id: number; name: string } | null>(null);
 
+  const [hisOptions, setHisOptions] = useState<Array<{ id: number; name: string }>>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    (async () => {
+      try {
+        const url = `${API_BASE}/api/v1/superadmin/his?page=0&size=200`;
+        const res = await fetch(url, { headers: { ...authHeader() } });
+        if (!res.ok) return;
+        const data = await res.json();
+        // data may be a Spring page or an array
+        const list = Array.isArray(data) ? data : (Array.isArray(data.content) ? data.content : []);
+        const mapped = list.map((x: any) => ({ id: Number(x.id), name: String(x.name ?? x.label ?? x.id) }));
+        if (alive) setHisOptions(mapped.filter((x) => Number.isFinite(x.id)));
+      } catch (e) {
+        // ignore
+      }
+    })();
+    return () => { alive = false; };
+  }, [open]);
+
   useEffect(() => {
     // when opening modal populate hardwareOpt from form or viewing/editing metadata
     if (!open) return;
@@ -668,13 +671,9 @@ export default function HospitalsPage() {
       hospitalCode: "",
       name: "",
       address: "",
-      taxCode: "",
       contactPerson: "",
-      contactPosition: "",
       contactEmail: "",
       contactNumber: "",
-      itDepartmentContact: "",
-      itContactPhone: "",
       bankName: "",
       bankContactPerson: "",
       province: "",
@@ -724,7 +723,7 @@ export default function HospitalsPage() {
 
   async function onDelete(id: number) {
     if (!canEdit) {
-      alert("Bạn không có quyền xóa bệnh viện");
+      toast.error("Bạn không có quyền xóa bệnh viện");
       return;
     }
     if (!confirm("Xóa bệnh viện này?")) return;
@@ -734,12 +733,16 @@ export default function HospitalsPage() {
         method: "DELETE",
         headers: { ...authHeader() },
       });
-      if (!res.ok) throw new Error(`DELETE failed ${res.status}`);
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `DELETE failed ${res.status}`);
+      }
       await fetchList();
       // close modal if currently viewing the deleted item
       if (isViewing) closeModal();
+      toast.success("Xóa thành công");
     } catch (e: any) {
-      alert(e.message || "Xóa thất bại");
+      toast.error(e?.message || "Xóa thất bại");
     } finally {
       setLoading(false);
     }
@@ -762,29 +765,25 @@ export default function HospitalsPage() {
     setError(null);
 
     try {
-      const payload: any = {
-        hospitalCode: form.hospitalCode?.trim() || undefined,
-        name: form.name.trim(),
-        address: form.address?.trim() || undefined,
-        taxCode: form.taxCode?.trim() || undefined,
-        contactPerson: form.contactPerson?.trim() || undefined,
-        contactPosition: form.contactPosition?.trim() || undefined,
-        contactEmail: form.contactEmail?.trim() || undefined,
-        contactNumber: form.contactNumber?.trim() || undefined,
-        itDepartmentContact: form.itDepartmentContact?.trim() || undefined,
-        itContactPhone: form.itContactPhone?.trim() || undefined,
-        bankName: form.bankName?.trim() || undefined,
-        bankContactPerson: form.bankContactPerson?.trim() || undefined,
-        province: form.province?.trim() || undefined,
-        hisSystemId: form.hisSystemId ?? undefined,
-        hardwareId: form.hardwareId ?? undefined,
-        projectStatus: form.projectStatus,
+  const payload: any = {
+    hospitalCode: form.hospitalCode?.trim() || undefined,
+    name: form.name.trim(),
+    address: form.address?.trim() || undefined,
+    contactPerson: form.contactPerson?.trim() || undefined,
+    contactEmail: form.contactEmail?.trim() || undefined,
+    contactNumber: form.contactNumber?.trim() || undefined,
+    bankName: form.bankName?.trim() || undefined,
+    bankContactPerson: form.bankContactPerson?.trim() || undefined,
+    province: form.province?.trim() || undefined,
+    hisSystemId: form.hisSystemId ?? undefined,
+    hardwareId: form.hardwareId ?? undefined,
+    projectStatus: form.projectStatus,
   // project dates are handled by BusinessProject; do not send from Hospital
-        notes: form.notes?.trim() || undefined,
-        imageFile: form.imageFile || undefined,
-        priority: form.priority,
-        // assignedUserIds intentionally not sent from Hospital form
-      };
+    notes: form.notes?.trim() || undefined,
+    imageFile: form.imageFile || undefined,
+    priority: form.priority,
+    // assignedUserIds intentionally not sent from Hospital form
+  };
 
       const method = isEditing ? "PUT" : "POST";
       const url = isEditing ? `${BASE}/${editing!.id}` : BASE;
@@ -803,8 +802,10 @@ export default function HospitalsPage() {
       closeModal();
       setPage(0); // Reset trang 1
       await fetchList();
+      toast.success(isEditing ? "Cập nhật thành công" : "Tạo thành công");
     } catch (e: any) {
       setError(e.message || "Lưu thất bại");
+      toast.error(e?.message || "Lưu thất bại");
     } finally {
       setLoading(false);
     }
@@ -860,12 +861,6 @@ export default function HospitalsPage() {
               {canEdit && (
                 <button className={`rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md`} onClick={onCreate}> + Thêm bệnh viện</button>
               )}
-              {/* <button className="rounded-xl border-2 border-gray-300 px-5 py-3 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400 flex items-center gap-2" onClick={fetchList}>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Làm mới
-              </button> */}
             </div>
           </div>
         </ComponentCard>
@@ -1158,7 +1153,7 @@ export default function HospitalsPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="mb-1 block text-sm">Liên hệ chung</label>
+                      <label className="mb-1 block text-sm">Số điện thoại liên hệ viện</label>
                       <input
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
                         value={form.contactNumber || ""}
@@ -1167,7 +1162,7 @@ export default function HospitalsPage() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-sm">Email liên hệ</label>
+                      <label className="mb-1 block text-sm">Email người phụ trách</label>
                       <input
                         type="email"
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
@@ -1189,17 +1184,20 @@ export default function HospitalsPage() {
                     </div>
                     <div>
                       <label className="mb-1 block text-sm font-medium">Đơn vị HIS</label>
-                      <input
-                        type="number"
+                      <select
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                        placeholder="(không bắt buộc)"
                         value={form.hisSystemId ?? ""}
                         onChange={(e) => {
-                          const v = e.target.value.trim();
+                          const v = e.target.value;
                           setForm((s) => ({ ...s, hisSystemId: v === "" ? undefined : Number(v) }));
                         }}
                         disabled={isViewing || !canEdit}
-                      />
+                      >
+                        <option value="">(không bắt buộc)</option>
+                        {(hisOptions || []).map((h) => (
+                          <option key={h.id} value={h.id}>{h.name}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                   {/* Hardware selector */}

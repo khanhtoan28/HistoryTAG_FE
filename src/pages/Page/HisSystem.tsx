@@ -2,9 +2,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
-import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
+import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete, AiOutlinePlus } from "react-icons/ai";
 import { FaHospital } from "react-icons/fa";
-import { FiMapPin, FiMail, FiPhone, FiUser, FiClock, FiLink } from "react-icons/fi";
+import { FiMail, FiPhone, FiUser, FiClock } from "react-icons/fi";
+import toast from "react-hot-toast";
 
 // ===================== Types ===================== //
 export type SortDir = "asc" | "desc";
@@ -241,6 +242,7 @@ const HisSystemPage: React.FC = () => {
   // ------- modal helpers ------- //
   function onCreate() {
     setEditing(null);
+    setViewing(null);
     setForm({ name: "", address: "", contactPerson: "", email: "", phoneNumber: "", apiUrl: "" });
     setFormErrors({});
     setOpen(true);
@@ -302,21 +304,23 @@ const HisSystemPage: React.FC = () => {
 
   async function onDelete(id: number) {
     if (!canEdit) {
-      alert("Bạn không có quyền xóa HIS");
+      toast.error("Bạn không có quyền xóa HIS");
       return;
     }
     if (!confirm("Xóa HIS này?")) return;
     setLoading(true);
     try {
       // @ts-ignore
-      const res = await fetchWithFallback((base) => `${base}/${id}`, { method: "DELETE", headers: { ...authHeader() } });
+      await fetchWithFallback((base) => `${base}/${id}`, { method: "DELETE", headers: { ...authHeader() } });
       // adjust page when last item removed
       if (items.length === 1 && page > 0) setPage((p) => p - 1);
       await fetchList();
+      toast.success("Xóa HIS thành công");
     } catch (error: unknown) {
       const msg = errMsg(error, "Xóa thất bại");
       console.error("onDelete error:", error);
       setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -336,7 +340,7 @@ const HisSystemPage: React.FC = () => {
     try {
       const method = isEditing ? "PUT" : "POST";
       // @ts-ignore
-      const res = await fetchWithFallback((base) => (isEditing ? `${base}/${editing!.id}` : base), {
+      await fetchWithFallback((base) => (isEditing ? `${base}/${editing!.id}` : base), {
         method,
         headers: { ...authHeader() },
         body: JSON.stringify(form),
@@ -345,10 +349,12 @@ const HisSystemPage: React.FC = () => {
       setOpen(false);
       setEditing(null);
       await fetchList();
+      toast.success(isEditing ? "Cập nhật HIS thành công" : "Tạo HIS thành công");
     } catch (error: unknown) {
       const msg = errMsg(error, "Lưu thất bại");
       console.error("onSubmit error:", error);
       setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -384,12 +390,6 @@ const HisSystemPage: React.FC = () => {
               {canEdit && (
                 <button className="rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md" onClick={onCreate}> + Thêm HIS</button>
               )}
-              {/* <button className="rounded-xl border-2 border-gray-300 px-5 py-3 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400 flex items-center gap-2" onClick={fetchList}>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Làm mới
-              </button> */}
             </div>
           </div>
         </ComponentCard>
@@ -427,8 +427,7 @@ const HisSystemPage: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3">
                         <h4 title={h.name} className="font-semibold text-gray-900 truncate group-hover:text-primary">{h.name}</h4>
-                        <span className="text-xs text-gray-400">•</span>
-                        <span title={h.address || ""} className="text-xs text-gray-500">{h.address || "—"}</span>
+                        {/* address removed as requested */}
                       </div>
                       <div className="mt-2 text-sm text-gray-600">
                         <div className="truncate"><span className="text-xs text-gray-400">Người liên hệ: </span><span title={h.contactPerson || ""} className="font-medium text-gray-800">{h.contactPerson || "—"}</span>{h.phoneNumber && <span className="ml-2 text-xs text-gray-500">• {h.phoneNumber}</span>}</div>
@@ -447,7 +446,7 @@ const HisSystemPage: React.FC = () => {
                         title="Xem"
                         aria-label={`Xem ${h.name}`}
                         onClick={(e) => { e.stopPropagation(); onView(h); }}
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition transform group-hover:scale-105 text-xs font-medium"
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-blue-100 text-blue-700 hover:bg-blue-50 transition transform group-hover:scale-105 text-xs font-medium"
                       >
                         <AiOutlineEye className="w-4 h-4" />
                         <span className="hidden sm:inline">Xem</span>
@@ -519,7 +518,10 @@ const HisSystemPage: React.FC = () => {
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setOpen(false)} />
           <div className="relative z-10 w-full max-w-5xl rounded-3xl bg-white p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-2xl font-bold text-gray-900">{isViewing ? "Chi tiết HIS" : (isEditing ? "Cập nhật HIS" : "Thêm HIS")}</h3>
+              <h3 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                {!isViewing && !isEditing && <AiOutlinePlus className="w-6 h-6 text-blue-600" />}
+                {isViewing ? "Chi tiết HIS" : (isEditing ? "Cập nhật HIS" : "Thêm HIS")}
+              </h3>
               <button className="rounded-xl p-2 transition-all hover:bg-gray-100 hover:scale-105" onClick={() => setOpen(false)}>
                 {/* close */}
               </button>
@@ -536,16 +538,10 @@ const HisSystemPage: React.FC = () => {
             ) : isViewing ? (
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <Info stacked label="Tên HIS" icon={<FaHospital />} value={viewing?.name || "—"} />
-                <Info stacked label="Địa chỉ" icon={<FiMapPin />} value={viewing?.address || "—"} />
                 <Info stacked label="Người liên hệ" icon={<FiUser />} value={viewing?.contactPerson || "—"} />
                 <Info stacked label="Email" icon={<FiMail />} value={viewing?.email || "—"} />
                 <Info stacked label="Số điện thoại" icon={<FiPhone />} value={viewing?.phoneNumber || "—"} />
-                <Info
-                  stacked
-                  label="API URL"
-                  icon={<FiLink />}
-                  value={viewing?.apiUrl ? <a href={viewing.apiUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline break-words">{viewing.apiUrl}</a> : "—"}
-                />
+                {/* Removed Địa chỉ and API URL from view as requested */}
                 <Info stacked label="Tạo lúc" icon={<FiClock />} value={formatDateShort(viewing?.createdAt)} />
                 <Info stacked label="Cập nhật lúc" icon={<FiClock />} value={formatDateShort(viewing?.updatedAt)} />
 
@@ -559,7 +555,12 @@ const HisSystemPage: React.FC = () => {
               <form onSubmit={onSubmit} className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div className="space-y-5">
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-gray-700">Tên HIS*</label>
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">
+                      <span className="inline-flex items-center gap-2">
+                        <FaHospital className="w-4 h-4 text-gray-500" />
+                        <span>Tên HIS*</span>
+                      </span>
+                    </label>
                     <input
                         required
                         disabled={isViewing || !canEdit}
@@ -572,7 +573,12 @@ const HisSystemPage: React.FC = () => {
                     {formErrors.name && <p className="mt-1 text-xs text-red-600">{formErrors.name}</p>}
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-gray-700">Người liên hệ</label>
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">
+                      <span className="inline-flex items-center gap-2">
+                        <FiUser className="w-4 h-4 text-gray-500" />
+                        <span>Người liên hệ</span>
+                      </span>
+                    </label>
                     <input
                       disabled={isViewing || !canEdit}
                       className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${
@@ -586,7 +592,12 @@ const HisSystemPage: React.FC = () => {
 
                 <div className="space-y-5">
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-gray-700">Email</label>
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">
+                      <span className="inline-flex items-center gap-2">
+                        <FiMail className="w-4 h-4 text-gray-500" />
+                        <span>Email</span>
+                      </span>
+                    </label>
                     <input
                       disabled={isViewing || !canEdit}
                       type="email"
@@ -599,7 +610,12 @@ const HisSystemPage: React.FC = () => {
                     {formErrors.email && <p className="mt-1 text-xs text-red-600">{formErrors.email}</p>}
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-gray-700">Số điện thoại</label>
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">
+                      <span className="inline-flex items-center gap-2">
+                        <FiPhone className="w-4 h-4 text-gray-500" />
+                        <span>Số điện thoại</span>
+                      </span>
+                    </label>
                     <input
                       disabled={isViewing || !canEdit}
                       className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${

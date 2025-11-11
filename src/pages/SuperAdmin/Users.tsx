@@ -427,12 +427,6 @@ export default function SuperAdminUsers() {
               <option value={50}>50 / trang</option>
             </select>
             <button
-              className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
-              onClick={fetchList}
-            >
-              Làm mới
-            </button>
-            <button
               className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100"
               onClick={onCreate}
             >
@@ -632,7 +626,7 @@ export default function SuperAdminUsers() {
                   {/* form content kept intact */}
                   <div className="space-y-3">
                     <div>
-                      <label className="mb-1 block text-sm font-medium">Username <span className="text-red-500">*</span></label>
+                      <label className="mb-1 block text-sm font-medium">Tên tài khoản <span className="text-red-500">*</span></label>
                       <input required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.username} onChange={(e) => setForm((s) => ({ ...s, username: e.target.value }))} disabled={isViewing || isEditing} pattern="^[a-zA-Z0-9]+$" minLength={6} maxLength={100} />
                       {!isViewing && <p className="mt-1 text-xs text-gray-500">Từ 6-100 ký tự, chỉ chữ và số</p>}
                     </div>
