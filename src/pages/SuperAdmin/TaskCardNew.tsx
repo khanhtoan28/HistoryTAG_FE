@@ -13,6 +13,9 @@ type BaseTask = {
   hospitalName?: string | null;
   picDeploymentId?: number | null;
   picDeploymentName?: string | null;
+  receivedById?: number | null;
+  receivedByName?: string | null;
+  receivedDate?: string | null;
   status?: string | null;
   startDate?: string | null;
   deadline?: string | null;
@@ -189,7 +192,7 @@ export default function TaskCardNew({
               <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Tiếp nhận bởi:{" "}
                 <span className="font-medium text-gray-800 dark:text-gray-200">
-                  {(task as any).receivedByName ?? "-"}
+                  {task.receivedByName ?? "-"}
                 </span>
               </div>
             </div>

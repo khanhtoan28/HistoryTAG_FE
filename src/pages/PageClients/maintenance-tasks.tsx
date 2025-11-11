@@ -133,6 +133,9 @@ export type ImplementationTaskResponseDTO = {
     hospitalName?: string | null;
     picDeploymentId: number | null;
     picDeploymentName?: string | null;
+    receivedById?: number | null;
+    receivedByName?: string | null;
+    receivedDate?: string | null;
     quantity?: number | null;
     agencyId?: number | null;
     hisSystemId?: number | null;
@@ -1105,6 +1108,7 @@ function DetailModal({
                         <Info icon={<FiTag />} label="Tên" value={item.name} />
                         <Info icon={<FaHospital />} label="Bệnh viện" value={item.hospitalName} />
                         <Info icon={<FiUser />} label="Người làm" value={item.picDeploymentName} />
+                        <Info icon={<FiUser />} label="Tiếp nhận bởi" value={item.receivedByName || "—"} />
 
                         <Info
                             icon={<FiTag />}
@@ -1210,8 +1214,8 @@ const ImplementationTasksPage: React.FC = () => {
     const [editing, setEditing] = useState<ImplementationTaskResponseDTO | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState("");
-    const [sortBy, setSortBy] = useState("id");
-    const [sortDir, setSortDir] = useState("asc");
+    const [sortBy, setSortBy] = useState("createdAt");
+    const [sortDir, setSortDir] = useState("desc");
     const [page, setPage] = useState(0);
     const [size, setSize] = useState(10);
     const [totalCount, setTotalCount] = useState<number | null>(null);
@@ -1227,7 +1231,7 @@ const ImplementationTasksPage: React.FC = () => {
     // hospital list view state (like implementation-tasks page)
     const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
     const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{
-        id: number;
+        id: number | null;
         label: string;
         subLabel?: string;
         taskCount: number;
@@ -1375,7 +1379,7 @@ const ImplementationTasksPage: React.FC = () => {
             await fetchList();
             await fetchHospitalsWithTasks();
         } else {
-            toast.error(`Có ${failures.length}/${group.tasks.length} công việc tiếp nhận thất bại.`);
+            toast.error(`Tiếp nhận thất bại. Bạn không có quyền tiếp nhận công việc này.`);
             await fetchPendingTasks();
         }
     };
@@ -1439,7 +1443,9 @@ const ImplementationTasksPage: React.FC = () => {
         setLoadingHospitals(true);
         setError(null);
         try {
-            const endpoint = `${API_ROOT}/api/v1/admin/maintenance/hospitals/summary`;
+            // Fetch a large page of tasks and aggregate by hospital (giống implementation tasks)
+            const params = new URLSearchParams({ page: "0", size: "2000", sortBy: "id", sortDir: "asc" });
+            const endpoint = `${API_ROOT}/api/v1/admin/maintenance/tasks?${params.toString()}`;
             const res = await fetch(endpoint, {
                 method: "GET",
                 headers: authHeaders(),
@@ -1447,34 +1453,78 @@ const ImplementationTasksPage: React.FC = () => {
             });
             if (!res.ok) throw new Error(`Failed to fetch hospitals: ${res.status}`);
             const payload = await res.json();
-            const summaries = Array.isArray(payload) ? payload : [];
-            const normalized = summaries.map((item: any, idx: number) => ({
-                id: Number(item?.hospitalId ?? -(idx + 1)),
-                label: String(item?.hospitalName ?? "—"),
-                subLabel: item?.province ? String(item.province) : "",
-                taskCount: Number(item?.maintenanceTaskCount ?? 0),
-                acceptedCount: Number(item?.maintenanceTaskCount ?? 0),
-                nearDueCount: 0,
-                overdueCount: 0,
-                fromDeployment: Boolean(item?.transferredFromDeployment),
-                acceptedByMaintenance: Boolean(item?.acceptedByMaintenance),
-            }));
+            const items: ImplementationTaskResponseDTO[] = Array.isArray(payload?.content) ? payload.content : Array.isArray(payload) ? payload : [];
 
-            setHospitalsWithTasks((prev) => {
-                const prevMap = new Map(prev.map((entry) => [entry.id, entry]));
-                const merged = normalized.map((entry) => {
-                    const prevEntry = prevMap.get(entry.id);
-                    const hasMaintenanceTasks = (entry.taskCount ?? 0) > 0;
-                    return {
-                        ...entry,
-                        fromDeployment: hasMaintenanceTasks
-                            ? false
-                            : entry.fromDeployment || prevEntry?.fromDeployment || false,
-                        acceptedByMaintenance: entry.acceptedByMaintenance || prevEntry?.acceptedByMaintenance || false,
-                    };
-                });
-                return merged.filter((h) => h.acceptedByMaintenance || h.taskCount > 0);
-            });
+            // Aggregate by hospitalName
+            const acc = new Map<string, { id: number | null; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number }>();
+            for (const it of items) {
+                const name = (it.hospitalName || "").toString().trim() || "—";
+                const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
+                const key = hospitalId != null ? `id-${hospitalId}` : `name-${name}`;
+                const current = acc.get(key) || { id: hospitalId, label: name, subLabel: "", taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0 };
+                if (current.id == null && hospitalId != null) current.id = hospitalId;
+                if (!current.label && name) current.label = name;
+                current.taskCount += 1;
+                const taskStatus = normalizeStatus(it.status);
+                if (taskStatus === 'COMPLETED') current.acceptedCount += 1;
+                // Count near due / overdue for non-completed
+                if (taskStatus !== 'COMPLETED' && it.deadline) {
+                    const d = new Date(it.deadline);
+                    if (!Number.isNaN(d.getTime())) {
+                        d.setHours(0,0,0,0);
+                        const today = new Date();
+                        const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+                        const dayDiff = Math.round((d.getTime() - startToday) / (24 * 60 * 60 * 1000));
+                        if (dayDiff === -1 || dayDiff === 0) current.nearDueCount += 1; // yesterday or today
+                        if (dayDiff > 0) current.overdueCount += 1; // after today (the rule you set)
+                    }
+                }
+                acc.set(key, current);
+            }
+            const list = Array.from(acc.values());
+            // Enrich province/subLabel by querying hospitals search per name (best effort)
+            async function resolveHospitalMeta(name: string): Promise<{ province: string; id: number | null }> {
+                try {
+                    const res = await fetch(`${API_ROOT}/api/v1/admin/hospitals/search?name=${encodeURIComponent(name)}`, { headers: authHeaders(), credentials: 'include' });
+                    if (!res.ok) return { province: '', id: null };
+                    const arr = await res.json();
+                    if (!Array.isArray(arr) || arr.length === 0) return { province: '', id: null };
+                    // Prefer exact match by label/name
+                    const pick = (arr as any[]).find((x) => {
+                        const label = String(x?.label ?? x?.name ?? '').trim();
+                        return label.toLowerCase() === name.trim().toLowerCase();
+                    }) || arr[0];
+                    if (!pick || typeof pick !== 'object') return { province: '', id: null };
+                    const obj: any = pick;
+                    const resolvedId = typeof obj?.id === 'number' ? obj.id : obj?.id != null ? Number(obj.id) : null;
+                    const keys = ['province', 'provinceName', 'city', 'cityName', 'addressProvince', 'addressProvinceName', 'region', 'subLabel'];
+                    for (const k of keys) {
+                        const v = obj[k];
+                        if (typeof v === 'string' && v.trim()) {
+                            // If backend returns multiple provinces separated by comma, pick the first
+                            const value = String(v).split(',')[0].trim();
+                            // remove trailing task counts if mistakenly included (" - X tasks")
+                            return { province: value.replace(/\s*-\s*\d+\s+tasks?/i, '').trim(), id: resolvedId };
+                        }
+                    }
+                    // As last resort, attempt to parse from label formatted like "Province - Hospital"
+                    if (typeof obj.label === 'string') {
+                        const m = obj.label.split(' - ');
+                        if (m.length > 1) return { province: m[0].split(',')[0].trim(), id: resolvedId };
+                    }
+                    return { province: '', id: resolvedId };
+                } catch { return { province: '', id: null }; }
+            }
+
+            const withProvince = await Promise.all(list.map(async (h) => {
+                const meta = await resolveHospitalMeta(h.label);
+                return {
+                    ...h,
+                    id: h.id ?? meta.id ?? null,
+                    subLabel: h.subLabel && h.subLabel.trim() ? h.subLabel : meta.province,
+                };
+            }));
+            setHospitalsWithTasks(withProvince);
         } catch (e: any) {
             setError(e.message || "Lỗi tải danh sách bệnh viện");
             setHospitalsWithTasks([]);
@@ -1487,17 +1537,17 @@ const ImplementationTasksPage: React.FC = () => {
         let list = hospitalsWithTasks;
         const q = hospitalSearch.trim().toLowerCase();
         if (q) list = list.filter(h => h.label.toLowerCase().includes(q) || (h.subLabel || '').toLowerCase().includes(q));
-        if (hospitalStatusFilter === 'accepted') list = list.filter(h => h.acceptedByMaintenance);
+        if (hospitalStatusFilter === 'accepted') list = list.filter(h => (h.acceptedCount || 0) > 0);
         else if (hospitalStatusFilter === 'incomplete') list = list.filter(h => (h.acceptedCount || 0) < (h.taskCount || 0));
-        else if (hospitalStatusFilter === 'unaccepted') list = list.filter(h => !h.acceptedByMaintenance);
+        else if (hospitalStatusFilter === 'unaccepted') list = list.filter(h => (h.acceptedCount || 0) === 0);
 
         const dir = hospitalSortDir === 'desc' ? -1 : 1;
         list = [...list].sort((a, b) => {
             if (hospitalSortBy === 'taskCount') return ((a.taskCount || 0) - (b.taskCount || 0)) * dir;
-            if (hospitalSortBy === 'accepted') return ((Number(Boolean(a.acceptedByMaintenance)) - Number(Boolean(b.acceptedByMaintenance)))) * dir;
+            if (hospitalSortBy === 'accepted') return ((a.acceptedCount || 0) - (b.acceptedCount || 0)) * dir;
             if (hospitalSortBy === 'ratio') {
-                const ra = (a.taskCount || 0) > 0 ? (a.acceptedCount || 0) / (a.taskCount || 1) : Number(Boolean(a.acceptedByMaintenance));
-                const rb = (b.taskCount || 0) > 0 ? (b.acceptedCount || 0) / (b.taskCount || 1) : Number(Boolean(b.acceptedByMaintenance));
+                const ra = (a.taskCount || 0) > 0 ? (a.acceptedCount || 0) / (a.taskCount || 1) : 0;
+                const rb = (b.taskCount || 0) > 0 ? (b.acceptedCount || 0) / (b.taskCount || 1) : 0;
                 return (ra - rb) * dir;
             }
             // label
@@ -1509,17 +1559,21 @@ const ImplementationTasksPage: React.FC = () => {
     useEffect(() => {
         if (!showHospitalList && selectedHospital) {
             fetchList();
-            // fetch accepted count for header summary
+            // fetch completed count for header summary
             (async () => {
                 try {
-                    const params = new URLSearchParams({ page: "0", size: "1", status: "ACCEPTED", hospitalName: selectedHospital });
+                    const params = new URLSearchParams({ page: "0", size: "2000", hospitalName: selectedHospital });
                     const url = `${apiBase}?${params.toString()}`;
                     const res = await fetch(url, { method: "GET", headers: authHeaders(), credentials: "include" });
                     if (!res.ok) return setAcceptedCount(null);
                     const resp = await res.json();
-                    if (resp && typeof resp.totalElements === 'number') setAcceptedCount(resp.totalElements);
-                    else if (Array.isArray(resp)) setAcceptedCount(resp.length);
-                    else setAcceptedCount(0);
+                    const items = Array.isArray(resp?.content) ? resp.content : Array.isArray(resp) ? resp : [];
+                    // Count completed tasks
+                    const completedCount = items.filter((it: any) => {
+                        const taskStatus = normalizeStatus(it.status);
+                        return taskStatus === 'COMPLETED';
+                    }).length;
+                    setAcceptedCount(completedCount);
                 } catch { setAcceptedCount(null); }
             })();
         }
@@ -1560,16 +1614,21 @@ const ImplementationTasksPage: React.FC = () => {
             // We are on hospital table → refresh the aggregated list
             await fetchHospitalsWithTasks();
         } else {
-            // We are viewing tasks of a hospital → refresh tasks and accepted counter
+            // We are viewing tasks of a hospital → refresh tasks and completed counter
             await fetchList();
             try {
-                const params = new URLSearchParams({ page: "0", size: "1", status: "ACCEPTED", hospitalName: selectedHospital || "" });
+                const params = new URLSearchParams({ page: "0", size: "2000", hospitalName: selectedHospital || "" });
                 const urlCount = `${apiBase}?${params.toString()}`;
                 const r = await fetch(urlCount, { method: "GET", headers: authHeaders(), credentials: "include" });
                 if (r.ok) {
                     const resp = await r.json();
-                    if (resp && typeof resp.totalElements === 'number') setAcceptedCount(resp.totalElements);
-                    else if (Array.isArray(resp)) setAcceptedCount(resp.length);
+                    const items = Array.isArray(resp?.content) ? resp.content : Array.isArray(resp) ? resp : [];
+                    // Count completed tasks
+                    const completedCount = items.filter((it: any) => {
+                        const taskStatus = normalizeStatus(it.status);
+                        return taskStatus === 'COMPLETED';
+                    }).length;
+                    setAcceptedCount(completedCount);
                 }
             } catch { /* ignore */ }
 
@@ -1662,6 +1721,7 @@ const ImplementationTasksPage: React.FC = () => {
                                 value={sortBy}
                                 onChange={(e) => { setSortBy(e.target.value); setPage(0); }}
                             >
+                                <option value="createdAt">Sắp xếp theo: ngày tạo</option>
                                 <option value="id">Sắp xếp theo: id</option>
                                 <option value="hospitalName">Sắp xếp theo: bệnh viện</option>
                                 <option value="deadline">Sắp xếp theo: deadline</option>
@@ -1873,6 +1933,7 @@ const ImplementationTasksPage: React.FC = () => {
                                     key={row.id}
                                     task={row as any}
                                     idx={enableItemAnimation ? idx : undefined}
+                                    displayIndex={page * size + idx}
                                     animate={enableItemAnimation}
                                     statusLabelOverride={statusLabel}
                                     statusClassOverride={statusBadgeClasses}

@@ -14,6 +14,9 @@ type MaintTask = {
   name: string;
   hospitalName?: string | null;
   picDeploymentName?: string | null;
+  receivedById?: number | null;
+  receivedByName?: string | null;
+  receivedDate?: string | null;
   status?: string | null;
   createdAt?: string | null;
   apiUrl?: string | null;
