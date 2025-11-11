@@ -38,8 +38,8 @@ type UserForm = {
 };
 
 const ROLE_OPTIONS = ["USER", "ADMIN", "SUPERADMIN"]; // Match backend RoleType enum
-const DEPARTMENT_OPTIONS = ["IT", "ACCOUNTING"] as const;
-const TEAM_OPTIONS = ["DEV", "DEPLOYMENT", "MAINTENANCE"] as const;
+const DEPARTMENT_OPTIONS = ["IT", "ACCOUNTING", "BUSINESS"] as const;
+const TEAM_OPTIONS = ["DEV", "DEPLOYMENT", "MAINTENANCE", "SALES"] as const;
 const WORK_STATUS_OPTIONS = ["ACTIVE", "INACTIVE", "ON_LEAVE", "TERMINATED"] as const;
 
 export default function SuperAdminUsers() {
@@ -78,7 +78,10 @@ export default function SuperAdminUsers() {
     department: "",
     team: "",
     workStatus: "",
+  
   });
+
+  // business projects selection removed from UI; keep backend support if needed later
 
   function getErrorMessage(err: unknown, fallback = "Thao tác thất bại") {
     if (axios.isAxiosError(err)) {
@@ -181,6 +184,7 @@ export default function SuperAdminUsers() {
 
   useEffect(() => {
     void fetchList();
+    // businesses fetching removed (UI selection hidden)
   }, [fetchList]);
 
   function onCreate() {
@@ -331,6 +335,7 @@ export default function SuperAdminUsers() {
           avatar: form.avatarFile || undefined,
           department: form.department || undefined,
           team: form.team || undefined,
+          
           workStatus: form.workStatus || undefined,
           roles: form.roles && form.roles.length ? form.roles : undefined,
         };
@@ -347,6 +352,7 @@ export default function SuperAdminUsers() {
           phoneNumber: form.phoneNumber.trim(),
           department: form.department,
           team: form.team || undefined,
+          
           roles: form.roles,
         };
         await createUser(payload);
@@ -566,6 +572,8 @@ export default function SuperAdminUsers() {
                   <div className="flex-1 text-gray-700 break-words">{viewing.team ?? "—"}</div>
                 </div>
 
+                {/* Team kinh doanh view removed */}
+
                 <div className="flex items-start gap-4">
                   <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiInfo className="text-gray-500" />Trạng thái làm việc:</span></div>
                   <div className="flex-1 text-gray-700 break-words">{(() => { const obj = viewing as Record<string, unknown>; const v = 'workStatus' in obj ? obj['workStatus'] : undefined; return v != null && v !== '' ? String(v) : '—'; })()}</div>
@@ -715,6 +723,8 @@ export default function SuperAdminUsers() {
                         {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </div>
+
+                    {/* Team kinh doanh selection removed from form */}
 
                     {isEditing && (
                       <div>
