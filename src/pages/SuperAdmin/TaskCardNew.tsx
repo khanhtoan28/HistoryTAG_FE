@@ -88,6 +88,7 @@ export default function TaskCardNew({
   hideHospitalName = false,
   statusLabelOverride,
   statusClassOverride,
+  leadingTopLeft,
 }: {
   task: ImplTask;
   onEdit: (t: ImplTask) => void;
@@ -102,6 +103,7 @@ export default function TaskCardNew({
   hideHospitalName?: boolean;
   statusLabelOverride?: (status?: string) => string;
   statusClassOverride?: (status?: string) => string;
+  leadingTopLeft?: React.ReactNode;
 }) {
   const delayMs = typeof idx === "number" && idx > 0 ? 2000 + (idx - 1) * 80 : 0;
   const style = animate ? { animation: "fadeInUp 220ms both", animationDelay: `${delayMs}ms` } : undefined;
@@ -125,12 +127,42 @@ export default function TaskCardNew({
     ? statusLabelOverride(effectiveStatus)
     : getDisplayStatus(effectiveStatus);
 
+  // Tính toán deadline status (quá hạn / sắp hạn)
+  const deadlineStatus = (() => {
+    // Chỉ hiển thị khi task chưa COMPLETED và có deadline
+    const normalizedStatus = effectiveStatus.toUpperCase();
+    if (normalizedStatus === "COMPLETED" || !task.deadline) return null;
+
+    try {
+      const deadline = new Date(task.deadline);
+      if (Number.isNaN(deadline.getTime())) return null;
+
+      deadline.setHours(0, 0, 0, 0);
+      const today = new Date();
+      const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+      const dayDiff = Math.round((deadline.getTime() - startToday) / (24 * 60 * 60 * 1000));
+
+      // Quá hạn: deadline đã qua (dayDiff < 0)
+      if (dayDiff < 0) return { type: "overdue", label: "Quá hạn", class: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200" };
+      // Sắp đến hạn: hôm nay hoặc trong 3 ngày tới (0 <= dayDiff <= 3)
+      if (dayDiff >= 0 && dayDiff <= 3) return { type: "nearDue", label: "Sắp đến hạn", class: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-200" };
+      return null;
+    } catch {
+      return null;
+    }
+  })();
+
   return (
     <div
-      className="group w-full rounded-2xl bg-white dark:bg-gray-900 px-6 py-5 shadow-sm transition-all border border-gray-100 dark:border-gray-800 hover:border-blue-200 hover:shadow-lg"
+      className="group relative w-full rounded-2xl bg-white dark:bg-gray-900 px-6 py-5 shadow-sm transition-all border border-gray-100 dark:border-gray-800 hover:border-blue-200 hover:shadow-lg"
       style={style}
     >
-      <div className="flex gap-4 items-start">
+      {leadingTopLeft && (
+        <div className="absolute left-2.5 top-2.5 z-10">
+          {leadingTopLeft}
+        </div>
+      )}
+      <div className={`flex gap-4 items-start ${leadingTopLeft ? 'pl-7 pt-1' : ''}`}>
         {/* Left badge + icon */}
         <div className="flex items-center gap-3">
           <div className="flex flex-col items-center">
@@ -159,6 +191,15 @@ export default function TaskCardNew({
                     {badgeLabel}
                   </span>
                 )}
+
+                {/* Hiển thị badge "Quá hạn" hoặc "Sắp hạn" */}
+                {deadlineStatus && (
+                  <span
+                    className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${deadlineStatus.class}`}
+                  >
+                    {deadlineStatus.label}
+                  </span>
+                )}
               </div>
 
               {task.hisSystemName && (
@@ -174,7 +215,7 @@ export default function TaskCardNew({
                 </span>
               </div>  
 
-              {!hideHospitalName && task.hospitalName &&
+              {/* {!hideHospitalName && task.hospitalName &&
                 task.name &&
                 task.name.trim() &&
                 task.name.trim() !== task.hospitalName.trim() && (
@@ -187,7 +228,7 @@ export default function TaskCardNew({
                       {task.hospitalName}
                     </span>
                   </div>
-                )}
+                )} */}
 
               <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Tiếp nhận bởi:{" "}
