@@ -77,6 +77,7 @@ export default function TaskCardNew({
   onDelete,
   onOpen,
   idx,
+  displayIndex,
   animate = true,
   canView = true,
   canEdit = true,
@@ -90,6 +91,7 @@ export default function TaskCardNew({
   onDelete: (id: number) => void;
   onOpen: (t: ImplTask) => void;
   idx?: number;
+  displayIndex?: number;
   animate?: boolean;
   canView?: boolean;
   canEdit?: boolean;
@@ -101,7 +103,14 @@ export default function TaskCardNew({
   const delayMs = typeof idx === "number" && idx > 0 ? 2000 + (idx - 1) * 80 : 0;
   const style = animate ? { animation: "fadeInUp 220ms both", animationDelay: `${delayMs}ms` } : undefined;
 
-  // (Indicators removed; keep component lean and avoid unused vars)
+  const orderNumber = (() => {
+    if (typeof displayIndex === "number" && !Number.isNaN(displayIndex)) return displayIndex + 1;
+    if (typeof idx === "number" && !Number.isNaN(idx)) return idx + 1;
+    const rawId = (task as any)?.id;
+    if (rawId != null && Number.isFinite(Number(rawId))) return Number(rawId);
+    return 0;
+  })();
+  const orderLabel = String(orderNumber).padStart(3, "0");
 
   const transferredToMaintenance =
     Boolean((task as any)?.transferredToMaintenance) ||
@@ -123,7 +132,7 @@ export default function TaskCardNew({
         <div className="flex items-center gap-3">
           <div className="flex flex-col items-center">
             <div className="w-12 h-12 rounded-md bg-gray-50 dark:bg-gray-800 border flex items-center justify-center text-sm font-semibold text-gray-700 dark:text-gray-200">
-              {String(task.id).padStart(3, "0")}
+              {orderLabel}
             </div>
           </div>
           <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900 text-blue-600 dark:text-blue-200 shadow-sm">
@@ -156,11 +165,11 @@ export default function TaskCardNew({
               )}
 
               <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                Nhân viên phụ trách:{" "}
+                Người phụ trách:{" "}
                 <span className="font-medium text-gray-800 dark:text-gray-200">
                   {task.picDeploymentName ?? "-"}
                 </span>
-              </div>
+              </div>  
 
               {!hideHospitalName && task.hospitalName &&
                 task.name &&
@@ -176,6 +185,13 @@ export default function TaskCardNew({
                     </span>
                   </div>
                 )}
+
+              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Tiếp nhận bởi:{" "}
+                <span className="font-medium text-gray-800 dark:text-gray-200">
+                  {(task as any).receivedByName ?? "-"}
+                </span>
+              </div>
             </div>
 
             {/* Right column: dates */}
@@ -214,10 +230,7 @@ export default function TaskCardNew({
             </div>
 
             <div className="flex items-center gap-3">
-              {/**
-               * If the implementation task has been marked readOnlyForDeployment or
-               * already transferred, disable edit/delete and hide convert action.
-               */}
+              
               {canEdit && !task.readOnlyForDeployment && (
                 <button
                   onClick={(e) => {

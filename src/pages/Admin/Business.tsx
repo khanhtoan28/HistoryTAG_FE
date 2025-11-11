@@ -18,6 +18,7 @@ import {
   TaskIcon,
 } from '../../icons';
 import Pagination from '../../components/common/Pagination';
+import ComponentCard from '../../components/common/ComponentCard';
 
 const BusinessPage: React.FC = () => {
   const roles = JSON.parse(localStorage.getItem('roles') || '[]');
@@ -26,6 +27,14 @@ const BusinessPage: React.FC = () => {
     if (r && typeof r === 'object') {
       const roleName = (r as Record<string, unknown>).roleName;
       if (typeof roleName === 'string') return roleName.toUpperCase() === 'ADMIN' || roleName.toUpperCase() === 'SUPERADMIN';
+    }
+    return false;
+  });
+  const isSuperAdmin = roles.some((r: unknown) => {
+    if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
+    if (r && typeof r === 'object') {
+      const roleName = (r as Record<string, unknown>).roleName ?? (r as Record<string, unknown>).role_name ?? (r as Record<string, unknown>).role;
+      if (typeof roleName === 'string') return roleName.toUpperCase() === 'SUPERADMIN';
     }
     return false;
   });
@@ -38,7 +47,7 @@ const BusinessPage: React.FC = () => {
   const [selectedHospitalPhone, setSelectedHospitalPhone] = useState<string | null>(null);
   // commissionPercent is the user-facing input (entered as percent, e.g. 12 means 12%)
   const [commissionPercent, setCommissionPercent] = useState<number | null>(null);
-  const [quantity, setQuantity] = useState<number>(1);
+  const [quantity, setQuantity] = useState<number | ''>(1);
   const [name, setName] = useState<string>('');
   const [statusValue, setStatusValue] = useState<string>('CARING');
   const [startDateValue, setStartDateValue] = useState<string>('');
@@ -46,7 +55,7 @@ const BusinessPage: React.FC = () => {
   type BusinessItem = {
     id: number;
     name?: string;
-  hospital?: { id?: number; label?: string } | null;
+    hospital?: { id?: number; label?: string } | null;
     hospitalPhone?: string | null;
     hardware?: { label?: string } | null;
     quantity?: number | null;
@@ -76,6 +85,19 @@ const BusinessPage: React.FC = () => {
     const n = Number(id);
     if (Number.isNaN(n)) return String(id);
     return `HD${String(n).padStart(2, '0')}`;
+  }
+
+  // Small Info helper (styled like Hospitals page) -------------------------------------------------
+  function Info({ label, value, icon }: { label: string; value?: React.ReactNode; icon?: React.ReactNode }) {
+    return (
+      <div className="flex items-start gap-4">
+        <div className="min-w-[150px] flex items-center gap-3">
+          {icon && <span className="text-gray-500 text-lg">{icon}</span>}
+          <span className="font-semibold text-gray-900">{label}:</span>
+        </div>
+        <div className="flex-1 text-gray-700 break-words">{value ?? '—'}</div>
+      </div>
+    );
   }
   const [items, setItems] = useState<BusinessItem[]>([]);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
@@ -118,14 +140,21 @@ const BusinessPage: React.FC = () => {
       const content = Array.isArray(res?.content) ? res.content : (Array.isArray(res) ? res : []);
       // ensure numeric fields are numbers
       const normalized = (content as Array<Record<string, unknown>>).map((c) => {
-        const unit = c['unitPrice'];
-        const total = c['totalPrice'];
+        const unit = c['unitPrice'] ?? c['unit_price'];
+        const total = c['totalPrice'] ?? c['total_price'];
         const comm = c['commission'];
+        const qty = c['quantity'] ?? c['qty'] ?? c['amount'];
+        // accept multiple possible keys for start/completion
+        const start = (c['startDate'] ?? c['start_date'] ?? c['start'] ?? c['startDateTime']) as string | undefined | null;
+        const completion = (c['completionDate'] ?? c['finishDate'] ?? c['completion_date'] ?? c['finish_date'] ?? c['finishDate']) as string | undefined | null;
         return {
           ...c,
           unitPrice: unit != null ? Number(String(unit)) : null,
           totalPrice: total != null ? Number(String(total)) : null,
           commission: comm != null ? Number(String(comm)) : null,
+          quantity: qty != null ? Number(String(qty)) : null,
+          startDate: start ?? null,
+          completionDate: completion ?? null,
         } as BusinessItem;
       });
       setItems(normalized);
@@ -159,9 +188,26 @@ const BusinessPage: React.FC = () => {
     }
   }
 
+  // helper: current datetime in `YYYY-MM-DDTHH:mm` for <input type="datetime-local">
+  function nowDateTimeLocal() {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+  }
+
+  // helper: convert a YYYY-MM-DDTHH:mm (16 chars) to backend form with :00 seconds when needed
+  function toLocalDateTimeStr(v?: string | null) {
+    return v ? (v.length === 16 ? `${v}:00` : v) : undefined;
+  }
+
   // run on mount and when pagination changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useEffect(() => { fetchHardwareOptions(''); fetchHospitalOptions(''); loadList(currentPage, itemsPerPage); }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useEffect(() => { loadList(currentPage, itemsPerPage); }, [currentPage, itemsPerPage]);
 
   function applyFilters() {
@@ -187,10 +233,27 @@ const BusinessPage: React.FC = () => {
 
     setSaving(true);
       try {
-        const toLocalDateTimeStr = (v?: string | null) => v ? (v.length === 16 ? `${v}:00` : v) : undefined;
+        // ensure startDate is set (default to now) so backend always receives a start date
+        const finalStart = startDateValue && startDateValue.trim() !== '' ? startDateValue : nowDateTimeLocal();
+        // validate completion date is not earlier than start date
+        if (completionDateValue && completionDateValue.trim() !== '') {
+          try {
+            const st = new Date(finalStart);
+            const comp = new Date(completionDateValue);
+            if (comp.getTime() < st.getTime()) {
+              setToast({ message: 'Ngày hoàn thành không được nhỏ hơn ngày bắt đầu', type: 'error' });
+              setSaving(false);
+              return;
+            }
+          } catch {
+            // ignore parse errors, backend will validate further
+          }
+        }
         const payload: Record<string, unknown> = { name, hospitalId: selectedHospitalId, hardwareId: selectedHardwareId, quantity, status: statusValue,
-          startDate: toLocalDateTimeStr(startDateValue),
+          startDate: toLocalDateTimeStr(finalStart),
           completionDate: toLocalDateTimeStr(completionDateValue),
+          // some backends use 'finishDate' instead of 'completionDate' — include both to be safe
+          finishDate: toLocalDateTimeStr(completionDateValue),
         };
         // compute commission amount from percent and total (backend expects absolute amount)
         const total = computeTotal();
@@ -223,7 +286,19 @@ const BusinessPage: React.FC = () => {
 
   function computeTotal() {
     if (selectedHardwarePrice == null) return 0;
-    return (selectedHardwarePrice) * (quantity || 0);
+    return (selectedHardwarePrice) * (Number(quantity) || 0);
+  }
+
+  // when status is changed in the modal, handle auto-complete for CONTRACTED
+  async function handleStatusChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const newStatus = e.target.value;
+    setStatusValue(newStatus);
+    if (newStatus === 'CONTRACTED') {
+      // only set locally — do NOT auto-save. User must click Lưu/Cập nhật to persist and trigger downstream actions
+      const now = nowDateTimeLocal();
+      setCompletionDateValue(now);
+      setToast({ message: 'Đã đặt ngày hoàn thành tạm thời. Vui lòng nhấn Lưu để xác nhận và tạo Task Triển khai.', type: 'success' });
+    }
   }
 
   function statusLabel(status?: string | null) {
@@ -253,6 +328,8 @@ const BusinessPage: React.FC = () => {
       setEditingId(id);
       setName(res.name ?? '');
       setSelectedHospitalId(res.hospital?.id ?? null);
+      // support older API that may use finishDate as the key
+  const remoteCompletion = (res.completionDate ?? ((res as unknown as Record<string, unknown>).finishDate as string | undefined)) as string | undefined | null;
       if (res.hospital?.id) {
         // use the auth/hospitals endpoint (works for non-superadmin roles too)
         api.get(`/api/v1/auth/hospitals/${res.hospital.id}`).then(r => {
@@ -262,8 +339,9 @@ const BusinessPage: React.FC = () => {
         }).catch(() => setSelectedHospitalPhone(null));
       } else setSelectedHospitalPhone(null);
   setSelectedHardwareId(res.hardware?.id ?? null);
-  setStartDateValue(res.startDate ? (res.startDate.length === 16 ? res.startDate : res.startDate.substring(0,16)) : '');
-  setCompletionDateValue(res.completionDate ? (res.completionDate.length === 16 ? res.completionDate : res.completionDate.substring(0,16)) : '');
+  const remoteStart = (res.startDate ?? (res as unknown as Record<string, unknown>)['start_date'] ?? (res as unknown as Record<string, unknown>)['startDateTime']) as string | undefined | null;
+  setStartDateValue(remoteStart ? (remoteStart.length === 16 ? remoteStart : remoteStart.substring(0,16)) : '');
+  setCompletionDateValue(remoteCompletion ? (remoteCompletion.length === 16 ? remoteCompletion : remoteCompletion.substring(0,16)) : '');
       // convert existing commission amount to percentage for the input
       const existingTotal = res.totalPrice != null ? Number(res.totalPrice) : null;
       if (res.commission != null && existingTotal && existingTotal > 0) {
@@ -272,7 +350,7 @@ const BusinessPage: React.FC = () => {
       } else {
         setCommissionPercent(null);
       }
-      setQuantity(res.quantity ?? 1);
+  setQuantity(res.quantity != null ? Number(String(res.quantity)) : 1);
       // fetch price
       if (res.hardware?.id) {
         const r = await api.get(`/api/v1/superadmin/hardware/${res.hardware.id}`);
@@ -304,7 +382,7 @@ const BusinessPage: React.FC = () => {
   function closeView() { setViewItem(null); }
 
   return (
-    <div className="p-6 relative overflow-hidden">
+    <div className="p-6 relative bg-white">
       {/* Toasts */}
       {toast && (
         <div className="fixed top-6 right-6 z-50">
@@ -313,23 +391,24 @@ const BusinessPage: React.FC = () => {
           </div>
         </div>
       )}
-      {/* Animated gradient background */}
-      <div aria-hidden className="absolute inset-0 -z-10">
-        <div style={{
-          background: 'linear-gradient(45deg, rgba(99,102,241,0.25), rgba(16,185,129,0.18), rgba(234,88,12,0.15))',
-          width: '200%',
-          height: '200%',
-          transform: 'translate(-25%, -25%)',
-          filter: 'blur(60px)',
-          animation: 'bgMove 12s linear infinite'
-        }} />
-      </div>
-
-      <style>{`@keyframes bgMove { 0% { transform: translate(-30%, -30%) rotate(0deg); } 50% { transform: translate(-20%, -10%) rotate(10deg);} 100% { transform: translate(-30%, -30%) rotate(0deg);} }`}</style>
+      {/* Page background simplified to white (no animated gradient) */}
 
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-extrabold mb-0">Quản lý Kinh doanh</h1>
-  <button type="button" onClick={() => { setEditingId(null); setName(''); setSelectedHardwareId(null); setQuantity(1); setStatusValue('CARING'); setStartDateValue(''); setCompletionDateValue(''); setShowModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-pink-500 text-white rounded shadow-lg">
+        <button
+          type="button"
+          onClick={() => {
+            setEditingId(null);
+            setName('');
+            setSelectedHardwareId(null);
+            setQuantity(1);
+            setStatusValue('CARING');
+            setStartDateValue(nowDateTimeLocal());
+            setCompletionDateValue('');
+            setShowModal(true);
+          }}
+          className={`rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md flex items-center gap-2`}
+        >
           <PlusIcon style={{ width: 18, height: 18, fill: 'white' }} />
           <span>Thêm mới</span>
         </button>
@@ -378,7 +457,13 @@ const BusinessPage: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Số lượng</label>
-              <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} className="w-40 rounded border px-3 py-2" />
+              <input
+                type="number"
+                min={1}
+                value={quantity === '' ? '' : quantity}
+                onChange={(e) => setQuantity(e.target.value ? Number(e.target.value) : '')}
+                className="w-40 rounded border px-3 py-2"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Đơn giá</label>
@@ -398,10 +483,10 @@ const BusinessPage: React.FC = () => {
 
           {/* Create/Edit modal */}
           {showModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center">
-              <div className="absolute inset-0 bg-black/40" onClick={() => { if (!saving) setShowModal(false); }} />
-              <div className="relative bg-white rounded p-6 w-[720px] shadow-lg">
-                <h3 className="text-xl font-semibold mb-4">{editingId ? 'Sửa Kinh doanh' : 'Thêm Kinh doanh'}</h3>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onMouseDown={(e) => e.target === e.currentTarget && !saving && setShowModal(false)}>
+              <div className="absolute inset-0 bg-black/50" />
+              <div className="relative bg-white rounded-xl p-6 w-[720px] shadow-lg">
+                <h3 className="text-xl font-semibold mb-4">{editingId ? 'Cập nhật Kinh doanh' : 'Thêm Kinh doanh'}</h3>
                 <form onSubmit={handleSubmit} className="space-y-3">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -441,7 +526,7 @@ const BusinessPage: React.FC = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">Trạng thái</label>
-                      <select value={statusValue} onChange={(e) => setStatusValue(e.target.value)} className="w-full rounded border px-3 py-2">
+                      <select value={statusValue} onChange={handleStatusChange} className="w-full rounded border px-3 py-2">
                         <option value="CARING">Đang chăm sóc</option>
                         <option value="CONTRACTED">Ký hợp đồng</option>
                         <option value="CANCELLED">Hủy</option>
@@ -449,11 +534,21 @@ const BusinessPage: React.FC = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">Số lượng</label>
-                      <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} className="w-40 rounded border px-3 py-2" />
+                      <input
+                        type="number"
+                        min={1}
+                        value={quantity === '' ? '' : quantity}
+                        onChange={(e) => setQuantity(e.target.value ? Number(e.target.value) : '')}
+                        className="w-40 rounded border px-3 py-2"
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">Hoa hồng (%)</label>
-                      <input type="number" step="0.01" min={0} value={commissionPercent ?? ''} onChange={(e) => setCommissionPercent(e.target.value ? Number(e.target.value) : null)} className="w-40 rounded border px-3 py-2" />
+                      {isSuperAdmin ? (
+                        <input type="number" step="0.01" min={0} value={commissionPercent ?? ''} onChange={(e) => setCommissionPercent(e.target.value ? Number(e.target.value) : null)} className="w-40 rounded border px-3 py-2" />
+                      ) : (
+                        <div className="p-2 text-gray-700">{commissionPercent != null ? commissionPercent + '%' : '—'}</div>
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">Đơn giá</label>
@@ -465,10 +560,10 @@ const BusinessPage: React.FC = () => {
                     </div>
                     <div className="col-span-2">
                       <label className="block text-sm font-medium mb-1">Ngày hoàn thành</label>
-                      <input type="datetime-local" value={completionDateValue} onChange={(e) => setCompletionDateValue(e.target.value)} className="w-full rounded border px-3 py-2" />
+                      <input type="datetime-local" value={completionDateValue} onChange={(e) => setCompletionDateValue(e.target.value)} min={startDateValue || undefined} className="w-full rounded border px-3 py-2" />
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 justify-between">
+                      <div className="flex items-center gap-3 justify-between">
                     <div className="text-sm text-gray-600">Tổng: <span className="font-semibold">{computeTotal() > 0 ? computeTotal().toLocaleString() + ' ₫' : '—'}</span></div>
                     <div className="flex items-center gap-3">
                       <button type="button" onClick={() => { if (!saving) { setShowModal(false); setEditingId(null); } }} className="px-4 py-2 border rounded">Hủy</button>
@@ -481,62 +576,59 @@ const BusinessPage: React.FC = () => {
           )}
 
           <div>
-            <h2 className="text-lg font-semibold mb-2">Danh sách Kinh doanh</h2>
-            <div className="rounded border bg-white p-3">
-              <table className="w-full text-sm">
-                <thead>
-                    <tr className="bg-gradient-to-r from-white to-gray-50">
-                    <th className="text-center px-2 py-3">ID</th>
-                    <th className="text-center px-2 py-3">Tên</th>
-                    <th className="text-center px-2 py-3">Bệnh viện</th>
-                    <th className="text-center px-2 py-3">Điện thoại</th>
-                    <th className="text-center px-2 py-3">Phần cứng</th>
-                    <th className="text-center px-2 py-3">Bắt đầu</th>
-                    <th className="text-center px-2 py-3">Hoàn thành</th>
-                    <th className="text-center px-2 py-3">Số lượng</th>
-                    <th className="text-center px-2 py-3">Đơn giá</th>
-                    <th className="text-center px-2 py-3">Tổng</th>
-                    <th className="text-center px-2 py-3">Hoa hồng</th>
-                    <th className="text-center px-2 py-3">Hành động</th>
-                    <th className="text-center px-2 py-3">Trạng thái</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((it) => (
-                    <tr key={it.id}
-                        onMouseEnter={() => setHoveredId(it.id)}
-                        onMouseLeave={() => setHoveredId(null)}
-                        className={`transform transition duration-200 ${hoveredId === it.id ? 'scale-101 shadow-lg bg-gradient-to-r from-indigo-50 to-pink-50' : 'hover:shadow hover:bg-gray-50'}`}>
-                      <td className="text-center px-2 py-2">{formatBusinessId(it.id)}</td>
-                        <td className="text-center px-2 py-2">{it.name}</td>
-                        <td className="text-center px-2 py-2">{it.hospital?.label ?? '—'}</td>
-                        <td className="text-center px-2 py-2">{it.hospitalPhone ?? '—'}</td>
-                        <td className="text-center px-2 py-2">{it.hardware?.label ?? '—'}</td>
-                        <td className="text-center px-2 py-2">{formatDateShort(it.startDate)}</td>
-                        <td className="text-center px-2 py-2">{formatDateShort(it.completionDate)}</td>
-                        <td className="text-center px-2 py-2">{it.quantity ?? '—'}</td>
-                        <td className="text-center px-2 py-2">{it.unitPrice != null ? it.unitPrice.toLocaleString() + ' ₫' : '—'}</td>
-                        <td className="text-center px-2 py-2">{it.totalPrice != null ? it.totalPrice.toLocaleString() + ' ₫' : '—'}</td>
-                        <td className="text-center px-2 py-2">{it.commission != null ? (it.commission.toLocaleString() + ' ₫') : '—'} {it.commission != null && it.totalPrice ? `(${((it.commission / it.totalPrice) * 100).toFixed(2).replace(/\.00$/,'')}%)` : ''}</td>
-                        <td className="text-center px-2 py-2">
-                          <div className="flex items-center justify-center gap-2">
-                            <button title="Xem" onClick={() => openView(it)} className="p-2 rounded-full bg-white shadow hover:scale-105 transition">
-                              <EyeIcon style={{ width: 16, height: 16 }} />
-                            </button>
-                            <button title="Sửa" onClick={() => openEditModal(it.id)} className="p-2 rounded-full bg-yellow-50 hover:scale-105 transition">
-                              <PencilIcon style={{ width: 16, height: 16 }} />
-                            </button>
-                            <button title="Xóa" onClick={() => handleDelete(it.id)} disabled={deletingId === it.id} className={`p-2 rounded-full ${deletingId === it.id ? 'bg-red-200 opacity-70' : 'bg-red-50'} hover:scale-105 transition`}>
-                              <TrashBinIcon style={{ width: 16, height: 16 }} />
-                            </button>
-                          </div>
-                        </td>
-                        <td className="text-center px-2 py-2">{renderStatusBadge(it.status)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ComponentCard title="Danh sách Kinh doanh">
+              <div className="space-y-4">
+                {items.map((it) => (
+                  <div key={it.id}
+                    className={`flex items-start gap-4 p-4 bg-white border border-gray-100 rounded-lg shadow-sm transition-all duration-150 ${hoveredId === it.id ? 'shadow-lg scale-101 bg-indigo-50 border-green-400' : 'hover:shadow hover:border-green-300'}`}
+                    onMouseEnter={() => setHoveredId(it.id)} onMouseLeave={() => setHoveredId(null)}
+                  >
+                    <div className="flex-shrink-0">
+                      <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-gray-50 text-sm font-semibold text-gray-700">{formatBusinessId(it.id)}</div>
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="text-lg font-semibold text-gray-900">{it.name ?? '—'}</div>
+                          <div className="text-sm text-gray-500">{it.hospital?.label ?? '—'}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {renderStatusBadge(it.status)}
+                        </div>
+                      </div>
+
+                      <div className="mt-2 grid grid-cols-2 md:grid-cols-2 gap-3 text-sm text-gray-600">
+                        <div>Điện thoại: <div className="font-medium text-gray-800">{it.hospitalPhone ?? '—'}</div></div>
+                        <div>Phần cứng: <div className="font-medium text-gray-800">{it.hardware?.label ?? '—'}</div></div>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between text-sm text-gray-700">
+                        <div className="flex items-center gap-6">
+                          <div>Số lượng: <span className="font-medium">{it.quantity ?? '—'}</span></div>
+                          <div>Đơn giá: <span className="font-medium">{it.unitPrice != null ? it.unitPrice.toLocaleString() + ' ₫' : '—'}</span></div>
+                          <div>Tổng: <span className="font-semibold">{it.totalPrice != null ? it.totalPrice.toLocaleString() + ' ₫' : '—'}</span></div>
+                        </div>
+                        <div />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-2">
+                      <button onClick={() => openView(it)} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-100 text-blue-600 bg-white hover:bg-blue-50">
+                        <EyeIcon style={{ width: 16, height: 16 }} />
+                        <span className="text-sm">Xem</span>
+                      </button>
+                      <button onClick={() => openEditModal(it.id)} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-yellow-100 text-orange-600 bg-yellow-50 hover:bg-yellow-100">
+                        <PencilIcon style={{ width: 16, height: 16 }} />
+                        <span className="text-sm">Sửa</span>
+                      </button>
+                      <button onClick={() => handleDelete(it.id)} disabled={deletingId === it.id} className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${deletingId === it.id ? 'border-red-200 text-red-400 bg-red-50 opacity-70' : 'border-red-100 text-red-600 bg-red-50 hover:bg-red-100'}`}>
+                        <TrashBinIcon style={{ width: 16, height: 16 }} />
+                        <span className="text-sm">Xóa</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             <Pagination
               currentPage={currentPage}
               totalPages={totalPages}
@@ -546,125 +638,28 @@ const BusinessPage: React.FC = () => {
               onItemsPerPageChange={(s) => { setItemsPerPage(s); setCurrentPage(0); }}
               showItemsPerPage={true}
             />
+            </ComponentCard>
           </div>
         </div>
       )}
       {/* Detail modal */}
       {viewItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={closeView} />
-          <div className="relative bg-white rounded p-6 w-[640px] shadow-lg">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onMouseDown={(e) => e.target === e.currentTarget && closeView()}>
+          <div className="absolute inset-0 bg-black/50" />
+          <div className="relative bg-white rounded-xl p-6 w-[640px] shadow-lg">
             <h3 className="text-lg font-semibold mb-4">Chi tiết Kinh doanh {formatBusinessId(viewItem.id)}</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
-                  <UserCircleIcon style={{ width: 18, height: 18 }} />
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Tên</div>
-                  <div className="font-medium">{viewItem.name ?? '—'}</div>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
-                  <GroupIcon style={{ width: 18, height: 18 }} />
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Bệnh viện</div>
-                  <div className="font-medium">{viewItem.hospital?.label ?? '—'}</div>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
-                  <EnvelopeIcon style={{ width: 16, height: 16 }} />
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Điện thoại</div>
-                  <div className="font-medium">{viewItem.hospitalPhone ?? '—'}</div>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
-                  <BoxCubeIcon style={{ width: 16, height: 16 }} />
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Phần cứng</div>
-                  <div className="font-medium">{viewItem.hardware?.label ?? '—'}</div>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
-                  <CalenderIcon style={{ width: 16, height: 16 }} />
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Bắt đầu</div>
-                  <div className="font-medium">{formatDateShort(viewItem.startDate)}</div>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
-                  <TimeIcon style={{ width: 16, height: 16 }} />
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Hoàn thành</div>
-                  <div className="font-medium">{formatDateShort(viewItem.completionDate)}</div>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
-                  <BoxIconLine style={{ width: 16, height: 16 }} />
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Số lượng</div>
-                  <div className="font-medium">{viewItem.quantity ?? '—'}</div>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
-                  <DollarLineIcon style={{ width: 16, height: 16 }} />
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Đơn giá</div>
-                  <div className="font-medium">{viewItem.unitPrice != null ? viewItem.unitPrice.toLocaleString() + ' ₫' : '—'}</div>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
-                  <DollarLineIcon style={{ width: 16, height: 16 }} />
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Tổng</div>
-                  <div className="font-medium">{viewItem.totalPrice != null ? viewItem.totalPrice.toLocaleString() + ' ₫' : '—'}</div>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
-                  <CheckCircleIcon style={{ width: 16, height: 16 }} />
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Hoa hồng</div>
-                  <div className="font-medium">{viewItem.commission != null ? (Number(viewItem.commission).toLocaleString() + ' ₫') : '—'} {viewItem.commission != null && viewItem.totalPrice ? `(${((Number(viewItem.commission) / Number(viewItem.totalPrice)) * 100).toFixed(2).replace(/\.00$/,'')}%)` : ''}</div>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-100">
-                  <TaskIcon style={{ width: 16, height: 16 }} />
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Trạng thái</div>
-                  <div className="font-medium">{viewItem.status ?? '—'}</div>
-                </div>
-              </div>
+            <div className="space-y-3 text-sm">
+              <Info label="Tên" value={<div className="font-medium">{viewItem.name ?? '—'}</div>} icon={<UserCircleIcon style={{ width: 18, height: 18 }} />} />
+              <Info label="Bệnh viện" value={<div className="font-medium">{viewItem.hospital?.label ?? '—'}</div>} icon={<GroupIcon style={{ width: 18, height: 18 }} />} />
+              <Info label="Điện thoại" value={<div className="font-medium">{viewItem.hospitalPhone ?? '—'}</div>} icon={<EnvelopeIcon style={{ width: 16, height: 16 }} />} />
+              <Info label="Phần cứng" value={<div className="font-medium">{viewItem.hardware?.label ?? '—'}</div>} icon={<BoxCubeIcon style={{ width: 16, height: 16 }} />} />
+              <Info label="Bắt đầu" value={<div className="font-medium">{formatDateShort(viewItem.startDate)}</div>} icon={<CalenderIcon style={{ width: 16, height: 16 }} />} />
+              <Info label="Hoàn thành" value={<div className="font-medium">{formatDateShort(viewItem.completionDate)}</div>} icon={<TimeIcon style={{ width: 16, height: 16 }} />} />
+              <Info label="Số lượng" value={<div className="font-medium">{viewItem.quantity ?? '—'}</div>} icon={<BoxIconLine style={{ width: 16, height: 16 }} />} />
+              <Info label="Đơn giá" value={<div className="font-medium">{viewItem.unitPrice != null ? viewItem.unitPrice.toLocaleString() + ' ₫' : '—'}</div>} icon={<DollarLineIcon style={{ width: 16, height: 16 }} />} />
+              <Info label="Tổng" value={<div className="font-medium">{viewItem.totalPrice != null ? viewItem.totalPrice.toLocaleString() + ' ₫' : '—'}</div>} icon={<DollarLineIcon style={{ width: 16, height: 16 }} />} />
+              <Info label="Hoa hồng" value={<div className="font-medium">{viewItem.commission != null ? (Number(viewItem.commission).toLocaleString() + ' ₫') : '—'} {viewItem.commission != null && viewItem.totalPrice ? `(${((Number(viewItem.commission) / Number(viewItem.totalPrice)) * 100).toFixed(2).replace(/\.00$/,'')}%)` : ''}</div>} icon={<CheckCircleIcon style={{ width: 16, height: 16 }} />} />
+              <Info label="Trạng thái" value={<div className="font-medium">{statusLabel(viewItem.status) ?? '—'}</div>} icon={<TaskIcon style={{ width: 16, height: 16 }} />} />
             </div>
             <div className="mt-4 text-right">
               <button onClick={closeView} className="px-3 py-1 bg-indigo-600 text-white rounded">Đóng</button>

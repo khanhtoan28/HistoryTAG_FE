@@ -38,8 +38,8 @@ type UserForm = {
 };
 
 const ROLE_OPTIONS = ["USER", "ADMIN", "SUPERADMIN"]; // Match backend RoleType enum
-const DEPARTMENT_OPTIONS = ["IT", "ACCOUNTING"] as const;
-const TEAM_OPTIONS = ["DEV", "DEPLOYMENT", "MAINTENANCE"] as const;
+const DEPARTMENT_OPTIONS = ["IT", "ACCOUNTING", "BUSINESS"] as const;
+const TEAM_OPTIONS = ["DEV", "DEPLOYMENT", "MAINTENANCE", "SALES"] as const;
 const WORK_STATUS_OPTIONS = ["ACTIVE", "INACTIVE", "ON_LEAVE", "TERMINATED"] as const;
 
 export default function SuperAdminUsers() {
@@ -78,7 +78,10 @@ export default function SuperAdminUsers() {
     department: "",
     team: "",
     workStatus: "",
+  
   });
+
+  // business projects selection removed from UI; keep backend support if needed later
 
   function getErrorMessage(err: unknown, fallback = "Thao tác thất bại") {
     if (axios.isAxiosError(err)) {
@@ -181,6 +184,7 @@ export default function SuperAdminUsers() {
 
   useEffect(() => {
     void fetchList();
+    // businesses fetching removed (UI selection hidden)
   }, [fetchList]);
 
   function onCreate() {
@@ -331,6 +335,7 @@ export default function SuperAdminUsers() {
           avatar: form.avatarFile || undefined,
           department: form.department || undefined,
           team: form.team || undefined,
+          
           workStatus: form.workStatus || undefined,
           roles: form.roles && form.roles.length ? form.roles : undefined,
         };
@@ -347,6 +352,7 @@ export default function SuperAdminUsers() {
           phoneNumber: form.phoneNumber.trim(),
           department: form.department,
           team: form.team || undefined,
+          
           roles: form.roles,
         };
         await createUser(payload);
@@ -420,12 +426,6 @@ export default function SuperAdminUsers() {
               <option value={20}>20 / trang</option>
               <option value={50}>50 / trang</option>
             </select>
-            <button
-              className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
-              onClick={fetchList}
-            >
-              Làm mới
-            </button>
             <button
               className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100"
               onClick={onCreate}
@@ -566,6 +566,8 @@ export default function SuperAdminUsers() {
                   <div className="flex-1 text-gray-700 break-words">{viewing.team ?? "—"}</div>
                 </div>
 
+                {/* Team kinh doanh view removed */}
+
                 <div className="flex items-start gap-4">
                   <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiInfo className="text-gray-500" />Trạng thái làm việc:</span></div>
                   <div className="flex-1 text-gray-700 break-words">{(() => { const obj = viewing as Record<string, unknown>; const v = 'workStatus' in obj ? obj['workStatus'] : undefined; return v != null && v !== '' ? String(v) : '—'; })()}</div>
@@ -624,7 +626,7 @@ export default function SuperAdminUsers() {
                   {/* form content kept intact */}
                   <div className="space-y-3">
                     <div>
-                      <label className="mb-1 block text-sm font-medium">Username <span className="text-red-500">*</span></label>
+                      <label className="mb-1 block text-sm font-medium">Tên tài khoản <span className="text-red-500">*</span></label>
                       <input required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.username} onChange={(e) => setForm((s) => ({ ...s, username: e.target.value }))} disabled={isViewing || isEditing} pattern="^[a-zA-Z0-9]+$" minLength={6} maxLength={100} />
                       {!isViewing && <p className="mt-1 text-xs text-gray-500">Từ 6-100 ký tự, chỉ chữ và số</p>}
                     </div>
@@ -715,6 +717,8 @@ export default function SuperAdminUsers() {
                         {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </div>
+
+                    {/* Team kinh doanh selection removed from form */}
 
                     {isEditing && (
                       <div>

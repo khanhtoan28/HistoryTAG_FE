@@ -13,6 +13,9 @@ export type ImplementationTaskResponseDTO = {
   hospitalName?: string | null;
   picDeploymentId: number | null;
   picDeploymentName?: string | null;
+  receivedById?: number | null;
+  receivedByName?: string | null;
+  receivedDate?: string | null;
   quantity?: number | null;
   agencyId?: number | null;
   hisSystemId?: number | null;
@@ -131,10 +134,36 @@ function authHeaders(extra?: Record<string, string>) {
   };
 }
 
+function toLocalISOString(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const y = date.getFullYear();
+  const m = pad(date.getMonth() + 1);
+  const d = pad(date.getDate());
+  const hh = pad(date.getHours());
+  const mm = pad(date.getMinutes());
+  const ss = pad(date.getSeconds());
+  return `${y}-${m}-${d}T${hh}:${mm}:${ss}`; // no timezone suffix
+}
+
 function toISOOrNull(v?: string | Date | null) {
   if (!v) return null;
   try {
-    return typeof v === "string" ? (v.trim() ? new Date(v).toISOString() : null) : v.toISOString();
+    if (v instanceof Date) {
+      return toLocalISOString(v);
+    }
+    const raw = String(v).trim();
+    if (!raw) return null;
+    // If has timezone, keep as is
+    if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) return raw;
+    // If datetime-local 'YYYY-MM-DDTHH:mm' or with seconds
+    const m1 = raw.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/);
+    if (m1) {
+      return raw.length === 16 ? `${raw}:00` : raw.slice(0, 19);
+    }
+    // Fallback: attempt parse and format local
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) return toLocalISOString(d);
+    return raw;
   } catch {
     return null;
   }
@@ -145,38 +174,24 @@ function toDatetimeLocalInput(value?: string | null) {
   try {
     const raw = String(value).trim();
     if (!raw) return "";
-    const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(raw);
-    let date: Date;
-    if (hasTimezone) {
-      date = new Date(raw);
-    } else {
-      const match = raw.match(
-        /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?/
-      );
-      if (match) {
-        const [, y, m, d, hh = "00", mm = "00", ss = "00"] = match;
-        date = new Date(
-          Date.UTC(
-            Number(y),
-            Number(m) - 1,
-            Number(d),
-            Number(hh),
-            Number(mm),
-            Number(ss)
-          )
-        );
-      } else {
-        date = new Date(raw);
-      }
+
+    if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) {
+      const date = new Date(raw);
+      if (Number.isNaN(date.getTime())) return raw.slice(0, 16);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const year = date.getFullYear();
+      const month = pad(date.getMonth() + 1);
+      const day = pad(date.getDate());
+      const hours = pad(date.getHours());
+      const minutes = pad(date.getMinutes());
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
     }
-    if (Number.isNaN(date.getTime())) return raw.slice(0, 16);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const year = date.getFullYear();
-    const month = pad(date.getMonth() + 1);
-    const day = pad(date.getDate());
-    const hours = pad(date.getHours());
-    const minutes = pad(date.getMinutes());
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
+
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw)) {
+      return raw.slice(0, 16);
+    }
+
+    return raw;
   } catch {
     return "";
   }
@@ -465,21 +480,73 @@ function TaskFormModal({
     []
   );
 
+  const currentUser = useMemo((): { id: number | null; name: string } => {
+    const parseNumber = (value: unknown): number | null => {
+      const num = Number(value);
+      return Number.isFinite(num) && num > 0 ? num : null;
+    };
+
+    const readStoredUser = (): Record<string, any> | null => {
+      try {
+        const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? (parsed as Record<string, any>) : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const storedUser = readStoredUser();
+    let id = storedUser ? parseNumber(storedUser.id ?? storedUser.userId) : null;
+
+    if (!id) {
+      id = parseNumber(localStorage.getItem("userId") ?? sessionStorage.getItem("userId"));
+    }
+
+    const nameCandidates = [
+      storedUser?.fullname,
+      storedUser?.fullName,
+      storedUser?.username,
+      storedUser?.name,
+      localStorage.getItem("username"),
+      sessionStorage.getItem("username"),
+    ];
+
+    let name = "";
+    for (const candidate of nameCandidates) {
+      if (typeof candidate === "string" && candidate.trim()) {
+        name = candidate.trim();
+        break;
+      }
+    }
+
+    if (!name && storedUser?.email && typeof storedUser.email === "string") {
+      name = storedUser.email;
+    }
+
+    return { id: id ?? null, name };
+  }, []);
+  const currentUserId = currentUser.id;
+  const currentUserName = currentUser.name;
+
   // Removed loaders for Agency/HIS/Hardware (fields hidden)
 
   const [model, setModel] = useState<ImplementationTaskRequestDTO>(() => {
     const normalized = normalizeStatus(initial?.status)?.toString() ?? "RECEIVED";
     const isNew = !initial?.id;
+    const defaultPicId = Number(initial?.picDeploymentId) || (isNew ? currentUserId ?? 0 : 0);
+    const defaultStart = initial?.startDate || (isNew ? toLocalISOString(new Date()) : "");
     return {
       name: initial?.name || "",
       hospitalId: Number(initial?.hospitalId) || 0,
-      picDeploymentId: Number(initial?.picDeploymentId) || 0,
+      picDeploymentId: defaultPicId,
       apiTestStatus: initial?.apiTestStatus ?? "",
       additionalRequest: initial?.additionalRequest ?? "",
       deadline: initial?.deadline ?? "",
       completionDate: initial?.completionDate ?? "",
       status: normalized,
-      startDate: initial?.startDate ?? (isNew ? new Date().toISOString() : ""),
+      startDate: defaultStart,
     };
   });
 
@@ -490,9 +557,10 @@ function TaskFormModal({
   });
 
   const [picOpt, setPicOpt] = useState<{ id: number; name: string } | null>(() => {
-    const id = (initial?.picDeploymentId as number) || 0;
-    const nm = (initial?.picDeploymentName as string) || "";
-    return id ? { id, name: nm || String(id) } : null;
+    const isNew = !initial?.id;
+    const id = (initial?.picDeploymentId as number) || (isNew ? currentUserId ?? 0 : 0);
+    const nm = (initial?.picDeploymentName as string) || (isNew ? currentUserName : "");
+    return id ? { id, name: nm && nm.trim() ? nm : String(id) } : null;
   });
 
   // Removed: agencyOpt, hisOpt, hardwareOpt (fields hidden)
@@ -502,17 +570,21 @@ function TaskFormModal({
 
     const normalized = normalizeStatus(initial?.status)?.toString() ?? "RECEIVED";
     const isNew = !initial?.id;
-    const nowIso = new Date().toISOString();
+    const nowIso = toLocalISOString(new Date());
+    const defaultPicId = Number(initial?.picDeploymentId) || (isNew ? currentUserId ?? 0 : 0);
+    const defaultPicName = (initial?.picDeploymentName as string) || (isNew ? currentUserName : "");
+    const defaultStart = initial?.startDate || (isNew ? nowIso : "");
+
     setModel({
       name: initial?.name || "",
       hospitalId: Number(initial?.hospitalId) || 0,
-      picDeploymentId: Number(initial?.picDeploymentId) || 0,
+      picDeploymentId: defaultPicId,
       apiTestStatus: initial?.apiTestStatus ?? "",
       additionalRequest: initial?.additionalRequest ?? "",
       deadline: initial?.deadline ?? "",
       completionDate: initial?.completionDate ?? "",
       status: normalized,
-      startDate: initial?.startDate ?? (isNew ? nowIso : ""),
+      startDate: defaultStart,
     });
 
     // Setup selects: nếu có tên truyền vào thì dùng, không thì null (và sẽ resolve theo ID phía dưới)
@@ -520,9 +592,9 @@ function TaskFormModal({
     const hnm = (initial?.hospitalName as string) || "";
     setHospitalOpt(hid ? { id: hid, name: hnm || String(hid) } : null);
 
-    const pid = (initial?.picDeploymentId as number) || 0;
-    const pnm = (initial?.picDeploymentName as string) || "";
-    setPicOpt(pid ? { id: pid, name: pnm || String(pid) } : null);
+    const pid = defaultPicId;
+    const pnm = defaultPicName;
+    setPicOpt(pid ? { id: pid, name: pnm && pnm.trim() ? pnm : String(pid) } : null);
 
     // removed resolve for agency/his/hardware
 
@@ -571,7 +643,7 @@ function TaskFormModal({
         })
         .catch(() => { });
     }
-  }, [open, initial]);
+  }, [open, initial, currentUserId, currentUserName]);
 
   // Removed resolve effect for agency/his/hardware
 
@@ -597,7 +669,7 @@ function TaskFormModal({
 
     const normalizedStatus = normalizeStatus(model.status);
     const isNew = !(initial as any)?.id;
-    const startDateRaw = model.startDate || (isNew ? new Date().toISOString() : "");
+    const startDateRaw = model.startDate || (isNew ? toLocalISOString(new Date()) : "");
     const completionRaw = normalizedStatus === "COMPLETED"
       ? (model.completionDate || new Date().toISOString())
       : "";
@@ -676,7 +748,7 @@ function TaskFormModal({
               />
 
               <RemoteSelect
-                label="Người phụ trách (PIC)"
+                label="Người làm"
                 required
                 placeholder="Nhập tên người phụ trách để tìm…"
                 fetchOptions={searchPICs}
@@ -717,6 +789,7 @@ function TaskFormModal({
 
               <Field label="Deadline (ngày)">
                 <TextInput
+                  lang="vi"
                   type="datetime-local"
                   value={toDatetimeLocalInput(model.deadline)}
                   onChange={(e) => setModel((s) => ({ ...s, deadline: e.target.value }))}
@@ -724,6 +797,7 @@ function TaskFormModal({
               </Field>
               <Field label="Ngày bắt đầu">
                 <TextInput
+                  lang="vi"
                   type="datetime-local"
                   value={toDatetimeLocalInput(model.startDate)}
                   onChange={(e) => setModel((s) => ({ ...s, startDate: e.target.value }))}
@@ -731,6 +805,7 @@ function TaskFormModal({
               </Field>
               <Field label="Ngày hoàn thành">
                 <TextInput
+                  lang="vi"
                   type="datetime-local"
                   value={toDatetimeLocalInput(model.completionDate)}
                   onChange={(e) => setModel((s) => ({ ...s, completionDate: e.target.value }))}
@@ -774,6 +849,8 @@ function DetailModal({
 }) {
   if (!open || !item) return null;
 
+  console.log("DetailModal item startDate", item.startDate);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
@@ -807,6 +884,7 @@ function DetailModal({
             <Info icon={<FaHospital />} label="Tên" value={item.name} />
             <Info icon={<FiMapPin />} label="Bệnh viện" value={item.hospitalName} />
             <Info icon={<FiUser />} label="Người phụ trách" value={item.picDeploymentName} />
+            <Info icon={<FiUser />} label="Tiếp nhận bởi" value={item.receivedByName || "—"} />
 
             <Info
               icon={<FiTag />}
@@ -908,8 +986,8 @@ const ImplementationTasksPage: React.FC = () => {
   const [editing, setEditing] = useState<ImplementationTaskResponseDTO | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [sortBy, setSortBy] = useState("id");
-  const [sortDir, setSortDir] = useState("asc");
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortDir, setSortDir] = useState("desc");
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(10);
   const [totalCount, setTotalCount] = useState<number | null>(null);
@@ -975,7 +1053,19 @@ const ImplementationTasksPage: React.FC = () => {
         ...item,
         status: normalizeStatus(item.status) || item.status || "RECEIVED",
       }));
-      setData(normalizedItems);
+      let finalItems = normalizedItems;
+      if (sortBy === "createdAt") {
+        const dir = sortDir === "asc" ? 1 : -1;
+        finalItems = [...normalizedItems].sort((a, b) => {
+          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          if (aTime !== bTime) return (aTime - bTime) * dir;
+          const aId = Number(a.id ?? 0);
+          const bId = Number(b.id ?? 0);
+          return (aId - bId) * dir;
+        });
+      }
+      setData(finalItems);
       if (resp && typeof resp.totalElements === "number") setTotalCount(resp.totalElements);
       else setTotalCount(Array.isArray(resp) ? resp.length : null);
 
@@ -1373,7 +1463,7 @@ const ImplementationTasksPage: React.FC = () => {
             <div className="mt-3 text-sm text-gray-600 dark:text-gray-300 flex items-center gap-4">
               <span>Tổng: <span className="font-semibold text-gray-800 dark:text-gray-100">{loading ? '...' : (totalCount ?? data.length)}</span></span>
               {typeof acceptedCount === 'number' && (
-                <span>Đã nghiệm thu: <span className="font-semibold text-gray-800 dark:text-gray-100">{acceptedCount}/{totalCount ?? data.length} task</span></span>
+                <span>Đã hoàn thành: <span className="font-semibold text-gray-800 dark:text-gray-100">{acceptedCount}/{totalCount ?? data.length} task</span></span>
               )}
             </div>
           </div>
@@ -1384,6 +1474,7 @@ const ImplementationTasksPage: React.FC = () => {
                 <option value="id">Sắp xếp theo: id</option>
                 <option value="hospitalName">Sắp xếp theo: bệnh viện</option>
                 <option value="deadline">Sắp xếp theo: deadline</option>
+                <option value="createdAt">Sắp xếp theo: ngày tạo</option>
               </select>
               <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900" value={sortDir} onChange={(e) => setSortDir(e.target.value)}>
                 <option value="asc">Tăng dần</option>
@@ -1411,7 +1502,7 @@ const ImplementationTasksPage: React.FC = () => {
               </button>
             )}
             <button className="rounded-full border px-4 py-2 text-sm shadow-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 flex items-center gap-2" onClick={async () => {
-              setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc'); setPage(0);
+              setSearchTerm(''); setStatusFilter(''); setSortBy('createdAt'); setSortDir('desc'); setPage(0);
               setLoading(true);
               const start = Date.now();
               await fetchList();
@@ -1420,8 +1511,6 @@ const ImplementationTasksPage: React.FC = () => {
               if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
               setLoading(false);
             }}>
-
-              <span>Làm mới</span>
             </button>
           </div>
         </div>
@@ -1604,12 +1693,13 @@ const ImplementationTasksPage: React.FC = () => {
                   key={row.id}
                   task={row as any}
                   idx={enableItemAnimation ? idx : undefined}
+                  displayIndex={page * size + idx}
                   animate={enableItemAnimation}
                   onOpen={() => { setDetailItem(row); setDetailOpen(true); }}
                   onEdit={() => { setEditing(row); setModalOpen(true); }}
                   onDelete={(id: number) => { handleDelete(id); }}
-                  canEdit={canManage}
-                  canDelete={canManage}
+                  canEdit={canManage && (() => { try { const uidRaw = localStorage.getItem("userId") || sessionStorage.getItem("userId"); const uid = uidRaw ? Number(uidRaw) : 0; return uid > 0 && Number(row.picDeploymentId) === uid; } catch { return false; } })()}
+                  canDelete={canManage && (() => { try { const uidRaw = localStorage.getItem("userId") || sessionStorage.getItem("userId"); const uid = uidRaw ? Number(uidRaw) : 0; return uid > 0 && Number(row.picDeploymentId) === uid; } catch { return false; } })()}
                 />
 
               ))

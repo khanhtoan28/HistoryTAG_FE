@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
@@ -178,8 +179,9 @@ export default function HardwarePage() {
     try {
       await HardwareAPI.deleteHardware(id);
       await fetchList();
+      toast.success("Xóa phần cứng thành công");
     } catch (e: any) {
-      alert(e.message || "Xóa thất bại");
+      toast.error(e.message || "Xóa thất bại");
     } finally {
       setLoading(false);
     }
@@ -214,8 +216,10 @@ export default function HardwarePage() {
       closeModal();
       setPage(0);
       await fetchList();
+      toast.success(isEditing ? "Cập nhật phần cứng thành công" : "Tạo phần cứng thành công");
     } catch (e: any) {
       setError(e.message || "Lưu thất bại");
+      toast.error(e.message || "Lưu thất bại");
     } finally {
       setLoading(false);
     }
@@ -260,12 +264,6 @@ export default function HardwarePage() {
             <p className="text-sm text-gray-600">Tổng: <span className="font-semibold text-gray-900">{totalElements}</span></p>
             <div className="flex items-center gap-3">
               <button className="rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md" onClick={onCreate}> + Thêm phần cứng</button>
-              <button className="rounded-xl border-2 border-gray-300 px-5 py-3 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400 flex items-center gap-2" onClick={fetchList}>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Làm mới
-              </button>
             </div>
           </div>
         </ComponentCard>
