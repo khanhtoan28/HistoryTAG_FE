@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import { useEffect, useState, useCallback } from "react";
@@ -571,7 +572,7 @@ export default function SuperAdminHome() {
   const displayedImplTasks = profileImplTasks.filter((t) => inSelectedQuarter((t as any).startDate ?? (t as any).completionDate ?? (t as any).createdDate ?? null));
   const displayedDevTasks = profileDevTasks.filter((t) => inSelectedQuarter((t as any).startDate ?? (t as any).endDate ?? (t as any).createdDate ?? null));
   const displayedMaintTasks = profileMaintTasks.filter((t) => inSelectedQuarter((t as any).startDate ?? (t as any).endDate ?? (t as any).createdDate ?? null));
-  const displayedBusinesses = profileBusinesses.filter((b) => inSelectedQuarter((b as Record<string, unknown>)['startDate'] ?? (b as Record<string, unknown>)['completionDate'] ?? null));
+  const displayedBusinesses = profileBusinesses.filter((b) => inSelectedQuarter((b as any).startDate ?? (b as any).completionDate ?? null));
 
   // compute available status options (from data) and apply per-table status filters
   const implStatusOptions = Array.from(new Set(displayedImplTasks.map(t => String((t as any).status ?? '').toUpperCase()).filter(s => s && s !== ''))).sort();
@@ -582,21 +583,7 @@ export default function SuperAdminHome() {
   const filteredDevTasks = devStatusFilter === 'all' ? displayedDevTasks : displayedDevTasks.filter(t => String((t as any).status ?? '').toUpperCase() === devStatusFilter);
   const filteredMaintTasks = maintStatusFilter === 'all' ? displayedMaintTasks : displayedMaintTasks.filter(t => String((t as any).status ?? '').toUpperCase() === maintStatusFilter);
 
-  // Aggregations for implementation and maintenance
-  const completedStatuses = new Set(['COMPLETED', 'DONE', 'TRANSFERRED_TO_CUSTOMER', 'ACCEPTED']);
-  const transferredStatuses = new Set(['TRANSFERRED', 'PENDING_TRANSFER', 'TRANSFERRED_TO_CUSTOMER']);
-
-  // implementation aggregates removed per user request (cards for received/completed removed)
-
-  const maintTotalReceived = displayedMaintTasks.length;
-  const maintTotalCompleted = displayedMaintTasks.reduce((acc, t) => {
-    const s = String((t as any).status ?? '').toUpperCase();
-    return acc + (completedStatuses.has(s) ? 1 : 0);
-  }, 0);
-  const maintTotalTransferred = displayedMaintTasks.reduce((acc, t) => {
-    const s = String((t as any).status ?? '').toUpperCase();
-    return acc + (transferredStatuses.has(s) ? 1 : 0);
-  }, 0);
+  // Aggregations for implementation and maintenance (kept minimal per current UI needs)
 
   // CSV export helpers
   const escapeCsvCell = (v: unknown) => {
