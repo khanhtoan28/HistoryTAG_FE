@@ -998,7 +998,7 @@ const ImplementationTasksPage: React.FC = () => {
   const [detailItem, setDetailItem] = useState<ImplementationTaskResponseDTO | null>(null);
   // hospital list view state (like SuperAdmin page)
   const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
-  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number | null; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number }>>([]);
+  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number | null; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean }>>([]);
   const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
   const [hospitalPage, setHospitalPage] = useState<number>(0);
   const [hospitalSize, setHospitalSize] = useState<number>(20);
@@ -1164,17 +1164,25 @@ const ImplementationTasksPage: React.FC = () => {
       const items: ImplementationTaskResponseDTO[] = Array.isArray(payload?.content) ? payload.content : Array.isArray(payload) ? payload : [];
 
       // Aggregate by hospitalName
-      const acc = new Map<string, { id: number | null; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number }>();
+      const acc = new Map<string, { id: number | null; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number; transferredCount: number; acceptedByMaintenanceCount: number }>();
       for (const it of items) {
         const name = (it.hospitalName || "").toString().trim() || "—";
         const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
         const key = hospitalId != null ? `id-${hospitalId}` : `name-${name}`;
-        const current = acc.get(key) || { id: hospitalId, label: name, subLabel: "", taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0 };
+        const current = acc.get(key) || { id: hospitalId, label: name, subLabel: "", taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0, transferredCount: 0, acceptedByMaintenanceCount: 0 };
         if (current.id == null && hospitalId != null) current.id = hospitalId;
         if (!current.label && name) current.label = name;
         current.taskCount += 1;
         const taskStatus = normalizeStatus(it.status);
         if (taskStatus === 'COMPLETED') current.acceptedCount += 1;
+        // Count transferred tasks
+        if (it.transferredToMaintenance === true) {
+          current.transferredCount += 1;
+        }
+        // Count tasks accepted by maintenance (readOnlyForDeployment = true means maintenance accepted)
+        if (it.readOnlyForDeployment === true && it.transferredToMaintenance === true) {
+          current.acceptedByMaintenanceCount += 1;
+        }
         // Count near due / overdue for non-completed
         if (taskStatus !== 'COMPLETED' && it.deadline) {
           const d = new Date(it.deadline);
@@ -1189,7 +1197,12 @@ const ImplementationTasksPage: React.FC = () => {
         }
         acc.set(key, current);
       }
-      const list = Array.from(acc.values());
+      // Calculate allTransferred and allAccepted after processing all tasks
+      const list = Array.from(acc.values()).map(h => ({
+        ...h,
+        allTransferred: h.taskCount > 0 && h.transferredCount === h.taskCount,
+        allAccepted: h.transferredCount > 0 && h.acceptedByMaintenanceCount === h.transferredCount,
+      }));
       // Enrich province/subLabel by querying hospitals search per name (best effort)
       async function resolveHospitalMeta(name: string): Promise<{ province: string; id: number | null }> {
         try {
@@ -1501,17 +1514,7 @@ const ImplementationTasksPage: React.FC = () => {
                 <span>Thêm mới</span>
               </button>
             )}
-            <button className="rounded-full border px-4 py-2 text-sm shadow-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 flex items-center gap-2" onClick={async () => {
-              setSearchTerm(''); setStatusFilter(''); setSortBy('createdAt'); setSortDir('desc'); setPage(0);
-              setLoading(true);
-              const start = Date.now();
-              await fetchList();
-              const minMs = 800;
-              const elapsed = Date.now() - start;
-              if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
-              setLoading(false);
-            }}>
-            </button>
+              
           </div>
         </div>
       </div>
@@ -1636,7 +1639,7 @@ const ImplementationTasksPage: React.FC = () => {
                                   >
                                     Xem task
                                   </button>
-                                  {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) === (hospital.taskCount || 0) && (
+                                  {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) === (hospital.taskCount || 0) && !hospital.allTransferred && (
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -1647,6 +1650,22 @@ const ImplementationTasksPage: React.FC = () => {
                                     >
                                       ➜ Chuyển sang bảo trì
                                     </button>
+                                  )}
+                                  {canManage && (hospital.taskCount || 0) > 0 && hospital.allTransferred && !hospital.allAccepted && (
+                                    <span
+                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-yellow-100 text-yellow-700 text-sm font-medium"
+                                      title="Đã chuyển sang bảo trì, đang chờ bảo trì tiếp nhận"
+                                    >
+                                      ⏳ Chờ tiếp nhận
+                                    </span>
+                                  )}
+                                  {canManage && (hospital.taskCount || 0) > 0 && hospital.allTransferred && hospital.allAccepted && (
+                                    <span
+                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-100 text-green-700 text-sm font-medium"
+                                      title="Đã chuyển sang bảo trì và bảo trì đã tiếp nhận"
+                                    >
+                                      ✓ Đã chuyển sang bảo trì
+                                    </span>
                                   )}
                                   {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) < (hospital.taskCount || 0) && (
                                     <span
