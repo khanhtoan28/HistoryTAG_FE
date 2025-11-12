@@ -9,7 +9,10 @@ import {
   HorizontaLDots,
   PageIcon,
   PlugInIcon,
-  TableIcon
+  TableIcon,
+  DocsIcon,
+  BoxIconLine,
+  TaskIcon,
 } from "../icons";
 import { UserIcon } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
@@ -41,7 +44,7 @@ const navItems: NavItem[] = [
   // },
   {
     name: "Bảng dữ liệu",
-    icon: <TableIcon />,
+    icon: <DocsIcon />,
     subItems: [
       { name: "Bệnh viện", path: "/hospitals", pro: false },
       { name: "Đơn vị HIS", path: "/his-sys", pro: false }
@@ -49,7 +52,7 @@ const navItems: NavItem[] = [
   },
   {
     name: "Trang",
-    icon: <PageIcon />,
+    icon: <TaskIcon />,
     subItems: [
       { name: "Công việc triển khai", path: "/implementation-tasks", pro: false },
       { name: "Công việc DEV", path: "/dev-tasks", pro: false },
@@ -58,7 +61,7 @@ const navItems: NavItem[] = [
   },
   {
     name: "Phòng kinh doanh",
-    icon: <PageIcon />,
+    icon: <BoxIconLine />,
     path: "/admin/business",
   },
 ];
