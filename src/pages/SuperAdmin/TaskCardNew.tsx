@@ -129,9 +129,14 @@ export default function TaskCardNew({
 
   // Tính toán deadline status (quá hạn / sắp hạn)
   const deadlineStatus = (() => {
-    // Chỉ hiển thị khi task chưa COMPLETED và có deadline
+    // Chỉ hiển thị khi task chưa hoàn thành và có deadline
+    // For implementation: COMPLETED = hoàn thành
+    // For maintenance: ACCEPTED (Nghiệm thu) và WAITING_FOR_DEV (Hoàn thành) = hoàn thành
     const normalizedStatus = effectiveStatus.toUpperCase();
-    if (normalizedStatus === "COMPLETED" || !task.deadline) return null;
+    const isCompleted = normalizedStatus === "COMPLETED" || 
+                       normalizedStatus === "ACCEPTED" || 
+                       normalizedStatus === "WAITING_FOR_DEV";
+    if (isCompleted || !task.deadline) return null;
 
     try {
       const deadline = new Date(task.deadline);
@@ -158,15 +163,15 @@ export default function TaskCardNew({
       style={style}
     >
       {leadingTopLeft && (
-        <div className="absolute left-2.5 top-2.5 z-10">
+        <div className="absolute left-1.5 top-1  z-5">
           {leadingTopLeft}
         </div>
       )}
-      <div className={`flex gap-4 items-start ${leadingTopLeft ? 'pl-7 pt-1' : ''}`}>
+      <div className={`flex gap-4 items-start ${leadingTopLeft ? 'pl-0   pt-0' : ''}`}>
         {/* Left badge + icon */}
         <div className="flex items-center gap-3">
           <div className="flex flex-col items-center">
-            <div className="w-12 h-12 rounded-md bg-gray-50 dark:bg-gray-800 border flex items-center justify-center text-sm font-semibold text-gray-700 dark:text-gray-200">
+            <div className="w-12 h-12 rounded-md bg-gray-50 dark:bg-blue-800 border flex items-center justify-center text-sm font-semibold text-gray-700 dark:text-gray-200">
               {orderLabel}
             </div>
           </div>

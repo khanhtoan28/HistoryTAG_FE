@@ -1866,7 +1866,7 @@ const ImplementationTasksPage: React.FC = () => {
                               if (e.target.checked) newSet.add(taskId); else newSet.delete(taskId);
                               setSelectedTaskIds(newSet);
                             }}
-                            className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 shadow-sm bg-white"
+                            className="w-4.5 h-4.5 text-blue-600 border-blue-300 rounded focus:ring-blue-500 shadow-sm bg-white"
                           />
                         ) : undefined}
                       />

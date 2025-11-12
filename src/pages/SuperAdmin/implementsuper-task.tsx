@@ -110,7 +110,7 @@ const ImplementSuperTaskPage: React.FC = () => {
   const searchDebounce = useRef<number | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<string>("id");
-  const [sortDir, setSortDir] = useState<string>("asc");
+  const [sortDir, setSortDir] = useState<string>("desc");
   const [page, setPage] = useState<number>(0);
   const [size, setSize] = useState<number>(10);
   const [enableItemAnimation, setEnableItemAnimation] = useState<boolean>(true);
@@ -134,16 +134,16 @@ const ImplementSuperTaskPage: React.FC = () => {
   const [editing, setEditing] = useState<ImplTask | null>(null);
   const [viewOnly, setViewOnly] = useState<boolean>(false);
 
-  async function fetchList() {
+  async function fetchList(overrides?: { page?: number; size?: number; sortBy?: string; sortDir?: string }) {
     const start = Date.now();
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({
-        page: String(page),
-        size: String(size),
-        sortBy: sortBy,
-        sortDir: sortDir,
+        page: String(overrides?.page ?? page),
+        size: String(overrides?.size ?? size),
+        sortBy: overrides?.sortBy ?? sortBy,
+        sortDir: overrides?.sortDir ?? sortDir,
       });
       // Build search param. If a PIC is selected, append the PIC's label (name)
       // to the search query so backend can match tasks by PIC name even when
@@ -293,8 +293,8 @@ const ImplementSuperTaskPage: React.FC = () => {
           ...hospital,
           subLabel: province, // Keep only province without task count
           taskCount: taskCount,
-          nearDueCount: 0,
-          overdueCount: 0,
+          nearDueCount: 0, // Initialize to 0 - will be calculated in augment()
+          overdueCount: 0, // Initialize to 0 - will be calculated in augment()
           transferredCount: 0,
         };
       });
@@ -328,29 +328,55 @@ const ImplementSuperTaskPage: React.FC = () => {
       const allPayload = allRes.ok ? await allRes.json() : [];
       const allItems = Array.isArray(allPayload?.content) ? allPayload.content : Array.isArray(allPayload) ? allPayload : [];
       const augment = (list: Array<typeof baseList[number] & { acceptedCount?: number }>) => {
+        // Reset all nearDueCount and overdueCount to 0 before counting
+        for (const item of list) {
+          item.nearDueCount = 0;
+          item.overdueCount = 0;
+          item.transferredCount = 0;
+        }
+        
         const today = new Date();
         const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+        
         for (const it of allItems as any[]) {
-          const statusUp = String(it?.status || '').toUpperCase();
+          const statusUp = String(it?.status || '').trim().toUpperCase();
           const label = String(it?.hospitalName || '').trim();
           const target = list.find(x => x.label === label);
           if (!target) continue;
+          
+          // Check if task is transferred to maintenance
           const isTransferred = Boolean((it as any)?.transferredToMaintenance) || statusUp === 'TRANSFERRED';
+          
+          // Update transferred count
           if (isTransferred) {
             target.transferredCount = (target.transferredCount || 0) + 1;
           }
           if (statusUp === 'TRANSFERRED') {
             target.acceptedCount = (target.acceptedCount || 0) + 1;
           }
-          // Skip completed tasks when counting near due/overdue
-          if (statusUp === 'COMPLETED' || isTransferred) continue;
+          
+          // CRITICAL: Skip ALL completed/transferred tasks when counting near due/overdue
+          // This must be checked BEFORE calculating deadline status
+          // Tasks that are completed or transferred should NOT be counted in nearDueCount/overdueCount
+          if (statusUp === 'COMPLETED' || isTransferred) {
+            continue; // Skip this task - do not count towards near due/overdue
+          }
+          
+          // Only process tasks that are NOT completed and NOT transferred
           if (!it?.deadline) continue;
           const d = new Date(it.deadline);
           if (Number.isNaN(d.getTime())) continue;
           d.setHours(0,0,0,0);
           const dayDiff = Math.round((d.getTime() - startToday) / (24 * 60 * 60 * 1000));
-          if (dayDiff === -1 || dayDiff === 0) target.nearDueCount = (target.nearDueCount || 0) + 1;
-          if (dayDiff < 0) target.overdueCount = (target.overdueCount || 0) + 1;
+          
+          // Quá hạn: deadline đã qua (dayDiff < 0)
+          if (dayDiff < 0) {
+            target.overdueCount = (target.overdueCount || 0) + 1;
+          }
+          // Sắp đến hạn: hôm nay hoặc trong 3 ngày tới (0 <= dayDiff <= 3)
+          else if (dayDiff >= 0 && dayDiff <= 3) {
+            target.nearDueCount = (target.nearDueCount || 0) + 1;
+          }
         }
       };
 
@@ -626,11 +652,24 @@ const ImplementSuperTaskPage: React.FC = () => {
     // Refresh hospital list to update task counts (especially acceptedCount)
     await fetchHospitalsWithTasks();
     
-    // If creating new task or updating task for a specific hospital, refresh task list
-    if (!isUpdate || (selectedHospital && !showHospitalList)) {
-      await fetchList();
+    // If creating new task, reset to first page and ensure sort by id desc (newest first)
+    if (!isUpdate) {
+      // Set sort to id desc so new task appears at top
+      setPage(0);
+      setSortBy("id");
+      setSortDir("desc");
+      // Fetch immediately with new sort params to ensure new task appears at top
+      await fetchList({ page: 0, sortBy: "id", sortDir: "desc" });
       if (selectedHospital && !showHospitalList) {
         await fetchAcceptedCountForHospital(selectedHospital);
+      }
+    } else {
+      // If updating task, just refresh the list
+      if (selectedHospital && !showHospitalList) {
+        await fetchList();
+        await fetchAcceptedCountForHospital(selectedHospital);
+      } else {
+        await fetchList();
       }
     }
     
@@ -719,7 +758,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                       {loadingHospitals ? "..." : hospitalSummary.total}
                     </span>
                   </span>
-                  <span className="font-semibold text-gray-800 dark:text-gray-200">
+                  {/* <span className="font-semibold text-gray-800 dark:text-gray-200">
                     Đang hiển thị:
                     <span className="ml-1 font-bold text-gray-900 dark:text-gray-100">
                       {loadingHospitals ? "..." : hospitalSummary.filteredCount}
@@ -730,7 +769,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                     <span className="ml-1 font-bold text-gray-900 dark:text-gray-100">
                       {loadingHospitals ? "..." : hospitalSummary.completed}
                     </span>
-                  </span>
+                  </span> */}
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -810,11 +849,11 @@ const ImplementSuperTaskPage: React.FC = () => {
                                 {(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task
                               </span>
                               {(hospital.nearDueCount ?? 0) > 0 && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Sắp hạn: {hospital.nearDueCount}</span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Sắp đến hạn: {hospital.nearDueCount}</span>
                               )}
                               {(hospital.overdueCount ?? 0) > 0 && (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Quá hạn: {hospital.overdueCount}</span>
-                              )}
+                              )}  
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -1177,3 +1216,4 @@ function Info({ label, value, icon }: { label: string; value?: React.ReactNode; 
 }
 
 export default ImplementSuperTaskPage;
+
