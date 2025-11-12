@@ -281,20 +281,7 @@ function PlusIcon({ className }: { className?: string }) {
         </svg>
     );
 }
-function ChevronLeftIcon({ className }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className || "w-4 h-4"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <polyline points="15 18 9 12 15 6" />
-        </svg>
-    );
-}
-function ChevronRightIcon({ className }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={className || "w-4 h-4"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <polyline points="9 18 15 12 9 6" />
-        </svg>
-    );
-}
+// Chevron icons removed; pagination uses text arrows/characters to avoid unused symbol warnings
 
 // formatStt removed - cards now rendered by TaskCardNew which shows id
 
@@ -1429,28 +1416,53 @@ const ImplementationTasksPage: React.FC = () => {
                 </div>
             </div>
 
-            <div className="mt-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <button className="px-3 py-1 border rounded inline-flex items-center gap-2" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0}>
-                        <ChevronLeftIcon />
-                        <span>Prev</span>
-                    </button>
-                    <span>Trang {page + 1}{totalCount ? ` / ${Math.max(1, Math.ceil((totalCount || 0) / size))}` : ""}</span>
-                    <button className="px-3 py-1 border rounded inline-flex items-center gap-2" onClick={() => setPage((p) => p + 1)} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)}>
-                        <span>Next</span>
-                        <ChevronRightIcon />
-                    </button>
-                </div>
-                <div className="flex items-center gap-2">
-                    <label className="text-sm">Số hàng:</label>
-                    <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1">
-                        <option value="5">5</option>
-                        <option value="10">10</option>
-                        <option value="20">20</option>
-                        <option value="50">50</option>
-                    </select>
-                </div>
-            </div>
+                    <div className="mt-4 flex items-center justify-between py-3">
+                        <div className="text-sm text-gray-600">
+                            {totalCount === null ? (
+                                <span>Hiển thị 0 trong tổng số 0 mục</span>
+                            ) : (
+                                (() => {
+                                    const total = totalCount || 0;
+                                    const from = page * size + 1;
+                                    const to = Math.min((page + 1) * size, total);
+                                    return <span>Hiển thị {from} đến {to} trong tổng số {total} mục</span>;
+                                })()
+                            )}
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
+                                <label className="text-sm text-gray-600">Hiển thị:</label>
+                                <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1 text-sm">
+                                    <option value="5">5</option>
+                                    <option value="10">10</option>
+                                    <option value="20">20</option>
+                                    <option value="50">50</option>
+                                </select>
+                            </div>
+
+                            <div className="inline-flex items-center gap-1">
+                                <button onClick={() => setPage(0)} disabled={page <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Đầu">«</button>
+                                <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Trước">‹</button>
+
+                                {(() => {
+                                    const total = Math.max(1, Math.ceil((totalCount || 0) / size));
+                                    const pages: number[] = [];
+                                    const start = Math.max(1, page + 1 - 2);
+                                    const end = Math.min(total, start + 4);
+                                    for (let i = start; i <= end; i++) pages.push(i);
+                                    return pages.map((p) => (
+                                        <button key={p} onClick={() => setPage(p - 1)} className={`px-3 py-1 border rounded text-sm ${page + 1 === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}>
+                                            {p}
+                                        </button>
+                                    ));
+                                })()}
+
+                                <button onClick={() => setPage((p) => Math.min(Math.max(0, Math.ceil((totalCount || 0) / size) - 1), p + 1))} disabled={(page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Tiếp">›</button>
+                                <button onClick={() => setPage(Math.max(0, Math.ceil((totalCount || 0) / size) - 1))} disabled={(page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Cuối">»</button>
+                            </div>
+                        </div>
+                    </div>
 
             <TaskFormModal
                 open={modalOpen}

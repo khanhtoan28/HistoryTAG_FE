@@ -14,6 +14,9 @@ type MaintTask = {
   name: string;
   hospitalName?: string | null;
   picDeploymentName?: string | null;
+  receivedById?: number | null;
+  receivedByName?: string | null;
+  receivedDate?: string | null;
   status?: string | null;
   createdAt?: string | null;
   apiUrl?: string | null;
@@ -124,7 +127,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
   const searchDebounce = useRef<number | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<string>("id");
-  const [sortDir, setSortDir] = useState<string>("asc");
+  const [sortDir, setSortDir] = useState<string>("desc");
   const [page, setPage] = useState<number>(0);
   const [size, setSize] = useState<number>(10);
   const [enableItemAnimation, setEnableItemAnimation] =
@@ -140,7 +143,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
   const [loadingPending, setLoadingPending] = useState(false);
   // hospital list view state (like implementation-tasks page)
   const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
-  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number }>>([]);
+  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; fromDeployment?: boolean; acceptedByMaintenance?: boolean }>>([]);
   const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
   const [hospitalPage, setHospitalPage] = useState<number>(0);
   const [hospitalSize, setHospitalSize] = useState<number>(20);
@@ -150,16 +153,16 @@ const MaintenanceSuperTaskPage: React.FC = () => {
   const [hospitalSortBy, setHospitalSortBy] = useState<string>("label");
   const [hospitalSortDir, setHospitalSortDir] = useState<string>("asc");
 
-  async function fetchList() {
+  async function fetchList(overrides?: { page?: number; size?: number; sortBy?: string; sortDir?: string }) {
     const start = Date.now();
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({
-        page: String(page),
-        size: String(size),
-        sortBy: sortBy,
-        sortDir: sortDir,
+        page: String(overrides?.page ?? page),
+        size: String(overrides?.size ?? size),
+        sortBy: overrides?.sortBy ?? sortBy,
+        sortDir: overrides?.sortDir ?? sortDir,
       });
       if (searchTerm) params.set("search", searchTerm);
       if (statusFilter) params.set("status", statusFilter);
@@ -372,6 +375,19 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     setLoadingHospitals(true);
     setError(null);
     try {
+      // Fetch summary để lấy thông tin từ deployment và các bệnh viện đã accept
+      const summaryEndpoint = `${API_ROOT}/api/v1/admin/maintenance/hospitals/summary`;
+      const summaryRes = await fetch(summaryEndpoint, {
+        method: "GET",
+        headers: authHeaders(),
+        credentials: "include",
+      });
+      let summaries: any[] = [];
+      if (summaryRes.ok) {
+        const summaryPayload = await summaryRes.json();
+        summaries = Array.isArray(summaryPayload) ? summaryPayload : [];
+      }
+
       // Fetch a large page of tasks and aggregate by hospital
       const params = new URLSearchParams({ page: "0", size: "2000", sortBy: "id", sortDir: "asc" });
       const endpoint = `${API_ROOT}/api/v1/superadmin/maintenance/tasks?${params.toString()}`;
@@ -384,30 +400,174 @@ const MaintenanceSuperTaskPage: React.FC = () => {
       const payload = await res.json();
       const items: MaintTask[] = Array.isArray(payload?.content) ? payload.content : Array.isArray(payload) ? payload : [];
 
-      // Aggregate by hospitalName
-      const acc = new Map<string, { id: number; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number }>();
+      // Aggregate tasks by hospital để đếm taskCount
+      // Use both hospitalId (number) and hospitalName (string) as keys
+      // Note: acceptedCount will be fetched separately for accuracy
+      // Note: nearDueCount and overdueCount will be calculated separately in augment function
+      const tasksByHospitalId = new Map<number, { taskCount: number; hospitalName?: string }>();
+      const tasksByHospitalName = new Map<string, { taskCount: number; hospitalId?: number }>();
+      
+      // First pass: count total tasks per hospital
       for (const it of items) {
-        const name = (it.hospitalName || "").toString().trim() || "—";
-        const key = name;
-        const current = acc.get(key) || { id: acc.size + 1, label: name, subLabel: "", taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0 };
-        current.taskCount += 1;
-        if ((it.status || '').toUpperCase() === 'ACCEPTED') current.acceptedCount += 1;
-        // Count near due / overdue for non-accepted
-        const statusUp = String(it.status || '').toUpperCase();
-        if (statusUp !== 'ACCEPTED' && statusUp !== 'TRANSFERRED' && it.deadline) {
+        const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
+        const hospitalName = (it.hospitalName || "").toString().trim();
+        
+        if (hospitalId) {
+          const current = tasksByHospitalId.get(hospitalId) || { taskCount: 0, hospitalName: hospitalName || undefined };
+          current.taskCount += 1;
+          if (!current.hospitalName && hospitalName) current.hospitalName = hospitalName;
+          tasksByHospitalId.set(hospitalId, current);
+        } else if (hospitalName) {
+          const current = tasksByHospitalName.get(hospitalName) || { taskCount: 0 };
+          current.taskCount += 1;
+          tasksByHospitalName.set(hospitalName, current);
+        }
+      }
+
+      // Build list of all hospitals (from summaries and from tasks)
+      const allHospitalNames = new Set<string>();
+      summaries.forEach((item: any) => {
+        const name = String(item?.hospitalName ?? "").trim();
+        if (name) allHospitalNames.add(name);
+      });
+      tasksByHospitalId.forEach((stats) => {
+        if (stats.hospitalName) allHospitalNames.add(stats.hospitalName);
+      });
+      tasksByHospitalName.forEach((_, name) => {
+        allHospitalNames.add(name);
+      });
+
+      // Fetch accepted counts for each hospital in parallel (like implementation super task)
+      const acceptedCountsMap = new Map<string, number>();
+      const acceptedCountsPromises = Array.from(allHospitalNames).map(async (hospitalName) => {
+        try {
+          // Fetch count of ACCEPTED tasks for this hospital
+          const params = new URLSearchParams({ page: "0", size: "1", status: "ACCEPTED", hospitalName });
+          const url = `${API_ROOT}/api/v1/superadmin/maintenance/tasks?${params.toString()}`;
+          const res = await fetch(url, {
+            method: "GET",
+            headers: authHeaders(),
+            credentials: "include",
+          });
+          if (!res.ok) return { hospitalName, count: 0 };
+          const resp = await res.json();
+          const count = resp && typeof resp.totalElements === "number" ? resp.totalElements : (Array.isArray(resp) ? resp.length : (Array.isArray(resp?.content) ? resp.content.length : 0));
+          return { hospitalName, count };
+        } catch {
+          return { hospitalName, count: 0 };
+        }
+      });
+      const acceptedCountsResults = await Promise.all(acceptedCountsPromises);
+      acceptedCountsResults.forEach(({ hospitalName, count }) => {
+        acceptedCountsMap.set(hospitalName, count);
+      });
+
+      // Calculate near due/overdue counts using augment function (like implementation super task)
+      // This ensures we reset values and only count non-completed tasks
+      const augment = (list: Array<{ label: string; nearDueCount?: number; overdueCount?: number }>) => {
+        // Reset all nearDueCount and overdueCount to 0 before counting
+        for (const item of list) {
+          item.nearDueCount = 0;
+          item.overdueCount = 0;
+        }
+        
+        const today = new Date();
+        const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+        
+        for (const it of items) {
+          const statusUp = String(it?.status || '').trim().toUpperCase();
+          const label = String(it?.hospitalName || '').trim();
+          const target = list.find(x => x.label === label);
+          if (!target) continue;
+          
+          // CRITICAL: Skip ALL completed/transferred tasks when counting near due/overdue
+          // In maintenance: WAITING_FOR_DEV (Hoàn thành) and ACCEPTED (Nghiệm thu) are both considered completed
+          // Tasks that are WAITING_FOR_DEV, ACCEPTED, or TRANSFERRED should NOT be counted
+          const isCompleted = statusUp === 'ACCEPTED' || statusUp === 'WAITING_FOR_DEV';
+          const isTransferred = statusUp === 'TRANSFERRED';
+          
+          if (isCompleted || isTransferred) {
+            continue; // Skip this task - do not count towards near due/overdue
+          }
+          
+          // Only process tasks that are NOT completed and NOT transferred
+          if (!it?.deadline) continue;
           const d = new Date(it.deadline);
-          if (!Number.isNaN(d.getTime())) {
-            d.setHours(0,0,0,0);
-            const today = new Date();
-            const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-            const dayDiff = Math.round((d.getTime() - startToday) / (24 * 60 * 60 * 1000));
-            if (dayDiff === -1 || dayDiff === 0) current.nearDueCount += 1; // yesterday or today
-            if (dayDiff > 0) current.overdueCount += 1; // after today
+          if (Number.isNaN(d.getTime())) continue;
+          d.setHours(0,0,0,0);
+          const dayDiff = Math.round((d.getTime() - startToday) / (24 * 60 * 60 * 1000));
+          
+          // Quá hạn: deadline đã qua (dayDiff < 0)
+          if (dayDiff < 0) {
+            target.overdueCount = (target.overdueCount || 0) + 1;
+          }
+          // Sắp đến hạn: hôm nay hoặc trong 3 ngày tới (0 <= dayDiff <= 3)
+          else if (dayDiff >= 0 && dayDiff <= 3) {
+            target.nearDueCount = (target.nearDueCount || 0) + 1;
           }
         }
-        acc.set(key, current);
+      };
+
+      // Merge summary với task counts
+      const normalized = summaries.map((item: any, idx: number) => {
+        const hospitalId = Number(item?.hospitalId ?? -(idx + 1));
+        const hospitalName = String(item?.hospitalName ?? "—");
+        const taskStats = tasksByHospitalId.get(hospitalId) || { taskCount: 0 };
+        const acceptedCount = acceptedCountsMap.get(hospitalName) ?? 0;
+        return {
+          id: hospitalId,
+          label: hospitalName,
+          subLabel: item?.province ? String(item.province) : "",
+          taskCount: taskStats.taskCount > 0 ? taskStats.taskCount : Number(item?.maintenanceTaskCount ?? 0),
+          acceptedCount: acceptedCount,
+          nearDueCount: 0, // Will be calculated by augment()
+          overdueCount: 0, // Will be calculated by augment()
+          fromDeployment: Boolean(item?.transferredFromDeployment),
+          acceptedByMaintenance: Boolean(item?.acceptedByMaintenance),
+        };
+      });
+
+      // Thêm các bệnh viện có tasks nhưng không có trong summary (nếu có)
+      for (const [hospitalId, taskStats] of tasksByHospitalId.entries()) {
+        if (taskStats.hospitalName && !normalized.find(h => h.id === hospitalId)) {
+          const hospitalName = String(taskStats.hospitalName ?? "—");
+          const acceptedCount = acceptedCountsMap.get(hospitalName) ?? 0;
+          normalized.push({
+            id: hospitalId,
+            label: hospitalName,
+            subLabel: "",
+            taskCount: taskStats.taskCount,
+            acceptedCount: acceptedCount,
+            nearDueCount: 0, // Will be calculated by augment()
+            overdueCount: 0, // Will be calculated by augment()
+            fromDeployment: false,
+            acceptedByMaintenance: false,
+          });
+        }
       }
-      const list = Array.from(acc.values());
+
+      // Thêm các bệnh viện chỉ có tên (không có ID) từ tasks
+      for (const [hospitalName, taskStats] of tasksByHospitalName.entries()) {
+        if (!normalized.find(h => h.label === hospitalName)) {
+          const acceptedCount = acceptedCountsMap.get(hospitalName) ?? 0;
+          normalized.push({
+            id: -(normalized.length + 1), // Use negative ID for hospitals without ID
+            label: hospitalName,
+            subLabel: "",
+            taskCount: taskStats.taskCount,
+            acceptedCount: acceptedCount,
+            nearDueCount: 0, // Will be calculated by augment()
+            overdueCount: 0, // Will be calculated by augment()
+            fromDeployment: false,
+            acceptedByMaintenance: false,
+          });
+        }
+      }
+
+      // Apply augment function to calculate nearDueCount and overdueCount (like implementation super task)
+      augment(normalized);
+
+      const list = normalized;
       // Enrich province/subLabel by querying hospitals search per name (best effort)
       async function resolveProvinceByName(name: string): Promise<string> {
         try {
@@ -442,7 +602,10 @@ const MaintenanceSuperTaskPage: React.FC = () => {
         ...h,
         subLabel: h.subLabel && h.subLabel.trim() ? h.subLabel : await resolveProvinceByName(h.label),
       })));
-      setHospitalsWithTasks(withProvince);
+      
+      // Hiển thị tất cả bệnh viện có task, hoặc đã được accept từ triển khai, hoặc đang chờ tiếp nhận từ triển khai
+      const filtered = withProvince.filter((h) => h.acceptedByMaintenance || h.taskCount > 0 || h.fromDeployment);
+      setHospitalsWithTasks(filtered);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg || "Lỗi tải danh sách bệnh viện");
@@ -476,6 +639,8 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     if (hospitalStatusFilter === 'accepted') list = list.filter(h => (h.acceptedCount || 0) > 0);
     else if (hospitalStatusFilter === 'incomplete') list = list.filter(h => (h.acceptedCount || 0) < (h.taskCount || 0));
     else if (hospitalStatusFilter === 'unaccepted') list = list.filter(h => (h.acceptedCount || 0) === 0);
+    else if (hospitalStatusFilter === 'fromDeployment') list = list.filter(h => h.fromDeployment && !h.acceptedByMaintenance);
+    else if (hospitalStatusFilter === 'acceptedFromDeployment') list = list.filter(h => h.fromDeployment && h.acceptedByMaintenance);
 
     const dir = hospitalSortDir === 'desc' ? -1 : 1;
     list = [...list].sort((a, b) => {
@@ -550,10 +715,23 @@ const MaintenanceSuperTaskPage: React.FC = () => {
       // We are on hospital table → refresh the aggregated list
       await fetchHospitalsWithTasks();
     } else {
-      // We are viewing tasks of a hospital → refresh tasks and accepted counter
-      await fetchList();
-      if (selectedHospital) {
-        await fetchAcceptedCountForHospital(selectedHospital);
+      // If creating new task, reset to first page and ensure sort by id desc (newest first)
+      if (!isUpdate) {
+        // Set sort to id desc so new task appears at top
+        setPage(0);
+        setSortBy("id");
+        setSortDir("desc");
+        // Fetch immediately with new sort params to ensure new task appears at top
+        await fetchList({ page: 0, sortBy: "id", sortDir: "desc" });
+        if (selectedHospital) {
+          await fetchAcceptedCountForHospital(selectedHospital);
+        }
+      } else {
+        // We are viewing tasks of a hospital → refresh tasks and accepted counter
+        await fetchList();
+        if (selectedHospital) {
+          await fetchAcceptedCountForHospital(selectedHospital);
+        }
       }
 
       // Optimistically bump hospital list counters
@@ -624,6 +802,8 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                     <option value="accepted">Có nghiệm thu</option>
                     <option value="incomplete">Chưa nghiệm thu hết</option>
                     <option value="unaccepted">Chưa có nghiệm thu</option>
+                    <option value="fromDeployment">Từ triển khai</option>
+                    <option value="acceptedFromDeployment">Đã nhận từ triển khai</option>
                   </select>
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
@@ -633,18 +813,18 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                       {loadingHospitals ? "..." : hospitalSummary.total}
                     </span>
                   </span>
-                  <span className="font-semibold text-gray-800 dark:text-gray-200">
+                  {/* <span className="font-semibold text-gray-800 dark:text-gray-200">
                     Đang hiển thị:
                     <span className="ml-1 font-bold text-gray-900 dark:text-gray-100">
                       {loadingHospitals ? "..." : hospitalSummary.filteredCount}
                     </span>
-                  </span>
-                  <span className="font-semibold text-gray-800 dark:text-gray-200">
+                  </span> */}
+                  {/* <span className="font-semibold text-gray-800 dark:text-gray-200">
                     Đã hoàn thành 100%:
                     <span className="ml-1 font-bold text-gray-900 dark:text-gray-100">
                       {loadingHospitals ? "..." : hospitalSummary.acceptedFull}
                     </span>
-                  </span>
+                  </span> */}
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -720,7 +900,19 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                               <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
                                 <FaHospital className="text-blue-600 text-lg" />
                               </div>
-                              <div className="text-sm font-medium text-gray-900">{hospital.label}</div>
+                              <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                <span>{hospital.label}</span>
+                                {hospital.fromDeployment && !hospital.acceptedByMaintenance && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">
+                                    Từ triển khai
+                                  </span>
+                                )}
+                                {hospital.fromDeployment && hospital.acceptedByMaintenance && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                                    Nhận từ triển khai
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -732,7 +924,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                                 {(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task
                               </span>
                               {(hospital.nearDueCount ?? 0) > 0 && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Sắp hạn: {hospital.nearDueCount}</span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Sắp đến hạn: {hospital.nearDueCount}</span>
                               )}
                               {(hospital.overdueCount ?? 0) > 0 && (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Quá hạn: {hospital.overdueCount}</span>
@@ -757,41 +949,51 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <button 
-                    className="px-3 py-1 border rounded" 
-                    onClick={() => setHospitalPage((p) => Math.max(0, p - 1))} 
-                    disabled={hospitalPage <= 0}
-                  >
-                    Prev
-                  </button>
-                  <span className="text-sm">
-                    Trang {hospitalPage + 1} / {Math.max(1, Math.ceil(filteredHospitals.length / hospitalSize))}
-                  </span>
-                  <button 
-                    className="px-3 py-1 border rounded" 
-                    onClick={() => setHospitalPage((p) => p + 1)} 
-                    disabled={(hospitalPage + 1) * hospitalSize >= filteredHospitals.length}
-                  >
-                    Next
-                  </button>
+              <div className="mt-4 flex items-center justify-between py-3">
+                <div className="text-sm text-gray-600">
+                  {filteredHospitals.length === 0 ? (
+                    <span>Hiển thị 0 trong tổng số 0 mục</span>
+                  ) : (
+                    (() => {
+                      const total = filteredHospitals.length;
+                      const from = hospitalPage * hospitalSize + 1;
+                      const to = Math.min((hospitalPage + 1) * hospitalSize, total);
+                      return <span>Hiển thị {from} đến {to} trong tổng số {total} mục</span>;
+                    })()
+                  )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-sm">Số hàng:</label>
-                  <select 
-                    value={String(hospitalSize)} 
-                    onChange={(e) => { 
-                      setHospitalSize(Number(e.target.value)); 
-                      setHospitalPage(0); 
-                    }} 
-                    className="border rounded px-2 py-1 text-sm"
-                  >
-                    <option value="10">10</option>
-                    <option value="20">20</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                  </select>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-600">Hiển thị:</label>
+                    <select value={String(hospitalSize)} onChange={(e) => { setHospitalSize(Number(e.target.value)); setHospitalPage(0); }} className="border rounded px-2 py-1 text-sm">
+                      <option value="10">10</option>
+                      <option value="20">20</option>
+                      <option value="50">50</option>
+                      <option value="100">100</option>
+                    </select>
+                  </div>
+
+                  <div className="inline-flex items-center gap-1">
+                    <button onClick={() => setHospitalPage(0)} disabled={hospitalPage <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Đầu">«</button>
+                    <button onClick={() => setHospitalPage((p) => Math.max(0, p - 1))} disabled={hospitalPage <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Trước">‹</button>
+
+                    {(() => {
+                      const total = Math.max(1, Math.ceil(filteredHospitals.length / hospitalSize));
+                      const pages: number[] = [];
+                      const start = Math.max(1, hospitalPage + 1 - 2);
+                      const end = Math.min(total, start + 4);
+                      for (let i = start; i <= end; i++) pages.push(i);
+                      return pages.map((p) => (
+                        <button key={p} onClick={() => setHospitalPage(p - 1)} className={`px-3 py-1 border rounded text-sm ${hospitalPage + 1 === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}>
+                          {p}
+                        </button>
+                      ));
+                    })()}
+
+                    <button onClick={() => setHospitalPage((p) => Math.min(Math.max(0, Math.ceil(filteredHospitals.length / hospitalSize) - 1), p + 1))} disabled={(hospitalPage + 1) * hospitalSize >= filteredHospitals.length} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Tiếp">›</button>
+                    <button onClick={() => setHospitalPage(Math.max(0, Math.ceil(filteredHospitals.length / hospitalSize) - 1))} disabled={(hospitalPage + 1) * hospitalSize >= filteredHospitals.length} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Cuối">»</button>
+                  </div>
                 </div>
               </div>
             </>
@@ -934,46 +1136,51 @@ const MaintenanceSuperTaskPage: React.FC = () => {
 
       {/* Pagination */}
       {!showHospitalList && (
-      <div className="mt-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <button
-            className="px-3 py-1 border rounded"
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            disabled={page <= 0}
-          >
-            Prev
-          </button>
-          <span>
-            Trang {page + 1}
-            {totalCount
-              ? ` / ${Math.max(1, Math.ceil(totalCount / size))}`
-              : ""}
-          </span>
-          <button
-            className="px-3 py-1 border rounded"
-            onClick={() => setPage((p) => p + 1)}
-            disabled={
-              totalCount !== null && (page + 1) * size >= (totalCount || 0)
-            }
-          >
-            Next
-          </button>
+      <div className="mt-4 flex items-center justify-between py-3">
+        <div className="text-sm text-gray-600">
+          {totalCount === null ? (
+            <span>Hiển thị 0 trong tổng số 0 mục</span>
+          ) : (
+            (() => {
+              const total = totalCount || 0;
+              const from = page * size + 1;
+              const to = Math.min((page + 1) * size, total);
+              return <span>Hiển thị {from} đến {to} trong tổng số {total} mục</span>;
+            })()
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm">Số hàng:</label>
-          <select
-            value={String(size)}
-            onChange={(e) => {
-              setSize(Number(e.target.value));
-              setPage(0);
-            }}
-            className="border rounded px-2 py-1"
-          >
-            <option value="5">5</option>
-            <option value="10">10</option>
-            <option value="20">20</option>
-            <option value="50">50</option>
-          </select>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">Hiển thị:</label>
+            <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1 text-sm">
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+            </select>
+          </div>
+
+          <div className="inline-flex items-center gap-1">
+            <button onClick={() => setPage(0)} disabled={page <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Đầu">«</button>
+            <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Trước">‹</button>
+
+            {(() => {
+              const total = Math.max(1, Math.ceil((totalCount || 0) / size));
+              const pages: number[] = [];
+              const start = Math.max(1, page + 1 - 2);
+              const end = Math.min(total, start + 4);
+              for (let i = start; i <= end; i++) pages.push(i);
+              return pages.map((p) => (
+                <button key={p} onClick={() => setPage(p - 1)} className={`px-3 py-1 border rounded text-sm ${page + 1 === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}>
+                  {p}
+                </button>
+              ));
+            })()}
+
+            <button onClick={() => setPage((p) => Math.min(Math.max(0, Math.ceil((totalCount || 0) / size) - 1), p + 1))} disabled={(page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Tiếp">›</button>
+            <button onClick={() => setPage(Math.max(0, Math.ceil((totalCount || 0) / size) - 1))} disabled={(page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Cuối">»</button>
+          </div>
         </div>
       </div>
       )}
@@ -1022,21 +1229,7 @@ function DetailModal({
   item: MaintTask | null;
 }) {
   if (!open || !item) return null;
-  const fmt = (d?: string | null) => {
-    if (!d) return "—";
-    const date = new Date(d);
-    if (Number.isNaN(date.getTime())) return "—";
-    return new Intl.DateTimeFormat("vi-VN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-      timeZone: "Asia/Ho_Chi_Minh",
-    }).format(date);
-  };
+  const fmt = (d?: string | null) => (d ? new Date(d).toLocaleString("vi-VN") : "—");
 
   return (
     <div
@@ -1095,7 +1288,7 @@ function DetailModal({
             <Info label="API Test" value={item.apiTestStatus} icon={<FiInfo />} />
             <Info label="Ngày bắt đầu" value={fmt(item.startDate)} icon={<FiClock />} />
             <Info label="Ngày nghiệm thu" value={fmt(item.acceptanceDate)} icon={<FiClock />} />
-            <Info label="Ngày hoàn thành" value={fmt(item.finishDate)} icon={<FiClock />} />
+            <Info label="Ngày hoàn thành" value={fmt(item.finishDate ?? item.completionDate)} icon={<FiClock />} />
             <Info label="Tạo lúc" value={fmt(item.createdAt)} icon={<FiClock />} />
           </div>
 

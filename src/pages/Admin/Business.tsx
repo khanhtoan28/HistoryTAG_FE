@@ -21,7 +21,9 @@ import Pagination from '../../components/common/Pagination';
 import ComponentCard from '../../components/common/ComponentCard';
 
 const BusinessPage: React.FC = () => {
-  const roles = JSON.parse(localStorage.getItem('roles') || '[]');
+  // read roles from either localStorage or sessionStorage (some flows store roles in sessionStorage)
+  const rolesRaw = localStorage.getItem('roles') || sessionStorage.getItem('roles') || '[]';
+  const roles = JSON.parse(rolesRaw);
   const isAdmin = roles.some((r: unknown) => {
     if (typeof r === 'string') return r.toUpperCase() === 'ADMIN' || r.toUpperCase() === 'SUPERADMIN';
     if (r && typeof r === 'object') {
@@ -101,6 +103,20 @@ const BusinessPage: React.FC = () => {
     return `HD${String(n).padStart(2, '0')}`;
   }
 
+  // Ensure items with status 'CARING' (Đang chăm sóc) are shown first.
+  // Secondary sort: newer startDate first. Non-dates are treated as 0.
+  function sortBusinessItems(list: BusinessItem[]) {
+    return list.slice().sort((a, b) => {
+      const aCare = (a.status ?? '').toString().toUpperCase() === 'CARING';
+      const bCare = (b.status ?? '').toString().toUpperCase() === 'CARING';
+      if (aCare && !bCare) return -1;
+      if (!aCare && bCare) return 1;
+      const aTime = a.startDate ? new Date(a.startDate).getTime() : 0;
+      const bTime = b.startDate ? new Date(b.startDate).getTime() : 0;
+      return bTime - aTime;
+    });
+  }
+
   // Small Info helper (styled like Hospitals page) -------------------------------------------------
   function Info({ label, value, icon }: { label: string; value?: React.ReactNode; icon?: React.ReactNode }) {
     return (
@@ -121,6 +137,7 @@ const BusinessPage: React.FC = () => {
   const [totalItems, setTotalItems] = useState<number>(0);
   const [filterStartFrom, setFilterStartFrom] = useState<string>('');
   const [filterStartTo, setFilterStartTo] = useState<string>('');
+  const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [viewItem, setViewItem] = useState<BusinessItem | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -150,7 +167,9 @@ const BusinessPage: React.FC = () => {
   async function loadList(page = currentPage, size = itemsPerPage) {
     try {
       const toParam = (v?: string | null) => v ? (v.length === 16 ? `${v}:00` : v) : undefined;
-      const res = await getBusinesses({ page, size, startDateFrom: toParam(filterStartFrom), startDateTo: toParam(filterStartTo) });
+      const params: Record<string, unknown> = { page, size, startDateFrom: toParam(filterStartFrom), startDateTo: toParam(filterStartTo) };
+      if (filterStatus && filterStatus !== 'ALL') params.status = filterStatus;
+      const res = await getBusinesses(params);
       const content = Array.isArray(res?.content) ? res.content : (Array.isArray(res) ? res : []);
       // ensure numeric fields are numbers
       const normalized = (content as Array<Record<string, unknown>>).map((c) => {
@@ -171,7 +190,7 @@ const BusinessPage: React.FC = () => {
           completionDate: completion ?? null,
         } as BusinessItem;
       });
-      setItems(normalized);
+  setItems(sortBusinessItems(normalized));
       // fetch phone numbers for each hospital in the list (best-effort)
       try {
         const withPhones = await Promise.all((normalized as BusinessItem[]).map(async (it) => {
@@ -188,7 +207,7 @@ const BusinessPage: React.FC = () => {
           } else out.hospitalPhone = null;
           return out;
         }));
-        setItems(withPhones);
+  setItems(sortBusinessItems(withPhones));
         // pagination metadata (when backend returns Page)
         setTotalItems(res?.totalElements ?? (Array.isArray(res) ? res.length : content.length));
         setTotalPages(res?.totalPages ?? 1);
@@ -232,6 +251,7 @@ const BusinessPage: React.FC = () => {
   function clearFilters() {
     setFilterStartFrom('');
     setFilterStartTo('');
+    setFilterStatus('ALL');
     setCurrentPage(0);
     loadList(0, itemsPerPage);
   }
@@ -443,6 +463,15 @@ const BusinessPage: React.FC = () => {
           <label className="text-sm">Đến</label>
           <input type="datetime-local" value={filterStartTo} onChange={(e) => setFilterStartTo(e.target.value)} className="rounded border px-2 py-1" />
         </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm">Trạng thái</label>
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="rounded border px-2 py-1">
+            <option value="ALL">— Tất cả —</option>
+            <option value="CARING">Đang chăm sóc</option>
+            <option value="CONTRACTED">Ký hợp đồng</option>
+            <option value="CANCELLED">Hủy</option>
+          </select>
+        </div>
         <div className="ml-auto flex items-center gap-2">
           <button onClick={applyFilters} className="px-3 py-1 bg-blue-600 text-white rounded">Lọc</button>
           <button onClick={clearFilters} className="px-3 py-1 border rounded">Xóa</button>
@@ -634,11 +663,11 @@ const BusinessPage: React.FC = () => {
                         <EyeIcon style={{ width: 16, height: 16 }} />
                         <span className="text-sm">Xem</span>
                       </button>
-                      <button onClick={() => { if (!canManage) { setToast({ message: 'Bạn không có quyền', type: 'error' }); return; } openEditModal(it.id); }} disabled={!canManage} className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${canManage ? 'border-yellow-100 text-orange-600 bg-yellow-50 hover:bg-yellow-100' : 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'}`}>
+                      <button onClick={() => { if (!canManage) { setToast({ message: 'Bạn không có quyền', type: 'error' }); return; } if (it.status === 'CONTRACTED' && !isSuperAdmin) { setToast({ message: 'Không thể sửa dự án đã ký hợp đồng', type: 'error' }); return; } openEditModal(it.id); }} disabled={!canManage || (it.status === 'CONTRACTED' && !isSuperAdmin)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${( !canManage || (it.status === 'CONTRACTED' && !isSuperAdmin) ) ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed' : 'border-yellow-100 text-orange-600 bg-yellow-50 hover:bg-yellow-100'}`}>
                         <PencilIcon style={{ width: 16, height: 16 }} />
                         <span className="text-sm">Sửa</span>
                       </button>
-                      <button onClick={() => { if (!canManage) { setToast({ message: 'Bạn không có quyền', type: 'error' }); return; } handleDelete(it.id); }} disabled={!canManage || deletingId === it.id} className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${(!canManage || deletingId === it.id) ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed' : 'border-red-100 text-red-600 bg-red-50 hover:bg-red-100'}`}>
+                      <button onClick={() => { if (!canManage) { setToast({ message: 'Bạn không có quyền', type: 'error' }); return; } if (it.status === 'CONTRACTED' && !isSuperAdmin) { setToast({ message: 'Không thể xóa dự án đã ký hợp đồng', type: 'error' }); return; } handleDelete(it.id); }} disabled={!canManage || deletingId === it.id || (it.status === 'CONTRACTED' && !isSuperAdmin)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${( !canManage || deletingId === it.id || (it.status === 'CONTRACTED' && !isSuperAdmin) ) ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed' : 'border-red-100 text-red-600 bg-red-50 hover:bg-red-100'}`}>
                         <TrashBinIcon style={{ width: 16, height: 16 }} />
                         <span className="text-sm">Xóa</span>
                       </button>
