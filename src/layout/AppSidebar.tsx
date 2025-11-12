@@ -56,6 +56,11 @@ const navItems: NavItem[] = [
       { name: "Công việc bảo trì", path: "/maintenance-tasks", pro: false },
     ],
   },
+  {
+    name: "Phòng kinh doanh",
+    icon: <PageIcon />,
+    path: "/admin/business",
+  },
 ];
 
 // Danh sách mục điều hướng “Khác”
