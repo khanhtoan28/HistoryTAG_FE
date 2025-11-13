@@ -2086,20 +2086,51 @@ const ImplementationTasksPage: React.FC = () => {
                                             </table>
                                         </div>
                                     </div>
-                                    <div className="mt-4 flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <button className="px-3 py-1 border rounded" onClick={() => setHospitalPage((p) => Math.max(0, p - 1))} disabled={hospitalPage <= 0}>Prev</button>
-                                            <span className="text-sm">Trang {hospitalPage + 1} / {Math.max(1, Math.ceil(filteredHospitals.length / hospitalSize))}</span>
-                                            <button className="px-3 py-1 border rounded" onClick={() => setHospitalPage((p) => p + 1)} disabled={(hospitalPage + 1) * hospitalSize >= filteredHospitals.length}>Next</button>
+                                    <div className="mt-4 flex items-center justify-between py-3 w-full">
+                                        <div className="text-sm text-gray-600">
+                                            {filteredHospitals.length === 0 ? (
+                                                <span>Hiển thị 0 trong tổng số 0 mục</span>
+                                            ) : (
+                                                (() => {
+                                                    const total = filteredHospitals.length;
+                                                    const from = hospitalPage * hospitalSize + 1;
+                                                    const to = Math.min((hospitalPage + 1) * hospitalSize, total);
+                                                    return <span>Hiển thị {from} đến {to} trong tổng số {total} mục</span>;
+                                                })()
+                                            )}
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <label className="text-sm">Số hàng:</label>
-                                            <select value={String(hospitalSize)} onChange={(e) => { setHospitalSize(Number(e.target.value)); setHospitalPage(0); }} className="border rounded px-2 py-1 text-sm">
-                                                <option value="10">10</option>
-                                                <option value="20">20</option>
-                                                <option value="50">50</option>
-                                                <option value="100">100</option>
-                                            </select>
+
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-2">
+                                                <label className="text-sm text-gray-600">Hiển thị:</label>
+                                                <select value={String(hospitalSize)} onChange={(e) => { setHospitalSize(Number(e.target.value)); setHospitalPage(0); }} className="border rounded px-2 py-1 text-sm">
+                                                    <option value="10">10</option>
+                                                    <option value="20">20</option>
+                                                    <option value="50">50</option>
+                                                    <option value="100">100</option>
+                                                </select>
+                                            </div>
+
+                                            <div className="inline-flex items-center gap-1">
+                                                <button onClick={() => setHospitalPage(0)} disabled={hospitalPage <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Đầu">«</button>
+                                                <button onClick={() => setHospitalPage((p) => Math.max(0, p - 1))} disabled={hospitalPage <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Trước">‹</button>
+
+                                                {(() => {
+                                                    const total = Math.max(1, Math.ceil(filteredHospitals.length / hospitalSize));
+                                                    const pages: number[] = [];
+                                                    const start = Math.max(1, hospitalPage + 1 - 2);
+                                                    const end = Math.min(total, start + 4);
+                                                    for (let i = start; i <= end; i++) pages.push(i);
+                                                    return pages.map((p) => (
+                                                        <button key={p} onClick={() => setHospitalPage(p - 1)} className={`px-3 py-1 border rounded text-sm ${hospitalPage + 1 === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}>
+                                                            {p}
+                                                        </button>
+                                                    ));
+                                                })()}
+
+                                                <button onClick={() => setHospitalPage((p) => Math.min(Math.max(0, Math.ceil(filteredHospitals.length / hospitalSize) - 1), p + 1))} disabled={(hospitalPage + 1) * hospitalSize >= filteredHospitals.length} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Tiếp">›</button>
+                                                <button onClick={() => setHospitalPage(Math.max(0, Math.ceil(filteredHospitals.length / hospitalSize) - 1))} disabled={(hospitalPage + 1) * hospitalSize >= filteredHospitals.length} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Cuối">»</button>
+                                            </div>
                                         </div>
                                     </div>
                                 </>
@@ -2161,7 +2192,7 @@ const ImplementationTasksPage: React.FC = () => {
                                     return (
                                         <div key={row.id}>
                                             <TaskCardNew
-                                                task={row as any}
+                                                task={row as unknown as ImplementationTaskResponseDTO}
                                                 idx={enableItemAnimation ? idx : undefined}
                                                 displayIndex={page * size + idx}
                                                 animate={enableItemAnimation}
@@ -2241,13 +2272,34 @@ const ImplementationTasksPage: React.FC = () => {
                 loading={loadingPending}
             />
 
-            <TaskFormModal
-                open={modalOpen}
-                onClose={() => setModalOpen(false)}
-                initial={editing as any || undefined}
-                onSubmit={handleSubmit}
-                userTeam={userTeam}
-            />
+            {(() => {
+                const initialForForm = editing
+                    ? ({
+                        id: (editing as ImplementationTaskResponseDTO).id,
+                        name: (editing as ImplementationTaskResponseDTO).name,
+                        hospitalId: (editing as ImplementationTaskResponseDTO).hospitalId ?? undefined,
+                        hospitalName: (editing as ImplementationTaskResponseDTO).hospitalName ?? null,
+                        picDeploymentId: (editing as ImplementationTaskResponseDTO).picDeploymentId ?? undefined,
+                        picDeploymentName: (editing as ImplementationTaskResponseDTO).picDeploymentName ?? null,
+                        apiTestStatus: (editing as ImplementationTaskResponseDTO).apiTestStatus ?? undefined,
+                        additionalRequest: (editing as ImplementationTaskResponseDTO).additionalRequest ?? undefined,
+                        deadline: (editing as ImplementationTaskResponseDTO).deadline ?? undefined,
+                        completionDate: (editing as ImplementationTaskResponseDTO).completionDate ?? undefined,
+                        status: (editing as ImplementationTaskResponseDTO).status ?? undefined,
+                        startDate: (editing as ImplementationTaskResponseDTO).startDate ?? undefined,
+                    } as Partial<ImplementationTaskRequestDTO> & { id?: number; hospitalName?: string | null; picDeploymentName?: string | null })
+                    : undefined;
+
+                return (
+                    <TaskFormModal
+                        open={modalOpen}
+                        onClose={() => setModalOpen(false)}
+                        initial={initialForForm}
+                        onSubmit={handleSubmit}
+                        userTeam={userTeam}
+                    />
+                );
+            })()}
 
             <DetailModal open={detailOpen} onClose={() => setDetailOpen(false)} item={detailItem} />
         </div>

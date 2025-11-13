@@ -4,9 +4,9 @@ import PageMeta from "../../components/common/PageMeta";
 import { useEffect, useState, useCallback } from "react";
 import Chart from "react-apexcharts";
 import { ApexOptions } from "apexcharts";
-import { getSummaryReport, type SuperAdminSummaryDTO, HardwareAPI, getAllImplementationTasks, getAllDevTasks, getAllMaintenanceTasks, getAllUsers, UserResponseDTO, ImplementationTaskResponseDTO, DevTaskResponseDTO, MaintenanceTaskResponseDTO } from "../../api/superadmin.api";
+import { getSummaryReport, type SuperAdminSummaryDTO, HardwareAPI, getAllImplementationTasks, getAllDevTasks, getAllMaintenanceTasks, getAllUsers, filterUsers, UserResponseDTO, ImplementationTaskResponseDTO, DevTaskResponseDTO, MaintenanceTaskResponseDTO } from "../../api/superadmin.api";
 import { searchHospitals } from "../../api/business.api";
-import api from "../../api/client";
+import api, { getAuthToken } from "../../api/client";
 import { getBusinesses } from "../../api/business.api";
 import toast from "react-hot-toast";
 
@@ -55,6 +55,44 @@ export default function SuperAdminHome() {
   const [hwTopN, setHwTopN] = useState<number>(8);
   const [hwRows, setHwRows] = useState<Array<{ key: string; label: string; revenue: number; quantity: number; taskCount: number; impl: number; dev: number; maint: number; image?: string }>>([]);
   const [hwLoading, setHwLoading] = useState(false);
+  // Employee Performance report states
+  const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
+  type EmployeePerf = {
+    userId?: number | null;
+    fullName?: string | null;
+    team?: string | null;
+    department?: string | null;
+    totalAssigned?: number;
+    totalInProgress?: number;
+    totalCompleted?: number;
+    totalLate?: number;
+    totalReceived?: number;
+    avgProcessingHours?: number;
+  };
+  const [reportYear, setReportYear] = useState<number>(new Date().getFullYear());
+  const [reportMonth, setReportMonth] = useState<number | ''>('');
+  const [reportTeam, setReportTeam] = useState<string>('ALL');
+  const [reportDepartment, setReportDepartment] = useState<string>('');
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportData, setReportData] = useState<EmployeePerf[]>([]);
+  const [departments, setDepartments] = useState<string[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<UserResponseDTO[]>([]);
+
+  // load departments list (unique departments from users)
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const uResp = await getAllUsers({ page: 0, size: 10000 });
+        const uList = Array.isArray(uResp) ? (uResp as any[]) : (uResp as any)?.content ?? [];
+        const deps = Array.from(new Set(uList.map((u: any) => (u?.department ?? null)).filter(Boolean))).sort();
+        if (mounted) setDepartments(deps as string[]);
+      } catch (err) {
+        console.warn('Failed to load departments', err);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
   // Hospital profile states
   const [profileHospitalId, setProfileHospitalId] = useState<string>('');
   const [profileQuery, setProfileQuery] = useState<string>('');
@@ -91,6 +129,72 @@ export default function SuperAdminHome() {
       mounted = false;
     };
   }, []);
+
+  const fetchEmployeePerformance = async () => {
+    setReportLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('year', String(reportYear));
+      if (reportMonth !== '') params.append('month', String(reportMonth));
+      if (reportTeam && reportTeam !== 'ALL') params.append('team', reportTeam);
+      if (reportDepartment) params.append('department', reportDepartment);
+
+      const url = `${API_ROOT}/api/v1/superadmin/reports/employee-performance?${params.toString()}`;
+      const token = getAuthToken();
+      const res = await fetch(url, { method: 'GET', headers: token ? { Authorization: `Bearer ${token}` } : undefined, credentials: 'include' });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const data = await res.json();
+      setReportData(Array.isArray(data) ? data : []);
+    } catch (err: unknown) {
+      console.error('fetchEmployeePerformance failed', err);
+      toast.error((err as Error)?.message ?? 'Lấy báo cáo thất bại');
+      setReportData([]);
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const fetchUsersByTeamAndDept = async () => {
+    try {
+      const params: any = {};
+      // lightweight call: we don't filter by name/status/dates here
+      if (reportTeam && reportTeam !== 'ALL') params.team = reportTeam;
+      if (reportDepartment) params.department = reportDepartment;
+      const users = await filterUsers(params);
+      setFilteredUsers(Array.isArray(users) ? users : []);
+    } catch (err: unknown) {
+      console.error('fetchUsersByTeamAndDept failed', err);
+      toast.error((err as Error)?.message ?? 'Lấy danh sách người dùng thất bại');
+      setFilteredUsers([]);
+    }
+  };
+
+  const exportEmployeePerformanceExcel = async () => {
+    try {
+      const params = new URLSearchParams();
+      params.append('year', String(reportYear));
+      if (reportMonth !== '') params.append('month', String(reportMonth));
+      if (reportTeam && reportTeam !== 'ALL') params.append('team', reportTeam);
+      if (reportDepartment) params.append('department', reportDepartment);
+      const url = `${API_ROOT}/api/v1/superadmin/reports/employee-performance/export?${params.toString()}`;
+      const token = getAuthToken();
+      const res = await fetch(url, { method: 'GET', headers: token ? { Authorization: `Bearer ${token}` } : undefined, credentials: 'include' });
+      if (!res.ok) throw new Error(`Export failed ${res.status}`);
+      const blob = await res.blob();
+      const aUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = aUrl;
+      const monthPart = reportMonth !== '' ? `-${String(reportMonth).padStart(2, '0')}` : '';
+      a.download = `employee_performance_${reportYear}${monthPart}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(aUrl);
+    } catch (err: unknown) {
+      console.error('exportEmployeePerformanceExcel failed', err);
+      toast.error((err as Error)?.message ?? 'Xuất file thất bại');
+    }
+  };
 
   // load business report
   const loadBusinessReport = useCallback(async (from?: string, to?: string) => {
@@ -720,6 +824,8 @@ export default function SuperAdminHome() {
               <h1 className="text-2xl font-bold">Super Admin Dashboard</h1>
               <p className="mt-1 text-sm opacity-90">Tổng quan hệ thống & truy cập nhanh các phần quản trị</p>
             </div>
+            {/* Filtered users by Team / Department */}
+         
           </div>
         </header>
 
@@ -903,6 +1009,111 @@ export default function SuperAdminHome() {
                   />
                 )}
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Employee Performance Report */}
+        <section className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100 w-full">
+          <div className="max-w-full">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Báo cáo Hiệu suất Nhân viên</h2>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                <div className="flex flex-col">
+                  <label className="block text-xs text-gray-500">Năm</label>
+                  <select value={reportYear} onChange={(e) => setReportYear(Number(e.target.value))} className="mt-1 rounded-md border px-3 py-2 text-sm bg-white w-36">
+                    {Array.from({ length: new Date().getFullYear() - 2019 }).map((_, i) => {
+                      const y = 2020 + i;
+                      return <option key={y} value={y}>{y}</option>;
+                    })}
+                  </select>
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="block text-xs text-gray-500">Tháng (tùy chọn)</label>
+                  <select value={reportMonth} onChange={(e) => setReportMonth(e.target.value === '' ? '' : Number(e.target.value))} className="mt-1 rounded-md border px-3 py-2 text-sm bg-white w-36">
+                    <option value="">Tất cả</option>
+                    {Array.from({ length: 12 }).map((_, i) => {
+                      const m = i + 1;
+                      return <option key={m} value={m}>{m}</option>;
+                    })}
+                  </select>
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="block text-xs text-gray-500">Team</label>
+                  <select value={reportTeam} onChange={(e) => setReportTeam(e.target.value)} className="mt-1 rounded-md border px-3 py-2 text-sm bg-white w-44">
+                    <option value="ALL">Tất cả</option>
+                    <option value="DEPLOYMENT">DEPLOYMENT</option>
+                    <option value="DEV">DEV</option>
+                    <option value="MAINTENANCE">MAINTENANCE</option>
+                    <option value="SALES">SALES</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="block text-xs text-gray-500">Phòng ban (tùy chọn)</label>
+                  <select value={reportDepartment} onChange={(e) => setReportDepartment(e.target.value)} className="mt-1 rounded-md border px-3 py-2 text-sm bg-white w-56">
+                    <option value="">Tất cả</option>
+                    {departments.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+                <div className="mt-2 sm:mt-0 flex items-center gap-2">
+                <button onClick={async () => { await Promise.all([fetchEmployeePerformance(), fetchUsersByTeamAndDept()]); }} disabled={reportLoading} className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-700">Áp dụng</button>
+                <button onClick={() => void exportEmployeePerformanceExcel()} disabled={reportLoading} className="rounded-md bg-indigo-100 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-200">Xuất Excel</button>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              {reportLoading ? (
+                <div className="text-sm text-gray-500">Đang tải báo cáo…</div>
+              ) : reportData.length === 0 ? (
+                <div className="text-sm text-gray-500">Chưa có dữ liệu. Nhấn Áp dụng để lấy báo cáo.</div>
+              ) : (
+                <div className="overflow-x-auto mt-2">
+                  <table className="min-w-full text-sm table-auto">
+                    <thead>
+                      <tr className="text-xs text-gray-600 bg-gray-50">
+                        <th className="px-2 py-1 text-center">ID</th>
+                        <th className="px-2 py-1 text-center">Họ và tên</th>
+                        <th className="px-2 py-1 text-center">Team</th>
+                        <th className="px-2 py-1 text-center">Phòng ban</th>
+                        <th className="px-2 py-1 text-center">Đã giao</th>
+                        <th className="px-2 py-1 text-center">Đang xử lý</th>
+                        <th className="px-2 py-1 text-center">Hoàn thành</th>
+                        <th className="px-2 py-1 text-center">Quá hạn</th>
+                        <th className="px-2 py-1 text-center">Đã tiếp nhận</th>
+                        <th className="px-2 py-1 text-center">TB xử lý (h)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reportData.map((r, idx) => (
+                        <tr key={`${r.userId ?? idx}`} className={`border-t odd:bg-white even:bg-gray-50 hover:bg-gray-100`}>
+                          <td className="px-2 py-2 align-middle text-center">{r.userId ?? '—'}</td>
+                          <td className="px-2 py-2 align-middle text-center">{r.fullName ?? '—'}</td>
+                          <td className="px-2 py-2 align-middle text-center">{r.team ?? '—'}</td>
+                          <td className="px-2 py-2 align-middle text-center">{r.department ?? '—'}</td>
+                          <td className="px-2 py-2 align-middle text-center">{r.totalAssigned ?? 0}</td>
+                          <td className="px-2 py-2 align-middle text-center">{r.totalInProgress ?? 0}</td>
+                          <td className="px-2 py-2 align-middle text-center">{r.totalCompleted ?? 0}</td>
+                          <td className="px-2 py-2 align-middle text-center">{r.totalLate ?? 0}</td>
+                          <td className="px-2 py-2 align-middle text-center">{r.totalReceived ?? 0}</td>
+                          <td className="px-2 py-2 align-middle text-center">{r.avgProcessingHours != null ? (Math.round(r.avgProcessingHours * 100) / 100) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </section>

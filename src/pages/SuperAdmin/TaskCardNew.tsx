@@ -85,7 +85,6 @@ export default function TaskCardNew({
   canView = true,
   canEdit = true,
   canDelete = true,
-  hideHospitalName = false,
   statusLabelOverride,
   statusClassOverride,
   leadingTopLeft,
@@ -100,7 +99,6 @@ export default function TaskCardNew({
   canView?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;
-  hideHospitalName?: boolean;
   statusLabelOverride?: (status?: string) => string;
   statusClassOverride?: (status?: string) => string;
   leadingTopLeft?: React.ReactNode;

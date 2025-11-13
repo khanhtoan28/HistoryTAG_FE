@@ -112,6 +112,8 @@ export async function filterUsers(params: {
   status?: boolean;
   fromDate?: string;
   toDate?: string;
+  team?: string;
+  department?: string;
 }) {
   const { data } = await api.get<UserResponseDTO[]>("/api/v1/superadmin/users/filter", { params });
   return data;

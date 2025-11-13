@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { searchHardware, searchHospitals, createBusiness, getBusinesses, updateBusiness, deleteBusiness, getBusinessById } from '../../api/business.api';
+import { searchHardware, searchHospitals, createBusiness, getBusinesses, updateBusiness, deleteBusiness, getBusinessById, getHardwareById } from '../../api/business.api';
 import api from '../../api/client';
 import {
   PlusIcon,
@@ -21,7 +21,9 @@ import Pagination from '../../components/common/Pagination';
 import ComponentCard from '../../components/common/ComponentCard';
 
 const BusinessPage: React.FC = () => {
-  const roles = JSON.parse(localStorage.getItem('roles') || '[]');
+  // read roles from either localStorage or sessionStorage (some flows store roles in sessionStorage)
+  const rolesRaw = localStorage.getItem('roles') || sessionStorage.getItem('roles') || '[]';
+  const roles = JSON.parse(rolesRaw);
   const isAdmin = roles.some((r: unknown) => {
     if (typeof r === 'string') return r.toUpperCase() === 'ADMIN' || r.toUpperCase() === 'SUPERADMIN';
     if (r && typeof r === 'object') {
@@ -38,6 +40,20 @@ const BusinessPage: React.FC = () => {
     }
     return false;
   });
+  
+  // Read stored user (may contain team information)
+  const storedUserRaw = localStorage.getItem('user') || sessionStorage.getItem('user');
+  let storedUser: Record<string, any> | null = null;
+  try {
+    storedUser = storedUserRaw ? JSON.parse(storedUserRaw) : null;
+  } catch {
+    storedUser = null;
+  }
+  const userTeam = storedUser && storedUser.team ? String(storedUser.team).toUpperCase() : null;
+  // Page access: allow if ADMIN/SUPERADMIN or we have a logged-in user (teams can view). This keeps viewing broadly available in admin area.
+  const pageAllowed = isAdmin || isSuperAdmin || Boolean(storedUser);
+  // Manage rights: only SUPERADMIN or team SALES can create/update/delete
+  const canManage = isSuperAdmin || userTeam === 'SALES';
 
   const [hardwareOptions, setHardwareOptions] = useState<Array<{ id: number; label: string; subLabel?: string }>>([]);
   const [hospitalOptions, setHospitalOptions] = useState<Array<{ id: number; label: string }>>([]);
@@ -87,6 +103,20 @@ const BusinessPage: React.FC = () => {
     return `HD${String(n).padStart(2, '0')}`;
   }
 
+  // Ensure items with status 'CARING' (Đang chăm sóc) are shown first.
+  // Secondary sort: newer startDate first. Non-dates are treated as 0.
+  function sortBusinessItems(list: BusinessItem[]) {
+    return list.slice().sort((a, b) => {
+      const aCare = (a.status ?? '').toString().toUpperCase() === 'CARING';
+      const bCare = (b.status ?? '').toString().toUpperCase() === 'CARING';
+      if (aCare && !bCare) return -1;
+      if (!aCare && bCare) return 1;
+      const aTime = a.startDate ? new Date(a.startDate).getTime() : 0;
+      const bTime = b.startDate ? new Date(b.startDate).getTime() : 0;
+      return bTime - aTime;
+    });
+  }
+
   // Small Info helper (styled like Hospitals page) -------------------------------------------------
   function Info({ label, value, icon }: { label: string; value?: React.ReactNode; icon?: React.ReactNode }) {
     return (
@@ -107,6 +137,7 @@ const BusinessPage: React.FC = () => {
   const [totalItems, setTotalItems] = useState<number>(0);
   const [filterStartFrom, setFilterStartFrom] = useState<string>('');
   const [filterStartTo, setFilterStartTo] = useState<string>('');
+  const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [viewItem, setViewItem] = useState<BusinessItem | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -136,7 +167,9 @@ const BusinessPage: React.FC = () => {
   async function loadList(page = currentPage, size = itemsPerPage) {
     try {
       const toParam = (v?: string | null) => v ? (v.length === 16 ? `${v}:00` : v) : undefined;
-      const res = await getBusinesses({ page, size, startDateFrom: toParam(filterStartFrom), startDateTo: toParam(filterStartTo) });
+      const params: Record<string, unknown> = { page, size, startDateFrom: toParam(filterStartFrom), startDateTo: toParam(filterStartTo) };
+      if (filterStatus && filterStatus !== 'ALL') params.status = filterStatus;
+      const res = await getBusinesses(params);
       const content = Array.isArray(res?.content) ? res.content : (Array.isArray(res) ? res : []);
       // ensure numeric fields are numbers
       const normalized = (content as Array<Record<string, unknown>>).map((c) => {
@@ -157,7 +190,7 @@ const BusinessPage: React.FC = () => {
           completionDate: completion ?? null,
         } as BusinessItem;
       });
-      setItems(normalized);
+  setItems(sortBusinessItems(normalized));
       // fetch phone numbers for each hospital in the list (best-effort)
       try {
         const withPhones = await Promise.all((normalized as BusinessItem[]).map(async (it) => {
@@ -174,7 +207,7 @@ const BusinessPage: React.FC = () => {
           } else out.hospitalPhone = null;
           return out;
         }));
-        setItems(withPhones);
+  setItems(sortBusinessItems(withPhones));
         // pagination metadata (when backend returns Page)
         setTotalItems(res?.totalElements ?? (Array.isArray(res) ? res.length : content.length));
         setTotalPages(res?.totalPages ?? 1);
@@ -218,13 +251,14 @@ const BusinessPage: React.FC = () => {
   function clearFilters() {
     setFilterStartFrom('');
     setFilterStartTo('');
+    setFilterStatus('ALL');
     setCurrentPage(0);
     loadList(0, itemsPerPage);
   }
 
   async function handleSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault();
-    if (!isAdmin) return setToast({ message: 'Bạn không có quyền', type: 'error' });
+    if (!canManage) return setToast({ message: 'Bạn không có quyền thực hiện thao tác này', type: 'error' });
     // validation
   if (!name || name.trim().length === 0) return setToast({ message: 'Tên dự án là bắt buộc', type: 'error' });
   if (!selectedHospitalId) return setToast({ message: 'Vui lòng chọn bệnh viện', type: 'error' });
@@ -353,8 +387,12 @@ const BusinessPage: React.FC = () => {
   setQuantity(res.quantity != null ? Number(String(res.quantity)) : 1);
       // fetch price
       if (res.hardware?.id) {
-        const r = await api.get(`/api/v1/superadmin/hardware/${res.hardware.id}`);
-        setSelectedHardwarePrice(r.data && r.data.price != null ? Number(r.data.price) : null);
+        try {
+          const hw = await getHardwareById(res.hardware.id);
+          setSelectedHardwarePrice(hw && hw.price != null ? Number(hw.price) : null);
+        } catch {
+          setSelectedHardwarePrice(null);
+        }
       } else setSelectedHardwarePrice(null);
       setShowModal(true);
     } catch (e) { console.error(e); setToast({ message: 'Không thể load mục để sửa', type: 'error' }); }
@@ -398,6 +436,7 @@ const BusinessPage: React.FC = () => {
         <button
           type="button"
           onClick={() => {
+            if (!canManage) { setToast({ message: 'Bạn không có quyền', type: 'error' }); return; }
             setEditingId(null);
             setName('');
             setSelectedHardwareId(null);
@@ -407,7 +446,8 @@ const BusinessPage: React.FC = () => {
             setCompletionDateValue('');
             setShowModal(true);
           }}
-          className={`rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md flex items-center gap-2`}
+          disabled={!canManage}
+          className={`rounded-xl border px-6 py-3 text-sm font-medium text-white transition-all flex items-center gap-2 ${canManage ? 'border-blue-500 bg-blue-500 hover:bg-blue-600 hover:shadow-md' : 'border-gray-200 bg-gray-300 cursor-not-allowed'}`}
         >
           <PlusIcon style={{ width: 18, height: 18, fill: 'white' }} />
           <span>Thêm mới</span>
@@ -423,12 +463,21 @@ const BusinessPage: React.FC = () => {
           <label className="text-sm">Đến</label>
           <input type="datetime-local" value={filterStartTo} onChange={(e) => setFilterStartTo(e.target.value)} className="rounded border px-2 py-1" />
         </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm">Trạng thái</label>
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="rounded border px-2 py-1">
+            <option value="ALL">— Tất cả —</option>
+            <option value="CARING">Đang chăm sóc</option>
+            <option value="CONTRACTED">Ký hợp đồng</option>
+            <option value="CANCELLED">Hủy</option>
+          </select>
+        </div>
         <div className="ml-auto flex items-center gap-2">
           <button onClick={applyFilters} className="px-3 py-1 bg-blue-600 text-white rounded">Lọc</button>
           <button onClick={clearFilters} className="px-3 py-1 border rounded">Xóa</button>
         </div>
       </div>
-      {!isAdmin ? (
+      {!pageAllowed ? (
         <div className="text-red-600">Bạn không có quyền truy cập trang này.</div>
       ) : (
         <div>
@@ -444,11 +493,8 @@ const BusinessPage: React.FC = () => {
                 const v = e.target.value; setSelectedHardwareId(v ? Number(v) : null);
                 const found = hardwareOptions.find(h => String(h.id) === v);
                 if (found) {
-                  // fetch hardware detail to read price
-                  api.get(`/api/v1/superadmin/hardware/${found.id}`).then(r => {
-                    // keep null if backend did not provide price
-                    setSelectedHardwarePrice(r.data && r.data.price != null ? Number(r.data.price) : null);
-                  }).catch(() => setSelectedHardwarePrice(null));
+                  // fetch hardware detail to read price (base-aware)
+                  getHardwareById(found.id).then(r => setSelectedHardwarePrice(r && r.price != null ? Number(r.price) : null)).catch(() => setSelectedHardwarePrice(null));
                 } else setSelectedHardwarePrice(null);
               }} className="w-full rounded border px-3 py-2">
                 <option value="">— Chọn phần cứng —</option>
@@ -499,7 +545,7 @@ const BusinessPage: React.FC = () => {
                         const v = e.target.value; setSelectedHardwareId(v ? Number(v) : null);
                         const found = hardwareOptions.find(h => String(h.id) === v);
                         if (found) {
-                          api.get(`/api/v1/superadmin/hardware/${found.id}`).then(r => setSelectedHardwarePrice(r.data && r.data.price != null ? Number(r.data.price) : null)).catch(() => setSelectedHardwarePrice(null));
+                          getHardwareById(found.id).then(r => setSelectedHardwarePrice(r && r.price != null ? Number(r.price) : null)).catch(() => setSelectedHardwarePrice(null));
                         } else setSelectedHardwarePrice(null);
                       }} className="w-full rounded border px-3 py-2">
                         <option value="">— Chọn phần cứng —</option>
@@ -617,11 +663,11 @@ const BusinessPage: React.FC = () => {
                         <EyeIcon style={{ width: 16, height: 16 }} />
                         <span className="text-sm">Xem</span>
                       </button>
-                      <button onClick={() => openEditModal(it.id)} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-yellow-100 text-orange-600 bg-yellow-50 hover:bg-yellow-100">
+                      <button onClick={() => { if (!canManage) { setToast({ message: 'Bạn không có quyền', type: 'error' }); return; } if (it.status === 'CONTRACTED' && !isSuperAdmin) { setToast({ message: 'Không thể sửa dự án đã ký hợp đồng', type: 'error' }); return; } openEditModal(it.id); }} disabled={!canManage || (it.status === 'CONTRACTED' && !isSuperAdmin)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${( !canManage || (it.status === 'CONTRACTED' && !isSuperAdmin) ) ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed' : 'border-yellow-100 text-orange-600 bg-yellow-50 hover:bg-yellow-100'}`}>
                         <PencilIcon style={{ width: 16, height: 16 }} />
                         <span className="text-sm">Sửa</span>
                       </button>
-                      <button onClick={() => handleDelete(it.id)} disabled={deletingId === it.id} className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${deletingId === it.id ? 'border-red-200 text-red-400 bg-red-50 opacity-70' : 'border-red-100 text-red-600 bg-red-50 hover:bg-red-100'}`}>
+                      <button onClick={() => { if (!canManage) { setToast({ message: 'Bạn không có quyền', type: 'error' }); return; } if (it.status === 'CONTRACTED' && !isSuperAdmin) { setToast({ message: 'Không thể xóa dự án đã ký hợp đồng', type: 'error' }); return; } handleDelete(it.id); }} disabled={!canManage || deletingId === it.id || (it.status === 'CONTRACTED' && !isSuperAdmin)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${( !canManage || deletingId === it.id || (it.status === 'CONTRACTED' && !isSuperAdmin) ) ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed' : 'border-red-100 text-red-600 bg-red-50 hover:bg-red-100'}`}>
                         <TrashBinIcon style={{ width: 16, height: 16 }} />
                         <span className="text-sm">Xóa</span>
                       </button>

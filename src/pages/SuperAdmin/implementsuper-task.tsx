@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";// hoặc copy 2 hàm này từ trang cũ nếu bạn chưa có
 import { FiClipboard, FiMapPin, FiUser, FiClock, FiLink, FiActivity, FiCalendar, FiInfo } from "react-icons/fi";
 import toast from "react-hot-toast";
@@ -28,6 +29,21 @@ type ImplTask = {
   completionDate?: string | null;
   finishDate?: string | null;
   notes?: string | null;
+};
+
+type PendingTask = ImplTask & {
+  receivedById?: number | null;
+  receivedByName?: string | null;
+  readOnlyForDeployment?: boolean;
+  transferredToMaintenance?: boolean;
+  hospitalId?: number | null;
+  hospitalName?: string | null;
+};
+
+type PendingGroup = {
+  hospitalName: string;
+  hospitalId: number | null;
+  tasks: PendingTask[];
 };
 
 function authHeaders() {
@@ -127,6 +143,91 @@ const ImplementSuperTaskPage: React.FC = () => {
   const [hospitalStatusFilter, setHospitalStatusFilter] = useState<string>("");
   const [hospitalSortBy, setHospitalSortBy] = useState<string>("label");
   const [hospitalSortDir, setHospitalSortDir] = useState<string>("asc");
+  // Pending (Business -> Deployment) modal state (use admin endpoints)
+  const [pendingOpen, setPendingOpen] = useState(false);
+  const [pendingGroups, setPendingGroups] = useState<PendingGroup[]>([]);
+  const [loadingPending, setLoadingPending] = useState(false);
+  const pendingCountRef = useRef<number>(0);
+  const lastPendingCountRef = useRef<number>(0);
+  const navigate = useNavigate();
+
+  async function fetchPendingGroups(): Promise<number> {
+    setLoadingPending(true);
+    try {
+      const url = `${API_ROOT}/api/v1/admin/implementation/pending`;
+      const res = await fetch(url, { method: 'GET', headers: authHeaders(), credentials: 'include' });
+      if (res.status === 401) {
+        toast.error('Bạn chưa đăng nhập hoặc phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        navigate('/signin');
+        return pendingCountRef.current;
+      }
+      if (!res.ok) throw new Error(`Failed to load pending: ${res.status}`);
+      const list = await res.json();
+      const filtered = (Array.isArray(list) ? list : []).filter((t: unknown) => {
+        const tt = t as PendingTask;
+        return !(tt.receivedById || tt.receivedByName);
+      }) as PendingTask[];
+      const groups = new Map<string, PendingGroup>();
+      for (const t of filtered) {
+        const name = (t.hospitalName || '—').toString();
+        const key = `${t.hospitalId ?? 'null'}::${name}`;
+        const cur = groups.get(key) || { hospitalId: typeof t.hospitalId === 'number' ? t.hospitalId : null, hospitalName: name, tasks: [] as PendingTask[] };
+        cur.tasks.push(t);
+        groups.set(key, cur);
+      }
+      const grouped = Array.from(groups.values());
+      setPendingGroups(grouped);
+      const count = grouped.reduce((s, g) => s + (g.tasks?.length || 0), 0);
+      pendingCountRef.current = count;
+      return count;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(msg || 'Lỗi khi tải danh sách chờ');
+    } finally {
+      setLoadingPending(false);
+    }
+    return pendingCountRef.current;
+  }
+
+  async function handleAcceptTask(taskId: number, suppressRefresh = false) {
+    try {
+      const url = `${API_ROOT}/api/v1/admin/implementation/accept/${taskId}`;
+      const res = await fetch(url, { method: 'PUT', headers: authHeaders(), credentials: 'include' });
+      if (res.status === 401) {
+        toast.error('Bạn chưa đăng nhập hoặc không có quyền. Vui lòng đăng nhập lại.');
+        navigate('/signin');
+        return;
+      }
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+  await res.json().catch(() => null);
+      // remove from pending groups
+  setPendingGroups((prev) => prev.map((g: PendingGroup) => ({ ...g, tasks: g.tasks.filter((t: PendingTask) => t.id !== taskId) })).filter((g: PendingGroup) => g.tasks.length > 0));
+      toast.success('Đã tiếp nhận công việc');
+      // refresh hospital/task lists so the accepted task and its hospital appear in the main views
+      if (!suppressRefresh) {
+        try { await fetchHospitalsWithTasks(); } catch (err) { console.debug('fetchHospitalsWithTasks after accept failed', err); }
+        try { if (!showHospitalList) await fetchList(); } catch (err) { console.debug('fetchList after accept failed', err); }
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(msg || 'Lỗi khi tiếp nhận công việc');
+    }
+  }
+
+  async function handleAcceptGroup(hospitalId: number | null) {
+    const group = pendingGroups.find(g => (g.hospitalId ?? null) === (hospitalId ?? null));
+    if (!group) return;
+    for (const t of [...group.tasks]) {
+      // accept sequentially to avoid race
+      await handleAcceptTask(t.id as number, true);
+    }
+    // After accepting the whole group, refresh once so hospital and tasks appear
+    try { await fetchHospitalsWithTasks(); } catch (err) { console.debug('fetchHospitalsWithTasks failed', err); }
+    try { if (!showHospitalList) await fetchList(); } catch (err) { console.debug('fetchList failed', err); }
+  }
 
   const apiBase = `${API_ROOT}/api/v1/superadmin/implementation/tasks`;
 
@@ -174,14 +275,43 @@ const ImplementSuperTaskPage: React.FC = () => {
         throw new Error(`GET ${url} failed: ${res.status}`);
       }
   const resp = await res.json();
-  const items = Array.isArray(resp?.content) ? resp.content : Array.isArray(resp) ? resp : [];
-      setData(items);
+      const items = Array.isArray(resp?.content) ? resp.content : Array.isArray(resp) ? resp : [];
+      // Debug: log any items that look like pending Business-created tasks (should be hidden until accepted)
+      try {
+        const pendingOnServer = (Array.isArray(items) ? items : []).filter((it: unknown) => {
+          const ix = it as Record<string, unknown>;
+          return ix && (ix['readOnlyForDeployment'] as unknown as boolean) === true && !(ix['receivedById'] || ix['receivedByName']);
+        });
+        if (pendingOnServer.length > 0) {
+          console.debug('[ImplementSuperTaskPage] fetchList: found pendingOnServer items that should be hidden until accepted:', pendingOnServer.map((p: unknown) => {
+            const pp = p as Record<string, unknown>;
+            return { id: pp['id'], name: pp['name'], hospitalName: pp['hospitalName'], readOnlyForDeployment: pp['readOnlyForDeployment'], receivedById: pp['receivedById'] };
+          }));
+        }
+      } catch (_err) {
+        // ignore debug failures
+      }
+      // Exclude tasks that were created from Business and are still pending acceptance by Deployment
+      // These tasks have `readOnlyForDeployment === true` and no `receivedById`/`receivedByName`.
+      const filteredItems = (Array.isArray(items) ? items : []).filter((it: unknown) => {
+        try {
+          const ii = it as PendingTask;
+          const isPending = (ii?.readOnlyForDeployment === true) && !((ii?.receivedById) || (ii?.receivedByName));
+          return !isPending;
+        } catch {
+          return true;
+        }
+      });
+      if (filteredItems.length !== (items || []).length) {
+        console.debug('[ImplementSuperTaskPage] fetchList: filtered out', (items || []).length - filteredItems.length, 'pending business-created tasks until accepted');
+      }
+      setData(filteredItems);
       // try to read total count from paged response
   if (resp && typeof resp.totalElements === 'number') setTotalCount(resp.totalElements);
   else setTotalCount(Array.isArray(resp) ? resp.length : null);
   // disable entrance animation after all staggered animations have started
       if (enableItemAnimation) {
-        const itemCount = items.length;
+  const itemCount = filteredItems.length;
         // base delay 2000ms for first visible row, +80ms per subsequent row (as in TaskCardNew)
         const maxDelay = itemCount > 1 ? 2000 + ((itemCount - 2) * 80) : 0;
         const animationDuration = 220; // matches TaskCardNew animation duration
@@ -338,14 +468,24 @@ const ImplementSuperTaskPage: React.FC = () => {
         const today = new Date();
         const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
         
-        for (const it of allItems as any[]) {
-          const statusUp = String(it?.status || '').trim().toUpperCase();
-          const label = String(it?.hospitalName || '').trim();
+        for (const it of allItems as unknown as PendingTask[]) {
+          // Skip tasks that were created by Business and are still pending acceptance by Deployment
+          // These should not affect hospital aggregations (nearDue/overdue/transferred counts)
+          try {
+            const maybe = it as PendingTask;
+            if (maybe?.readOnlyForDeployment === true && !(maybe?.receivedById || maybe?.receivedByName)) {
+              continue;
+            }
+          } catch {
+            // ignore cast errors
+          }
+          const statusUp = String((it as PendingTask)?.status || '').trim().toUpperCase();
+          const label = String((it as PendingTask)?.hospitalName || '').trim();
           const target = list.find(x => x.label === label);
           if (!target) continue;
           
           // Check if task is transferred to maintenance
-          const isTransferred = Boolean((it as any)?.transferredToMaintenance) || statusUp === 'TRANSFERRED';
+          const isTransferred = Boolean((it as PendingTask)?.transferredToMaintenance) || statusUp === 'TRANSFERRED';
           
           // Update transferred count
           if (isTransferred) {
@@ -475,6 +615,61 @@ const ImplementSuperTaskPage: React.FC = () => {
 
   useEffect(() => {
     fetchHospitalsWithTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Poll pending groups periodically and show notifications when new pending tasks arrive
+  useEffect(() => {
+    let mounted = true;
+
+    // Ask for notification permission once (non-blocking)
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+        // request in background; user may decline
+        Notification.requestPermission().catch(() => {});
+      }
+    } catch (err) {
+      console.debug('Notification permission request failed', err);
+    }
+
+    // Initial load
+    (async () => {
+      try {
+        const initial = await fetchPendingGroups();
+        lastPendingCountRef.current = initial;
+      } catch (err) {
+        console.debug('Initial fetchPendingGroups failed', err);
+      }
+    })();
+
+    const intervalId = window.setInterval(async () => {
+      try {
+        const newCount = await fetchPendingGroups();
+        const last = lastPendingCountRef.current || 0;
+        if (!mounted) return;
+        if (newCount > last) {
+          const diff = newCount - last;
+          // show in-app toast
+          toast.success(`Có ${diff} công việc chờ mới cần tiếp nhận`);
+          // show browser notification if permitted
+          try {
+            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+              new Notification('Công việc chờ mới', { body: `Có ${diff} công việc chờ cần tiếp nhận`, silent: false });
+            }
+          } catch (err) {
+            console.debug('Browser notification failed', err);
+          }
+        }
+        lastPendingCountRef.current = newCount;
+      } catch (err) {
+        console.debug('Polling fetchPendingGroups failed', err);
+      }
+    }, 8000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalId);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -784,7 +979,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                   <option value="desc">Giảm dần</option>
                 </select>
                 <button 
-                  className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
+                  className="rounded-lg bg-blue-600 text-white px-3 py-1.5 shadow hover:bg-blue-700 text-sm"
                   onClick={() => {
                     setViewOnly(false);
                     setEditing(null);
@@ -794,6 +989,64 @@ const ImplementSuperTaskPage: React.FC = () => {
                 >
                   + Thêm task mới
                 </button>
+                {/* Pending tasks button (fetch from admin endpoint) */}
+                <button
+                  className="relative ml-2 inline-flex items-center gap-2 rounded-lg border border-blue-200 text-blue-600 px-2 py-1 text-sm hover:bg-blue-50"
+                  onClick={() => { setPendingOpen(true); fetchPendingGroups(); }}
+                >
+                  <span className="inline-flex items-center" style={{fontSize: '0.95rem'}}>📨</span>
+                  <span className="ml-1">Công việc chờ</span>
+                  {pendingGroups.reduce((s, g) => s + (g.tasks?.length || 0), 0) > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[11px] rounded-full px-1.5 py-0.5">
+                      {pendingGroups.reduce((s, g) => s + (g.tasks?.length || 0), 0)}
+                    </span>
+                  )}
+                </button>
+                {/* Pending modal - placed here so it can access component state/functions */}
+                {pendingOpen && (
+                  <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/40" onMouseDown={(e) => { if (e.target === e.currentTarget) setPendingOpen(false); }}>
+                    <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl border border-gray-200 overflow-auto max-h-[80vh]">
+                      <div className="p-4 border-b flex items-center justify-between">
+                        <h3 className="text-lg font-semibold">📨 Công việc chờ - Tiếp nhận từ Phòng Kinh Doanh</h3>
+                        <div className="flex items-center gap-2">
+                          <button className="px-3 py-1 rounded" onClick={() => { setPendingOpen(false); }}>Đóng</button>
+                          <button className="px-3 py-1 rounded border" onClick={async () => { await fetchPendingGroups(); }}>Làm mới</button>
+                        </div>
+                      </div>
+                      <div className="p-4 space-y-4">
+                        {loadingPending ? (
+                          <div className="text-center py-8">Đang tải...</div>
+                        ) : pendingGroups.length === 0 ? (
+                          <div className="text-center py-8">Không có công việc chờ</div>
+                        ) : (
+                          pendingGroups.map((g) => (
+                            <div key={`${g.hospitalId ?? 'null'}-${g.hospitalName}`} className="border rounded-lg p-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="font-semibold">{g.hospitalName} <span className="text-sm text-gray-500">({g.tasks.length})</span></div>
+                                <div className="flex items-center gap-2">
+                                  <button className="px-3 py-1 rounded" onClick={() => handleAcceptGroup(g.hospitalId)}>Tiếp nhận tất cả</button>
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                {g.tasks.map((t: PendingTask) => (
+                                  <div key={t.id} className="p-2 rounded-md border bg-gray-50 flex items-center justify-between">
+                                    <div>
+                                      <div className="font-medium">{t.name}</div>
+                                      <div className="text-sm text-gray-600">Số lượng: {t.quantity ?? '—'}</div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <button className="px-3 py-1 rounded bg-green-50 text-green-700" onClick={() => handleAcceptTask(t.id)}>Tiếp nhận</button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -903,41 +1156,89 @@ const ImplementSuperTaskPage: React.FC = () => {
               </div>
 
               {/* Pagination for hospitals */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <button 
-                    className="px-3 py-1 border rounded" 
-                    onClick={() => setHospitalPage((p) => Math.max(0, p - 1))} 
-                    disabled={hospitalPage <= 0}
-                  >
-                    Prev
-                  </button>
-                  <span className="text-sm">
-                    Trang {hospitalPage + 1} / {Math.max(1, Math.ceil(filteredHospitals.length / hospitalSize))}
-                  </span>
-                  <button 
-                    className="px-3 py-1 border rounded" 
-                    onClick={() => setHospitalPage((p) => p + 1)} 
-                    disabled={(hospitalPage + 1) * hospitalSize >= filteredHospitals.length}
-                  >
-                    Next
-                  </button>
+              <div className="flex items-center justify-between py-3">
+                <div className="text-sm text-gray-600">
+                  {filteredHospitals.length === 0 ? (
+                    <span>Hiển thị 0 trong tổng số 0 mục</span>
+                  ) : (
+                    (() => {
+                      const total = filteredHospitals.length;
+                      const from = hospitalPage * hospitalSize + 1;
+                      const to = Math.min((hospitalPage + 1) * hospitalSize, total);
+                      return <span>Hiển thị {from} đến {to} trong tổng số {total} mục</span>;
+                    })()
+                  )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-sm">Số hàng:</label>
-                  <select 
-                    value={String(hospitalSize)} 
-                    onChange={(e) => { 
-                      setHospitalSize(Number(e.target.value)); 
-                      setHospitalPage(0); 
-                    }} 
-                    className="border rounded px-2 py-1 text-sm"
-                  >
-                    <option value="10">10</option>
-                    <option value="20">20</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                  </select>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-600">Hiển thị:</label>
+                    <select
+                      value={String(hospitalSize)}
+                      onChange={(e) => { setHospitalSize(Number(e.target.value)); setHospitalPage(0); }}
+                      className="border rounded px-2 py-1 text-sm"
+                    >
+                      <option value="10">10</option>
+                      <option value="20">20</option>
+                      <option value="50">50</option>
+                      <option value="100">100</option>
+                    </select>
+                  </div>
+
+                  <div className="inline-flex items-center gap-1">
+                    <button
+                      onClick={() => setHospitalPage(0)}
+                      disabled={hospitalPage <= 0}
+                      className="px-2 py-1 border rounded text-sm disabled:opacity-50"
+                      title="Đầu"
+                    >
+                      «
+                    </button>
+                    <button
+                      onClick={() => setHospitalPage((p) => Math.max(0, p - 1))}
+                      disabled={hospitalPage <= 0}
+                      className="px-2 py-1 border rounded text-sm disabled:opacity-50"
+                      title="Trước"
+                    >
+                      ‹
+                    </button>
+
+                    {/* page numbers */}
+                    {(() => {
+                      const total = Math.max(1, Math.ceil(filteredHospitals.length / hospitalSize));
+                      const pages: number[] = [];
+                      // show up to 5 pages: current, +/-2, constrained
+                      const start = Math.max(1, hospitalPage + 1 - 2);
+                      const end = Math.min(total, start + 4);
+                      for (let i = start; i <= end; i++) pages.push(i);
+                      return pages.map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => setHospitalPage(p - 1)}
+                          className={`px-3 py-1 border rounded text-sm ${hospitalPage + 1 === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}
+                        >
+                          {p}
+                        </button>
+                      ));
+                    })()}
+
+                    <button
+                      onClick={() => setHospitalPage((p) => Math.min(Math.max(0, Math.ceil(filteredHospitals.length / hospitalSize) - 1), p + 1))}
+                      disabled={(hospitalPage + 1) * hospitalSize >= filteredHospitals.length}
+                      className="px-2 py-1 border rounded text-sm disabled:opacity-50"
+                      title="Tiếp"
+                    >
+                      ›
+                    </button>
+                    <button
+                      onClick={() => setHospitalPage(Math.max(0, Math.ceil(filteredHospitals.length / hospitalSize) - 1))}
+                      disabled={(hospitalPage + 1) * hospitalSize >= filteredHospitals.length}
+                      className="px-2 py-1 border rounded text-sm disabled:opacity-50"
+                      title="Cuối"
+                    >
+                      »
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1021,7 +1322,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                 // Pre-fill hospital if we're viewing tasks for a specific hospital
                 const hospitalId = selectedHospital ? hospitalsWithTasks.find(h => h.label === selectedHospital)?.id : undefined;
                 setViewOnly(false);
-                setEditing(hospitalId ? { hospitalId, hospitalName: selectedHospital } as any : null); 
+                setEditing(hospitalId ? ({ hospitalId, hospitalName: selectedHospital } as unknown as ImplTask) : null); 
                 setModalOpen(true); 
               }}
             >
@@ -1056,9 +1357,25 @@ const ImplementSuperTaskPage: React.FC = () => {
             data.length === 0 ? (
               <div className="px-4 py-6 text-center text-gray-500">Không có dữ liệu</div>
             ) : (
-              data.map((row, idx) => {
-                  // SuperAdmin should be allowed to edit/delete even if backend marks readOnlyForDeployment
-                  const displayed = { ...(row as any), readOnlyForDeployment: false } as ImplTask;
+              // Do not show tasks created from Business that are pending acceptance by Deployment/SuperAdmin.
+              // A task is pending when readOnlyForDeployment === true AND it has not been received (no receivedById).
+              (() => {
+                const visible = data.filter((r) => {
+                  const rr = r as Record<string, unknown>;
+                  const rod = rr['readOnlyForDeployment'] as unknown as boolean;
+                  const receivedId = rr['receivedById'];
+                  const receivedName = rr['receivedByName'];
+                  const name = String(rr['name'] ?? '').toLowerCase();
+                  const looksLikeBusiness = name.includes('business contract') || name.includes('business:') || name.includes('contract:');
+                  // Hide if explicitly marked readOnlyForDeployment and not yet received,
+                  // or defensively hide if it looks like a Business-created task and not yet received.
+                  const notReceived = !(receivedId || receivedName);
+                  if ((rod === true && notReceived) || (notReceived && looksLikeBusiness)) return false;
+                  return true;
+                });
+                return visible.map((row, idx) => {
+                  // For SuperAdmin we still allow editing/deleting of regular tasks.
+                  const displayed = row as ImplTask;
                   return (
                     <TaskCard
                       key={row.id}
@@ -1072,10 +1389,10 @@ const ImplementSuperTaskPage: React.FC = () => {
                       onDelete={(id) => handleDelete(id)}
                       canEdit={true}
                       canDelete={true}
-                      hideHospitalName={true}
                     />
                   );
-              })
+                });
+              })()
             )
           )}
         </div>
@@ -1111,7 +1428,7 @@ const ImplementSuperTaskPage: React.FC = () => {
           initial={editing ?? undefined}
           onSubmit={handleSubmit}
           readOnly={false}
-          transferred={Boolean((editing as any)?.transferredToMaintenance || String(editing?.status ?? '').toUpperCase() === 'TRANSFERRED')}
+          transferred={Boolean(((editing as unknown as PendingTask)?.transferredToMaintenance) || String(editing?.status ?? '').toUpperCase() === 'TRANSFERRED')}
         />
       )}
 
@@ -1169,7 +1486,8 @@ function DetailModal({
                 </span>
               )}
             />
-
+      
+            {/* Pending tasks modal moved to top-level so it has access to state/functions */}
             <Info icon={<FiLink />} label="API URL" value={item.apiUrl} />
             <Info icon={<FiActivity />} label="API Test" value={item.apiTestStatus} />
             <Info icon={<FiInfo />} label="Số lượng" value={item.quantity ?? "—"} />
