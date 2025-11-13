@@ -1279,19 +1279,78 @@ const ImplementationTasksPage: React.FC = () => {
     setLoadingHospitals(true);
     setError(null);
     try {
-      // Fetch a large page of tasks and aggregate by hospital
-      const params = new URLSearchParams({ page: "0", size: "2000", sortBy: "id", sortDir: "asc" });
-      const endpoint = `${API_ROOT}/api/v1/admin/implementation/tasks?${params.toString()}`;
-      const res = await fetch(endpoint, {
+      // ✅ Fetch hospitals with transfer status (new endpoint - tối ưu hơn)
+      const res = await fetch(`${API_ROOT}/api/v1/admin/implementation/tasks/hospitals/with-status`, {
         method: "GET",
         headers: authHeaders(),
         credentials: "include",
       });
-      if (!res.ok) throw new Error(`Failed to fetch hospitals: ${res.status}`);
-      const payload = await res.json();
-  const items: ImplementationTaskResponseDTO[] = Array.isArray(payload?.content) ? payload.content : Array.isArray(payload) ? payload : [];
-  // Exclude Business-created pending tasks from hospital summaries (they are not yet in deployment list)
-  const visibleItems = items.filter((it) => !(it.readOnlyForDeployment === true && !it.receivedById));
+      if (!res.ok) {
+        if (res.status === 401) {
+          throw new Error(`Unauthorized (401): Token may be expired or invalid. Please login again.`);
+        }
+        throw new Error(`Failed to fetch hospitals: ${res.status}`);
+      }
+      const hospitals = await res.json();
+      
+      // Parse task count from subLabel (format: "Province - X tasks" or "X tasks")
+      const baseList = (Array.isArray(hospitals) ? hospitals : []).map((hospital: { id: number; label: string; subLabel?: string; transferredToMaintenance?: boolean; acceptedByMaintenance?: boolean }) => {
+        let taskCount = 0;
+        let province = hospital.subLabel || "";
+        
+        // Parse task count from subLabel
+        if (hospital.subLabel) {
+          const match = hospital.subLabel.match(/(\d+)\s+tasks?/i);
+          if (match) {
+            taskCount = parseInt(match[1], 10);
+            // Extract province (everything before " - X tasks")
+            province = hospital.subLabel.replace(/\s*-\s*\d+\s+tasks?/i, "").trim();
+          }
+        }
+        
+        return {
+          ...hospital,
+          subLabel: province, // Keep only province without task count
+          taskCount: taskCount,
+          nearDueCount: 0, // Initialize to 0 - will be calculated in augment()
+          overdueCount: 0, // Initialize to 0 - will be calculated in augment()
+          transferredCount: 0,
+          // Use transfer status from backend
+          allTransferred: Boolean(hospital.transferredToMaintenance),
+          allAccepted: Boolean(hospital.acceptedByMaintenance),
+        };
+      });
+
+      // Fetch completed counts + near due/overdue for each hospital in parallel
+      const completedCounts = await Promise.all(
+        baseList.map(async (h) => {
+          try {
+            // count only COMPLETED as 'completed' for hospital aggregation
+            const p = new URLSearchParams({ page: "0", size: "1", status: "COMPLETED", hospitalName: h.label });
+            const u = `${API_ROOT}/api/v1/admin/implementation/tasks?${p.toString()}`;
+            const r = await fetch(u, { method: 'GET', headers: authHeaders(), credentials: 'include' });
+            if (!r.ok) return 0;
+            try {
+              const resp = await r.json();
+              if (resp && typeof resp.totalElements === 'number') return resp.totalElements as number;
+              else if (Array.isArray(resp)) return resp.length;
+            } catch {
+              // ignore individual parse errors
+            }
+            return 0;
+          } catch {
+            return 0;
+          }
+        })
+      );
+
+      // Fetch all tasks (limited) to compute near due/overdue per hospital
+      const allParams = new URLSearchParams({ page: "0", size: "2000", sortBy: "id", sortDir: "asc" });
+      const allRes = await fetch(`${API_ROOT}/api/v1/admin/implementation/tasks?${allParams.toString()}`, { method: 'GET', headers: authHeaders(), credentials: 'include' });
+      const allPayload = allRes.ok ? await allRes.json() : [];
+      const allItems = Array.isArray(allPayload?.content) ? allPayload.content : Array.isArray(allPayload) ? allPayload : [];
+      // Exclude Business-created pending tasks from hospital summaries (they are not yet in deployment list)
+      const visibleItems = allItems.filter((it: ImplementationTaskResponseDTO) => !(it.readOnlyForDeployment === true && !it.receivedById));
 
       // Aggregate by hospitalName
       const acc = new Map<string, { id: number | null; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number; transferredCount: number; acceptedByMaintenanceCount: number }>();
@@ -1329,55 +1388,25 @@ const ImplementationTasksPage: React.FC = () => {
         }
         acc.set(key, current);
       }
-      // Calculate allTransferred and allAccepted after processing all tasks
-      const list = Array.from(acc.values()).map(h => ({
-        ...h,
-        allTransferred: h.taskCount > 0 && h.transferredCount === h.taskCount,
-        allAccepted: h.transferredCount > 0 && h.acceptedByMaintenanceCount === h.transferredCount,
-      }));
-      // Enrich province/subLabel by querying hospitals search per name (best effort)
-      async function resolveHospitalMeta(name: string): Promise<{ province: string; id: number | null }> {
-        try {
-          const res = await fetch(`${API_ROOT}/api/v1/admin/hospitals/search?name=${encodeURIComponent(name)}`, { headers: authHeaders(), credentials: 'include' });
-          if (!res.ok) return { province: '', id: null };
-          const arr = await res.json();
-          if (!Array.isArray(arr) || arr.length === 0) return { province: '', id: null };
-          // Prefer exact match by label/name
-          const pick = (arr as any[]).find((x) => {
-            const label = String(x?.label ?? x?.name ?? '').trim();
-            return label.toLowerCase() === name.trim().toLowerCase();
-          }) || arr[0];
-          if (!pick || typeof pick !== 'object') return { province: '', id: null };
-          const obj: any = pick;
-          const resolvedId = typeof obj?.id === 'number' ? obj.id : obj?.id != null ? Number(obj.id) : null;
-          const keys = ['province', 'provinceName', 'city', 'cityName', 'addressProvince', 'addressProvinceName', 'region', 'subLabel'];
-          for (const k of keys) {
-            const v = obj[k];
-            if (typeof v === 'string' && v.trim()) {
-              // If backend returns multiple provinces separated by comma, pick the first
-              const value = String(v).split(',')[0].trim();
-              // remove trailing task counts if mistakenly included (" - X tasks")
-              return { province: value.replace(/\s*-\s*\d+\s+tasks?/i, '').trim(), id: resolvedId };
-            }
-          }
-          // As last resort, attempt to parse from label formatted like "Province - Hospital"
-          if (typeof obj.label === 'string') {
-            const m = obj.label.split(' - ');
-            if (m.length > 1) return { province: m[0].split(',')[0].trim(), id: resolvedId };
-          }
-          return { province: '', id: resolvedId };
-        } catch { return { province: '', id: null }; }
-      }
-
-      const withProvince = await Promise.all(list.map(async (h) => {
-        const meta = await resolveHospitalMeta(h.label);
+      // Merge baseList (có transfer status từ endpoint) với task counts từ aggregation
+      const withCompleted = baseList.map((h, idx) => {
+        // Tìm matching hospital từ acc (aggregated from tasks)
+        const hospitalId = h.id;
+        const hospitalName = h.label;
+        const key = hospitalId != null ? `id-${hospitalId}` : `name-${hospitalName}`;
+        const aggregated = acc.get(key);
+        
         return {
           ...h,
-          id: h.id ?? meta.id ?? null,
-          subLabel: h.subLabel && h.subLabel.trim() ? h.subLabel : meta.province,
+          acceptedCount: completedCounts[idx] ?? (aggregated?.acceptedCount ?? 0),
+          nearDueCount: aggregated?.nearDueCount ?? 0,
+          overdueCount: aggregated?.overdueCount ?? 0,
+          // Transfer status đã có từ backend endpoint
         };
-      }));
-      setHospitalsWithTasks(withProvince);
+      });
+      
+      // Province đã có trong subLabel từ endpoint, không cần fetch thêm
+      setHospitalsWithTasks(withCompleted);
     } catch (e: any) {
       setError(e.message || "Lỗi tải danh sách bệnh viện");
     } finally {
@@ -1573,10 +1602,11 @@ const ImplementationTasksPage: React.FC = () => {
       toast.error("Không xác định được bệnh viện để chuyển sang bảo trì.");
       return;
     }
-    if (!confirm(`Chuyển ${accepted}/${total} tác vụ của ${hospital.label} sang bảo trì?`)) return;
+    if (!confirm(`Chuyển bệnh viện ${hospital.label} sang bảo trì?`)) return;
     try {
+      // ✅ API mới: Chuyển bệnh viện (không phải task)
       const res = await fetch(
-        `${API_ROOT}/api/v1/admin/implementation/hospital/${hospitalId}/convert-to-maintenance`,
+        `${API_ROOT}/api/v1/admin/hospitals/${hospitalId}/transfer-to-maintenance`,
         {
           method: "POST",
           headers: authHeaders(),
@@ -1588,34 +1618,23 @@ const ImplementationTasksPage: React.FC = () => {
         toast.error(`Chuyển sang bảo trì thất bại: ${text || res.status}`);
         return;
       }
-      let payload: {
-        convertedCount?: number;
-        failedTaskIds?: number[];
-        failedMessages?: string[];
-        alreadyTransferredCount?: number;
-        skippedCount?: number;
-      } | null = null;
+      
+      toast.success(`Đã chuyển bệnh viện ${hospital.label} sang bảo trì`);
 
-      try {
-        payload = await res.json();
-      } catch {
-        payload = null;
-      }
+      // ✅ Update state ngay lập tức để UI cập nhật (từ "Chuyển sang bảo trì" → "Chờ tiếp nhận")
+      setHospitalsWithTasks((prev) => prev.map((h) => {
+        if (h.id === hospitalId || h.label === hospital.label) {
+          return {
+            ...h,
+            allTransferred: true, // Đã chuyển
+            allAccepted: false,   // Chưa tiếp nhận
+          };
+        }
+        return h;
+      }));
 
-      const converted = payload?.convertedCount ?? accepted;
-      const already = payload?.alreadyTransferredCount ?? 0;
-      const failedList = Array.isArray(payload?.failedTaskIds) ? payload?.failedTaskIds ?? [] : [];
-      const failed = failedList.length;
-
-      let successMsg = `Đã yêu cầu chuyển ${converted} công việc của ${hospital.label} sang bảo trì`;
-      if (already > 0) successMsg += ` (đã đánh dấu trước đó: ${already})`;
-      toast.success(`${successMsg}.`);
-
-      if (failed > 0) {
-        const detail = (payload?.failedMessages || []).filter(Boolean).join("; ");
-        toast.error(`Có ${failed} công việc chuyển thất bại${detail ? `: ${detail}` : ""}`);
-      }
-
+      // ✅ Refresh để lấy data mới nhất từ backend (sau delay nhỏ để đảm bảo backend đã commit)
+      await new Promise(resolve => setTimeout(resolve, 300));
       await fetchHospitalsWithTasks();
       if (!showHospitalList && selectedHospital === hospital.label) {
         await fetchList();
@@ -1897,7 +1916,7 @@ const ImplementationTasksPage: React.FC = () => {
                                       ✓ Đã chuyển sang bảo trì
                                     </span>
                                   )}
-                                  {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) < (hospital.taskCount || 0) && (
+                                  {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) < (hospital.taskCount || 0) && !hospital.allTransferred && (
                                     <span
                                       className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-sm"
                                       title={`Còn ${(hospital.taskCount || 0) - (hospital.acceptedCount || 0)} task chưa hoàn thành`}
@@ -2052,26 +2071,50 @@ const ImplementationTasksPage: React.FC = () => {
       </div>
 
       {!showHospitalList && (
-      <div className="mt-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <button className="px-3 py-1 border rounded inline-flex items-center gap-2" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0}>
-            <ChevronLeftIcon />
-            <span>Prev</span>
-          </button>
-          <span>Trang {page + 1}{totalCount ? ` / ${Math.max(1, Math.ceil((totalCount || 0) / size))}` : ""}</span>
-          <button className="px-3 py-1 border rounded inline-flex items-center gap-2" onClick={() => setPage((p) => p + 1)} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)}>
-            <span>Next</span>
-            <ChevronRightIcon />
-          </button>
+      <div className="mt-4 flex items-center justify-between py-3">
+        <div className="text-sm text-gray-600">
+          {totalCount === null || totalCount === 0 ? (
+            <span>Hiển thị 0 trong tổng số 0 mục</span>
+          ) : (
+            (() => {
+              const from = page * size + 1;
+              const to = Math.min((page + 1) * size, totalCount);
+              return <span>Hiển thị {from} đến {to} trong tổng số {totalCount} mục</span>;
+            })()
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm">Số hàng:</label>
-          <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1">
-            <option value="5">5</option>
-            <option value="10">10</option>
-            <option value="20">20</option>
-            <option value="50">50</option>
-          </select>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">Hiển thị:</label>
+            <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1 text-sm">
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+            </select>
+          </div>
+
+          <div className="inline-flex items-center gap-1">
+            <button onClick={() => setPage(0)} disabled={page <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Đầu">«</button>
+            <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Trước">‹</button>
+
+            {(() => {
+              const total = Math.max(1, Math.ceil((totalCount || 0) / size));
+              const pages: number[] = [];
+              const start = Math.max(1, page + 1 - 2);
+              const end = Math.min(total, start + 4);
+              for (let i = start; i <= end; i++) pages.push(i);
+              return pages.map((p) => (
+                <button key={p} onClick={() => setPage(p - 1)} className={`px-3 py-1 border rounded text-sm ${page + 1 === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}>
+                  {p}
+                </button>
+              ));
+            })()}
+
+            <button onClick={() => setPage((p) => Math.min(Math.max(0, Math.ceil((totalCount || 0) / size) - 1), p + 1))} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Tiếp">›</button>
+            <button onClick={() => setPage(Math.max(0, Math.ceil((totalCount || 0) / size) - 1))} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Cuối">»</button>
+          </div>
         </div>
       </div>
       )}

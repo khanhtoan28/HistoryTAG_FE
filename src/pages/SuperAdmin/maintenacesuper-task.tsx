@@ -46,6 +46,20 @@ type PendingTransferGroup = {
   tasks: MaintTask[];
 };
 
+type PendingHospital = {
+  id: number;
+  name: string;
+  province?: string | null;
+  transferredToMaintenance?: boolean | null;
+  acceptedByMaintenance?: boolean | null;
+  transferredAt?: string | null;
+  acceptedAt?: string | null;
+  transferredById?: number | null;
+  transferredByFullname?: string | null;
+  acceptedById?: number | null;
+  acceptedByFullname?: string | null;
+};
+
 function authHeaders() {
   const token = localStorage.getItem("access_token");
   return {
@@ -269,94 +283,73 @@ const MaintenanceSuperTaskPage: React.FC = () => {
   async function fetchPendingTasks() {
     setLoadingPending(true);
     try {
-      const res = await fetch(`${API_ROOT}/api/v1/admin/maintenance/pending`, {
+      // ✅ API mới: Lấy danh sách bệnh viện chờ tiếp nhận (hospital-level)
+      const res = await fetch(`${API_ROOT}/api/v1/admin/maintenance/pending-hospitals`, {
         method: "GET",
         headers: authHeaders(),
         credentials: "include",
       });
       if (!res.ok) {
         const msg = await res.text();
-        toast.error(`Tải công việc chờ thất bại: ${msg || res.status}`);
+        toast.error(`Tải danh sách bệnh viện chờ thất bại: ${msg || res.status}`);
         return;
       }
-      const list = await res.json();
-      const items: MaintTask[] = Array.isArray(list)
-        ? list
-        : Array.isArray(list?.content)
-        ? list.content
-        : [];
+      const hospitals: PendingHospital[] = await res.json();
+      const hospitalsList = Array.isArray(hospitals) ? hospitals : [];
 
-      const grouped = new Map<string, PendingTransferGroup>();
-      for (const task of items) {
-        const hospitalId = task?.hospitalId ?? null;
-        const hospitalName = (task?.hospitalName || task?.name || "Bệnh viện không xác định").toString();
-        const key = hospitalId !== null ? `id-${hospitalId}` : `name-${hospitalName}`;
+      // Convert từ HospitalResponseDTO sang PendingTransferGroup format (để tương thích với UI hiện tại)
+      const groupedList: PendingTransferGroup[] = hospitalsList.map((hospital) => ({
+        key: `id-${hospital.id}`,
+        hospitalId: hospital.id,
+        hospitalName: hospital.name || "Bệnh viện không xác định",
+        tasks: [], // Không có tasks vì đây là hospital-level
+      }));
 
-        if (!grouped.has(key)) {
-          grouped.set(key, {
-            key,
-            hospitalId,
-            hospitalName,
-            tasks: [],
-          });
-        }
-        grouped.get(key)!.tasks.push(task);
-      }
-
-      const groupedList = Array.from(grouped.values()).sort((a, b) =>
+      setPendingTasks(groupedList.sort((a, b) =>
         a.hospitalName.localeCompare(b.hospitalName, "vi", { sensitivity: "base" }),
-      );
-      setPendingTasks(groupedList);
+      ));
     } catch (err: unknown) {
       console.error(err);
-      toast.error("Lỗi khi tải công việc chờ");
+      toast.error("Lỗi khi tải danh sách bệnh viện chờ");
     } finally {
       setLoadingPending(false);
     }
   }
 
   const handleAcceptPendingGroup = async (group: PendingTransferGroup) => {
-    if (!group || !group.tasks?.length) {
-      toast.error("Không có công việc nào để tiếp nhận.");
+    if (!group || !group.hospitalId) {
+      toast.error("Không có bệnh viện nào để tiếp nhận.");
       return;
     }
 
-    const taskCount = group.tasks.length;
     if (
       !confirm(
-        `Tiếp nhận toàn bộ ${taskCount} công việc của ${group.hospitalName} và chuyển sang danh sách bảo trì?`,
+        `Tiếp nhận bệnh viện ${group.hospitalName} và chuyển sang danh sách bảo trì?`,
       )
     )
       return;
 
-    const failures: string[] = [];
-    let success = 0;
-
-    for (const task of group.tasks) {
-      if (!task?.id) continue;
-      try {
-        const res = await fetch(`${API_ROOT}/api/v1/admin/maintenance/accept/${task.id}`, {
-          method: "PUT",
-          headers: authHeaders(),
-          credentials: "include",
-        });
-        if (!res.ok) {
-          const msg = await res.text();
-          failures.push(msg || `Task ${task.id} (${res.status})`);
-        } else {
-          success += 1;
-        }
-      } catch (err: unknown) {
-        failures.push(err instanceof Error ? err.message : String(err));
+    try {
+      // ✅ API mới: Tiếp nhận bệnh viện (1 API call thay vì loop qua từng task)
+      const res = await fetch(`${API_ROOT}/api/v1/admin/maintenance/accept-hospital/${group.hospitalId}`, {
+        method: "PUT",
+        headers: authHeaders(),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const msg = await res.text();
+        toast.error(`Tiếp nhận thất bại: ${msg || res.status}`);
+        return;
       }
-    }
 
-    if (failures.length === 0) {
-      toast.success(`Đã tiếp nhận ${success} công việc của ${group.hospitalName}`);
+      toast.success(`Đã tiếp nhận bệnh viện ${group.hospitalName}`);
       setPendingTasks((prev) => prev.filter((item) => item.key !== group.key));
+      // ✅ Refresh danh sách bệnh viện để hiển thị ngay bệnh viện vừa tiếp nhận
+      await fetchHospitalsWithTasks();
       await fetchList();
-    } else {
-      toast.error(`Có ${failures.length}/${taskCount} công việc tiếp nhận thất bại.`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(msg || "Lỗi khi tiếp nhận");
       await fetchPendingTasks();
     }
   };
@@ -604,8 +597,17 @@ const MaintenanceSuperTaskPage: React.FC = () => {
         subLabel: h.subLabel && h.subLabel.trim() ? h.subLabel : await resolveProvinceByName(h.label),
       })));
       
-      // Hiển thị tất cả bệnh viện có task, hoặc đã được accept từ triển khai, hoặc đang chờ tiếp nhận từ triển khai
-      const filtered = withProvince.filter((h) => h.acceptedByMaintenance || h.taskCount > 0 || h.fromDeployment);
+      // ✅ CHỈ hiển thị bệnh viện đã được tiếp nhận (acceptedByMaintenance = true) hoặc có task bảo trì
+      // Bệnh viện chưa tiếp nhận (fromDeployment = true nhưng acceptedByMaintenance = false) sẽ KHÔNG hiện ở đây
+      // Bệnh viện chưa tiếp nhận sẽ chỉ hiện ở "Bệnh viện chờ tiếp nhận" (pending-hospitals)
+      const filtered = withProvince.filter((h) => {
+        // Nếu từ triển khai: CHỈ hiển thị nếu đã được tiếp nhận
+        if (h.fromDeployment) {
+          return h.acceptedByMaintenance === true;
+        }
+        // Nếu không từ triển khai: hiển thị nếu có task
+        return (h.taskCount || 0) > 0;
+      });
       setHospitalsWithTasks(filtered);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -765,7 +767,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">
-          {showHospitalList ? "Danh sách bệnh viện có task bảo trì" : `Danh sách công việc bảo trì - ${selectedHospital}`}
+          {showHospitalList ? "Danh sách bệnh viện cần bảo trì" : `Danh sách công việc bảo trì - ${selectedHospital}`}
         </h1>
         {!showHospitalList && (
           <button
@@ -853,7 +855,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                     fetchPendingTasks();
                   }}
                 >
-                  📨 Công việc chờ
+                  Viện chờ tiếp nhận
                   {pendingTasks.length > 0 && (
                     <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
                       {pendingTasks.length}
@@ -1085,7 +1087,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                 fetchPendingTasks();
               }}
             >
-              📨 Công việc chờ
+              📨 Bệnh viện chờ
               {pendingTasks.length > 0 && (
                 <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
                   {pendingTasks.length}
@@ -1347,7 +1349,7 @@ function DetailModal({
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b px-6 py-4 flex items-center justify-between">
-            <h3 className="text-lg font-bold">Công việc chờ (Bảo trì)</h3>
+            <h3 className="text-lg font-bold">Danh sách bệnh viện chờ tiếp nhận</h3>
             <button onClick={onClose} className="text-gray-500">✕</button>
           </div>
 
@@ -1355,7 +1357,7 @@ function DetailModal({
             {loading ? (
               <div className="text-center py-8">Đang tải...</div>
             ) : tasks.length === 0 ? (
-              <div className="text-center py-6 text-gray-500">Không có công việc chờ</div>
+              <div className="text-center py-6 text-gray-500">Không có bệnh viện chờ tiếp nhận</div>
             ) : (
               tasks.map((group) => (
                 <div
@@ -1368,7 +1370,7 @@ function DetailModal({
                         {group.hospitalName}
                       </div>
                       <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {group.tasks.length} công việc chờ tiếp nhận
+                        Bệnh viện chờ tiếp nhận
                       </div>
                     </div>
                     <button
@@ -1383,24 +1385,10 @@ function DetailModal({
                         }
                       }}
                     >
-                      {acceptingKey === group.key ? "Đang tiếp nhận..." : "Tiếp nhận tất cả"}
+                      {acceptingKey === group.key ? "Đang tiếp nhận..." : "Tiếp nhận bệnh viện"}
                     </button>
                   </div>
-                  <div className="px-5 py-3 bg-gray-50 dark:bg-gray-800/60">
-                    <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">
-                      Chi tiết công việc
-                    </div>
-                    <ul className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
-                      {group.tasks.map((task) => (
-                        <li key={task.id} className="flex items-center justify-between">
-                          <span className="truncate">{task.name}</span>
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            {task.picDeploymentName ? `PIC: ${task.picDeploymentName}` : ""}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                  
                 </div>
               ))
             )}

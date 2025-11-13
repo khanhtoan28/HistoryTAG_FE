@@ -88,6 +88,7 @@ export default function TaskCardNew({
   statusLabelOverride,
   statusClassOverride,
   leadingTopLeft,
+  allowEditCompleted = false, // ✅ Cho phép SuperAdmin sửa/xóa task đã hoàn thành
 }: {
   task: ImplTask;
   onEdit: (t: ImplTask) => void;
@@ -102,10 +103,9 @@ export default function TaskCardNew({
   statusLabelOverride?: (status?: string) => string;
   statusClassOverride?: (status?: string) => string;
   leadingTopLeft?: React.ReactNode;
+  allowEditCompleted?: boolean; // ✅ Cho phép SuperAdmin sửa/xóa task đã hoàn thành
 }) {
   const delayMs = typeof idx === "number" && idx > 0 ? 2000 + (idx - 1) * 80 : 0;
-  // Reference unused prop to avoid TS6133 (some builds enable strict unused checks)
-  void hideHospitalName;
   const style = animate ? { animation: "fadeInUp 220ms both", animationDelay: `${delayMs}ms` } : undefined;
 
   const orderNumber = (() => {
@@ -280,7 +280,8 @@ export default function TaskCardNew({
 
             <div className="flex items-center gap-3">
               
-              {canEdit && !task.readOnlyForDeployment && (
+              {/* ✅ SuperAdmin có thể sửa/xóa task đã hoàn thành nếu allowEditCompleted = true */}
+              {canEdit && (allowEditCompleted || !task.readOnlyForDeployment) && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -292,7 +293,7 @@ export default function TaskCardNew({
                   <span className="hidden md:inline">Sửa</span>
                 </button>
               )}
-              {canDelete && !task.readOnlyForDeployment && (
+              {canDelete && (allowEditCompleted || !task.readOnlyForDeployment) && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();

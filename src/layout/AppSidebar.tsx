@@ -30,7 +30,7 @@ const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
     name: "Bảng điều khiển",
-    subItems: [{ name: "Thương mại điện tử", path: "/home", pro: false }],
+    subItems: [{ name: "Báo cáo tổng quan", path: "/home", pro: false }],
   },
   {
     icon: <CalenderIcon />,
@@ -51,7 +51,7 @@ const navItems: NavItem[] = [
     ],
   },
   {
-    name: "Trang",
+    name: "Công việc",
     icon: <TaskIcon />,
     subItems: [
       { name: "Công việc triển khai", path: "/implementation-tasks", pro: false },

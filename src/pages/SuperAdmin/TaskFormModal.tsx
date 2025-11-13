@@ -327,7 +327,7 @@ export default function TaskFormModal({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!model.name?.trim()) {
-            alert("Tên dự án không được để trống");
+            alert("Tên công việc không được để trống");
             return;
         }
         if (!hospitalOpt?.id) {
@@ -514,8 +514,8 @@ export default function TaskFormModal({
                         {/* form content starts near top; header removed - only floating close button remains */}
                         <form onSubmit={handleSubmit} className="pt-6 px-6 pb-6 grid gap-4 max-h-[72vh] overflow-y-auto">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <Field label="Tên dự án" required>
-                                    <TextInput disabled={readOnly} value={model.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, name: e.target.value }))} placeholder="Nhập tên dự án" />
+                                <Field label="Tên công việc" required>
+                                    <TextInput disabled={readOnly} value={model.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, name: e.target.value }))} placeholder="Nhập tên công việc" />
                                 </Field>
 
                                 <RemoteSelect label="Bệnh viện" required placeholder="Nhập tên bệnh viện để tìm…" fetchOptions={searchHospitals} value={hospitalOpt} onChange={setHospitalOpt} disabled={readOnly || lockHospital} />

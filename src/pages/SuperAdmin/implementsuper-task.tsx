@@ -135,7 +135,7 @@ const ImplementSuperTaskPage: React.FC = () => {
   
   // New state for hospital list view
   const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
-  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean }>>([]);
+  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean }>>([]);
   const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
   const [hospitalPage, setHospitalPage] = useState<number>(0);
   const [hospitalSize, setHospitalSize] = useState<number>(20);
@@ -149,6 +149,9 @@ const ImplementSuperTaskPage: React.FC = () => {
   const [loadingPending, setLoadingPending] = useState(false);
   const pendingCountRef = useRef<number>(0);
   const lastPendingCountRef = useRef<number>(0);
+  // Track hospitals that were just converted -> maintenance but may not be accepted yet.
+  // Use id when available, otherwise use label string as key.
+  const pendingTransfersRef = useRef<Set<number | string>>(new Set());
   const navigate = useNavigate();
 
   async function fetchPendingGroups(): Promise<number> {
@@ -388,10 +391,10 @@ const ImplementSuperTaskPage: React.FC = () => {
     setLoadingHospitals(true);
     setError(null);
     try {
-      // Fetch hospitals (backend now includes task count in subLabel)
+      // Fetch hospitals with transfer status (new endpoint)
       const headers = authHeaders();
       console.debug("[fetchHospitalsWithTasks] Authorization header", headers.Authorization ? "present" : "missing");
-      const res = await fetch(`${API_ROOT}/api/v1/superadmin/implementation/tasks/hospitals`, {
+      const res = await fetch(`${API_ROOT}/api/v1/superadmin/implementation/tasks/hospitals/with-status`, {
         method: "GET",
         headers,
         credentials: "include",
@@ -405,7 +408,7 @@ const ImplementSuperTaskPage: React.FC = () => {
       const hospitals = await res.json();
       
       // Parse task count from subLabel (format: "Province - X tasks" or "X tasks")
-      const baseList = (Array.isArray(hospitals) ? hospitals : []).map((hospital: { id: number; label: string; subLabel?: string }) => {
+      const baseList = (Array.isArray(hospitals) ? hospitals : []).map((hospital: { id: number; label: string; subLabel?: string; transferredToMaintenance?: boolean; acceptedByMaintenance?: boolean }) => {
         let taskCount = 0;
         let province = hospital.subLabel || "";
         
@@ -426,6 +429,9 @@ const ImplementSuperTaskPage: React.FC = () => {
           nearDueCount: 0, // Initialize to 0 - will be calculated in augment()
           overdueCount: 0, // Initialize to 0 - will be calculated in augment()
           transferredCount: 0,
+          // Use transfer status from backend
+          allTransferred: Boolean(hospital.transferredToMaintenance),
+          allAccepted: Boolean(hospital.acceptedByMaintenance),
         };
       });
 
@@ -520,13 +526,31 @@ const ImplementSuperTaskPage: React.FC = () => {
         }
       };
 
-      const withCompleted = baseList.map((h, idx) => ({ ...h, acceptedCount: completedCounts[idx] ?? 0, allTransferred: false }));
+      const withCompleted = baseList.map((h, idx) => ({ ...h, acceptedCount: completedCounts[idx] ?? 0 }));
       augment(withCompleted);
+
+      // Transfer status is already set from backend response, but we need to handle pending transfers
       for (const item of withCompleted) {
-        const total = item.taskCount ?? 0;
-        const transferredCount = item.transferredCount ?? 0;
-        item.allTransferred = total > 0 && transferredCount >= total;
+        // If user just converted this hospital and it's recorded in pendingTransfersRef,
+        // keep showing the pending state (allTransferred=true, allAccepted=false)
+        try {
+          const idKey = (item.id ?? null) as number | null;
+          const labelKey = (item.label || '').toString().trim();
+          const hasPending = (idKey != null && pendingTransfersRef.current.has(idKey)) || (labelKey && pendingTransfersRef.current.has(labelKey));
+          if (hasPending && !item.allAccepted) {
+            item.allTransferred = true;
+            item.allAccepted = false;
+          }
+          // If backend reports accepted, remove from pending set
+          if (item.allAccepted) {
+            if (idKey != null) pendingTransfersRef.current.delete(idKey);
+            if (labelKey) pendingTransfersRef.current.delete(labelKey);
+          }
+        } catch (_err) {
+          // ignore
+        }
       }
+
       setHospitalsWithTasks(withCompleted);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -558,11 +582,12 @@ const ImplementSuperTaskPage: React.FC = () => {
       return;
     }
     
-    if (!confirm(`Chuyển tất cả tác vụ đã hoàn thành (${acceptedCount}/${taskCount}) của ${hospital.label} sang bảo trì?`)) return;
+    if (!confirm(`Chuyển bệnh viện ${hospital.label} sang bảo trì?`)) return;
     
     try {
+      // ✅ API mới: Chuyển bệnh viện (không phải task)
       const res = await fetch(
-        `${API_ROOT}/api/v1/admin/implementation/hospital/${hospital.id}/convert-to-maintenance`,
+        `${API_ROOT}/api/v1/admin/hospitals/${hospital.id}/transfer-to-maintenance`,
         {
           method: 'POST',
           headers: authHeaders(),
@@ -570,39 +595,33 @@ const ImplementSuperTaskPage: React.FC = () => {
         }
       );
       if (!res.ok) {
-        const t = await res.text().catch(() => null);
-        toast.error(`Không thể chuyển sang bảo trì: ${t || res.status}`);
+        await res.text().catch(() => null); // Consume response body
+        toast.error(`Viện đã có trong danh sách bảo trì`);
         return;
       }
-      let payload: {
-        convertedCount?: number;
-        failedTaskIds?: number[];
-        failedMessages?: string[];
-        alreadyTransferredCount?: number;
-        skippedCount?: number;
-      } | null = null;
+      
+      toast.success(`Đã chuyển bệnh viện ${hospital.label} sang bảo trì`);
 
+      // ✅ Update state ngay lập tức để UI cập nhật
+      setHospitalsWithTasks((prev: any[]) => prev.map((h: any) => {
+        if (h.id === hospital.id || h.label === hospital.label) {
+          return {
+            ...h,
+            allTransferred: true, // Đã chuyển
+            allAccepted: false,   // Chưa tiếp nhận
+          };
+        }
+        return h;
+      }));
+
+      // mark this hospital as pending transfer so UI will keep showing "Chờ tiếp nhận"
       try {
-        payload = await res.json();
-      } catch {
-        payload = null;
-      }
+        const key = hospital.id ?? hospital.label;
+        if (key != null) pendingTransfersRef.current.add(key);
+      } catch {}
 
-      const converted = payload?.convertedCount ?? acceptedCount;
-      const already = payload?.alreadyTransferredCount ?? 0;
-      const failedList = Array.isArray(payload?.failedTaskIds) ? payload?.failedTaskIds ?? [] : [];
-      const failed = failedList.length;
-
-      let successMsg = `Đã yêu cầu chuyển ${converted} tác vụ của ${hospital.label} sang bảo trì`;
-      if (already > 0) successMsg += ` (đã chuyển trước đó: ${already})`;
-      toast.success(`${successMsg}.`);
-
-      if (failed > 0) {
-        const detail = (payload?.failedMessages || []).filter(Boolean).join('; ');
-        toast.error(`Có ${failed} tác vụ chuyển thất bại${detail ? `: ${detail}` : ''}`);
-      }
-
-      // refresh
+      // ✅ Refresh để lấy data mới nhất từ backend (sau delay nhỏ)
+      await new Promise(resolve => setTimeout(resolve, 300));
       await fetchHospitalsWithTasks();
       if (!showHospitalList && selectedHospital === hospital.label) {
         await fetchList();
@@ -669,6 +688,27 @@ const ImplementSuperTaskPage: React.FC = () => {
     return () => {
       mounted = false;
       window.clearInterval(intervalId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // If there are any pending transfers (we recorded them after user action), poll hospital status
+  // until backend reports acceptance to flip UI to 'Đã chuyển sang bảo trì'. Poll interval 8s.
+  useEffect(() => {
+    let active = true;
+    const id = window.setInterval(async () => {
+      try {
+        if (!active) return;
+        if (!pendingTransfersRef.current || pendingTransfersRef.current.size === 0) return;
+        // Refresh hospital statuses to pick up accepted flags
+        await fetchHospitalsWithTasks();
+      } catch (err) {
+        console.debug('Polling hospital status failed', err);
+      }
+    }, 8000);
+    return () => {
+      active = false;
+      window.clearInterval(id);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1120,13 +1160,19 @@ const ImplementSuperTaskPage: React.FC = () => {
                               >
                                 Xem task 
                               </button>
-                              { (hospital.taskCount || 0) > 0 && hospital.allTransferred ? (
+                              { (hospital.taskCount || 0) > 0 && hospital.allTransferred && !hospital.allAccepted ? (
+                                <span
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-yellow-100 text-yellow-700 text-sm font-medium"
+                                >
+                                  ⏳ Chờ tiếp nhận
+                                </span>
+                              ) : (hospital.taskCount || 0) > 0 && hospital.allTransferred && hospital.allAccepted ? (
                                 <span 
                                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-sm"
                                 >
                                   ✓ Đã chuyển sang bảo trì
                                 </span>
-                              ) : (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) === (hospital.taskCount || 0) ? (
+                              ) : (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) === (hospital.taskCount || 0) && !hospital.allTransferred ? (
                                 <button
                                   onClick={(e) => { 
                                     e.stopPropagation(); 
@@ -1389,6 +1435,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                       onDelete={(id) => handleDelete(id)}
                       canEdit={true}
                       canDelete={true}
+                      allowEditCompleted={true} // ✅ SuperAdmin có thể sửa/xóa task đã hoàn thành
                     />
                   );
                 });
