@@ -481,11 +481,12 @@ const MaintenanceSuperTaskPage: React.FC = () => {
           if (!target) continue;
           
           // CRITICAL: Skip ALL completed/transferred tasks when counting near due/overdue
-          // In maintenance: WAITING_FOR_DEV (Hoàn thành) and ACCEPTED (Nghiệm thu) are both considered completed
-          // Tasks that are WAITING_FOR_DEV, ACCEPTED, or TRANSFERRED should NOT be counted
-          const isCompleted = statusUp === 'ACCEPTED' || statusUp === 'WAITING_FOR_DEV';
-          const isTransferred = statusUp === 'TRANSFERRED';
-          
+          // Different APIs/pages may use different status values. Treat the following
+          // as completed for maintenance: ACCEPTED, WAITING_FOR_DEV, or COMPLETED
+          // Also respect transferredToMaintenance boolean flag (some responses set this)
+          const isCompleted = statusUp === 'ACCEPTED' || statusUp === 'WAITING_FOR_DEV' || statusUp === 'COMPLETED';
+          const isTransferred = statusUp === 'TRANSFERRED' || Boolean((it as any)?.transferredToMaintenance);
+
           if (isCompleted || isTransferred) {
             continue; // Skip this task - do not count towards near due/overdue
           }

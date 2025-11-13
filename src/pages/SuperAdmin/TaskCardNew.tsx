@@ -106,6 +106,8 @@ export default function TaskCardNew({
   leadingTopLeft?: React.ReactNode;
 }) {
   const delayMs = typeof idx === "number" && idx > 0 ? 2000 + (idx - 1) * 80 : 0;
+  // Reference unused prop to avoid TS6133 (some builds enable strict unused checks)
+  void hideHospitalName;
   const style = animate ? { animation: "fadeInUp 220ms both", animationDelay: `${delayMs}ms` } : undefined;
 
   const orderNumber = (() => {

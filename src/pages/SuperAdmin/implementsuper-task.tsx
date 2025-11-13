@@ -871,7 +871,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                                 <span 
                                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-sm"
                                 >
-                                  Đã chuyển sang bảo trì
+                                  ✓ Đã chuyển sang bảo trì
                                 </span>
                               ) : (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) === (hospital.taskCount || 0) ? (
                                 <button

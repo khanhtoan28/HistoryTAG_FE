@@ -543,12 +543,14 @@ function TaskFormModal({
   const [model, setModel] = useState<ImplementationTaskRequestDTO>(() => {
     const normalized = normalizeStatus(initial?.status)?.toString() ?? "RECEIVED";
     const isNew = !initial?.id;
-    const defaultPicId = Number(initial?.picDeploymentId) || (isNew ? currentUserId ?? 0 : 0);
+    // Use explicit presence checks — don't coerce to 0 which is falsy and hides a valid id
+    const defaultPicId = initial?.picDeploymentId != null ? Number(initial.picDeploymentId) : (isNew && currentUserId ? currentUserId : undefined);
     const defaultStart = initial?.startDate || (isNew ? toLocalISOString(new Date()) : "");
     return {
       name: initial?.name || "",
       hospitalId: Number(initial?.hospitalId) || 0,
-      picDeploymentId: defaultPicId,
+      // model requires a number; use 0 when unknown but the select (picOpt) below controls validation
+      picDeploymentId: defaultPicId ?? 0,
       apiTestStatus: initial?.apiTestStatus ?? "",
       additionalRequest: initial?.additionalRequest ?? "",
       deadline: initial?.deadline ?? "",
@@ -566,9 +568,9 @@ function TaskFormModal({
 
   const [picOpt, setPicOpt] = useState<{ id: number; name: string } | null>(() => {
     const isNew = !initial?.id;
-    const id = (initial?.picDeploymentId as number) || (isNew ? currentUserId ?? 0 : 0);
+    const id = initial?.picDeploymentId != null ? Number(initial?.picDeploymentId) : (isNew && currentUserId ? currentUserId : undefined);
     const nm = (initial?.picDeploymentName as string) || (isNew ? currentUserName : "");
-    return id ? { id, name: nm && nm.trim() ? nm : String(id) } : null;
+    return id ? { id: Number(id), name: nm && nm.trim() ? nm : String(id) } : null;
   });
 
   // Removed: agencyOpt, hisOpt, hardwareOpt (fields hidden)
@@ -579,14 +581,14 @@ function TaskFormModal({
     const normalized = normalizeStatus(initial?.status)?.toString() ?? "RECEIVED";
     const isNew = !initial?.id;
     const nowIso = toLocalISOString(new Date());
-    const defaultPicId = Number(initial?.picDeploymentId) || (isNew ? currentUserId ?? 0 : 0);
-    const defaultPicName = (initial?.picDeploymentName as string) || (isNew ? currentUserName : "");
+  const defaultPicId = initial?.picDeploymentId != null ? Number(initial?.picDeploymentId) : (isNew && currentUserId ? currentUserId : undefined);
+  const defaultPicName = (initial?.picDeploymentName as string) || (isNew ? currentUserName : "");
     const defaultStart = initial?.startDate || (isNew ? nowIso : "");
 
     setModel({
       name: initial?.name || "",
       hospitalId: Number(initial?.hospitalId) || 0,
-      picDeploymentId: defaultPicId,
+      picDeploymentId: defaultPicId ?? 0,
       apiTestStatus: initial?.apiTestStatus ?? "",
       additionalRequest: initial?.additionalRequest ?? "",
       deadline: initial?.deadline ?? "",
@@ -600,9 +602,9 @@ function TaskFormModal({
     const hnm = (initial?.hospitalName as string) || "";
     setHospitalOpt(hid ? { id: hid, name: hnm || String(hid) } : null);
 
-    const pid = defaultPicId;
-    const pnm = defaultPicName;
-    setPicOpt(pid ? { id: pid, name: pnm && pnm.trim() ? pnm : String(pid) } : null);
+  const pid = defaultPicId;
+  const pnm = defaultPicName;
+  setPicOpt(pid ? { id: Number(pid), name: pnm && pnm.trim() ? pnm : String(pid) } : null);
 
     // removed resolve for agency/his/hardware
 
