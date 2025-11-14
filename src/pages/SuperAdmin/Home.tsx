@@ -1,13 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import React from "react";
 import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Chart from "react-apexcharts";
 import { ApexOptions } from "apexcharts";
-import { getSummaryReport, type SuperAdminSummaryDTO, HardwareAPI, getAllImplementationTasks, getAllDevTasks, getAllMaintenanceTasks, getAllUsers, filterUsers, UserResponseDTO, ImplementationTaskResponseDTO, DevTaskResponseDTO, MaintenanceTaskResponseDTO } from "../../api/superadmin.api";
-import { searchHospitals } from "../../api/business.api";
-import api, { getAuthToken } from "../../api/client";
+import { getSummaryReport, type SuperAdminSummaryDTO, HardwareAPI, getAllImplementationTasks, getAllDevTasks, getAllMaintenanceTasks, getAllUsers, UserResponseDTO, ImplementationTaskResponseDTO, DevTaskResponseDTO, MaintenanceTaskResponseDTO } from "../../api/superadmin.api";
 import { getBusinesses } from "../../api/business.api";
+import { getAuthToken } from "../../api/client";
 import toast from "react-hot-toast";
 
 function StatCard({ title, value, icon, color }: { title: string; value: string | number; icon?: React.ReactNode; color?: string }) {
@@ -76,7 +76,6 @@ export default function SuperAdminHome() {
   const [reportLoading, setReportLoading] = useState(false);
   const [reportData, setReportData] = useState<EmployeePerf[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
-  const [filteredUsers, setFilteredUsers] = useState<UserResponseDTO[]>([]);
 
   // load departments list (unique departments from users)
   useEffect(() => {
@@ -93,12 +92,11 @@ export default function SuperAdminHome() {
     })();
     return () => { mounted = false; };
   }, []);
-  // Hospital profile states
-  const [profileHospitalId, setProfileHospitalId] = useState<string>('');
-  const [profileQuery, setProfileQuery] = useState<string>('');
-  const [profileSuggestions, setProfileSuggestions] = useState<Array<{ id: number; name: string }>>([]);
+  // Team profile states (changed from hospital to team)
+  const [selectedTeam, setSelectedTeam] = useState<string>('');
+  const [availableTeams, setAvailableTeams] = useState<string[]>([]);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [profileHospital, setProfileHospital] = useState<Record<string, unknown> | null>(null);
+  const [hasLoadedProfile, setHasLoadedProfile] = useState(false);
   const [profileUsers, setProfileUsers] = useState<UserResponseDTO[]>([]);
   const [profileImplTasks, setProfileImplTasks] = useState<ImplementationTaskResponseDTO[]>([]);
   const [profileDevTasks, setProfileDevTasks] = useState<DevTaskResponseDTO[]>([]);
@@ -108,6 +106,9 @@ export default function SuperAdminHome() {
   const [profileQuarter, setProfileQuarter] = useState<'all' | 'Q1' | 'Q2' | 'Q3' | 'Q4'>('all');
   const [profileYear, setProfileYear] = useState<string>('');
   const [exportChoice, setExportChoice] = useState<'users' | 'impl' | 'dev' | 'maint' | 'businesses' | 'all' | 'all_single'>('users');
+  const [viewMode, setViewMode] = useState<'detail' | 'comparison'>('detail');
+  const [compareYear, setCompareYear] = useState<string>('');
+  const [timeRange, setTimeRange] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
   // per-table status filters
   const [implStatusFilter, setImplStatusFilter] = useState<string>('all');
   const [devStatusFilter, setDevStatusFilter] = useState<string>('all');
@@ -154,20 +155,6 @@ export default function SuperAdminHome() {
     }
   };
 
-  const fetchUsersByTeamAndDept = async () => {
-    try {
-      const params: any = {};
-      // lightweight call: we don't filter by name/status/dates here
-      if (reportTeam && reportTeam !== 'ALL') params.team = reportTeam;
-      if (reportDepartment) params.department = reportDepartment;
-      const users = await filterUsers(params);
-      setFilteredUsers(Array.isArray(users) ? users : []);
-    } catch (err: unknown) {
-      console.error('fetchUsersByTeamAndDept failed', err);
-      toast.error((err as Error)?.message ?? 'Lấy danh sách người dùng thất bại');
-      setFilteredUsers([]);
-    }
-  };
 
   const exportEmployeePerformanceExcel = async () => {
     try {
@@ -482,85 +469,88 @@ export default function SuperAdminHome() {
 
   useEffect(() => { void loadHardwareReport(); }, [loadHardwareReport]);
 
-  // debounce search for hospitals (autocomplete)
+  // Load available teams
   useEffect(() => {
-    if (!profileQuery || profileQuery.length < 2) {
-      setProfileSuggestions([]);
-      return;
-    }
     let mounted = true;
-    const t = setTimeout(async () => {
+    (async () => {
       try {
-        const list = await searchHospitals(profileQuery);
-        if (!mounted) return;
-        // backend returns array of { id, label }
-        const items = Array.isArray(list) ? (list as any[]).map((h) => ({ id: Number(h.id), name: String(h.label ?? h.name ?? h.id) })) : [];
-        setProfileSuggestions(items.filter((x) => Number.isFinite(x.id) && x.name));
+        const uResp = await getAllUsers({ page: 0, size: 10000 });
+        const uList = Array.isArray(uResp) ? (uResp as UserResponseDTO[]) : (uResp as any)?.content ?? [];
+        const teams = Array.from(new Set(uList.map((u) => u.team).filter(Boolean))).sort() as string[];
+        if (mounted) setAvailableTeams(teams);
       } catch (err) {
-        console.warn('searchHospitals failed', err);
-        if (mounted) setProfileSuggestions([]);
+        console.warn('Failed to load teams', err);
+        if (mounted) setAvailableTeams([]);
       }
-    }, 300);
-    return () => { mounted = false; clearTimeout(t); };
-  }, [profileQuery]);
+    })();
+    return () => { mounted = false; };
+  }, []);
 
-  // Load hospital profile (by id string or number)
-  const loadHospitalProfile = async (hidInput?: string | number) => {
-    const raw = hidInput != null ? hidInput : profileHospitalId;
-    const hid = Number(raw);
-    if (!hid || Number.isNaN(hid) || hid <= 0) {
-      toast.error('Vui lòng nhập một ID bệnh viện hợp lệ');
+  // Load team profile (load all tasks for selected team, grouped by hospital)
+  const loadTeamProfile = async (teamName?: string) => {
+    const team = teamName || selectedTeam;
+    if (!team || team.trim() === '') {
+      toast.error('Vui lòng chọn team');
       return;
     }
     setProfileLoading(true);
     try {
-      // fetch hospital detail via api client (adds auth headers)
-      try {
-        const { data } = await api.get(`/api/v1/superadmin/hospitals/${hid}`);
-        setProfileHospital(data ?? null);
-      } catch (err) {
-        console.warn('fetch hospital detail failed', err);
-        setProfileHospital(null);
-      }
-
-      // users
+      // users in this team
       try {
         const uResp = await getAllUsers({ page: 0, size: 10000 });
         const uList = Array.isArray(uResp) ? (uResp as UserResponseDTO[]) : (uResp as any)?.content ?? [];
         const filtered = (uList as UserResponseDTO[]).filter((u) => {
-          const ah = (u as any).assignedHospitalIds ?? (u as any).assignedHospitals ?? null;
-          if (Array.isArray(ah)) return ah.includes(hid);
-          if ((u as any).hospitalId === hid) return true;
-          if ((u as any).assignedHospitalId === hid) return true;
-          return false;
+          const userTeam = (u.team ?? '').toString().toUpperCase();
+          return userTeam === team.toUpperCase();
         });
         setProfileUsers(filtered);
       } catch (err) {
-        console.warn('load users for profile failed', err);
+        console.warn('load users for team failed', err);
         setProfileUsers([]);
       }
 
-      // tasks
+      // Get user IDs in this team to filter tasks
+      const uResp = await getAllUsers({ page: 0, size: 10000 });
+      const uList = Array.isArray(uResp) ? (uResp as UserResponseDTO[]) : (uResp as any)?.content ?? [];
+      const teamUserIds = (uList as UserResponseDTO[])
+        .filter((u) => ((u.team ?? '').toString().toUpperCase() === team.toUpperCase()))
+        .map((u) => u.id);
+
+      // tasks - filter by team users (PIC belongs to the team)
       try {
         const impl = await getAllImplementationTasks({ page: 0, size: 10000 });
         const implList = Array.isArray(impl) ? (impl as ImplementationTaskResponseDTO[]) : (impl as any)?.content ?? [];
-        setProfileImplTasks((implList as ImplementationTaskResponseDTO[]).filter((t) => Number(t.hospitalId) === hid));
+        // Filter tasks where PIC is in the selected team
+        const filtered = (implList as ImplementationTaskResponseDTO[]).filter((t) => {
+          const picId = (t as any).picDeploymentId ?? (t as any).picId;
+          return picId && teamUserIds.includes(Number(picId));
+        });
+        setProfileImplTasks(filtered);
       } catch (err) { console.warn('impl load', err); setProfileImplTasks([]); }
       try {
         const dev = await getAllDevTasks({ page: 0, size: 10000 });
         const devList = Array.isArray(dev) ? (dev as DevTaskResponseDTO[]) : (dev as any)?.content ?? [];
-        setProfileDevTasks((devList as DevTaskResponseDTO[]).filter((t) => Number(t.hospitalId) === hid));
+        const filtered = (devList as DevTaskResponseDTO[]).filter((t) => {
+          const picId = (t as any).picDeploymentId ?? (t as any).picId;
+          return picId && teamUserIds.includes(Number(picId));
+        });
+        setProfileDevTasks(filtered);
       } catch (err) { console.warn('dev load', err); setProfileDevTasks([]); }
       try {
         const m = await getAllMaintenanceTasks({ page: 0, size: 10000 });
         const mList = Array.isArray(m) ? (m as MaintenanceTaskResponseDTO[]) : (m as any)?.content ?? [];
-        setProfileMaintTasks((mList as MaintenanceTaskResponseDTO[]).filter((t) => Number(t.hospitalId) === hid));
+        const filtered = (mList as MaintenanceTaskResponseDTO[]).filter((t) => {
+          const picId = (t as any).picDeploymentId ?? (t as any).picId;
+          return picId && teamUserIds.includes(Number(picId));
+        });
+        setProfileMaintTasks(filtered);
       } catch (err) { console.warn('maint load', err); setProfileMaintTasks([]); }
 
-      // businesses
+      // businesses - filter by team users
       try {
-        const b = await getBusinesses({ page: 0, size: 10000, hospitalId: hid } as any);
+        const b = await getBusinesses({ page: 0, size: 10000 } as any);
         const bList = Array.isArray(b) ? (b as Array<Record<string, unknown>>) : (b as any)?.content ?? [];
+        // Filter businesses where creator/owner is in the team (if available)
         setProfileBusinesses(bList);
       } catch (err) { console.warn('business load', err); setProfileBusinesses([]); }
 
@@ -577,9 +567,11 @@ export default function SuperAdminHome() {
       }
 
     } catch (err) {
-      console.error('loadHospitalProfile failed', err);
+      console.error('loadTeamProfile failed', err);
+      setHasLoadedProfile(false);
     } finally {
       setProfileLoading(false);
+      setHasLoadedProfile(true);
     }
   };
 
@@ -600,6 +592,7 @@ export default function SuperAdminHome() {
         'TRANSFERRED_TO_CUSTOMER': 'Đã chuyển giao',
         'WAITING_FOR_DEPLOY': 'Chờ triển khai',
         'ACCEPTED': 'Đã chấp nhận',
+        'RECEIVED': 'Đã tiếp nhận',
         'CONTRACTED': 'Đã chốt hợp đồng',
         'CARING': 'Đang chăm sóc',
         'PENDING': 'Đang chờ',
@@ -687,6 +680,153 @@ export default function SuperAdminHome() {
   const filteredDevTasks = devStatusFilter === 'all' ? displayedDevTasks : displayedDevTasks.filter(t => String((t as any).status ?? '').toUpperCase() === devStatusFilter);
   const filteredMaintTasks = maintStatusFilter === 'all' ? displayedMaintTasks : displayedMaintTasks.filter(t => String((t as any).status ?? '').toUpperCase() === maintStatusFilter);
 
+  // Prepare data for comparison charts
+  const prepareComparisonData = useCallback(() => {
+    const allTasks = [
+      ...profileImplTasks.map(t => ({ ...t, type: 'impl' as const, hospitalName: t.hospitalName, receivedDate: (t as any).receivedDate ?? (t as any).startDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name })),
+      ...profileDevTasks.map(t => ({ ...t, type: 'dev' as const, hospitalName: (t as any).hospitalName, receivedDate: (t as any).receivedDate ?? (t as any).startDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name })),
+      ...profileMaintTasks.map(t => ({ ...t, type: 'maint' as const, hospitalName: (t as any).hospitalName, receivedDate: (t as any).receivedDate ?? (t as any).startDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name })),
+    ];
+
+    const currentYear = profileYear || String(new Date().getFullYear());
+    const compareYearValue = compareYear || String(Number(currentYear) - 1);
+
+    const getTimeKey = (dateStr: string | null | undefined, range: 'monthly' | 'quarterly' | 'yearly') => {
+      if (!dateStr) return null;
+      const d = new Date(dateStr);
+      if (Number.isNaN(d.getTime())) return null;
+      const year = d.getFullYear();
+      if (range === 'yearly') return String(year);
+      if (range === 'quarterly') {
+        const quarter = Math.floor(d.getMonth() / 3) + 1;
+        return `${year}-Q${quarter}`;
+      }
+      const month = d.getMonth() + 1;
+      return `${year}-${String(month).padStart(2, '0')}`;
+    };
+
+    const currentData: Record<string, { total: number; completed: number }> = {};
+    const compareData: Record<string, { total: number; completed: number }> = {};
+
+    allTasks.forEach(task => {
+      const key = getTimeKey(task.receivedDate, timeRange);
+      if (!key) return;
+      
+      const isCurrentYear = key.startsWith(currentYear);
+      const isCompareYear = key.startsWith(compareYearValue);
+      
+      if (isCurrentYear) {
+        if (!currentData[key]) currentData[key] = { total: 0, completed: 0 };
+        currentData[key].total++;
+        if (String(task.status).toUpperCase() === 'COMPLETED') currentData[key].completed++;
+      }
+      
+      if (isCompareYear) {
+        if (!compareData[key]) compareData[key] = { total: 0, completed: 0 };
+        compareData[key].total++;
+        if (String(task.status).toUpperCase() === 'COMPLETED') compareData[key].completed++;
+      }
+    });
+
+    // Generate labels based on timeRange
+    let labels: string[] = [];
+    if (timeRange === 'yearly') {
+      labels = [currentYear, compareYearValue];
+    } else if (timeRange === 'quarterly') {
+      labels = ['Q1', 'Q2', 'Q3', 'Q4'].map(q => `${currentYear}-${q}`);
+      if (compareYear) {
+        labels = labels.concat(['Q1', 'Q2', 'Q3', 'Q4'].map(q => `${compareYearValue}-${q}`));
+      }
+    } else {
+      labels = Array.from({ length: 12 }, (_, i) => `${currentYear}-${String(i + 1).padStart(2, '0')}`);
+      if (compareYear) {
+        labels = labels.concat(Array.from({ length: 12 }, (_, i) => `${compareYearValue}-${String(i + 1).padStart(2, '0')}`));
+      }
+    }
+
+    const currentSeries = labels.map(l => currentData[l]?.total || 0);
+    const compareSeries = labels.map(l => compareData[l]?.total || 0);
+    const currentCompletedSeries = labels.map(l => currentData[l]?.completed || 0);
+    const compareCompletedSeries = labels.map(l => compareData[l]?.completed || 0);
+
+    return { labels, currentSeries, compareSeries, currentCompletedSeries, compareCompletedSeries };
+  }, [profileImplTasks, profileDevTasks, profileMaintTasks, profileYear, compareYear, timeRange]);
+
+  const comparisonData = prepareComparisonData();
+
+  // Group tasks by hospital for visual table view
+  // Use startDate for filtering and display
+  const tasksByHospital = useMemo(() => {
+    // Helper to check if startDate matches quarter/year filter
+    const matchesStartDateFilter = (startDate?: string | null) => {
+      // If both quarter and year are "all" or empty, show all tasks
+      if (profileQuarter === 'all' && (!profileYear || profileYear === '')) return true;
+      
+      // If no date available, only show if filter is "all"
+      if (!startDate) {
+        return profileQuarter === 'all' && (!profileYear || profileYear === '');
+      }
+      
+      const d = new Date(startDate);
+      if (Number.isNaN(d.getTime())) {
+        // Invalid date, only show if filter is "all"
+        return profileQuarter === 'all' && (!profileYear || profileYear === '');
+      }
+      
+      // Check year filter
+      if (profileYear && profileYear !== '' && String(d.getFullYear()) !== profileYear) return false;
+      
+      // Check quarter filter
+      if (profileQuarter === 'all') return true;
+      const month = d.getMonth(); // 0..11
+      const q = Math.floor(month / 3) + 1;
+      return `Q${q}` === profileQuarter;
+    };
+
+    // Get all tasks (before status filter) and filter by startDate
+    const allImplTasks = profileImplTasks.filter(t => {
+      const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
+      return matchesStartDateFilter(startDate);
+    });
+    const allDevTasks = profileDevTasks.filter(t => {
+      const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
+      return matchesStartDateFilter(startDate);
+    });
+    const allMaintTasks = profileMaintTasks.filter(t => {
+      const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
+      return matchesStartDateFilter(startDate);
+    });
+
+    // Apply status filter
+    const implTasksFiltered = implStatusFilter === 'all' ? allImplTasks : allImplTasks.filter(t => String((t as any).status ?? '').toUpperCase() === implStatusFilter);
+    const devTasksFiltered = devStatusFilter === 'all' ? allDevTasks : allDevTasks.filter(t => String((t as any).status ?? '').toUpperCase() === devStatusFilter);
+    const maintTasksFiltered = maintStatusFilter === 'all' ? allMaintTasks : allMaintTasks.filter(t => String((t as any).status ?? '').toUpperCase() === maintStatusFilter);
+
+    const allTasks = [
+      ...implTasksFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
+      ...devTasksFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
+      ...maintTasksFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
+    ];
+
+    const grouped = new Map<string, Array<typeof allTasks[0]>>();
+    allTasks.forEach(task => {
+      const hospitalName = task.hospitalName || 'Không xác định';
+      if (!grouped.has(hospitalName)) {
+        grouped.set(hospitalName, []);
+      }
+      grouped.get(hospitalName)!.push(task);
+    });
+
+    return Array.from(grouped.entries()).map(([hospitalName, tasks]) => ({
+      hospitalName,
+      tasks: tasks.sort((a, b) => {
+        const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
+        const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
+        return dateB - dateA;
+      })
+    }));
+  }, [profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, implStatusFilter, devStatusFilter, maintStatusFilter]);
+
   // Aggregations for implementation and maintenance (kept minimal per current UI needs)
 
   // CSV export helpers
@@ -717,12 +857,11 @@ export default function SuperAdminHome() {
   };
 
   const makeFilename = (base: string) => {
-    const hid = profileHospitalId || (profileHospital ? String((profileHospital as any).id ?? '') : '');
-    const name = profileHospital ? String((profileHospital as any).name ?? (profileHospital as any).label ?? '') : '';
-    const safeName = name ? name.replace(/[^a-z0-9\-_]/gi, '_') : 'hospital';
+    const team = selectedTeam || '';
+    const safeTeam = team ? team.replace(/[^a-z0-9\-_]/gi, '_') : 'all_teams';
     const q = profileQuarter ?? 'all';
     const y = profileYear ?? '';
-    const parts = [base, hid ? `hid${hid}` : null, safeName || null, q !== 'all' ? q : null, y || null].filter(Boolean);
+    const parts = [base, safeTeam || null, q !== 'all' ? q : null, y || null].filter(Boolean);
     return parts.join('_') + '.csv';
   };
 
@@ -1068,7 +1207,7 @@ export default function SuperAdminHome() {
               </div>
 
                 <div className="mt-2 sm:mt-0 flex items-center gap-2">
-                <button onClick={async () => { await Promise.all([fetchEmployeePerformance(), fetchUsersByTeamAndDept()]); }} disabled={reportLoading} className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-700">Áp dụng</button>
+                <button onClick={async () => { await fetchEmployeePerformance(); }} disabled={reportLoading} className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-700">Áp dụng</button>
                 <button onClick={() => void exportEmployeePerformanceExcel()} disabled={reportLoading} className="rounded-md bg-indigo-100 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-200">Xuất Excel</button>
               </div>
             </div>
@@ -1121,9 +1260,9 @@ export default function SuperAdminHome() {
         {/* Hospital Profile (inline on Home) */}
         <section className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100 w-full">
           <div className="max-w-full">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Báo cáo chi tiết bệnh viện</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Báo cáo chi tiết theo từng viện</h2>
               </div>
               <div className="flex items-center gap-2">
                 <select value={exportChoice} onChange={(e) => setExportChoice(e.target.value as any)} className="rounded-md border px-3 py-1 text-sm bg-white">
@@ -1139,12 +1278,51 @@ export default function SuperAdminHome() {
               </div>
             </div>
 
+            {/* View Mode Tabs */}
+            <div className="flex items-center gap-2 mb-4 border-b border-gray-200">
+              <button
+                onClick={() => setViewMode('detail')}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  viewMode === 'detail'
+                    ? 'text-indigo-600 border-b-2 border-indigo-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Chi tiết
+              </button>
+              <button
+                onClick={() => setViewMode('comparison')}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  viewMode === 'comparison'
+                    ? 'text-indigo-600 border-b-2 border-indigo-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                So sánh
+              </button>
+            </div>
+
             <div className="mt-4 flex flex-wrap gap-3 items-center">
               <div className="w-full sm:w-auto">
-                <label className="text-sm text-gray-500">Tên bệnh viện</label>
+                <label className="text-sm text-gray-500">Chọn team</label>
                 <div className="relative mt-1 flex items-center gap-3">
-                  <input autoComplete="off" value={profileQuery} onChange={(e) => setProfileQuery(e.target.value)} placeholder="Nhập tên bệnh viện (tối thiểu 2 ký tự)" className="rounded-md border px-3 text-sm w-72 h-10" />
-                  <button onClick={() => void loadHospitalProfile()} disabled={profileLoading} className="h-10 inline-flex items-center rounded-md bg-indigo-600 px-4 text-sm font-semibold text-white hover:bg-indigo-700">Tải hồ sơ</button>
+                  <select 
+                    value={selectedTeam} 
+                    onChange={(e) => setSelectedTeam(e.target.value)} 
+                    className="rounded-md border px-3 text-sm w-72 h-10 bg-white"
+                  >
+                    <option value="">— Chọn team —</option>
+                    {availableTeams.map(team => (
+                      <option key={team} value={team}>{team}</option>
+                    ))}
+                  </select>
+                  <button 
+                    onClick={() => void loadTeamProfile()} 
+                    disabled={profileLoading || !selectedTeam} 
+                    className="h-10 inline-flex items-center rounded-md bg-indigo-600 px-4 text-sm font-semibold text-white hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  >
+                    Tải hồ sơ
+                  </button>
                   <div className="flex items-center gap-2 ml-2">
                     <label className="text-sm text-gray-500">Quý</label>
                     <select value={profileQuarter} onChange={(e) => setProfileQuarter(e.target.value as any)} className="rounded-md border px-2 py-1 text-sm bg-white">
@@ -1163,60 +1341,212 @@ export default function SuperAdminHome() {
                       })}
                     </select>
                   </div>
-                  {profileSuggestions.length > 0 && (
-                    <ul role="listbox" className="absolute z-50 left-0 top-full mt-1 w-72 rounded-md border bg-white shadow-md max-h-48 overflow-auto">
-                      {profileSuggestions.map(s => (
-                        <li key={s.id} role="option" aria-selected={false} tabIndex={0} className="px-3 py-2 hover:bg-gray-50 cursor-pointer" onMouseDown={(e) => { e.preventDefault(); }} onClick={() => { setProfileQuery(s.name); setProfileSuggestions([]); setProfileHospitalId(String(s.id)); void loadHospitalProfile(s.id); }}>
-                          <div className="flex items-center justify-between">
-                            <span>{s.name}</span>
-                            <span className="text-xs text-gray-400">#{s.id}</span>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
                 </div>
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-4">
-              {profileUsers.length > 0 && (
-                <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
-                  <h3 className="text-sm font-medium text-gray-700">Nhân sự phụ trách ({profileUsers.length})</h3>
-                  <div className="mt-3">
+            {/* Comparison View */}
+            {viewMode === 'comparison' && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-4 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-500">Khoảng thời gian:</label>
+                    <select value={timeRange} onChange={(e) => setTimeRange(e.target.value as any)} className="rounded-md border px-3 py-1 text-sm bg-white">
+                      <option value="monthly">Theo tháng</option>
+                      <option value="quarterly">Theo quý</option>
+                      <option value="yearly">Theo năm</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-500">So sánh với năm:</label>
+                    <select value={compareYear} onChange={(e) => setCompareYear(e.target.value)} className="rounded-md border px-3 py-1 text-sm bg-white w-32">
+                      <option value="">Không so sánh</option>
+                      {Array.from({ length: new Date().getFullYear() - 2019 }).map((_, i) => {
+                        const y = String(2020 + i);
+                        return <option key={y} value={y}>{y}</option>;
+                      })}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Comparison Charts */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+                    <h3 className="text-sm font-medium text-gray-700 mb-4">Tổng số công việc</h3>
+                    <Chart
+                      options={{
+                        chart: { type: 'line', toolbar: { show: false }, zoom: { enabled: false } },
+                        xaxis: { categories: comparisonData.labels },
+                        yaxis: { title: { text: 'Số lượng' } },
+                        legend: { position: 'top' },
+                        colors: ['#465fff', '#10b981'],
+                        stroke: { width: 2, curve: 'smooth' },
+                        markers: { size: 4 },
+                        tooltip: { shared: true, intersect: false }
+                      }}
+                      series={[
+                        { name: profileYear || String(new Date().getFullYear()), data: comparisonData.currentSeries },
+                        ...(compareYear ? [{ name: compareYear, data: comparisonData.compareSeries }] : [])
+                      ]}
+                      type="line"
+                      height={300}
+                    />
+                  </div>
+
+                  <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+                    <h3 className="text-sm font-medium text-gray-700 mb-4">Công việc đã hoàn thành</h3>
+                    <Chart
+                      options={{
+                        chart: { type: 'line', toolbar: { show: false }, zoom: { enabled: false } },
+                        xaxis: { categories: comparisonData.labels },
+                        yaxis: { title: { text: 'Số lượng' } },
+                        legend: { position: 'top' },
+                        colors: ['#465fff', '#10b981'],
+                        stroke: { width: 2, curve: 'smooth' },
+                        markers: { size: 4 },
+                        tooltip: { shared: true, intersect: false }
+                      }}
+                      series={[
+                        { name: profileYear || String(new Date().getFullYear()), data: comparisonData.currentCompletedSeries },
+                        ...(compareYear ? [{ name: compareYear, data: comparisonData.compareCompletedSeries }] : [])
+                      ]}
+                      type="line"
+                      height={300}
+                    />
+                  </div>
+                </div>
+
+                {/* Summary Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+                    <div className="text-sm text-gray-500">Tổng công việc ({profileYear || String(new Date().getFullYear())})</div>
+                    <div className="text-2xl font-bold text-gray-900 mt-1">
+                      {comparisonData.currentSeries.reduce((a, b) => a + b, 0)}
+                    </div>
+                    {compareYear && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        Năm {compareYear}: {comparisonData.compareSeries.reduce((a, b) => a + b, 0)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+                    <div className="text-sm text-gray-500">Đã hoàn thành ({profileYear || String(new Date().getFullYear())})</div>
+                    <div className="text-2xl font-bold text-gray-900 mt-1">
+                      {comparisonData.currentCompletedSeries.reduce((a, b) => a + b, 0)}
+                    </div>
+                    {compareYear && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        Năm {compareYear}: {comparisonData.compareCompletedSeries.reduce((a, b) => a + b, 0)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+                    <div className="text-sm text-gray-500">Tỷ lệ hoàn thành ({profileYear || String(new Date().getFullYear())})</div>
+                    <div className="text-2xl font-bold text-gray-900 mt-1">
+                      {comparisonData.currentSeries.reduce((a, b) => a + b, 0) > 0
+                        ? Math.round((comparisonData.currentCompletedSeries.reduce((a, b) => a + b, 0) / comparisonData.currentSeries.reduce((a, b) => a + b, 0)) * 100)
+                        : 0}%
+                    </div>
+                    {compareYear && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        Năm {compareYear}: {comparisonData.compareSeries.reduce((a, b) => a + b, 0) > 0
+                          ? Math.round((comparisonData.compareCompletedSeries.reduce((a, b) => a + b, 0) / comparisonData.compareSeries.reduce((a, b) => a + b, 0)) * 100)
+                          : 0}%
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Detail View */}
+            {viewMode === 'detail' && (
+              <>
+                {/* Visual Table View - Grouped by Hospital */}
+                {tasksByHospital.length > 0 && (
+                  <div className="mb-6 mt-4 rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+                    <h3 className="text-sm font-medium text-gray-700 mb-4">Tổng quan công việc theo bệnh viện</h3>
                     <div className="overflow-x-auto">
-                      <table className="min-w-full text-sm table-auto">
+                      <table className="min-w-full text-sm">
                         <thead>
-                          <tr className="text-xs text-gray-600 bg-gray-50">
-                            <th className="px-3 py-2 text-center">ID</th>
-                            <th className="px-3 py-2 text-center">Họ và tên</th>
-                            <th className="px-3 py-2 text-center">Username</th>
-                            <th className="px-3 py-2 text-center">Email</th>
-                            <th className="px-3 py-2 text-center">SĐT</th>
-                            <th className="px-3 py-2 text-center">Phòng/Team</th>
+                          <tr className="text-xs text-gray-600 bg-gray-50 border-b">
+                            <th className="px-4 py-3 text-left">Tên bệnh viện</th>
+                            <th className="px-4 py-3 text-left">Nội dung công việc</th>
+                            <th className="px-4 py-3 text-center">Ngày bắt đầu</th>
+                            <th className="px-4 py-3 text-center">Người phụ trách</th>
+                            <th className="px-4 py-3 text-center">Trạng thái</th>
+                            <th className="px-4 py-3 text-center">Ngày hoàn thành</th>
+                            <th className="px-4 py-3 text-center">Số ngày thực hiện</th>
                           </tr>
                         </thead>
                         <tbody>
-                            {profileUsers.map((u, idx) => (
-                            <tr key={u.id} className={`border-t ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-gray-100`}>
-                              <td className="px-3 py-2 align-middle text-center">{u.id}</td>
-                              <td className="px-3 py-2 align-middle text-center">{u.fullname ?? '—'}</td>
-                              <td className="px-3 py-2 align-middle text-center">{u.username ?? '—'}</td>
-                              <td className="px-3 py-2 align-middle text-center">{u.email ?? '—'}</td>
-                              <td className="px-3 py-2 align-middle text-center">{u.phone ?? '—'}</td>
-                              <td className="px-3 py-2 align-middle text-center">{u.department ?? u.team ?? '—'}</td>
-                            </tr>
+                          {tasksByHospital.map((group) => (
+                            <React.Fragment key={group.hospitalName}>
+                              {group.tasks.map((task, taskIdx) => (
+                                <tr key={`${group.hospitalName}-${taskIdx}`} className={`border-b ${taskIdx === 0 ? 'bg-blue-50' : ''} hover:bg-gray-50`}>
+                                  {taskIdx === 0 && (
+                                    <td rowSpan={group.tasks.length} className="px-4 py-3 align-top font-semibold text-gray-900 border-r relative">
+                                      <div>{group.hospitalName}</div>
+                                      <div className="absolute bottom-2 right-2 text-xs font-normal text-gray-500">
+                                        Tổng: {group.tasks.length} task
+                                      </div>
+                                    </td>
+                                  )}
+                                  <td className="px-4 py-0">
+                                    <div className="font-medium">{task.name || '—'}</div>
+                                    <div className="text-xs text-gray-500 mt-1">{task.type}</div>
+                                  </td>
+                                  <td className="px-4 py-0 text-center">
+                                    {(task as any).startDate ? new Date((task as any).startDate).toLocaleDateString('vi-VN') : '—'}
+                                  </td>
+                                  <td className="px-4 py-0 text-center">
+                                    {(task as any).picName ?? '—'}
+                                  </td>
+                                  <td className="px-4 py-0 text-center">
+                                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                                      String(task.status).toUpperCase() === 'COMPLETED'
+                                        ? 'bg-green-100 text-green-800'
+                                        : String(task.status).toUpperCase() === 'IN_PROCESS'
+                                        ? 'bg-yellow-100 text-yellow-800'
+                                        : 'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {translateStatus(String(task.status))}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-0 text-center">
+                                    {task.completionDate ? new Date(task.completionDate).toLocaleDateString('vi-VN') : '—'}
+                                  </td>
+                                  <td className="px-4 py-0 text-center">
+                                    {(() => {
+                                      const startDate = (task as any).startDate;
+                                      if (!startDate) return '—';
+                                      const start = new Date(startDate);
+                                      const endDate = task.completionDate ? new Date(task.completionDate) : new Date();
+                                      if (Number.isNaN(start.getTime()) || Number.isNaN(endDate.getTime())) return '—';
+                                      
+                                      // Reset time to 00:00:00 to calculate days based on date only, not time
+                                      const startDateOnly = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+                                      const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+                                      
+                                      const diffTime = endDateOnly.getTime() - startDateOnly.getTime();
+                                      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                                      return diffDays >= 0 ? `${diffDays} ngày` : '—';
+                                    })()}
+                                  </td>
+                                </tr>
+                              ))}
+                            </React.Fragment>
                           ))}
                         </tbody>
                       </table>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
 
+            {hasLoadedProfile && (
             <div className="mt-4 grid grid-cols-1 gap-4">
-              {/* Triển khai - own card */}
+              {/* Triển khai - own card - chỉ hiển thị nếu team chứa "Triển khai" */}
+              {(selectedTeam.toLowerCase().includes('triển khai') || selectedTeam.toLowerCase().includes('trienkhai')) && (
               <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="text-sm font-medium text-gray-700">Triển khai ({profileImplTasks.length})</h3>
@@ -1267,8 +1597,10 @@ export default function SuperAdminHome() {
                   )}
                 </div>
               </div>
+              )}
 
-              {/* Phát triển - own card */}
+              {/* Phát triển - own card - chỉ hiển thị nếu team chứa "Phát triển" hoặc "Dev" */}
+              {(selectedTeam.toLowerCase().includes('phát triển') || selectedTeam.toLowerCase().includes('phattrien') || selectedTeam.toLowerCase().includes('dev')) && (
               <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="text-sm font-medium text-gray-700">Phát triển ({profileDevTasks.length})</h3>
@@ -1318,8 +1650,10 @@ export default function SuperAdminHome() {
                   )}
                 </div>
               </div>
+              )}
 
-              {/* Bảo trì - own card */}
+              {/* Bảo trì - own card - chỉ hiển thị nếu team chứa "Bảo trì" */}
+              {(selectedTeam.toLowerCase().includes('bảo trì') || selectedTeam.toLowerCase().includes('baotri')) && (
               <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="text-sm font-medium text-gray-700">Bảo trì ({profileMaintTasks.length})</h3>
@@ -1370,7 +1704,10 @@ export default function SuperAdminHome() {
                   )}
                 </div>
               </div>
+              )}
 
+              {/* Lịch sử hợp đồng - chỉ hiển thị nếu team chứa "Kinh doanh" hoặc "Business" */}
+              {(selectedTeam.toLowerCase().includes('kinh doanh') || selectedTeam.toLowerCase().includes('kinhdoanh') || selectedTeam.toLowerCase().includes('business')) && (
               <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-700">Lịch sử hợp đồng</h3>
                 {profileBusinesses.length === 0 ? (
@@ -1404,9 +1741,13 @@ export default function SuperAdminHome() {
                   </div>
                 )}
               </div>
+              )}
 
               {/* HIS & hardware summary intentionally removed from UI */}
             </div>
+            )}
+            </>
+            )}
           </div>
         </section>
 

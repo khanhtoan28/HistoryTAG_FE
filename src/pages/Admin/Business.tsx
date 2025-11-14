@@ -61,6 +61,8 @@ const BusinessPage: React.FC = () => {
   const [selectedHardwarePrice, setSelectedHardwarePrice] = useState<number | null>(null);
   const [selectedHospitalId, setSelectedHospitalId] = useState<number | null>(null);
   const [selectedHospitalPhone, setSelectedHospitalPhone] = useState<string | null>(null);
+  const [hospitalDropdownOpen, setHospitalDropdownOpen] = useState<boolean>(false);
+  const [hospitalSearchInput, setHospitalSearchInput] = useState<string>('');
   // commissionPercent is the user-facing input (entered as percent, e.g. 12 means 12%)
   const [commissionPercent, setCommissionPercent] = useState<number | null>(null);
   const [quantity, setQuantity] = useState<number | ''>(1);
@@ -144,6 +146,7 @@ const BusinessPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' } | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   
 
   async function fetchHardwareOptions(q: string) {
@@ -243,6 +246,29 @@ const BusinessPage: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useEffect(() => { loadList(currentPage, itemsPerPage); }, [currentPage, itemsPerPage]);
 
+  // Debounce hospital search
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (hospitalSearchInput || hospitalDropdownOpen) {
+        fetchHospitalOptions(hospitalSearchInput);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [hospitalSearchInput, hospitalDropdownOpen]);
+
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    if (!hospitalDropdownOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.hospital-dropdown-container')) {
+        setHospitalDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [hospitalDropdownOpen]);
+
   function applyFilters() {
     setCurrentPage(0);
     loadList(0, itemsPerPage);
@@ -259,30 +285,78 @@ const BusinessPage: React.FC = () => {
   async function handleSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault();
     if (!canManage) return setToast({ message: 'Bạn không có quyền thực hiện thao tác này', type: 'error' });
+    
+    // Clear previous errors
+    const errors: Record<string, string> = {};
+    
     // validation
-  if (!name || name.trim().length === 0) return setToast({ message: 'Tên dự án là bắt buộc', type: 'error' });
-  if (!selectedHospitalId) return setToast({ message: 'Vui lòng chọn bệnh viện', type: 'error' });
-  if (!selectedHardwareId) return setToast({ message: 'Vui lòng chọn phần cứng', type: 'error' });
-    if (!quantity || quantity < 1) return setToast({ message: 'Số lượng phải lớn hơn hoặc bằng 1', type: 'error' });
+    if (!name || name.trim().length === 0) errors.name = 'Mã hợp đồng là bắt buộc';
+    
+    // Check duplicate contract code (name) - check in current items first
+    if (name && name.trim().length > 0) {
+      const trimmedName = name.trim();
+      const duplicate = items.find(item => {
+        // Exclude current editing item if in edit mode
+        if (editingId && item.id === editingId) return false;
+        // Case-insensitive comparison
+        const itemName = item.name?.trim() || '';
+        return itemName.toLowerCase() === trimmedName.toLowerCase();
+      });
+      if (duplicate) {
+        errors.name = 'Mã hợp đồng đã được sử dụng';
+      }
+      
+      // If no duplicate found in current items, check all items via API for accuracy
+      if (!duplicate) {
+        try {
+          const allBusinesses = await getBusinesses({ page: 0, size: 10000 });
+          const allItems = Array.isArray(allBusinesses?.content) ? allBusinesses.content : (Array.isArray(allBusinesses) ? allBusinesses : []);
+          const duplicateInAll = allItems.find((item: BusinessItem) => {
+            // Exclude current editing item if in edit mode
+            if (editingId && item.id === editingId) return false;
+            const itemName = item.name?.trim() || '';
+            return itemName.toLowerCase() === trimmedName.toLowerCase();
+          });
+          if (duplicateInAll) {
+            errors.name = 'Mã hợp đồng đã được sử dụng';
+          }
+        } catch (err) {
+          // If API fails, rely on items check only
+          console.warn('Failed to check duplicate contract code via API', err);
+        }
+      }
+    }
+    
+    if (!selectedHospitalId) errors.selectedHospitalId = 'Vui lòng chọn bệnh viện';
+    if (!selectedHardwareId) errors.selectedHardwareId = 'Vui lòng chọn phần cứng';
+    if (!quantity || quantity < 1) errors.quantity = 'Số lượng phải lớn hơn hoặc bằng 1';
+
+    // Ensure startDate is set (default to now) so backend always receives a start date
+    const finalStart = startDateValue && startDateValue.trim() !== '' ? startDateValue : nowDateTimeLocal();
+    // Validate completion date is not earlier than start date
+    if (completionDateValue && completionDateValue.trim() !== '') {
+      try {
+        const st = new Date(finalStart);
+        const comp = new Date(completionDateValue);
+        if (comp.getTime() < st.getTime()) {
+          errors.completionDateValue = 'Ngày hoàn thành không được nhỏ hơn ngày bắt đầu';
+        }
+      } catch {
+        // ignore parse errors, backend will validate further
+      }
+    }
+
+    // If there are validation errors, set them and stop
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
+
+    // Clear errors if validation passes
+    setFieldErrors({});
 
     setSaving(true);
       try {
-        // ensure startDate is set (default to now) so backend always receives a start date
-        const finalStart = startDateValue && startDateValue.trim() !== '' ? startDateValue : nowDateTimeLocal();
-        // validate completion date is not earlier than start date
-        if (completionDateValue && completionDateValue.trim() !== '') {
-          try {
-            const st = new Date(finalStart);
-            const comp = new Date(completionDateValue);
-            if (comp.getTime() < st.getTime()) {
-              setToast({ message: 'Ngày hoàn thành không được nhỏ hơn ngày bắt đầu', type: 'error' });
-              setSaving(false);
-              return;
-            }
-          } catch {
-            // ignore parse errors, backend will validate further
-          }
-        }
         const payload: Record<string, unknown> = { name, hospitalId: selectedHospitalId, hardwareId: selectedHardwareId, quantity, status: statusValue,
           startDate: toLocalDateTimeStr(finalStart),
           completionDate: toLocalDateTimeStr(completionDateValue),
@@ -321,6 +395,17 @@ const BusinessPage: React.FC = () => {
   function computeTotal() {
     if (selectedHardwarePrice == null) return 0;
     return (selectedHardwarePrice) * (Number(quantity) || 0);
+  }
+
+  // Helper function to clear field error when user changes value
+  function clearFieldError(fieldName: string) {
+    if (fieldErrors[fieldName]) {
+      setFieldErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[fieldName];
+        return newErrors;
+      });
+    }
   }
 
   // when status is changed in the modal, handle auto-complete for CONTRACTED
@@ -362,6 +447,9 @@ const BusinessPage: React.FC = () => {
       setEditingId(id);
       setName(res.name ?? '');
       setSelectedHospitalId(res.hospital?.id ?? null);
+      // Set hospital search input to the selected hospital label
+      setHospitalSearchInput(res.hospital?.label ?? '');
+      setHospitalDropdownOpen(false);
       // support older API that may use finishDate as the key
   const remoteCompletion = (res.completionDate ?? ((res as unknown as Record<string, unknown>).finishDate as string | undefined)) as string | undefined | null;
       if (res.hospital?.id) {
@@ -394,6 +482,7 @@ const BusinessPage: React.FC = () => {
           setSelectedHardwarePrice(null);
         }
       } else setSelectedHardwarePrice(null);
+      setFieldErrors({});
       setShowModal(true);
     } catch (e) { console.error(e); setToast({ message: 'Không thể load mục để sửa', type: 'error' }); }
   }
@@ -444,6 +533,9 @@ const BusinessPage: React.FC = () => {
             setStatusValue('CARING');
             setStartDateValue(nowDateTimeLocal());
             setCompletionDateValue('');
+            setFieldErrors({});
+            setHospitalSearchInput('');
+            setHospitalDropdownOpen(false);
             setShowModal(true);
           }}
           disabled={!canManage}
@@ -484,7 +576,7 @@ const BusinessPage: React.FC = () => {
           {/* Inline form kept for legacy but hidden on modal-enabled UI - keep for fallback */}
           <form onSubmit={handleSubmit} className="hidden space-y-3 mb-6 bg-white/60 p-4 rounded shadow-sm">
             <div>
-              <label className="block text-sm font-medium mb-1">Tên dự án</label>
+              <label className="block text-sm font-medium mb-1">Mã hợp đồng</label>
               <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded border px-3 py-2" />
             </div>
             <div>
@@ -529,46 +621,98 @@ const BusinessPage: React.FC = () => {
 
           {/* Create/Edit modal */}
           {showModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onMouseDown={(e) => e.target === e.currentTarget && !saving && setShowModal(false)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget && !saving) { setShowModal(false); setFieldErrors({}); } }}>
               <div className="absolute inset-0 bg-black/50" />
               <div className="relative bg-white rounded-xl p-6 w-[720px] shadow-lg">
                 <h3 className="text-xl font-semibold mb-4">{editingId ? 'Cập nhật Kinh doanh' : 'Thêm Kinh doanh'}</h3>
                 <form onSubmit={handleSubmit} className="space-y-3">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium mb-1">Tên dự án</label>
-                      <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded border px-3 py-2" />
+                      <label className="block text-sm font-medium mb-1">Mã hợp đồng</label>
+                      <input 
+                        value={name} 
+                        onChange={(e) => {
+                          setName(e.target.value);
+                          clearFieldError('name');
+                        }} 
+                        className={`w-full rounded border px-3 py-2 ${fieldErrors.name ? 'border-red-500' : ''}`}
+                      />
+                      {fieldErrors.name && <div className="mt-1 text-sm text-red-600">{fieldErrors.name}</div>}
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">Phần cứng</label>
-                      <select value={selectedHardwareId ?? ''} onChange={(e) => {
-                        const v = e.target.value; setSelectedHardwareId(v ? Number(v) : null);
-                        const found = hardwareOptions.find(h => String(h.id) === v);
-                        if (found) {
-                          getHardwareById(found.id).then(r => setSelectedHardwarePrice(r && r.price != null ? Number(r.price) : null)).catch(() => setSelectedHardwarePrice(null));
-                        } else setSelectedHardwarePrice(null);
-                      }} className="w-full rounded border px-3 py-2">
+                      <select 
+                        value={selectedHardwareId ?? ''} 
+                        onChange={(e) => {
+                          const v = e.target.value; 
+                          setSelectedHardwareId(v ? Number(v) : null);
+                          clearFieldError('selectedHardwareId');
+                          const found = hardwareOptions.find(h => String(h.id) === v);
+                          if (found) {
+                            getHardwareById(found.id).then(r => setSelectedHardwarePrice(r && r.price != null ? Number(r.price) : null)).catch(() => setSelectedHardwarePrice(null));
+                          } else setSelectedHardwarePrice(null);
+                        }} 
+                        className={`w-full rounded border px-3 py-2 ${fieldErrors.selectedHardwareId ? 'border-red-500' : ''}`}
+                      >
                         <option value="">— Chọn phần cứng —</option>
                         {hardwareOptions.map(h => <option key={h.id} value={h.id}>{h.label} {h.subLabel ? `— ${h.subLabel}` : ''}</option>)}
                       </select>
+                      {fieldErrors.selectedHardwareId && <div className="mt-1 text-sm text-red-600">{fieldErrors.selectedHardwareId}</div>}
                     </div>
-                    <div>
+                    <div className="relative">
                       <label className="block text-sm font-medium mb-1">Bệnh viện</label>
-                      <select value={selectedHospitalId ?? ''} onChange={(e) => { const v = e.target.value; const id = v ? Number(v) : null; setSelectedHospitalId(id); if (id) {
-                          const found = hospitalOptions.find(h => Number(h.id) === id);
-                          if (found) {
-                            api.get(`/api/v1/auth/hospitals/${found.id}`).then(r => {
-                              const d = r.data || {};
-                              const phone = d.contactNumber || d.contact_number || d.contactPhone || d.contact_phone || null;
-                              setSelectedHospitalPhone(phone);
-                            }).catch(() => setSelectedHospitalPhone(null));
-                          } else setSelectedHospitalPhone(null);
-                        } else setSelectedHospitalPhone(null);
-                      }} className="w-full rounded border px-3 py-2">
-                        <option value="">— Chọn bệnh viện —</option>
-                        {hospitalOptions.map(h => <option key={h.id} value={h.id}>{h.label}</option>)}
-                      </select>
-                      {selectedHospitalPhone && <div className="mt-1 text-sm text-gray-700">Số điện thoại bệnh viện: <span className="font-medium">{selectedHospitalPhone}</span></div>}
+                      <div className="relative hospital-dropdown-container">
+                        <input
+                          type="text"
+                          value={hospitalSearchInput}
+                          onChange={(e) => {
+                            setHospitalSearchInput(e.target.value);
+                            setHospitalDropdownOpen(true);
+                            clearFieldError('selectedHospitalId');
+                          }}
+                          onFocus={() => {
+                            setHospitalDropdownOpen(true);
+                            if (!hospitalSearchInput) {
+                              fetchHospitalOptions('');
+                            }
+                          }}
+                          placeholder="Tìm kiếm bệnh viện..."
+                          className={`w-full rounded border px-3 py-2 ${fieldErrors.selectedHospitalId ? 'border-red-500' : ''}`}
+                        />
+                        {hospitalDropdownOpen && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg">
+                            {hospitalOptions.length === 0 ? (
+                              <div className="px-4 py-2 text-sm text-gray-500">Không tìm thấy bệnh viện</div>
+                            ) : (
+                              <div className="max-h-[200px] overflow-y-auto">
+                                {hospitalOptions.map((hospital) => (
+                                  <div
+                                    key={hospital.id}
+                                    onClick={() => {
+                                      setSelectedHospitalId(hospital.id);
+                                      setHospitalSearchInput(hospital.label);
+                                      setHospitalDropdownOpen(false);
+                                      clearFieldError('selectedHospitalId');
+                                      api.get(`/api/v1/auth/hospitals/${hospital.id}`).then(r => {
+                                        const d = r.data || {};
+                                        const phone = d.contactNumber || d.contact_number || d.contactPhone || d.contact_phone || null;
+                                        setSelectedHospitalPhone(phone);
+                                      }).catch(() => setSelectedHospitalPhone(null));
+                                    }}
+                                    className={`px-4 py-2 cursor-pointer hover:bg-blue-50 ${
+                                      selectedHospitalId === hospital.id ? 'bg-blue-100' : ''
+                                    }`}
+                                  >
+                                    <div className="text-sm text-gray-900">{hospital.label}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {fieldErrors.selectedHospitalId && <div className="mt-1 text-sm text-red-600">{fieldErrors.selectedHospitalId}</div>}
+                      {selectedHospitalPhone && !fieldErrors.selectedHospitalId && <div className="mt-1 text-sm text-gray-700">Số điện thoại bệnh viện: <span className="font-medium">{selectedHospitalPhone}</span></div>}
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">Trạng thái</label>
@@ -584,9 +728,13 @@ const BusinessPage: React.FC = () => {
                         type="number"
                         min={1}
                         value={quantity === '' ? '' : quantity}
-                        onChange={(e) => setQuantity(e.target.value ? Number(e.target.value) : '')}
-                        className="w-40 rounded border px-3 py-2"
+                        onChange={(e) => {
+                          setQuantity(e.target.value ? Number(e.target.value) : '');
+                          clearFieldError('quantity');
+                        }}
+                        className={`w-40 rounded border px-3 py-2 ${fieldErrors.quantity ? 'border-red-500' : ''}`}
                       />
+                      {fieldErrors.quantity && <div className="mt-1 text-sm text-red-600">{fieldErrors.quantity}</div>}
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">Hoa hồng (%)</label>
@@ -606,13 +754,23 @@ const BusinessPage: React.FC = () => {
                     </div>
                     <div className="col-span-2">
                       <label className="block text-sm font-medium mb-1">Ngày hoàn thành</label>
-                      <input type="datetime-local" value={completionDateValue} onChange={(e) => setCompletionDateValue(e.target.value)} min={startDateValue || undefined} className="w-full rounded border px-3 py-2" />
+                      <input 
+                        type="datetime-local" 
+                        value={completionDateValue} 
+                        onChange={(e) => {
+                          setCompletionDateValue(e.target.value);
+                          clearFieldError('completionDateValue');
+                        }} 
+                        min={startDateValue || undefined} 
+                        className={`w-full rounded border px-3 py-2 ${fieldErrors.completionDateValue ? 'border-red-500' : ''}`}
+                      />
+                      {fieldErrors.completionDateValue && <div className="mt-1 text-sm text-red-600">{fieldErrors.completionDateValue}</div>}
                     </div>
                   </div>
                       <div className="flex items-center gap-3 justify-between">
                     <div className="text-sm text-gray-600">Tổng: <span className="font-semibold">{computeTotal() > 0 ? computeTotal().toLocaleString() + ' ₫' : '—'}</span></div>
                     <div className="flex items-center gap-3">
-                      <button type="button" onClick={() => { if (!saving) { setShowModal(false); setEditingId(null); } }} className="px-4 py-2 border rounded">Hủy</button>
+                      <button type="button" onClick={() => { if (!saving) { setShowModal(false); setEditingId(null); setFieldErrors({}); } }} className="px-4 py-2 border rounded">Hủy</button>
                       <button type="submit" disabled={saving} className={`px-4 py-2 rounded text-white ${saving ? 'bg-gray-400' : 'bg-blue-600'}`}>{saving ? 'Đang lưu...' : (editingId ? 'Cập nhật' : 'Lưu')}</button>
                     </div>
                   </div>

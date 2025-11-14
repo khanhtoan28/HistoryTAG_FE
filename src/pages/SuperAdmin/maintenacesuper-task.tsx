@@ -353,16 +353,73 @@ const MaintenanceSuperTaskPage: React.FC = () => {
       await fetchPendingTasks();
     }
   };
+
+  const handleAcceptAll = async () => {
+    if (pendingTasks.length === 0) {
+      toast.error("Không có bệnh viện nào để tiếp nhận.");
+      return;
+    }
+
+    if (
+      !confirm(
+        `Tiếp nhận tất cả ${pendingTasks.length} bệnh viện và chuyển sang danh sách bảo trì?`,
+      )
+    )
+      return;
+
+    // Accept all hospitals sequentially
+    for (const group of [...pendingTasks]) {
+      if (group.hospitalId) {
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          await handleAcceptPendingGroup(group);
+        } catch (err) {
+          console.error(`Failed to accept hospital ${group.hospitalName}:`, err);
+        }
+      }
+    }
+  };
   
   // Fetch pending tasks on mount so the badge shows without requiring a click.
   // Also refresh periodically (every 60s) to keep the count up-to-date.
+  // BUT: Skip polling when modal is open to avoid blinking/flashing
   useEffect(() => {
-    fetchPendingTasks();
+    let mounted = true;
+
+    // Initial load (only if modal is not open)
+    if (!pendingOpen) {
+      (async () => {
+        try {
+          await fetchPendingTasks();
+        } catch (err) {
+          console.debug('Initial fetchPendingTasks failed', err);
+        }
+      })();
+    }
+
+    // Only set up interval if modal is closed
+    if (pendingOpen) {
+      return () => {
+        mounted = false;
+      };
+    }
+
     const timer = window.setInterval(() => {
-      fetchPendingTasks();
+      try {
+        // Skip if modal is open or component unmounted
+        if (!mounted || pendingOpen) return;
+        fetchPendingTasks();
+      } catch (err) {
+        console.debug('Polling fetchPendingTasks failed', err);
+      }
     }, 40000);
-    return () => window.clearInterval(timer);
-  }, []);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOpen]);
 
   async function fetchHospitalsWithTasks() {
     setLoadingHospitals(true);
@@ -849,7 +906,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                   + Thêm task mới
                 </button>
                 <button
-                  className="relative rounded-full border px-4 py-2 text-sm shadow-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 flex items-center gap-2"
+                  className="relative inline-flex items-center gap-2 rounded-full border border-gray-300 text-gray-800 px-4 py-2 text-sm bg-white hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:bg-gray-900"
                   onClick={() => {
                     setPendingOpen(true);
                     fetchPendingTasks();
@@ -871,7 +928,9 @@ const MaintenanceSuperTaskPage: React.FC = () => {
               <div className="text-blue-600 text-4xl font-extrabold tracking-wider animate-pulse" aria-hidden="true">TAG</div>
             </div>
           ) : filteredHospitals.length === 0 ? (
-            <div className="px-4 py-6 text-center text-gray-500">Không có bệnh viện nào có task</div>
+            <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center text-gray-600 dark:text-gray-400">
+              Không có bệnh viện nào có task
+            </div>
           ) : (
             <>
               <div className="rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
@@ -1107,7 +1166,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
             </div>
           </div>
         ) : data.length === 0 ? (
-          <div className="px-4 py-6 text-center text-gray-500">
+          <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center text-gray-600 dark:text-gray-400">
             Không có dữ liệu
           </div>
         ) : (
@@ -1214,6 +1273,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
         tasks={pendingTasks}
         loading={loadingPending}
         onAccept={handleAcceptPendingGroup}
+        onAcceptAll={handleAcceptAll}
       />
     </div>
   );
@@ -1243,7 +1303,7 @@ function DetailModal({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 20 }}
-        className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800"
+        className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-6"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header (sticky) */}
@@ -1326,12 +1386,14 @@ function DetailModal({
     tasks,
     loading,
     onAccept,
+    onAcceptAll,
   }: {
     open: boolean;
     onClose: () => void;
     tasks: PendingTransferGroup[];
     loading: boolean;
     onAccept: (group: PendingTransferGroup) => Promise<void>;
+    onAcceptAll?: () => Promise<void>;
   }) {
     const [acceptingKey, setAcceptingKey] = useState<string | null>(null);
 
@@ -1345,21 +1407,34 @@ function DetailModal({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 20 }}
-          className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800"
+          className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-3 overflow-hidden"
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b px-6 py-4 flex items-center justify-between">
             <h3 className="text-lg font-bold">Danh sách bệnh viện chờ tiếp nhận</h3>
-            <button onClick={onClose} className="text-gray-500">✕</button>
+            {/* <button onClick={onClose} className="text-gray-500">✕</button> */}
           </div>
 
-          <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
+          <div className="p-4">
             {loading ? (
               <div className="text-center py-8">Đang tải...</div>
             ) : tasks.length === 0 ? (
               <div className="text-center py-6 text-gray-500">Không có bệnh viện chờ tiếp nhận</div>
             ) : (
-              tasks.map((group) => (
+              <>
+                {onAcceptAll && (
+                  <div className="mb-4 flex justify-end">
+                    <button
+                      onClick={onAcceptAll}
+                      disabled={tasks.length === 0}
+                      className="h-10 rounded-xl px-4 text-sm font-medium transition shadow-sm !bg-green-600 !text-white !border-green-600 hover:!bg-green-700 hover:!border-green-700 disabled:!bg-green-300 disabled:!border-green-300 disabled:!text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Tiếp nhận tất cả ({tasks.length})
+                    </button>
+                  </div>
+                )}
+                <div className="max-h-[60vh] overflow-y-auto space-y-3">
+                  {tasks.map((group) => (
                 <div
                   key={group.key}
                   className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-900"
@@ -1374,7 +1449,7 @@ function DetailModal({
                       </div>
                     </div>
                     <button
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-500 disabled:opacity-60"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-green-500 disabled:opacity-60"
                       disabled={acceptingKey === group.key}
                       onClick={async () => {
                         setAcceptingKey(group.key);
@@ -1385,18 +1460,18 @@ function DetailModal({
                         }
                       }}
                     >
-                      {acceptingKey === group.key ? "Đang tiếp nhận..." : "Tiếp nhận bệnh viện"}
+                      {acceptingKey === group.key ? "Đang tiếp nhận..." : "Tiếp nhận"}
                     </button>
                   </div>
                   
                 </div>
-              ))
+                  ))}
+                </div>
+              </>
             )}
           </div>
 
-          <div className="sticky bottom-0 bg-white dark:bg-gray-900 border-t p-4 flex justify-end">
-            <button onClick={onClose} className="px-4 py-2 rounded border">Đóng</button>
-          </div>
+          
         </motion.div>
       </div>
     );

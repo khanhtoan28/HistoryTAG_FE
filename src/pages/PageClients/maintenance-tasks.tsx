@@ -11,12 +11,14 @@ function PendingTasksModal({
     open,
     onClose,
     onAccept,
+    onAcceptAll,
     list,
     loading,
 }: {
     open: boolean;
     onClose: () => void;
     onAccept: (group: PendingTransferGroup) => Promise<void>;
+    onAcceptAll?: () => Promise<void>;
     list: PendingTransferGroup[];
     loading: boolean;
 }) {
@@ -38,15 +40,17 @@ function PendingTasksModal({
             >
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                         Viện chờ tiếp nhận
+                         Danh sách viện chờ tiếp nhận
                     </h2>
-                    <button
+                   
+                    {/* <button
                         onClick={onClose}
                         className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
                     >
                         ✕
-                    </button>
+                    </button> */}
                 </div>
+                <hr className="my-4 border-gray-200 dark:border-gray-700"></hr>
 
                 {loading ? (
                     <div className="text-center text-gray-500 py-6">Đang tải...</div>
@@ -55,8 +59,20 @@ function PendingTasksModal({
                         Không có công viện nào chờ tiếp nhận.
                     </div>
                 ) : (
-                    <div className="space-y-3 max-h-[60vh] overflow-y-auto">
-                        {list.map((group) => (
+                    <>
+                        {onAcceptAll && (
+                            <div className="mb-4 flex justify-end">
+                                <button
+                                    onClick={onAcceptAll}
+                                    disabled={list.length === 0}
+                                    className="h-10 rounded-xl px-4 text-sm font-medium transition shadow-sm !bg-green-600 !text-white !border-green-600 hover:!bg-green-700 hover:!border-green-700 disabled:!bg-green-300 disabled:!border-green-300 disabled:!text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Tiếp nhận tất cả ({list.length})
+                                </button>
+                            </div>
+                        )}
+                        <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                            {list.map((group) => (
                             <div
                                 key={group.key}
                                 className="border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800 overflow-hidden"
@@ -80,28 +96,16 @@ function PendingTasksModal({
                                             }
                                         }}
                                         disabled={acceptingKey === group.key}
-                                        className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-xl text-white
-                             bg-gradient-to-r from-emerald-600 to-green-600
-                             hover:from-emerald-500 hover:to-green-500
-                             shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40
-                             disabled:opacity-60 disabled:cursor-not-allowed"
+                                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-green-500 disabled:opacity-60"
                                     >
-                                        {acceptingKey === group.key ? (
-                                            <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10"
-                                                    stroke="currentColor" strokeWidth="4"></circle>
-                                                <path className="opacity-75" fill="currentColor"
-                                                    d="M4 12a8 8 0 018-8v4A4 4 0 008 12H4z"></path>
-                                            </svg>
-                                        ) : (
-                                            <FiCheckCircle className="w-4 h-4" />
-                                        )}
+                                        
                                         <span>Tiếp nhận</span>
                                     </button>
                                 </div>
                             </div>
                         ))}
-                    </div>
+                        </div>
+                    </>
                 )}
             </motion.div>
         </div>
@@ -1520,6 +1524,32 @@ const ImplementationTasksPage: React.FC = () => {
         }
     };
 
+    const handleAcceptAll = async () => {
+        if (pendingTasks.length === 0) {
+            toast.error("Không có bệnh viện nào để tiếp nhận.");
+            return;
+        }
+
+        if (
+            !confirm(
+                `Tiếp nhận tất cả ${pendingTasks.length} bệnh viện và chuyển sang danh sách bảo trì?`,
+            )
+        )
+            return;
+
+        // Accept all hospitals sequentially
+        for (const group of [...pendingTasks]) {
+            if (group.hospitalId) {
+                try {
+                    // eslint-disable-next-line no-await-in-loop
+                    await handleAcceptPendingGroup(group);
+                } catch (err) {
+                    console.error(`Failed to accept hospital ${group.hospitalName}:`, err);
+                }
+            }
+        }
+    };
+
     // Initial: load hospital list instead of tasks
     useEffect(() => {
         fetchHospitalsWithTasks();
@@ -1596,13 +1626,43 @@ const ImplementationTasksPage: React.FC = () => {
 
     // Fetch pending tasks on mount so the badge shows without requiring a click.
     // Also refresh periodically (every 60s) to keep the count up-to-date.
+    // BUT: Skip polling when modal is open to avoid blinking/flashing
     useEffect(() => {
-        fetchPendingTasks();
+        let mounted = true;
+
+        // Initial load (only if modal is not open)
+        if (!pendingOpen) {
+            (async () => {
+                try {
+                    await fetchPendingTasks();
+                } catch (err) {
+                    console.debug('Initial fetchPendingTasks failed', err);
+                }
+            })();
+        }
+
+        // Only set up interval if modal is closed
+        if (pendingOpen) {
+            return () => {
+                mounted = false;
+            };
+        }
+
         const timer = window.setInterval(() => {
-            fetchPendingTasks();
+            try {
+                // Skip if modal is open or component unmounted
+                if (!mounted || pendingOpen) return;
+                fetchPendingTasks();
+            } catch (err) {
+                console.debug('Polling fetchPendingTasks failed', err);
+            }
         }, 40000);
-        return () => window.clearInterval(timer);
-    }, [fetchPendingTasks]);
+
+        return () => {
+            mounted = false;
+            window.clearInterval(timer);
+        };
+    }, [fetchPendingTasks, pendingOpen]);
 
     async function fetchHospitalOptions(q: string) {
         try {
@@ -1991,26 +2051,27 @@ const ImplementationTasksPage: React.FC = () => {
                                             <option value="asc">Tăng dần</option>
                                             <option value="desc">Giảm dần</option>
                                         </select>
-                                        <Button
-                                            variant="ghost"
-                                            className="relative flex items-center gap-2 border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300"
-                                            onClick={() => { setPendingOpen(true); fetchPendingTasks(); }}
-                                        >
-                                            Viện chờ tiếp nhận
-                                            {pendingTasks.length > 0 && (
-                                                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
-                                                    {pendingTasks.length}
-                                                </span>
-                                            )}
-                                        </Button>
                                         {(isSuperAdmin || userTeam === "MAINTENANCE") && (
-                                            <button
-                                                className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
-                                                onClick={() => { setEditing(null); setModalOpen(true); }}
-                                                type="button"
-                                            >
-                                                + Thêm task mới
-                                            </button>
+                                            <>
+                                                <button
+                                                    className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
+                                                    onClick={() => { setEditing(null); setModalOpen(true); }}
+                                                    type="button"
+                                                >
+                                                    + Thêm task mới
+                                                </button>
+                                                <button
+                                                    className="relative inline-flex items-center gap-2 rounded-full border border-gray-300 text-gray-800 px-4 py-2 text-sm bg-white hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:bg-gray-900"
+                                                    onClick={() => { setPendingOpen(true); fetchPendingTasks(); }}
+                                                >
+                                                    Viện chờ tiếp nhận
+                                                    {pendingTasks.length > 0 && (
+                                                        <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
+                                                            {pendingTasks.length}
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            </>
                                         )}
                                     </div>
                                 </div>
@@ -2020,7 +2081,9 @@ const ImplementationTasksPage: React.FC = () => {
                                     <div className="text-blue-600 text-4xl font-extrabold tracking-wider animate-pulse" aria-hidden="true">TAG</div>
                                 </div>
                             ) : filteredHospitals.length === 0 ? (
-                                <div className="px-4 py-6 text-center text-gray-500">Không có bệnh viện nào có task</div>
+                                <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center text-gray-600 dark:text-gray-400">
+                                  Không có bệnh viện nào có task
+                                </div>
                             ) : (
                                 <>
                                     <div className="rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
@@ -2134,7 +2197,9 @@ const ImplementationTasksPage: React.FC = () => {
                         </div>
                     ) : (
                         filtered.length === 0 ? (
-                            <div className="px-4 py-6 text-center text-gray-500">Không có dữ liệu</div>
+                            <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center text-gray-600 dark:text-gray-400">
+                              Không có dữ liệu
+                            </div>
                         ) : (
                             <>
                                 {/* Bulk actions toolbar */}
@@ -2278,6 +2343,7 @@ const ImplementationTasksPage: React.FC = () => {
                 open={pendingOpen}
                 onClose={() => setPendingOpen(false)}
                 onAccept={handleAcceptPendingGroup}
+                onAcceptAll={handleAcceptAll}
                 list={pendingTasks}
                 loading={loadingPending}
             />

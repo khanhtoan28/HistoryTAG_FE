@@ -1,13 +1,10 @@
 import { useEffect, useState } from "react";
 import {
-  ArrowDownIcon,
-  ArrowRightIcon,
-  ArrowUpIcon,
+  PaperPlaneIcon,
   CheckCircleIcon,
   TaskIcon,
   UserIcon,
 } from "../../icons";
-import Badge from "../ui/badge/Badge";
 
 const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
 
@@ -89,13 +86,6 @@ export default function EcommerceMetrics() {
   const completedThisMonth = summary?.completedThisMonth ?? 0;
   const completedLastMonth = summary?.completedLastMonth ?? 0;
 
-  const completedChange =
-    completedLastMonth > 0
-      ? ((completedThisMonth - completedLastMonth) / completedLastMonth) * 100
-      : completedThisMonth > 0
-      ? 100
-      : 0;
-
   if (loading) {
     return (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 md:gap-6">
@@ -122,13 +112,13 @@ export default function EcommerceMetrics() {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 md:gap-6">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 md:gap-6 w-full">
       {/* Task phụ trách */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6 flex flex-col h-full">
         <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300">
           <TaskIcon className="size-6" />
         </div>
-        <div className="mt-5 space-y-2">
+        <div className="mt-5 space-y-2 flex-1 flex flex-col">
           <div>
             <span className="text-sm text-gray-500 dark:text-gray-400">
               Task phụ trách
@@ -137,29 +127,31 @@ export default function EcommerceMetrics() {
               {formatNumber(assigned)}
             </h4>
           </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            Đang xử lý:&nbsp;
-            <span className="font-semibold text-blue-600 dark:text-blue-300">
-              {formatNumber(inProgress)}
-            </span>
-          </div>
-          <div className="flex gap-3 text-xs text-gray-500 dark:text-gray-400">
-            <span className="text-red-500 dark:text-red-300">
-              Quá hạn: {formatNumber(overdue)}
-            </span>
-            <span className="text-amber-500 dark:text-amber-300">
-              Sắp hạn: {formatNumber(nearDue)}
-            </span>
+          <div className="mt-auto space-y-1">
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              Đang xử lý:&nbsp;
+              <span className="font-semibold text-blue-600 dark:text-blue-300">
+                {formatNumber(inProgress)}
+              </span>
+            </div>
+            <div className="flex gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <span className="text-red-500 dark:text-red-300">
+                Quá hạn: {formatNumber(overdue)}
+              </span>
+              <span className="text-amber-500 dark:text-amber-300">
+                Sắp hạn: {formatNumber(nearDue)}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Task tiếp nhận */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6 flex flex-col h-full">
         <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300">
           <UserIcon className="size-6" />
         </div>
-        <div className="mt-5 space-y-2">
+        <div className="mt-5 space-y-2 flex-1 flex flex-col">
           <div>
             <span className="text-sm text-gray-500 dark:text-gray-400">
               Task tiếp nhận
@@ -168,18 +160,18 @@ export default function EcommerceMetrics() {
               {formatNumber(received)}
             </h4>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-auto">
             Bao gồm cả task do đội khác phụ trách.
           </p>
         </div>
       </div>
 
       {/* Task chuyển giao */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6 flex flex-col h-full">
         <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300">
-          <ArrowRightIcon className="size-6" />
+          <PaperPlaneIcon className="size-6" />
         </div>
-        <div className="mt-5 space-y-2">
+        <div className="mt-5 space-y-2 flex-1 flex flex-col">
           <div>
             <span className="text-sm text-gray-500 dark:text-gray-400">
               Task chuyển giao
@@ -188,19 +180,19 @@ export default function EcommerceMetrics() {
               {formatNumber(transferred)}
             </h4>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-auto">
             Những task bạn tiếp nhận nhưng không phải người phụ trách chính.
           </p>
         </div>
       </div>
 
       {/* Task đã hoàn thành */}
-      <div className="relative rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
+      <div className="relative rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6 flex flex-col h-full">
         <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300">
           <CheckCircleIcon className="size-6" />
         </div>
        
-        <div className="mt-5 space-y-2">
+        <div className="mt-5 space-y-2 flex-1 flex flex-col">
           <div>
             <span className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
               Task hoàn thành
@@ -209,14 +201,16 @@ export default function EcommerceMetrics() {
               {formatNumber(completed)}
             </h4>
           </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            Tháng này:&nbsp;
-            <span className="font-semibold text-emerald-600 dark:text-emerald-300">
-              {formatNumber(completedThisMonth)}
-            </span>
-          </div>
-          <div className="text-xs text-gray-400 dark:text-gray-500">
-            Tháng trước: {formatNumber(completedLastMonth)}
+          <div className="mt-auto space-y-1">
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              Tháng này:&nbsp;
+              <span className="font-semibold text-emerald-600 dark:text-emerald-300">
+                {formatNumber(completedThisMonth)}
+              </span>
+            </div>
+            <div className="text-xs text-gray-400 dark:text-gray-500">
+              Tháng trước: {formatNumber(completedLastMonth)}
+            </div>
           </div>
         </div>
       </div>

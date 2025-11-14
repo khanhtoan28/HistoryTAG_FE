@@ -1053,6 +1053,8 @@ const ImplementationTasksPage: React.FC = () => {
   const [pendingOpen, setPendingOpen] = useState(false);
   const [pendingGroups, setPendingGroups] = useState<Array<{ hospitalName: string; hospitalId: number | null; tasks: ImplementationTaskResponseDTO[] }>>([]);
   const [loadingPending, setLoadingPending] = useState(false);
+  const pendingCountRef = useRef<number>(0);
+  const lastPendingCountRef = useRef<number>(0);
   
   // Tính số task đã hoàn thành từ data đã được filter (trong trang hiện tại)
   const completedCountFromFiltered = useMemo(() => {
@@ -1176,6 +1178,73 @@ const ImplementationTasksPage: React.FC = () => {
     fetchHospitalsWithTasks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Poll pending groups periodically and show notifications when new pending tasks arrive
+  // BUT: Skip polling when modal is open to avoid blinking/flashing
+  useEffect(() => {
+    let mounted = true;
+
+    // Ask for notification permission once (non-blocking)
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+        // request in background; user may decline
+        Notification.requestPermission().catch(() => {});
+      }
+    } catch (err) {
+      console.debug('Notification permission request failed', err);
+    }
+
+    // Initial load (only if modal is not open)
+    if (!pendingOpen) {
+      (async () => {
+        try {
+          const initial = await fetchPendingGroups();
+          lastPendingCountRef.current = initial;
+        } catch (err) {
+          console.debug('Initial fetchPendingGroups failed', err);
+        }
+      })();
+    }
+
+    // Only set up interval if modal is closed
+    if (pendingOpen) {
+      return () => {
+        mounted = false;
+      };
+    }
+
+    const intervalId = window.setInterval(async () => {
+      try {
+        // Skip if modal is open or component unmounted
+        if (!mounted || pendingOpen) return;
+        const newCount = await fetchPendingGroups();
+        const last = lastPendingCountRef.current || 0;
+        if (!mounted || pendingOpen) return;
+        if (newCount > last) {
+          const diff = newCount - last;
+          // show in-app toast
+          toast.success(`Có ${diff} công việc chờ mới cần tiếp nhận`);
+          // show browser notification if permitted
+          try {
+            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+              new Notification('Công việc chờ mới', { body: `Có ${diff} công việc chờ cần tiếp nhận`, silent: false });
+            }
+          } catch (err) {
+            console.debug('Browser notification failed', err);
+          }
+        }
+        lastPendingCountRef.current = newCount;
+      } catch (err) {
+        console.debug('Polling fetchPendingGroups failed', err);
+      }
+    }, 8000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOpen]);
 
   // when page or size changes, refetch
   useEffect(() => {
@@ -1389,21 +1458,29 @@ const ImplementationTasksPage: React.FC = () => {
         acc.set(key, current);
       }
       // Merge baseList (có transfer status từ endpoint) với task counts từ aggregation
-      const withCompleted = baseList.map((h, idx) => {
-        // Tìm matching hospital từ acc (aggregated from tasks)
-        const hospitalId = h.id;
-        const hospitalName = h.label;
-        const key = hospitalId != null ? `id-${hospitalId}` : `name-${hospitalName}`;
-        const aggregated = acc.get(key);
-        
-        return {
-          ...h,
-          acceptedCount: completedCounts[idx] ?? (aggregated?.acceptedCount ?? 0),
-          nearDueCount: aggregated?.nearDueCount ?? 0,
-          overdueCount: aggregated?.overdueCount ?? 0,
-          // Transfer status đã có từ backend endpoint
-        };
-      });
+      // Chỉ hiển thị các bệnh viện có task đã được tiếp nhận (không phải pending)
+      const withCompleted = baseList
+        .map((h, idx) => {
+          // Tìm matching hospital từ acc (aggregated from tasks - đã loại pending)
+          const hospitalId = h.id;
+          const hospitalName = h.label;
+          const key = hospitalId != null ? `id-${hospitalId}` : `name-${hospitalName}`;
+          const aggregated = acc.get(key);
+          
+          // Chỉ sử dụng taskCount từ aggregated (đã filter pending tasks)
+          // Không fallback về h.taskCount vì nó có thể bao gồm pending tasks
+          const finalTaskCount = aggregated?.taskCount ?? 0;
+          
+          return {
+            ...h,
+            taskCount: finalTaskCount,
+            acceptedCount: completedCounts[idx] ?? (aggregated?.acceptedCount ?? 0),
+            nearDueCount: aggregated?.nearDueCount ?? 0,
+            overdueCount: aggregated?.overdueCount ?? 0,
+            // Transfer status đã có từ backend endpoint
+          };
+        })
+        .filter((h) => h.taskCount > 0); // Chỉ hiển thị bệnh viện có task đã được tiếp nhận
       
       // Province đã có trong subLabel từ endpoint, không cần fetch thêm
       setHospitalsWithTasks(withCompleted);
@@ -1415,7 +1492,7 @@ const ImplementationTasksPage: React.FC = () => {
   }
 
   // Fetch pending implementation tasks that were created from Business and not yet accepted by Deployment
-  async function fetchPendingGroups() {
+  async function fetchPendingGroups(): Promise<number> {
     setLoadingPending(true);
     try {
       const url = `${API_ROOT}/api/v1/admin/implementation/pending`;
@@ -1423,7 +1500,7 @@ const ImplementationTasksPage: React.FC = () => {
       if (res.status === 401) {
         toast.error('Bạn chưa đăng nhập hoặc phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
         navigate('/signin');
-        return;
+        return pendingCountRef.current;
       }
       if (!res.ok) throw new Error(`Failed to load pending: ${res.status}`);
       const list: ImplementationTaskResponseDTO[] = await res.json();
@@ -1437,18 +1514,33 @@ const ImplementationTasksPage: React.FC = () => {
         cur.tasks.push(t);
         groups.set(key, cur);
       }
-      setPendingGroups(Array.from(groups.values()).map(g => ({ hospitalName: g.hospitalName, hospitalId: g.hospitalId, tasks: g.tasks })));
+      const grouped = Array.from(groups.values()).map(g => ({ hospitalName: g.hospitalName, hospitalId: g.hospitalId, tasks: g.tasks }));
+      setPendingGroups(grouped);
+      const count = grouped.reduce((s, g) => s + (g.tasks?.length || 0), 0);
+      pendingCountRef.current = count;
+      return count;
     } catch (e: any) {
       toast.error(e?.message || 'Lỗi khi tải danh sách chờ');
     } finally {
       setLoadingPending(false);
     }
+    return pendingCountRef.current;
   }
 
   async function handleAcceptTask(taskId: number) {
     try {
       const url = `${API_ROOT}/api/v1/admin/implementation/accept/${taskId}`;
-      const res = await fetch(url, { method: 'PUT', headers: authHeaders(), credentials: 'include' });
+      // Set startDate to current date/time and status to RECEIVED when accepting
+      const startDate = toLocalISOString(new Date());
+      const res = await fetch(url, { 
+        method: 'PUT', 
+        headers: authHeaders(), 
+        credentials: 'include',
+        body: JSON.stringify({ 
+          startDate,
+          status: 'RECEIVED'
+        })
+      });
       if (res.status === 401) {
         toast.error('Bạn chưa đăng nhập hoặc không có quyền. Vui lòng đăng nhập lại.');
         navigate('/signin');
@@ -1489,6 +1581,11 @@ const ImplementationTasksPage: React.FC = () => {
 
       // Refresh hospital summary to keep counters in sync (best-effort)
       fetchHospitalsWithTasks().catch(() => {});
+      
+      // Refresh task list if viewing tasks to show updated startDate and status
+      if (!showHospitalList && selectedHospital) {
+        await fetchList();
+      }
     } catch (e: any) {
       toast.error(e?.message || 'Lỗi khi tiếp nhận công việc');
     }
@@ -1501,6 +1598,16 @@ const ImplementationTasksPage: React.FC = () => {
     for (const t of [...group.tasks]) {
       // eslint-disable-next-line no-await-in-loop
       await handleAcceptTask(t.id as number);
+    }
+  }
+
+  async function handleAcceptAll() {
+    // Accept all tasks from all hospitals sequentially
+    for (const group of [...pendingGroups]) {
+      for (const t of [...group.tasks]) {
+        // eslint-disable-next-line no-await-in-loop
+        await handleAcceptTask(t.id as number);
+      }
     }
   }
 
@@ -1834,7 +1941,9 @@ const ImplementationTasksPage: React.FC = () => {
                   <div className="text-blue-600 text-4xl font-extrabold tracking-wider animate-pulse" aria-hidden="true">TAG</div>
                 </div>
               ) : filteredHospitals.length === 0 ? (
-                <div className="px-4 py-6 text-center text-gray-500">Không có bệnh viện nào có task</div>
+                <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center text-gray-600 dark:text-gray-400">
+                  Không có bệnh viện nào có task
+                </div>
               ) : (
                 <>
                   <div className="rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
@@ -1985,7 +2094,9 @@ const ImplementationTasksPage: React.FC = () => {
             </div>
           ) : (
             filtered.length === 0 ? (
-              <div className="px-4 py-6 text-center text-gray-500">Không có dữ liệu</div>
+              <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center text-gray-600 dark:text-gray-400">
+                Không có dữ liệu
+              </div>
             ) : (
               <>
                 {/* Bulk actions toolbar */}
@@ -2160,43 +2271,56 @@ const ImplementationTasksPage: React.FC = () => {
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold">📨 Công việc chờ - Tiếp nhận từ Phòng Kinh Doanh</h3>
               <div className="flex items-center gap-2">
-                <Button variant="ghost" onClick={() => { setPendingOpen(false); }}>
+                <button 
+                  className="h-10 rounded-xl px-4 text-sm font-medium transition shadow-sm bg-transparent border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  onClick={() => { setPendingOpen(false); }}
+                >
                   Đóng
-                </Button>
-                <Button variant="primary" onClick={async () => { await fetchPendingGroups(); }}>
+                </button>
+                <button 
+                  className="h-10 rounded-xl px-4 text-sm font-medium transition shadow-sm border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-900/20"
+                  onClick={async () => { await fetchPendingGroups(); }}
+                >
                   Làm mới
-                </Button>
+                </button>
               </div>
             </div>
-            <div className="p-4 space-y-4">
+            <div className="p-4">
               {loadingPending ? (
                 <div className="text-center py-8">Đang tải...</div>
               ) : pendingGroups.length === 0 ? (
                 <div className="text-center py-8">Không có công việc chờ</div>
               ) : (
-                pendingGroups.map((g) => (
-                  <div key={`${g.hospitalId ?? 'null'}-${g.hospitalName}`} className="border rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="font-semibold">{g.hospitalName} <span className="text-sm text-gray-500">({g.tasks.length})</span></div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" onClick={() => handleAcceptGroup(g.hospitalId)}>Tiếp nhận tất cả</Button>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      {g.tasks.map((t) => (
-                        <div key={t.id} className="p-2 rounded-md border bg-gray-50 dark:bg-gray-800 flex items-center justify-between">
-                          <div>
-                            <div className="font-medium">{t.name}</div>
-                            <div className="text-sm text-gray-600">Người phụ trách: {t.picDeploymentName || '—'}</div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button variant="primary" onClick={() => handleAcceptTask(t.id as number)}>Tiếp nhận</Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                <>
+                  <div className="mb-4 flex justify-end">
+                    <Button 
+                      variant="primary" 
+                      onClick={handleAcceptAll} 
+                      disabled={pendingGroups.reduce((sum, g) => sum + g.tasks.length, 0) === 0}
+                      className="!bg-green-600 !text-white !border-green-600 hover:!bg-green-700 hover:!border-green-700 disabled:!bg-green-300 disabled:!border-green-300 disabled:!text-white"
+                    >
+                      Tiếp nhận tất cả ({pendingGroups.reduce((sum, g) => sum + g.tasks.length, 0)})
+                    </Button>
                   </div>
-                ))
+                  <div className="space-y-3">
+                    {pendingGroups.map((g) => (
+                      <div key={`${g.hospitalId ?? 'null'}-${g.hospitalName}`} className="border rounded-lg p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                        <div className="font-semibold text-base">
+                          {g.hospitalName} <span className="text-sm text-gray-500 font-normal">({g.tasks.length} hợp đồng)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button 
+                            variant="primary" 
+                            onClick={() => handleAcceptGroup(g.hospitalId)}
+                            className="!bg-blue-600 !text-white !border-blue-600 hover:!bg-blue-700 hover:!border-blue-700 disabled:!bg-blue-300 disabled:!border-blue-300 disabled:!text-white"
+                          >
+                            Tiếp nhận
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           </div>
