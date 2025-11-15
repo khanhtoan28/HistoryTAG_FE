@@ -9,6 +9,8 @@ import { getSummaryReport, type SuperAdminSummaryDTO, HardwareAPI, getAllImpleme
 import { getBusinesses } from "../../api/business.api";
 import { getAuthToken } from "../../api/client";
 import toast from "react-hot-toast";
+import Pagination from "../../components/common/Pagination";
+import ExcelJS from 'exceljs';
 
 function StatCard({ title, value, icon, color }: { title: string; value: string | number; icon?: React.ReactNode; color?: string }) {
   let display: React.ReactNode = value;
@@ -39,6 +41,7 @@ export default function SuperAdminHome() {
   const [summary, setSummary] = useState<SuperAdminSummaryDTO | null>(null);
   const [businessFrom, setBusinessFrom] = useState<string>('');
   const [businessTo, setBusinessTo] = useState<string>('');
+  const [businessStatus, setBusinessStatus] = useState<string>(''); // Filter by status
   const [businessLoading, setBusinessLoading] = useState(false);
   const [totalExpected, setTotalExpected] = useState<number | null>(null);
   const [totalActual, setTotalActual] = useState<number | null>(null);
@@ -105,6 +108,8 @@ export default function SuperAdminHome() {
   const [hardwareMap, setHardwareMap] = useState<Record<string, string>>({});
   const [profileQuarter, setProfileQuarter] = useState<'all' | 'Q1' | 'Q2' | 'Q3' | 'Q4'>('all');
   const [profileYear, setProfileYear] = useState<string>('');
+  const [profileDateFrom, setProfileDateFrom] = useState<string>(''); // Date range filter from
+  const [profileDateTo, setProfileDateTo] = useState<string>(''); // Date range filter to
   const [exportChoice, setExportChoice] = useState<'users' | 'impl' | 'dev' | 'maint' | 'businesses' | 'all' | 'all_single'>('users');
   const [viewMode, setViewMode] = useState<'detail' | 'comparison'>('detail');
   const [compareYear, setCompareYear] = useState<string>('');
@@ -113,6 +118,27 @@ export default function SuperAdminHome() {
   const [implStatusFilter, setImplStatusFilter] = useState<string>('all');
   const [devStatusFilter, setDevStatusFilter] = useState<string>('all');
   const [maintStatusFilter, setMaintStatusFilter] = useState<string>('all');
+  // Profile status filter (for "Báo cáo chi tiết theo từng viện")
+  const [profileStatusFilter, setProfileStatusFilter] = useState<string>('all');
+  // Pagination for detail view
+  const [detailCurrentPage, setDetailCurrentPage] = useState<number>(0);
+  const [detailItemsPerPage, setDetailItemsPerPage] = useState<number>(50);
+  const [detailTotalItems, setDetailTotalItems] = useState<number>(0);
+  const [detailTotalPages, setDetailTotalPages] = useState<number>(1);
+  // Collapsible groups (hospital names)
+  const [collapsedHospitals, setCollapsedHospitals] = useState<Set<string>>(new Set());
+  
+  const toggleHospitalCollapse = (hospitalName: string) => {
+    setCollapsedHospitals(prev => {
+      const next = new Set(prev);
+      if (next.has(hospitalName)) {
+        next.delete(hospitalName);
+      } else {
+        next.add(hospitalName);
+      }
+      return next;
+    });
+  };
   useEffect(() => {
     let mounted = true;
     const load = async () => {
@@ -184,13 +210,14 @@ export default function SuperAdminHome() {
   };
 
   // load business report
-  const loadBusinessReport = useCallback(async (from?: string, to?: string) => {
+  const loadBusinessReport = useCallback(async (from?: string, to?: string, status?: string) => {
     setBusinessLoading(true);
     try {
       const toParam = (v?: string | null) => v ? (v.length === 16 ? `${v}:00` : v) : undefined;
       const params: Record<string, unknown> = {};
       if (from) params.startDateFrom = toParam(from);
       if (to) params.startDateTo = toParam(to);
+      if (status && status.trim() !== '') params.status = status.trim();
       // fetch all matching projects (backend paginates; request a large size to try to get all)
       const res = await getBusinesses({ page: 0, size: 10000, ...params });
       const content = Array.isArray(res?.content) ? res.content : (Array.isArray(res) ? res : []);
@@ -516,16 +543,36 @@ export default function SuperAdminHome() {
         .filter((u) => ((u.team ?? '').toString().toUpperCase() === team.toUpperCase()))
         .map((u) => u.id);
 
-      // tasks - filter by team users (PIC belongs to the team)
+      // tasks - use server-side filtering
+      const filterParams: any = {
+        team: team,
+        page: 0,
+        size: 10000, // Load all filtered results (server-side filter reduces data significantly)
+        sortBy: 'startDate',
+        sortDir: 'desc'
+      };
+      // Add date range filter if set (convert to ISO format for backend)
+      if (profileDateFrom) {
+        // Convert date input (YYYY-MM-DD) to ISO datetime (YYYY-MM-DDTHH:mm:ss)
+        filterParams.startDateFrom = `${profileDateFrom}T00:00:00`;
+      }
+      if (profileDateTo) {
+        filterParams.startDateTo = `${profileDateTo}T23:59:59`;
+      }
+      // Add quarter/year filter if date range not set
+      if (!profileDateFrom && !profileDateTo) {
+        if (profileQuarter && profileQuarter !== 'all') filterParams.quarter = profileQuarter;
+        if (profileYear) filterParams.year = profileYear;
+      }
+      // Add status filter if set
+      if (profileStatusFilter && profileStatusFilter !== 'all') {
+        filterParams.status = profileStatusFilter;
+      }
+      
       try {
-        const impl = await getAllImplementationTasks({ page: 0, size: 10000 });
+        const impl = await getAllImplementationTasks(filterParams);
         const implList = Array.isArray(impl) ? (impl as ImplementationTaskResponseDTO[]) : (impl as any)?.content ?? [];
-        // Filter tasks where PIC is in the selected team
-        const filtered = (implList as ImplementationTaskResponseDTO[]).filter((t) => {
-          const picId = (t as any).picDeploymentId ?? (t as any).picId;
-          return picId && teamUserIds.includes(Number(picId));
-        });
-        setProfileImplTasks(filtered);
+        setProfileImplTasks(implList);
       } catch (err) { console.warn('impl load', err); setProfileImplTasks([]); }
       try {
         const dev = await getAllDevTasks({ page: 0, size: 10000 });
@@ -757,8 +804,30 @@ export default function SuperAdminHome() {
   // Group tasks by hospital for visual table view
   // Use startDate for filtering and display
   const tasksByHospital = useMemo(() => {
-    // Helper to check if startDate matches quarter/year filter
-    const matchesStartDateFilter = (startDate?: string | null) => {
+    // Helper to check if startDate matches date range filter
+    const matchesDateRangeFilter = (startDate?: string | null) => {
+      // Priority: Date range > Quarter/Year
+      // If date range is set, use it
+      if (profileDateFrom || profileDateTo) {
+        if (!startDate) return false;
+        const d = new Date(startDate);
+        if (Number.isNaN(d.getTime())) return false;
+        const taskDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        
+        if (profileDateFrom) {
+          const fromDate = new Date(profileDateFrom);
+          fromDate.setHours(0, 0, 0, 0);
+          if (taskDate < fromDate) return false;
+        }
+        if (profileDateTo) {
+          const toDate = new Date(profileDateTo);
+          toDate.setHours(23, 59, 59, 999);
+          if (taskDate > toDate) return false;
+        }
+        return true;
+      }
+      
+      // Fallback to quarter/year filter if date range not set
       // If both quarter and year are "all" or empty, show all tasks
       if (profileQuarter === 'all' && (!profileYear || profileYear === '')) return true;
       
@@ -786,21 +855,42 @@ export default function SuperAdminHome() {
     // Get all tasks (before status filter) and filter by startDate
     const allImplTasks = profileImplTasks.filter(t => {
       const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
-      return matchesStartDateFilter(startDate);
+      return matchesDateRangeFilter(startDate);
     });
     const allDevTasks = profileDevTasks.filter(t => {
       const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
-      return matchesStartDateFilter(startDate);
+      return matchesDateRangeFilter(startDate);
     });
     const allMaintTasks = profileMaintTasks.filter(t => {
       const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
-      return matchesStartDateFilter(startDate);
+      return matchesDateRangeFilter(startDate);
     });
 
-    // Apply status filter
-    const implTasksFiltered = implStatusFilter === 'all' ? allImplTasks : allImplTasks.filter(t => String((t as any).status ?? '').toUpperCase() === implStatusFilter);
-    const devTasksFiltered = devStatusFilter === 'all' ? allDevTasks : allDevTasks.filter(t => String((t as any).status ?? '').toUpperCase() === devStatusFilter);
-    const maintTasksFiltered = maintStatusFilter === 'all' ? allMaintTasks : allMaintTasks.filter(t => String((t as any).status ?? '').toUpperCase() === maintStatusFilter);
+    // Helper to normalize status to canonical statuses
+    const normalizeStatusToCanonical = (status?: string | null): string | null => {
+      if (!status) return null;
+      const s = String(status).trim().toUpperCase();
+      // Map variants to canonical statuses
+      if (s === 'RECEIVED' || s === 'NOT_STARTED' || s === 'PENDING') return 'RECEIVED';
+      if (s === 'IN_PROCESS' || s === 'IN_PROGRESS' || s === 'API_TESTING' || s === 'INTEGRATING' || s === 'WAITING_FOR_DEV' || s === 'WAITING_FOR_DEPLOY') return 'IN_PROCESS';
+      if (s === 'COMPLETED' || s === 'DONE' || s === 'FINISHED' || s === 'ACCEPTED' || s === 'TRANSFERRED' || s === 'PENDING_TRANSFER' || s === 'TRANSFERRED_TO_CUSTOMER') return 'COMPLETED';
+      if (s === 'ISSUE' || s === 'FAILED' || s === 'ERROR') return 'ISSUE';
+      // Return as-is if already canonical
+      if (s === 'RECEIVED' || s === 'IN_PROCESS' || s === 'COMPLETED' || s === 'ISSUE') return s;
+      return s; // Return original for unmatched statuses
+    };
+    
+    // Apply status filter (use profileStatusFilter if set, otherwise use individual filters)
+    const statusFilter = profileStatusFilter !== 'all' ? profileStatusFilter : null;
+    const implTasksFiltered = statusFilter 
+      ? allImplTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
+      : (implStatusFilter === 'all' ? allImplTasks : allImplTasks.filter(t => String((t as any).status ?? '').toUpperCase() === implStatusFilter));
+    const devTasksFiltered = statusFilter
+      ? allDevTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
+      : (devStatusFilter === 'all' ? allDevTasks : allDevTasks.filter(t => String((t as any).status ?? '').toUpperCase() === devStatusFilter));
+    const maintTasksFiltered = statusFilter
+      ? allMaintTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
+      : (maintStatusFilter === 'all' ? allMaintTasks : allMaintTasks.filter(t => String((t as any).status ?? '').toUpperCase() === maintStatusFilter));
 
     const allTasks = [
       ...implTasksFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
@@ -817,7 +907,7 @@ export default function SuperAdminHome() {
       grouped.get(hospitalName)!.push(task);
     });
 
-    return Array.from(grouped.entries()).map(([hospitalName, tasks]) => ({
+    const sortedGroups = Array.from(grouped.entries()).map(([hospitalName, tasks]) => ({
       hospitalName,
       tasks: tasks.sort((a, b) => {
         const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
@@ -825,7 +915,39 @@ export default function SuperAdminHome() {
         return dateB - dateA;
       })
     }));
-  }, [profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, implStatusFilter, devStatusFilter, maintStatusFilter]);
+    
+    // Calculate total items for pagination
+    const totalItems = sortedGroups.reduce((sum, group) => sum + group.tasks.length, 0);
+    setDetailTotalItems(totalItems);
+    setDetailTotalPages(Math.ceil(totalItems / detailItemsPerPage));
+    
+    // Apply pagination - show only current page items
+    let currentItemIndex = 0;
+    const startIndex = detailCurrentPage * detailItemsPerPage;
+    const endIndex = startIndex + detailItemsPerPage;
+    
+    const paginatedGroups: typeof sortedGroups = [];
+    for (const group of sortedGroups) {
+      if (currentItemIndex >= endIndex) break;
+      
+      const groupStartIndex = currentItemIndex;
+      const groupEndIndex = currentItemIndex + group.tasks.length;
+      
+      // If group is partially visible
+      if (groupStartIndex < endIndex && groupEndIndex > startIndex) {
+        const visibleStart = Math.max(0, startIndex - groupStartIndex);
+        const visibleEnd = Math.min(group.tasks.length, endIndex - groupStartIndex);
+        paginatedGroups.push({
+          hospitalName: group.hospitalName,
+          tasks: group.tasks.slice(visibleStart, visibleEnd)
+        });
+      }
+      
+      currentItemIndex = groupEndIndex;
+    }
+    
+    return paginatedGroups;
+  }, [profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, profileDateFrom, profileDateTo, implStatusFilter, devStatusFilter, maintStatusFilter, profileStatusFilter, detailCurrentPage, detailItemsPerPage]);
 
   // Aggregations for implementation and maintenance (kept minimal per current UI needs)
 
@@ -935,6 +1057,231 @@ export default function SuperAdminHome() {
     } catch (err) {
       console.error('exportAllSingleCsv failed', err);
       toast.error('Xuất file thất bại');
+    }
+  };
+
+  // Export detail report to Excel with grouping by hospital (similar to web UI)
+  const exportDetailExcel = async () => {
+    try {
+      if (!hasLoadedProfile || tasksByHospital.length === 0) {
+        toast.error('Vui lòng tải hồ sơ trước');
+        return;
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Báo cáo chi tiết');
+
+      // Set column headers
+      const headers = ['Tên bệnh viện', 'Nội dung công việc', 'Ngày bắt đầu', 'Người phụ trách', 'Trạng thái', 'Ngày hoàn thành', 'Số ngày thực hiện'];
+      const headerRow = worksheet.addRow(headers);
+      
+      // Style header row
+      headerRow.font = { bold: true, size: 11 };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      headerRow.height = 25;
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE5E7EB' } // Light gray background
+      };
+      headerRow.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+
+      // Set column widths
+      worksheet.getColumn(1).width = 25; // Tên bệnh viện
+      worksheet.getColumn(2).width = 40; // Nội dung công việc
+      worksheet.getColumn(3).width = 15; // Ngày bắt đầu
+      worksheet.getColumn(4).width = 20; // Người phụ trách
+      worksheet.getColumn(5).width = 18; // Trạng thái
+      worksheet.getColumn(6).width = 18; // Ngày hoàn thành
+      worksheet.getColumn(7).width = 18; // Số ngày thực hiện
+
+      // Add data rows with grouping
+      let currentRow = 2; // Start after header row
+      
+      // Get all groups (not paginated) - reuse logic from tasksByHospital
+      const allGroups = (() => {
+        // Same logic as tasksByHospital but without pagination
+        const matchesDateRangeFilter = (startDate?: string | null) => {
+          if (profileDateFrom || profileDateTo) {
+            if (!startDate) return false;
+            const d = new Date(startDate);
+            if (Number.isNaN(d.getTime())) return false;
+            const taskDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+            
+            if (profileDateFrom) {
+              const fromDate = new Date(profileDateFrom);
+              fromDate.setHours(0, 0, 0, 0);
+              if (taskDate < fromDate) return false;
+            }
+            if (profileDateTo) {
+              const toDate = new Date(profileDateTo);
+              toDate.setHours(23, 59, 59, 999);
+              if (taskDate > toDate) return false;
+            }
+            return true;
+          }
+          if (profileQuarter === 'all' && (!profileYear || profileYear === '')) return true;
+          if (!startDate) {
+            return profileQuarter === 'all' && (!profileYear || profileYear === '');
+          }
+          const d = new Date(startDate);
+          if (Number.isNaN(d.getTime())) {
+            return profileQuarter === 'all' && (!profileYear || profileYear === '');
+          }
+          if (profileYear && profileYear !== '' && String(d.getFullYear()) !== profileYear) return false;
+          if (profileQuarter === 'all') return true;
+          const month = d.getMonth();
+          const q = Math.floor(month / 3) + 1;
+          return `Q${q}` === profileQuarter;
+        };
+
+        const allImplTasks = profileImplTasks.filter(t => {
+          const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
+          return matchesDateRangeFilter(startDate);
+        });
+        const allDevTasks = profileDevTasks.filter(t => {
+          const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
+          return matchesDateRangeFilter(startDate);
+        });
+        const allMaintTasks = profileMaintTasks.filter(t => {
+          const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
+          return matchesDateRangeFilter(startDate);
+        });
+
+        const normalizeStatusToCanonical = (status?: string | null): string | null => {
+          if (!status) return null;
+          const s = String(status).trim().toUpperCase();
+          if (s === 'RECEIVED' || s === 'NOT_STARTED' || s === 'PENDING') return 'RECEIVED';
+          if (s === 'IN_PROCESS' || s === 'IN_PROGRESS' || s === 'API_TESTING' || s === 'INTEGRATING' || s === 'WAITING_FOR_DEV' || s === 'WAITING_FOR_DEPLOY') return 'IN_PROCESS';
+          if (s === 'COMPLETED' || s === 'DONE' || s === 'FINISHED' || s === 'ACCEPTED' || s === 'TRANSFERRED' || s === 'PENDING_TRANSFER' || s === 'TRANSFERRED_TO_CUSTOMER') return 'COMPLETED';
+          if (s === 'ISSUE' || s === 'FAILED' || s === 'ERROR') return 'ISSUE';
+          if (s === 'RECEIVED' || s === 'IN_PROCESS' || s === 'COMPLETED' || s === 'ISSUE') return s;
+          return s;
+        };
+
+        const statusFilter = profileStatusFilter !== 'all' ? profileStatusFilter : null;
+        const implTasksFiltered = statusFilter 
+          ? allImplTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
+          : allImplTasks;
+        const devTasksFiltered = statusFilter
+          ? allDevTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
+          : allDevTasks;
+        const maintTasksFiltered = statusFilter
+          ? allMaintTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
+          : allMaintTasks;
+
+        const allTasks = [
+          ...implTasksFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
+          ...devTasksFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
+          ...maintTasksFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
+        ];
+
+        const grouped = new Map<string, Array<typeof allTasks[0]>>();
+        allTasks.forEach(task => {
+          const hospitalName = task.hospitalName || 'Không xác định';
+          if (!grouped.has(hospitalName)) {
+            grouped.set(hospitalName, []);
+          }
+          grouped.get(hospitalName)!.push(task);
+        });
+
+        return Array.from(grouped.entries()).map(([hospitalName, tasks]) => ({
+          hospitalName,
+          tasks: tasks.sort((a, b) => {
+            const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
+            const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
+            return dateB - dateA;
+          })
+        }));
+      })();
+
+      // Add hospital groups - hospital name on its own row, then tasks below
+      for (const group of allGroups) {
+        // Add hospital name row (bold header)
+        const hospitalRow = worksheet.addRow([
+          group.hospitalName, // Hospital name in first column
+          '', // Empty for other columns
+          '',
+          '',
+          '',
+          '',
+          ''
+        ]);
+        
+        hospitalRow.font = { bold: true, size: 11 };
+        hospitalRow.alignment = { vertical: 'middle', horizontal: 'left' };
+        hospitalRow.height = 22;
+        hospitalRow.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+        currentRow++;
+
+        // Add task rows below hospital name
+        for (const task of group.tasks) {
+          const taskRow = worksheet.addRow([
+            '', // Empty for hospital name column (hospital name is on row above)
+            `${task.name || '—'}\n${task.type}`, // Task name with type
+            task.startDate ? new Date(task.startDate).toLocaleDateString('vi-VN') : '—',
+            task.picName ?? '—',
+            translateStatus(String(task.status)),
+            task.completionDate ? new Date(task.completionDate).toLocaleDateString('vi-VN') : '—',
+            (() => {
+              const startDate = task.startDate;
+              if (!startDate) return '—';
+              const start = new Date(startDate);
+              const endDate = task.completionDate ? new Date(task.completionDate) : new Date();
+              if (Number.isNaN(start.getTime()) || Number.isNaN(endDate.getTime())) return '—';
+              const startDateOnly = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+              const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+              const diffTime = endDateOnly.getTime() - startDateOnly.getTime();
+              const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+              return diffDays >= 0 ? `${diffDays} ngày` : '—';
+            })()
+          ]);
+
+          taskRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+          taskRow.height = 30;
+          taskRow.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+          
+          // Left align task name
+          taskRow.getCell(2).alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+          
+          currentRow++;
+        }
+      }
+
+      // Freeze header row
+      worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+      // Generate buffer and download
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = makeFilename('bao_cao_chi_tiet').replace('.csv', '.xlsx');
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      
+      toast.success('Xuất file Excel thành công');
+    } catch (err) {
+      console.error('exportDetailExcel failed', err);
+      toast.error('Xuất file Excel thất bại');
     }
   };
 
@@ -1087,6 +1434,15 @@ export default function SuperAdminHome() {
                   <input value={businessTo} onChange={(e) => setBusinessTo(e.target.value)} type="datetime-local" className="mt-1 w-64 rounded-md border px-3 py-2 text-sm bg-white" />
                 </div>
                 <div className="flex flex-col">
+                  <label className="block text-xs text-gray-500">Trạng thái</label>
+                  <select value={businessStatus} onChange={(e) => setBusinessStatus(e.target.value)} className="mt-1 rounded-md border px-3 py-2 text-sm bg-white w-40">
+                    <option value="">Tất cả</option>
+                    <option value="CARING">Đang chăm sóc</option>
+                    <option value="CONTRACTED">Đã ký hợp đồng</option>
+                    <option value="CANCELLED">Đã hủy</option>
+                  </select>
+                </div>
+                <div className="flex flex-col">
                   <label className="block text-xs text-gray-500">Gộp theo</label>
                   <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as 'day' | 'month' | 'year')} className="mt-1 rounded-md border px-3 py-2 text-sm bg-white w-40">
                     <option value="day">Theo ngày</option>
@@ -1097,8 +1453,8 @@ export default function SuperAdminHome() {
               </div>
 
               <div className="mt-2 sm:mt-0 flex items-center gap-2">
-                <button onClick={() => void loadBusinessReport(businessFrom, businessTo)} disabled={businessLoading} className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-700">Áp dụng</button>
-                <button onClick={() => { setBusinessFrom(''); setBusinessTo(''); void loadBusinessReport(); }} disabled={businessLoading} className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200">Xóa</button>
+                <button onClick={() => void loadBusinessReport(businessFrom, businessTo, businessStatus)} disabled={businessLoading} className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-700">Áp dụng</button>
+                <button onClick={() => { setBusinessFrom(''); setBusinessTo(''); setBusinessStatus(''); void loadBusinessReport(); }} disabled={businessLoading} className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200">Xóa</button>
               </div>
             </div>
 
@@ -1262,19 +1618,13 @@ export default function SuperAdminHome() {
           <div className="max-w-full">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Báo cáo chi tiết theo từng viện</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Báo cáo chi tiết theo Team</h2>
               </div>
               <div className="flex items-center gap-2">
-                <select value={exportChoice} onChange={(e) => setExportChoice(e.target.value as any)} className="rounded-md border px-3 py-1 text-sm bg-white">
-                  <option value="users">Người dùng</option>
-                  <option value="impl">Triển khai</option>
-                  <option value="dev">Phát triển</option>
-                  <option value="maint">Bảo trì</option>
-                  <option value="businesses">Hợp đồng</option>
-                  <option value="all">Xuất tất cả (nhiều file)</option>
-                  <option value="all_single">Xuất tất cả vào 1 file</option>
-                </select>
-                <button onClick={() => { if (exportChoice === 'users') exportUsersCsv(); else if (exportChoice === 'impl') exportImplCsv(); else if (exportChoice === 'dev') exportDevCsv(); else if (exportChoice === 'maint') exportMaintCsv(); else if (exportChoice === 'businesses') exportBusinessesCsv(); else if (exportChoice === 'all') exportAllCsv(); else if (exportChoice === 'all_single') exportAllSingleCsv(); }} className="rounded-md bg-indigo-600 px-3 py-1 text-sm text-white hover:bg-indigo-700">Xuất</button>
+                
+                {viewMode === 'detail' && hasLoadedProfile && (
+                  <button onClick={() => void exportDetailExcel()} disabled={profileLoading} className="rounded-md bg-green-600 px-3 py-1 text-sm text-white hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed ml-2">Xuất Excel</button>
+                )}
               </div>
             </div>
 
@@ -1323,9 +1673,9 @@ export default function SuperAdminHome() {
                   >
                     Tải hồ sơ
                   </button>
-                  <div className="flex items-center gap-2 ml-2">
+                  <div className="flex items-center gap-2 ml-2 flex-wrap">
                     <label className="text-sm text-gray-500">Quý</label>
-                    <select value={profileQuarter} onChange={(e) => setProfileQuarter(e.target.value as any)} className="rounded-md border px-2 py-1 text-sm bg-white">
+                    <select value={profileQuarter} onChange={(e) => { setProfileQuarter(e.target.value as any); setDetailCurrentPage(0); }} className="rounded-md border px-2 py-1 text-sm bg-white">
                       <option value="all">Tất cả</option>
                       <option value="Q1">Q1</option>
                       <option value="Q2">Q2</option>
@@ -1333,12 +1683,46 @@ export default function SuperAdminHome() {
                       <option value="Q4">Q4</option>
                     </select>
                     <label className="text-sm text-gray-500">Năm</label>
-                    <select value={profileYear} onChange={(e) => setProfileYear(e.target.value)} className="rounded-md border px-2 py-1 text-sm bg-white w-28">
+                    <select value={profileYear} onChange={(e) => { setProfileYear(e.target.value); setDetailCurrentPage(0); }} className="rounded-md border px-2 py-1 text-sm bg-white w-28">
                       <option value="">Tất cả</option>
                       {Array.from({ length: new Date().getFullYear() - 2019 }).map((_, i) => {
                         const y = String(2020 + i);
                         return <option key={y} value={y}>{y}</option>;
                       })}
+                    </select>
+                    <label className="text-sm text-gray-500 ml-2">Từ ngày</label>
+                    <input 
+                      type="date" 
+                      value={profileDateFrom} 
+                      onChange={(e) => { setProfileDateFrom(e.target.value); setDetailCurrentPage(0); }} 
+                      className="rounded-md border px-2 py-1 text-sm bg-white"
+                    />
+                    <label className="text-sm text-gray-500">Đến ngày</label>
+                    <input 
+                      type="date" 
+                      value={profileDateTo} 
+                      onChange={(e) => { setProfileDateTo(e.target.value); setDetailCurrentPage(0); }} 
+                      className="rounded-md border px-2 py-1 text-sm bg-white"
+                    />
+                    {(profileDateFrom || profileDateTo) && (
+                      <button 
+                        onClick={() => { setProfileDateFrom(''); setProfileDateTo(''); setDetailCurrentPage(0); }} 
+                        className="text-xs text-gray-500 hover:text-gray-700 underline"
+                      >
+                        Xóa lọc ngày
+                      </button>
+                    )}
+                    <label className="text-sm text-gray-500 ml-2">Trạng thái</label>
+                    <select 
+                      value={profileStatusFilter} 
+                      onChange={(e) => { setProfileStatusFilter(e.target.value); setDetailCurrentPage(0); }} 
+                      className="rounded-md border px-2 py-1 text-sm bg-white"
+                    >
+                      <option value="all">Tất cả</option>
+                      <option value="RECEIVED">Đã tiếp nhận</option>
+                      <option value="IN_PROCESS">Đang xử lý</option>
+                      <option value="COMPLETED">Hoàn thành</option>
+                      <option value="ISSUE">Gặp sự cố</option>
                     </select>
                   </div>
                 </div>
@@ -1463,84 +1847,133 @@ export default function SuperAdminHome() {
             {viewMode === 'detail' && (
               <>
                 {/* Visual Table View - Grouped by Hospital */}
-                {tasksByHospital.length > 0 && (
+                {profileLoading ? (
+                  <div className="mb-6 mt-4 rounded-2xl bg-white p-8 shadow-sm border border-gray-100 flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                      <div className="text-sm text-gray-500">Đang tải dữ liệu...</div>
+                    </div>
+                  </div>
+                ) : tasksByHospital.length > 0 ? (
                   <div className="mb-6 mt-4 rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
-                    <h3 className="text-sm font-medium text-gray-700 mb-4">Tổng quan công việc theo bệnh viện</h3>
-                    <div className="overflow-x-auto">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-medium text-gray-700">Tổng quan công việc theo bệnh viện</h3>
+                      <div className="text-xs text-gray-500">
+                        Tổng: {detailTotalItems} công việc
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto relative" style={{ maxHeight: '600px', overflowY: 'auto' }}>
                       <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="text-xs text-gray-600 bg-gray-50 border-b">
-                            <th className="px-4 py-3 text-left">Tên bệnh viện</th>
-                            <th className="px-4 py-3 text-left">Nội dung công việc</th>
-                            <th className="px-4 py-3 text-center">Ngày bắt đầu</th>
-                            <th className="px-4 py-3 text-center">Người phụ trách</th>
-                            <th className="px-4 py-3 text-center">Trạng thái</th>
-                            <th className="px-4 py-3 text-center">Ngày hoàn thành</th>
-                            <th className="px-4 py-3 text-center">Số ngày thực hiện</th>
+                        <thead className="bg-gray-50 border-b sticky top-0 z-10">
+                          <tr className="text-xs text-gray-600">
+                            <th className="px-4 py-3 text-left bg-gray-50">Tên bệnh viện</th>
+                            <th className="px-4 py-3 text-left bg-gray-50">Nội dung công việc</th>
+                            <th className="px-4 py-3 text-center bg-gray-50">Ngày bắt đầu</th>
+                            <th className="px-4 py-3 text-center bg-gray-50">Người phụ trách</th>
+                            <th className="px-4 py-3 text-center bg-gray-50">Trạng thái</th>
+                            <th className="px-4 py-3 text-center bg-gray-50">Ngày hoàn thành</th>
+                            <th className="px-4 py-3 text-center bg-gray-50">Số ngày thực hiện</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {tasksByHospital.map((group) => (
-                            <React.Fragment key={group.hospitalName}>
-                              {group.tasks.map((task, taskIdx) => (
-                                <tr key={`${group.hospitalName}-${taskIdx}`} className={`border-b ${taskIdx === 0 ? 'bg-blue-50' : ''} hover:bg-gray-50`}>
-                                  {taskIdx === 0 && (
-                                    <td rowSpan={group.tasks.length} className="px-4 py-3 align-top font-semibold text-gray-900 border-r relative">
-                                      <div>{group.hospitalName}</div>
-                                      <div className="absolute bottom-2 right-2 text-xs font-normal text-gray-500">
-                                        Tổng: {group.tasks.length} task
+                          {tasksByHospital.map((group) => {
+                            const isCollapsed = collapsedHospitals.has(group.hospitalName);
+                            // For paginated view, use current group's tasks length (which is already filtered)
+                            const totalTasksForHospital = group.tasks.length;
+                            
+                            return (
+                              <React.Fragment key={group.hospitalName}>
+                                <tr className={`border-b ${'bg-blue-50'} hover:bg-gray-50 cursor-pointer`} onClick={() => toggleHospitalCollapse(group.hospitalName)}>
+                                  <td colSpan={7} className="px-4 py-3 font-semibold text-gray-900">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm">{isCollapsed ? '▶' : '▼'}</span>
+                                        <span>{group.hospitalName}</span>
                                       </div>
-                                    </td>
-                                  )}
-                                  <td className="px-4 py-0">
-                                    <div className="font-medium">{task.name || '—'}</div>
-                                    <div className="text-xs text-gray-500 mt-1">{task.type}</div>
-                                  </td>
-                                  <td className="px-4 py-0 text-center">
-                                    {(task as any).startDate ? new Date((task as any).startDate).toLocaleDateString('vi-VN') : '—'}
-                                  </td>
-                                  <td className="px-4 py-0 text-center">
-                                    {(task as any).picName ?? '—'}
-                                  </td>
-                                  <td className="px-4 py-0 text-center">
-                                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                                      String(task.status).toUpperCase() === 'COMPLETED'
-                                        ? 'bg-green-100 text-green-800'
-                                        : String(task.status).toUpperCase() === 'IN_PROCESS'
-                                        ? 'bg-yellow-100 text-yellow-800'
-                                        : 'bg-gray-100 text-gray-800'
-                                    }`}>
-                                      {translateStatus(String(task.status))}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-0 text-center">
-                                    {task.completionDate ? new Date(task.completionDate).toLocaleDateString('vi-VN') : '—'}
-                                  </td>
-                                  <td className="px-4 py-0 text-center">
-                                    {(() => {
-                                      const startDate = (task as any).startDate;
-                                      if (!startDate) return '—';
-                                      const start = new Date(startDate);
-                                      const endDate = task.completionDate ? new Date(task.completionDate) : new Date();
-                                      if (Number.isNaN(start.getTime()) || Number.isNaN(endDate.getTime())) return '—';
-                                      
-                                      // Reset time to 00:00:00 to calculate days based on date only, not time
-                                      const startDateOnly = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-                                      const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-                                      
-                                      const diffTime = endDateOnly.getTime() - startDateOnly.getTime();
-                                      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                                      return diffDays >= 0 ? `${diffDays} ngày` : '—';
-                                    })()}
+                                      <span className="text-xs font-normal text-gray-500">
+                                        Tổng: {totalTasksForHospital} task{isCollapsed ? ` (đã thu gọn)` : ''}
+                                      </span>
+                                    </div>
                                   </td>
                                 </tr>
-                              ))}
-                            </React.Fragment>
-                          ))}
+                                {!isCollapsed && group.tasks.map((task, taskIdx) => (
+                                  <tr key={`${group.hospitalName}-${taskIdx}`} className="border-b hover:bg-gray-50">
+                                    <td className="px-4 py-2"></td>
+                                    <td className="px-4 py-2">
+                                      <div className="font-medium">{task.name || '—'}</div>
+                                      <div className="text-xs text-gray-500 mt-1">{task.type}</div>
+                                    </td>
+                                    <td className="px-4 py-2 text-center">
+                                      {(task as any).startDate ? new Date((task as any).startDate).toLocaleDateString('vi-VN') : '—'}
+                                    </td>
+                                    <td className="px-4 py-2 text-center">
+                                      {(task as any).picName ?? '—'}
+                                    </td>
+                                    <td className="px-4 py-2 text-center">
+                                      <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                                        String(task.status).toUpperCase() === 'COMPLETED'
+                                          ? 'bg-green-100 text-green-800'
+                                          : String(task.status).toUpperCase() === 'IN_PROCESS'
+                                          ? 'bg-yellow-100 text-yellow-800'
+                                          : 'bg-gray-100 text-gray-800'
+                                      }`}>
+                                        {translateStatus(String(task.status))}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2 text-center">
+                                      {task.completionDate ? new Date(task.completionDate).toLocaleDateString('vi-VN') : '—'}
+                                    </td>
+                                    <td className="px-4 py-2 text-center">
+                                      {(() => {
+                                        const startDate = (task as any).startDate;
+                                        if (!startDate) return '—';
+                                        const start = new Date(startDate);
+                                        const endDate = task.completionDate ? new Date(task.completionDate) : new Date();
+                                        if (Number.isNaN(start.getTime()) || Number.isNaN(endDate.getTime())) return '—';
+                                        
+                                        // Reset time to 00:00:00 to calculate days based on date only, not time
+                                        const startDateOnly = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+                                        const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+                                        
+                                        const diffTime = endDateOnly.getTime() - startDateOnly.getTime();
+                                        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                                        return diffDays >= 0 ? `${diffDays} ngày` : '—';
+                                      })()}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </React.Fragment>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
+                    {detailTotalItems > 0 && (
+                      <Pagination
+                        currentPage={detailCurrentPage}
+                        totalPages={detailTotalPages}
+                        totalItems={detailTotalItems}
+                        itemsPerPage={detailItemsPerPage}
+                        onPageChange={(page) => {
+                          setDetailCurrentPage(page);
+                          // Scroll to top of table when page changes
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        onItemsPerPageChange={(size) => {
+                          setDetailItemsPerPage(size);
+                          setDetailCurrentPage(0);
+                        }}
+                        itemsPerPageOptions={[20, 50, 100, 200]}
+                        showItemsPerPage={true}
+                      />
+                    )}
                   </div>
+                ) : (
+                  !profileLoading && (
+                    <div className="mb-6 mt-4 rounded-2xl bg-white p-8 shadow-sm border border-gray-100 text-center">
+                      <div className="text-sm text-gray-500">Không có dữ liệu để hiển thị</div>
+                    </div>
+                  )
                 )}
 
             {hasLoadedProfile && (

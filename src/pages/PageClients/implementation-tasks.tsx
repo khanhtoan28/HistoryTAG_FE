@@ -2124,7 +2124,7 @@ const ImplementationTasksPage: React.FC = () => {
                           </>
                         ) : (
                           <>
-                            <span>✓</span>
+                            
                             <span>Hoàn thành đã chọn</span>
                           </>
                         )}

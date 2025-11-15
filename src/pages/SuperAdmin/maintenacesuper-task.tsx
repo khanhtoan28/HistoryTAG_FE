@@ -1449,7 +1449,7 @@ function DetailModal({
                       </div>
                     </div>
                     <button
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-green-500 disabled:opacity-60"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-60"
                       disabled={acceptingKey === group.key}
                       onClick={async () => {
                         setAcceptingKey(group.key);
