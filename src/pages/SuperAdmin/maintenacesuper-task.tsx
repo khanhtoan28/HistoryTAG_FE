@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
-import { FiActivity, FiInfo, FiLink, FiUser, FiClock } from "react-icons/fi";
+import { FiActivity, FiInfo, FiLink, FiUser, FiClock, FiCheckCircle, FiXCircle } from "react-icons/fi";
 import { FaHospital } from "react-icons/fa";
-import toast from "react-hot-toast";
+import { AiOutlineEye } from "react-icons/ai";
+import toast, { ToastOptions } from "react-hot-toast";
 import TaskCard from "./TaskCardNew";
 import TaskFormModal from "./TaskFormModal";
 
@@ -105,6 +106,54 @@ function statusLabel(status?: string | null) {
   return map[normalized] || status;
 }
 
+type ToastVariant = "success" | "error";
+
+const showStyledToast = (
+  type: ToastVariant,
+  message: string,
+  options?: ToastOptions
+) => {
+  const { duration, position, id, ariaProps } = options ?? {};
+  toast.custom(
+    () => (
+      <div className="pointer-events-auto">
+        <div
+          className={`flex min-w-[220px] items-center gap-3 rounded-2xl border px-4 py-3 shadow-lg bg-white ${
+            type === "success" ? "border-green-200" : "border-red-200"
+          }`}
+        >
+          <span
+            className={`flex h-9 w-9 items-center justify-center rounded-full ${
+              type === "success"
+                ? "bg-green-100 text-green-600"
+                : "bg-red-100 text-red-600"
+            }`}
+          >
+            {type === "success" ? (
+              <FiCheckCircle size={20} />
+            ) : (
+              <FiXCircle size={20} />
+            )}
+          </span>
+          <span className="text-sm font-medium text-gray-900">{message}</span>
+        </div>
+      </div>
+    ),
+    {
+      duration: duration ?? (type === "success" ? 3000 : 4000),
+      position: position ?? "top-right",
+      id,
+      ariaProps,
+    }
+  );
+};
+
+const toastSuccess = (message: string, options?: ToastOptions) =>
+  showStyledToast("success", message, options);
+
+const toastError = (message: string, options?: ToastOptions) =>
+  showStyledToast("error", message, options);
+
 const MaintenanceSuperTaskPage: React.FC = () => {
   const roles = JSON.parse(localStorage.getItem("roles") || "[]");
   const isSuper = roles.some((r: unknown) => {
@@ -133,10 +182,6 @@ const MaintenanceSuperTaskPage: React.FC = () => {
   void setHospitalQuery;
   void hospitalOptions;
   void setHospitalOptions;
-  // const [hospitalQuery, setHospitalQuery] = useState<string>("");
-  // const [hospitalOptions, setHospitalOptions] = useState<
-  //   Array<{ id: number; label: string }>
-  // >([]);
   const [selectedHospital, setSelectedHospital] = useState<string | null>(null);
   const searchDebounce = useRef<number | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
@@ -157,15 +202,47 @@ const MaintenanceSuperTaskPage: React.FC = () => {
   const [loadingPending, setLoadingPending] = useState(false);
   // hospital list view state (like implementation-tasks page)
   const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
-  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; fromDeployment?: boolean; acceptedByMaintenance?: boolean }>>([]);
+  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; fromDeployment?: boolean; acceptedByMaintenance?: boolean; picDeploymentIds?: Array<string | number>; picDeploymentNames?: string[] }>>([]);
   const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
   const [hospitalPage, setHospitalPage] = useState<number>(0);
   const [hospitalSize, setHospitalSize] = useState<number>(20);
   const [acceptedCount, setAcceptedCount] = useState<number | null>(null);
   const [hospitalSearch, setHospitalSearch] = useState<string>("");
   const [hospitalStatusFilter, setHospitalStatusFilter] = useState<string>("");
-  const [hospitalSortBy, setHospitalSortBy] = useState<string>("label");
-  const [hospitalSortDir, setHospitalSortDir] = useState<string>("asc");
+  const [hospitalPicFilter, setHospitalPicFilter] = useState<string[]>([]);
+  const [picFilterOpen, setPicFilterOpen] = useState<boolean>(false);
+  const [picFilterQuery, setPicFilterQuery] = useState<string>("");
+  const [picOptions, setPicOptions] = useState<Array<{ id: string; label: string }>>([]);
+  const picFilterDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        picFilterDropdownRef.current &&
+        !picFilterDropdownRef.current.contains(event.target as Node)
+      ) {
+        setPicFilterOpen(false);
+      }
+    }
+    if (picFilterOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    } else {
+      document.removeEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [picFilterOpen]);
+
+  useEffect(() => {
+    if (!picFilterOpen) {
+      setPicFilterQuery("");
+    }
+  }, [picFilterOpen]);
+
+  const filteredPicOptions = useMemo(() => {
+    const q = picFilterQuery.trim().toLowerCase();
+    if (!q) return picOptions;
+    return picOptions.filter((opt) => opt.label.toLowerCase().includes(q));
+  }, [picOptions, picFilterQuery]);
 
   async function fetchList(overrides?: { page?: number; size?: number; sortBy?: string; sortDir?: string }) {
     const start = Date.now();
@@ -265,7 +342,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     });
     if (!res.ok) {
       const msg = await res.text();
-      toast.error(`Xóa thất bại: ${msg || res.status}`);
+      toastError(`Xóa thất bại: ${msg || res.status}`);
       return;
     }
     if (showHospitalList) {
@@ -276,7 +353,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
         await fetchAcceptedCountForHospital(selectedHospital);
       }
     }
-    toast.success("Đã xóa");
+    toastSuccess("Đã xóa");
   };
 
   // --- pending tasks (chờ) for maintenance: fetch & accept ---
@@ -291,7 +368,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
       });
       if (!res.ok) {
         const msg = await res.text();
-        toast.error(`Tải danh sách bệnh viện chờ thất bại: ${msg || res.status}`);
+        toastError(`Tải danh sách bệnh viện chờ thất bại: ${msg || res.status}`);
         return;
       }
       const hospitals: PendingHospital[] = await res.json();
@@ -310,7 +387,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
       ));
     } catch (err: unknown) {
       console.error(err);
-      toast.error("Lỗi khi tải danh sách bệnh viện chờ");
+      toastError("Lỗi khi tải danh sách bệnh viện chờ");
     } finally {
       setLoadingPending(false);
     }
@@ -318,7 +395,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
 
   const handleAcceptPendingGroup = async (group: PendingTransferGroup) => {
     if (!group || !group.hospitalId) {
-      toast.error("Không có bệnh viện nào để tiếp nhận.");
+      toastError("Không có bệnh viện nào để tiếp nhận.");
       return;
     }
 
@@ -338,25 +415,25 @@ const MaintenanceSuperTaskPage: React.FC = () => {
       });
       if (!res.ok) {
         const msg = await res.text();
-        toast.error(`Tiếp nhận thất bại: ${msg || res.status}`);
+        toastError(`Tiếp nhận thất bại: ${msg || res.status}`);
         return;
       }
 
-      toast.success(`Đã tiếp nhận bệnh viện ${group.hospitalName}`);
+      toastSuccess(`Đã tiếp nhận bệnh viện ${group.hospitalName}`);
       setPendingTasks((prev) => prev.filter((item) => item.key !== group.key));
       // ✅ Refresh danh sách bệnh viện để hiển thị ngay bệnh viện vừa tiếp nhận
       await fetchHospitalsWithTasks();
       await fetchList();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      toast.error(msg || "Lỗi khi tiếp nhận");
+      toastError(msg || "Lỗi khi tiếp nhận");
       await fetchPendingTasks();
     }
   };
 
   const handleAcceptAll = async () => {
     if (pendingTasks.length === 0) {
-      toast.error("Không có bệnh viện nào để tiếp nhận.");
+      toastError("Không có bệnh viện nào để tiếp nhận.");
       return;
     }
 
@@ -454,22 +531,35 @@ const MaintenanceSuperTaskPage: React.FC = () => {
       // Use both hospitalId (number) and hospitalName (string) as keys
       // Note: acceptedCount will be fetched separately for accuracy
       // Note: nearDueCount and overdueCount will be calculated separately in augment function
-      const tasksByHospitalId = new Map<number, { taskCount: number; hospitalName?: string }>();
-      const tasksByHospitalName = new Map<string, { taskCount: number; hospitalId?: number }>();
+      const tasksByHospitalId = new Map<number, { taskCount: number; hospitalName?: string; picIds: Set<string>; picNames: Set<string> }>();
+      const tasksByHospitalName = new Map<string, { taskCount: number; hospitalId?: number; picIds: Set<string>; picNames: Set<string> }>();
+      const picOptionMap = new Map<string, { id: string; label: string }>();
       
       // First pass: count total tasks per hospital
       for (const it of items) {
         const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
         const hospitalName = (it.hospitalName || "").toString().trim();
+        const picIdValue = it.picDeploymentId != null ? String(it.picDeploymentId) : null;
+        const picLabel = (it.picDeploymentName || "").toString().trim();
+        if (picLabel) {
+          const optionKey = picIdValue ?? picLabel;
+          if (!picOptionMap.has(optionKey)) {
+            picOptionMap.set(optionKey, { id: optionKey, label: picLabel });
+          }
+        }
         
         if (hospitalId) {
-          const current = tasksByHospitalId.get(hospitalId) || { taskCount: 0, hospitalName: hospitalName || undefined };
+          const current = tasksByHospitalId.get(hospitalId) || { taskCount: 0, hospitalName: hospitalName || undefined, picIds: new Set<string>(), picNames: new Set<string>() };
           current.taskCount += 1;
           if (!current.hospitalName && hospitalName) current.hospitalName = hospitalName;
+          if (picIdValue) current.picIds.add(picIdValue);
+          if (picLabel) current.picNames.add(picLabel);
           tasksByHospitalId.set(hospitalId, current);
         } else if (hospitalName) {
-          const current = tasksByHospitalName.get(hospitalName) || { taskCount: 0 };
+          const current = tasksByHospitalName.get(hospitalName) || { taskCount: 0, hospitalId: undefined, picIds: new Set<string>(), picNames: new Set<string>() };
           current.taskCount += 1;
+          if (picIdValue) current.picIds.add(picIdValue);
+          if (picLabel) current.picNames.add(picLabel);
           tasksByHospitalName.set(hospitalName, current);
         }
       }
@@ -563,7 +653,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
       const normalized = summaries.map((item: any, idx: number) => {
         const hospitalId = Number(item?.hospitalId ?? -(idx + 1));
         const hospitalName = String(item?.hospitalName ?? "—");
-        const taskStats = tasksByHospitalId.get(hospitalId) || { taskCount: 0 };
+        const taskStats = tasksByHospitalId.get(hospitalId) || { taskCount: 0, picIds: new Set<string>(), picNames: new Set<string>() };
         const acceptedCount = acceptedCountsMap.get(hospitalName) ?? 0;
         return {
           id: hospitalId,
@@ -575,6 +665,8 @@ const MaintenanceSuperTaskPage: React.FC = () => {
           overdueCount: 0, // Will be calculated by augment()
           fromDeployment: Boolean(item?.transferredFromDeployment),
           acceptedByMaintenance: Boolean(item?.acceptedByMaintenance),
+          picDeploymentIds: Array.from(taskStats.picIds),
+          picDeploymentNames: Array.from(taskStats.picNames),
         };
       });
 
@@ -593,6 +685,8 @@ const MaintenanceSuperTaskPage: React.FC = () => {
             overdueCount: 0, // Will be calculated by augment()
             fromDeployment: false,
             acceptedByMaintenance: false,
+            picDeploymentIds: Array.from(taskStats.picIds),
+            picDeploymentNames: Array.from(taskStats.picNames),
           });
         }
       }
@@ -611,6 +705,8 @@ const MaintenanceSuperTaskPage: React.FC = () => {
             overdueCount: 0, // Will be calculated by augment()
             fromDeployment: false,
             acceptedByMaintenance: false,
+            picDeploymentIds: Array.from(taskStats.picIds),
+            picDeploymentNames: Array.from(taskStats.picNames),
           });
         }
       }
@@ -666,6 +762,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
         return (h.taskCount || 0) > 0;
       });
       setHospitalsWithTasks(filtered);
+      setPicOptions(Array.from(picOptionMap.values()));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg || "Lỗi tải danh sách bệnh viện");
@@ -692,6 +789,34 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     }
   }
 
+  const togglePicFilterValue = (value: string, checked: boolean) => {
+    setHospitalPicFilter((prev) => {
+      if (checked) {
+        if (prev.includes(value)) return prev;
+        return [...prev, value];
+      }
+      return prev.filter((id) => id !== value);
+    });
+    setHospitalPage(0);
+  };
+
+  const clearPicFilter = () => {
+    setHospitalPicFilter([]);
+    setHospitalPage(0);
+    setPicFilterOpen(false);
+    setPicFilterQuery("");
+  };
+
+  const clearHospitalStatusFilter = () => {
+    setHospitalStatusFilter("");
+    setHospitalPage(0);
+  };
+
+  const clearTaskStatusFilter = () => {
+    setStatusFilter("");
+    setPage(0);
+  };
+
   const filteredHospitals = useMemo(() => {
     let list = hospitalsWithTasks;
     const q = hospitalSearch.trim().toLowerCase();
@@ -701,21 +826,16 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     else if (hospitalStatusFilter === 'unaccepted') list = list.filter(h => (h.acceptedCount || 0) === 0);
     else if (hospitalStatusFilter === 'fromDeployment') list = list.filter(h => h.fromDeployment && !h.acceptedByMaintenance);
     else if (hospitalStatusFilter === 'acceptedFromDeployment') list = list.filter(h => h.fromDeployment && h.acceptedByMaintenance);
-
-    const dir = hospitalSortDir === 'desc' ? -1 : 1;
-    list = [...list].sort((a, b) => {
-      if (hospitalSortBy === 'taskCount') return ((a.taskCount || 0) - (b.taskCount || 0)) * dir;
-      if (hospitalSortBy === 'accepted') return ((a.acceptedCount || 0) - (b.acceptedCount || 0)) * dir;
-      if (hospitalSortBy === 'ratio') {
-        const ra = (a.taskCount || 0) > 0 ? (a.acceptedCount || 0) / (a.taskCount || 1) : 0;
-        const rb = (b.taskCount || 0) > 0 ? (b.acceptedCount || 0) / (b.taskCount || 1) : 0;
-        return (ra - rb) * dir;
-      }
-      // label
-      return a.label.localeCompare(b.label) * dir;
-    });
+    if (hospitalPicFilter.length > 0) {
+      const selected = new Set(hospitalPicFilter);
+      list = list.filter((h) =>
+        (h.picDeploymentIds || []).some((id) => selected.has(String(id))) ||
+        (h.picDeploymentNames || []).some((name) => selected.has(name))
+      );
+    }
+    list = [...list].sort((a, b) => a.label.localeCompare(b.label));
     return list;
-  }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalSortBy, hospitalSortDir]);
+  }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalPicFilter]);
 
   const hospitalSummary = useMemo(() => {
     const total = hospitalsWithTasks.length;
@@ -767,7 +887,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     });
     if (!res.ok) {
       const msg = await res.text();
-      toast.error(`${method} thất bại: ${msg || res.status}`);
+      toastError(`${method} thất bại: ${msg || res.status}`);
       return;
     }
     // Update UI immediately without full page reload
@@ -803,7 +923,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
         }));
       }
     }
-    toast.success(isUpdate ? "Cập nhật thành công" : "Tạo mới thành công");
+    toastSuccess(isUpdate ? "Cập nhật thành công" : "Tạo mới thành công");
   };
 
   const handleModalClose = () => {
@@ -848,23 +968,108 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                 <div className="flex flex-wrap items-center gap-3">
                   <input
                     type="text"
-                    className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                    className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
                     placeholder="Tìm theo tên bệnh viện / tỉnh"
                     value={hospitalSearch}
                     onChange={(e) => { setHospitalSearch(e.target.value); setHospitalPage(0); }}
                   />
-                  <select
-                    className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[180px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
-                    value={hospitalStatusFilter}
-                    onChange={(e) => { setHospitalStatusFilter(e.target.value); setHospitalPage(0); }}
+                  <div className="flex items-center gap-2 w-[280px]">
+                    <select
+                      className="w-[200px] rounded-full border px-4 py-3 text-sm shadow-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
+                      value={hospitalStatusFilter}
+                      onChange={(e) => { setHospitalStatusFilter(e.target.value); setHospitalPage(0); }}
+                    >
+                      <option value="" disabled hidden>— Trạng thái —</option>
+                      <option value="accepted">Có nghiệm thu</option>
+                      <option value="incomplete">Chưa nghiệm thu hết</option>
+                      <option value="unaccepted">Chưa có nghiệm thu</option>
+                      <option value="fromDeployment">Từ triển khai</option>
+                      <option value="acceptedFromDeployment">Đã nhận từ triển khai</option>
+                    </select>
+                    <button
+                      type="button"
+                      className={`px-3 py-1.5 text-xs text-blue-600 hover:underline focus:outline-none ${hospitalStatusFilter ? "visible" : "invisible pointer-events-none"}`}
+                      onClick={clearHospitalStatusFilter}
+                    >
+                      Bỏ lọc
+                    </button>
+                  </div>
+                </div>
+                <div ref={picFilterDropdownRef} className="flex flex-col gap-2 mt-3">
+                  <div className="relative w-full max-w-[200px]">
+                    <button
+                      type="button"
+                      className="w-full rounded-full border px-3 py-2 text-sm shadow-sm text-left flex items-center justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
+                      onClick={() => setPicFilterOpen((prev) => !prev)}
+                    >
+                      <span className="truncate">
+                        {hospitalPicFilter.length === 0
+                          ? "Lọc người phụ trách"
+                          : hospitalPicFilter.length === 1
+                            ? picOptions.find((opt) => opt.id === hospitalPicFilter[0])?.label ?? "Đã chọn 1"
+                            : `Đã chọn ${hospitalPicFilter.length} người phụ trách`}
+                      </span>
+                      <span className="text-xs text-gray-400">{picFilterOpen ? "▲" : "▼"}</span>
+                    </button>
+                    {picFilterOpen && (
+                      <div className="absolute z-30 mt-2 w-60 rounded-xl border border-gray-200 bg-white shadow-xl p-3 space-y-3">
+                        <input
+                          type="text"
+                          value={picFilterQuery}
+                          onChange={(e) => setPicFilterQuery(e.target.value)}
+                          placeholder="Tìm người phụ trách"
+                          className="w-full rounded-lg border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
+                        />
+                        <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                          {filteredPicOptions.length === 0 ? (
+                            <div className="text-sm text-gray-500 text-center py-6">
+                              Không có dữ liệu người phụ trách
+                            </div>
+                          ) : (
+                            filteredPicOptions.map((opt) => {
+                              const value = opt.id;
+                              const checked = hospitalPicFilter.includes(value);
+                              return (
+                                <label key={value} className="flex items-center gap-2 text-sm text-gray-700">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) => togglePicFilterValue(value, e.target.checked)}
+                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="truncate">{opt.label}</span>
+                                </label>
+                              );
+                            })
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <button
+                            type="button"
+                            className="px-3 py-1.5 text-sm text-blue-600 hover:underline focus:outline-none"
+                            onClick={clearPicFilter}
+                            disabled={hospitalPicFilter.length === 0}
+                          >
+                            Bỏ lọc
+                          </button>
+                          <button
+                            type="button"
+                            className="px-3 py-1.5 text-sm rounded-full border border-gray-300 hover:bg-gray-50 text-gray-600 focus:outline-none"
+                            onClick={() => setPicFilterOpen(false)}
+                          >
+                            Đóng
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className={`self-start px-3 py-1.5 text-xs text-blue-600 hover:underline focus:outline-none ${hospitalPicFilter.length === 0 ? "invisible pointer-events-none" : ""}`}
+                    onClick={clearPicFilter}
                   >
-                    <option value="">— Tất cả —</option>
-                    <option value="accepted">Có nghiệm thu</option>
-                    <option value="incomplete">Chưa nghiệm thu hết</option>
-                    <option value="unaccepted">Chưa có nghiệm thu</option>
-                    <option value="fromDeployment">Từ triển khai</option>
-                    <option value="acceptedFromDeployment">Đã nhận từ triển khai</option>
-                  </select>
+                    Bỏ lọc người phụ trách
+                  </button>
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
                   <span className="font-semibold text-gray-800 dark:text-gray-200">
@@ -888,17 +1093,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900" value={hospitalSortBy} onChange={(e) => { setHospitalSortBy(e.target.value); setHospitalPage(0); }}>
-                  <option value="label">Sắp xếp theo: tên</option>
-                  <option value="taskCount">Sắp xếp theo: tổng task</option>
-                  <option value="accepted">Sắp xếp theo: đã nghiệm thu</option>
-                  <option value="ratio">Sắp xếp theo: tỉ lệ nghiệm thu</option>
-                </select>
-                <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900" value={hospitalSortDir} onChange={(e) => setHospitalSortDir(e.target.value)}>
-                  <option value="asc">Tăng dần</option>
-                  <option value="desc">Giảm dần</option>
-                </select>
-                <button 
+                <button
                   className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
                   onClick={() => { setViewOnly(false); setEditing(null); setModalOpen(true); }}
                   type="button"
@@ -948,64 +1143,68 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                     <tbody className="bg-white divide-y divide-gray-200">
                       {filteredHospitals
                         .slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize)
-                        .map((hospital, index) => (
-                        <tr 
-                          key={`${hospital.label}-${index}`}
-                          className="hover:bg-gray-50 transition-colors cursor-pointer"
-                          onClick={() => handleHospitalClick(hospital.label)}
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {hospitalPage * hospitalSize + index + 1}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-                                <FaHospital className="text-blue-600 text-lg" />
-                              </div>
-                              <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
-                                <span>{hospital.label}</span>
-                                {hospital.fromDeployment && !hospital.acceptedByMaintenance && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">
-                                    Từ triển khai
-                                  </span>
-                                )}
-                                {hospital.fromDeployment && hospital.acceptedByMaintenance && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
-                                    Nhận từ triển khai
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {hospital.subLabel || "—"}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm align-top">
-                            <div className="flex flex-col items-start gap-1">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                {(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task
-                              </span>
-                              {(hospital.nearDueCount ?? 0) > 0 && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Sắp đến hạn: {hospital.nearDueCount}</span>
-                              )}
-                              {(hospital.overdueCount ?? 0) > 0 && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Quá hạn: {hospital.overdueCount}</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleHospitalClick(hospital.label);
-                              }}
-                              className="text-blue-600 hover:text-blue-800 font-medium"
+                        .map((hospital, index) => {
+                          const longName = (hospital.label || "").length > 32;
+                          return (
+                            <tr 
+                              key={`${hospital.label}-${index}`}
+                              className="hover:bg-gray-50 transition-colors cursor-pointer"
+                              onClick={() => handleHospitalClick(hospital.label)}
                             >
-                              Xem task
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {hospitalPage * hospitalSize + index + 1}
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className={`flex gap-3 ${longName ? 'items-start' : 'items-center'}`}>
+                                  <div className={`w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 ${longName ? 'mt-0.5' : ''}`}>
+                                    <FaHospital className="text-blue-600 text-lg" />
+                                  </div>
+                                  <div className={`text-sm font-medium text-gray-900 break-words max-w-[260px] flex flex-wrap gap-2 ${longName ? 'leading-snug' : ''}`}>
+                                    <span>{hospital.label}</span>
+                                    {hospital.fromDeployment && !hospital.acceptedByMaintenance && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">
+                                        Từ triển khai
+                                      </span>
+                                    )}
+                                    {hospital.fromDeployment && hospital.acceptedByMaintenance && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                                        Nhận từ triển khai
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {hospital.subLabel || "—"}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm align-top">
+                                <div className="flex flex-col items-start gap-1">
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    {(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task
+                                  </span>
+                                  {(hospital.nearDueCount ?? 0) > 0 && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Sắp đến hạn: {hospital.nearDueCount}</span>
+                                  )}
+                                  {(hospital.overdueCount ?? 0) > 0 && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Quá hạn: {hospital.overdueCount}</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleHospitalClick(hospital.label);
+                                  }}
+                                  className="p-2 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition"
+                                  title="Xem task"
+                                >
+                                  <AiOutlineEye className="text-lg" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
                     </tbody>
                   </table>
                 </div>
@@ -1082,19 +1281,28 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                   if (e.key === "Enter") fetchList();
                 }}
               />
-              <select
-                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[160px]"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-              >
-                <option value="">— Chọn trạng thái —</option>
-                <option value="NOT_STARTED">Đã tiếp nhận</option>
-                <option value="IN_PROGRESS">Chưa xử lý</option>
-                <option value="API_TESTING">Đang xử lý</option>
-                <option value="INTEGRATING">Gặp sự cố</option>
-                <option value="WAITING_FOR_DEV">Hoàn thành</option>
-                {/* ACCEPTED intentionally omitted for maintenance UI */}
-              </select>
+              <div className="flex items-center gap-2 w-[260px]">
+                <select
+                  className="w-[200px] rounded-full border px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="" disabled hidden>— Trạng thái —</option>
+                  <option value="NOT_STARTED">Đã tiếp nhận</option>
+                  <option value="IN_PROGRESS">Chưa xử lý</option>
+                  <option value="API_TESTING">Đang xử lý</option>
+                  <option value="INTEGRATING">Gặp sự cố</option>
+                  <option value="WAITING_FOR_DEV">Hoàn thành</option>
+                  {/* ACCEPTED intentionally omitted for maintenance UI */}
+                </select>
+                <button
+                  type="button"
+                  className={`px-3 py-1.5 text-xs text-blue-600 hover:underline focus:outline-none ${statusFilter ? "visible" : "invisible pointer-events-none"}`}
+                  onClick={clearTaskStatusFilter}
+                >
+                  Bỏ lọc
+                </button>
+              </div>
             </div>
             <div className="mt-3 text-sm text-gray-600 flex items-center gap-4">
               <span>Tổng:{" "}
@@ -1109,26 +1317,6 @@ const MaintenanceSuperTaskPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <select
-                className="rounded-lg border px-3 py-2 text-sm"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-              >
-                <option value="id">Sắp xếp theo: id</option>
-                <option value="hospitalName">Bệnh viện</option>
-                <option value="createdAt">Ngày tạo</option>
-              </select>
-              <select
-                className="rounded-lg border px-3 py-2 text-sm"
-                value={sortDir}
-                onChange={(e) => setSortDir(e.target.value)}
-              >
-                <option value="asc">Tăng dần</option>
-                <option value="desc">Giảm dần</option>
-              </select>
-            </div>
-
             <button
               className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
               onClick={() => {

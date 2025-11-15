@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import { FiActivity, FiInfo, FiLink, FiUser, FiClock } from "react-icons/fi";
 import TaskFormModal from "./TaskFormModal";
@@ -128,6 +128,10 @@ const DevSuperTaskPage: React.FC = () => {
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<string>("id");
   const [sortDir, setSortDir] = useState<string>("asc");
+  const [picFilter, setPicFilter] = useState<string[]>([]);
+  const [picFilterOpen, setPicFilterOpen] = useState<boolean>(false);
+  const [picFilterQuery, setPicFilterQuery] = useState<string>("");
+  const [picOptions, setPicOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [page, setPage] = useState<number>(0);
   const [size, setSize] = useState<number>(10);
   const [enableItemAnimation, setEnableItemAnimation] =
@@ -138,6 +142,36 @@ const DevSuperTaskPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<DevTask | null>(null);
   const [viewOnly, setViewOnly] = useState<boolean>(false);
+  const picFilterDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        picFilterDropdownRef.current &&
+        !picFilterDropdownRef.current.contains(event.target as Node)
+      ) {
+        setPicFilterOpen(false);
+      }
+    }
+    if (picFilterOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    } else {
+      document.removeEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [picFilterOpen]);
+
+  useEffect(() => {
+    if (!picFilterOpen) {
+      setPicFilterQuery("");
+    }
+  }, [picFilterOpen]);
+
+  const filteredPicOptions = useMemo(() => {
+    const q = picFilterQuery.trim().toLowerCase();
+    if (!q) return picOptions;
+    return picOptions.filter((opt) => opt.label.toLowerCase().includes(q));
+  }, [picOptions, picFilterQuery]);
 
   async function fetchList() {
     const start = Date.now();
@@ -167,6 +201,12 @@ const DevSuperTaskPage: React.FC = () => {
         ? resp
         : [];
       setData(items);
+      const picMap = new Map<string, string>();
+      items.forEach((item) => {
+        const label = (item.picDeploymentName || "").toString().trim();
+        if (label) picMap.set(label, label);
+      });
+      setPicOptions(Array.from(picMap.entries()).map(([id, label]) => ({ id, label })));
       if (resp && typeof resp.totalElements === "number")
         setTotalCount(resp.totalElements);
       else setTotalCount(Array.isArray(resp) ? resp.length : null);
@@ -226,6 +266,29 @@ const DevSuperTaskPage: React.FC = () => {
     toast.success("Đã xóa thành công");
   };
 
+  const togglePicFilterValue = (value: string, checked: boolean) => {
+    setPicFilter((prev) => {
+      if (checked) {
+        if (prev.includes(value)) return prev;
+        return [...prev, value];
+      }
+      return prev.filter((id) => id !== value);
+    });
+    setPage(0);
+  };
+
+  const clearPicFilter = () => {
+    setPicFilter([]);
+    setPicFilterOpen(false);
+    setPicFilterQuery("");
+    setPage(0);
+  };
+
+  const clearTaskStatusFilter = () => {
+    setStatusFilter("");
+    setPage(0);
+  };
+
   const handleSubmit = async (payload: Record<string, unknown>, id?: number) => {
     const isUpdate = Boolean(id);
     const url = isUpdate ? `${apiBase}/${id}` : apiBase;
@@ -250,6 +313,15 @@ const DevSuperTaskPage: React.FC = () => {
     setViewOnly(false);
     setEditing(null);
   };
+
+  const filteredData = useMemo(() => {
+    if (picFilter.length === 0) return data;
+    const selected = new Set(picFilter);
+    return data.filter((item) => {
+      const name = (item.picDeploymentName || "").toString().trim();
+      return name && selected.has(name);
+    });
+  }, [data, picFilter]);
 
   if (!isSuper) {
     return (
@@ -276,7 +348,7 @@ const DevSuperTaskPage: React.FC = () => {
                 <input
                 list="hospital-list"
                 type="text"
-                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px]"
+                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px] focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
                 placeholder="Tìm theo tên"
                 value={searchTerm}
                 onChange={(e) => {
@@ -292,46 +364,111 @@ const DevSuperTaskPage: React.FC = () => {
                 ))}
               </datalist>
 
-              <select
-                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[160px]"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+              <div className="flex items-center gap-2 w-[260px]">
+                <select
+                  className="w-[200px] rounded-full border px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="" disabled hidden>— Trạng thái —</option>
+              {["NOT_STARTED", "IN_PROGRESS", "API_TESTING", "INTEGRATING", "WAITING_FOR_DEV", "ACCEPTED"].map((value) => (
+                <option key={value} value={value}>{statusLabel(value)}</option>
+              ))}
+                </select>
+                <button
+                  type="button"
+                  className={`px-3 py-1.5 text-xs text-blue-600 hover:underline focus:outline-none ${statusFilter ? "visible" : "invisible pointer-events-none"}`}
+                  onClick={clearTaskStatusFilter}
+                >
+                  Bỏ lọc
+                </button>
+              </div>
+            </div>
+            <div ref={picFilterDropdownRef} className="mt-3 flex flex-col gap-2">
+              <div className="relative w-full max-w-[200px]">
+                <button
+                  type="button"
+                  className="w-full rounded-full border px-3 py-2 text-sm shadow-sm text-left flex items-center justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
+                  onClick={() => setPicFilterOpen((prev) => !prev)}
+                >
+                  <span className="truncate">
+                    {picFilter.length === 0
+                      ? "Lọc người phụ trách"
+                      : picFilter.length === 1
+                        ? picOptions.find((opt) => opt.id === picFilter[0])?.label ?? "Đã chọn 1"
+                        : `Đã chọn ${picFilter.length} người phụ trách`}
+                  </span>
+                  <span className="text-xs text-gray-400">{picFilterOpen ? "▲" : "▼"}</span>
+                </button>
+                {picFilterOpen && (
+                  <div className="absolute z-30 mt-2 w-60 rounded-xl border border-gray-200 bg-white shadow-xl p-3 space-y-3">
+                    <input
+                      type="text"
+                      value={picFilterQuery}
+                      onChange={(e) => setPicFilterQuery(e.target.value)}
+                      placeholder="Tìm người phụ trách"
+                      className="w-full rounded-lg border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
+                    />
+                    <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                      {filteredPicOptions.length === 0 ? (
+                        <div className="text-sm text-gray-500 text-center py-6">
+                          Không có dữ liệu người phụ trách
+                        </div>
+                      ) : (
+                        filteredPicOptions.map((opt) => {
+                          const value = opt.id;
+                          const checked = picFilter.includes(value);
+                          return (
+                            <label key={value} className="flex items-center gap-2 text-sm text-gray-700">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => togglePicFilterValue(value, e.target.checked)}
+                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="truncate">{opt.label}</span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 text-sm text-blue-600 hover:underline focus:outline-none"
+                        onClick={clearPicFilter}
+                        disabled={picFilter.length === 0}
+                      >
+                        Bỏ lọc
+                      </button>
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 text-sm rounded-full border border-gray-300 hover:bg-gray-50 text-gray-600 focus:outline-none"
+                        onClick={() => setPicFilterOpen(false)}
+                      >
+                        Đóng
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                className={`self-start px-3 py-1.5 text-xs text-blue-600 hover:underline focus:outline-none ${picFilter.length === 0 ? "invisible pointer-events-none" : ""}`}
+                onClick={clearPicFilter}
               >
-                <option value="">— Chọn trạng thái —</option>
-            {["NOT_STARTED", "IN_PROGRESS", "API_TESTING", "INTEGRATING", "WAITING_FOR_DEV", "ACCEPTED"].map((value) => (
-              <option key={value} value={value}>{statusLabel(value)}</option>
-            ))}
-              </select>
+                Bỏ lọc người phụ trách
+              </button>
             </div>
             <div className="mt-3 text-sm text-gray-600">
               Tổng:{" "}
               <span className="font-semibold text-gray-800">
-                {loading ? "..." : totalCount ?? data.length}
+                {loading ? "..." : filteredData.length}
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <select
-                className="rounded-lg border px-3 py-2 text-sm"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-              >
-                <option value="id">Sắp xếp theo: id</option>
-                <option value="hospitalName">Bệnh viện</option>
-                <option value="createdAt">Ngày tạo</option>
-              </select>
-              <select
-                className="rounded-lg border px-3 py-2 text-sm"
-                value={sortDir}
-                onChange={(e) => setSortDir(e.target.value)}
-              >
-                <option value="asc">Tăng dần</option>
-                <option value="desc">Giảm dần</option>
-              </select>
-            </div>
-
             <button
               className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
               onClick={() => {
@@ -350,16 +487,16 @@ const DevSuperTaskPage: React.FC = () => {
       <div className="space-y-3">
         {loading && isInitialLoad ? (
           <div className="flex items-center justify-center py-12">
-            <div className="text-blue-600 text-4xl font-extrabold tracking-wider animate-pulse">
+            <div className="text-blue-600 text-4l font-extrabold tracking-wider animate-pulse">
               TAG
             </div>
           </div>
-        ) : data.length === 0 ? (
+        ) : filteredData.length === 0 ? (
           <div className="px-4 py-6 text-center text-gray-500">
             Không có dữ liệu
           </div>
         ) : (
-          data.map((row, idx) => (
+          filteredData.map((row, idx) => (
                 <TaskCard
                   key={row.id}
                   task={row as unknown as import("../PageClients/implementation-tasks").ImplementationTaskResponseDTO}
@@ -387,7 +524,7 @@ const DevSuperTaskPage: React.FC = () => {
       <div className="mt-4 flex items-center justify-between py-3">
         <div className="text-sm text-gray-600">
           {(() => {
-            const total = totalCount ?? data.length;
+            const total = filteredData.length;
             if (!total || total === 0) return <span>Hiển thị 0 trong tổng số 0 mục</span>;
             const from = page * size + 1;
             const to = Math.min((page + 1) * size, total);
@@ -411,7 +548,7 @@ const DevSuperTaskPage: React.FC = () => {
             <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Trước">‹</button>
 
             {(() => {
-              const total = Math.max(1, Math.ceil((totalCount ?? data.length) / size));
+              const total = Math.max(1, Math.ceil(filteredData.length / size));
               const pages: number[] = [];
               const start = Math.max(1, page + 1 - 2);
               const end = Math.min(total, start + 4);
@@ -423,8 +560,8 @@ const DevSuperTaskPage: React.FC = () => {
               ));
             })()}
 
-            <button onClick={() => setPage((p) => p + 1)} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Tiếp">›</button>
-            <button onClick={() => setPage(Math.max(0, Math.ceil((totalCount ?? data.length) / size) - 1))} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Cuối">»</button>
+            <button onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * size >= filteredData.length} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Tiếp">›</button>
+            <button onClick={() => setPage(Math.max(0, Math.ceil(filteredData.length / size) - 1))} disabled={(page + 1) * size >= filteredData.length} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Cuối">»</button>
           </div>
         </div>
       </div>

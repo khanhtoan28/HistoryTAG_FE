@@ -5,6 +5,7 @@ import TaskCardNew from "../SuperAdmin/TaskCardNew";
 import { toast } from "react-hot-toast";
 import { FaHospital } from "react-icons/fa";
 import { FiUser, FiMapPin, FiLink, FiClock, FiTag, FiPhone } from "react-icons/fi";
+import { isBusinessContractTaskName as isBusinessContractTask } from "../../utils/businessContract";
 
 
 export type ImplementationTaskResponseDTO = {
@@ -1089,7 +1090,20 @@ const ImplementationTasksPage: React.FC = () => {
         status: normalizeStatus(item.status) || item.status || "RECEIVED",
       }));
       // Exclude tasks that were created from Business and are still pending acceptance by Deployment
-      const finalItems = normalizedItems.filter((it) => !(it.readOnlyForDeployment === true && !it.receivedById && !it.receivedByName));
+      const finalItems = normalizedItems.filter((it) => {
+        try {
+          const received = Boolean(it?.receivedById || it?.receivedByName);
+          const readOnlyPlaceholder = it?.readOnlyForDeployment === true;
+          const businessPlaceholder = isBusinessContractTask(
+            typeof it?.name === "string" ? it.name : String(it?.name ?? "")
+          );
+          if (readOnlyPlaceholder && !received) return false;
+          if (businessPlaceholder && !received) return false;
+          return true;
+        } catch {
+          return true;
+        }
+      });
       if (sortBy === "createdAt") {
         const dir = sortDir === "asc" ? 1 : -1;
         // sort the final items list
@@ -1419,7 +1433,20 @@ const ImplementationTasksPage: React.FC = () => {
       const allPayload = allRes.ok ? await allRes.json() : [];
       const allItems = Array.isArray(allPayload?.content) ? allPayload.content : Array.isArray(allPayload) ? allPayload : [];
       // Exclude Business-created pending tasks from hospital summaries (they are not yet in deployment list)
-      const visibleItems = allItems.filter((it: ImplementationTaskResponseDTO) => !(it.readOnlyForDeployment === true && !it.receivedById));
+      const visibleItems = (allItems as ImplementationTaskResponseDTO[]).filter((it) => {
+        try {
+          const received = Boolean(it?.receivedById || it?.receivedByName);
+          const readOnlyPlaceholder = it?.readOnlyForDeployment === true;
+          const businessPlaceholder = isBusinessContractTask(
+            typeof it?.name === "string" ? it.name : String(it?.name ?? "")
+          );
+          if (readOnlyPlaceholder && !received) return false;
+          if (businessPlaceholder && !received) return false;
+          return true;
+        } catch {
+          return true;
+        }
+      });
 
       // Aggregate by hospitalName
       const acc = new Map<string, { id: number | null; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number; transferredCount: number; acceptedByMaintenanceCount: number }>();

@@ -17,8 +17,10 @@ import {
   CheckCircleIcon,
   TaskIcon,
 } from '../../icons';
+import { FiCheckCircle, FiXCircle } from 'react-icons/fi';
 import Pagination from '../../components/common/Pagination';
 import ComponentCard from '../../components/common/ComponentCard';
+import { normalizeBusinessContractName } from '../../utils/businessContract';
 
 const BusinessPage: React.FC = () => {
   // read roles from either localStorage or sessionStorage (some flows store roles in sessionStorage)
@@ -70,6 +72,9 @@ const BusinessPage: React.FC = () => {
   const [statusValue, setStatusValue] = useState<string>('CARING');
   const [startDateValue, setStartDateValue] = useState<string>('');
   const [completionDateValue, setCompletionDateValue] = useState<string>('');
+  const [originalStatus, setOriginalStatus] = useState<string>('CARING');
+  const [statusConfirmOpen, setStatusConfirmOpen] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState<{ payload: Record<string, unknown>; isUpdate: boolean; successMessage?: string } | null>(null);
   type BusinessItem = {
     id: number;
     name?: string;
@@ -295,12 +300,23 @@ const BusinessPage: React.FC = () => {
     // Check duplicate contract code (name) - check in current items first
     if (name && name.trim().length > 0) {
       const trimmedName = name.trim();
+      const candidateLower = trimmedName.toLowerCase();
+      const candidateNormalized = normalizeBusinessContractName(trimmedName);
+      const matchesExistingName = (value?: string | null) => {
+        const existingTrimmed = (value ?? '').toString().trim();
+        if (!existingTrimmed) return false;
+        if (existingTrimmed.toLowerCase() === candidateLower) return true;
+        const existingNormalized = normalizeBusinessContractName(existingTrimmed);
+        if (existingNormalized && candidateNormalized) {
+          return existingNormalized === candidateNormalized;
+        }
+        return false;
+      };
+
       const duplicate = items.find(item => {
         // Exclude current editing item if in edit mode
         if (editingId && item.id === editingId) return false;
-        // Case-insensitive comparison
-        const itemName = item.name?.trim() || '';
-        return itemName.toLowerCase() === trimmedName.toLowerCase();
+        return matchesExistingName(item.name);
       });
       if (duplicate) {
         errors.name = 'Mã hợp đồng đã được sử dụng';
@@ -314,8 +330,7 @@ const BusinessPage: React.FC = () => {
           const duplicateInAll = allItems.find((item: BusinessItem) => {
             // Exclude current editing item if in edit mode
             if (editingId && item.id === editingId) return false;
-            const itemName = item.name?.trim() || '';
-            return itemName.toLowerCase() === trimmedName.toLowerCase();
+            return matchesExistingName(item.name);
           });
           if (duplicateInAll) {
             errors.name = 'Mã hợp đồng đã được sử dụng';
@@ -355,30 +370,64 @@ const BusinessPage: React.FC = () => {
     // Clear errors if validation passes
     setFieldErrors({});
 
+    const payload: Record<string, unknown> = {
+      name,
+      hospitalId: selectedHospitalId,
+      hardwareId: selectedHardwareId,
+      quantity,
+      status: statusValue,
+      startDate: toLocalDateTimeStr(finalStart),
+      completionDate: toLocalDateTimeStr(completionDateValue),
+      // some backends use 'finishDate' instead of 'completionDate' — include both to be safe
+      finishDate: toLocalDateTimeStr(completionDateValue),
+    };
+    // compute commission amount from percent and total (backend expects absolute amount)
+    const total = computeTotal();
+    if (commissionPercent != null && total > 0) {
+      // round to 2 decimals
+      const commissionAmount = Math.round(((commissionPercent / 100) * total) * 100) / 100;
+      payload.commission = commissionAmount;
+    }
+
+    const isUpdate = Boolean(editingId);
+    const requireConfirm = statusValue === 'CONTRACTED' && originalStatus !== 'CONTRACTED';
+    if (requireConfirm && !statusConfirmOpen) {
+      setPendingSubmit({ payload, isUpdate, successMessage: 'Chuyển trạng thái thành công' });
+      setStatusConfirmOpen(true);
+      return;
+    }
+
+    await submitBusiness(payload, isUpdate, requireConfirm ? 'Chuyển trạng thái thành công' : undefined);
+  }
+
+  async function submitBusiness(
+    payload: Record<string, unknown>,
+    isUpdate: boolean,
+    successMessage?: string,
+  ) {
+    setPendingSubmit(null);
+    setStatusConfirmOpen(false);
     setSaving(true);
-      try {
-        const payload: Record<string, unknown> = { name, hospitalId: selectedHospitalId, hardwareId: selectedHardwareId, quantity, status: statusValue,
-          startDate: toLocalDateTimeStr(finalStart),
-          completionDate: toLocalDateTimeStr(completionDateValue),
-          // some backends use 'finishDate' instead of 'completionDate' — include both to be safe
-          finishDate: toLocalDateTimeStr(completionDateValue),
-        };
-        // compute commission amount from percent and total (backend expects absolute amount)
-        const total = computeTotal();
-        if (commissionPercent != null && total > 0) {
-          // round to 2 decimals
-          const commissionAmount = Math.round(((commissionPercent / 100) * total) * 100) / 100;
-          payload.commission = commissionAmount;
-        }
-      if (editingId) {
+    try {
+      if (isUpdate) {
+        if (!editingId) throw new Error('Không xác định được ID để cập nhật');
         await updateBusiness(editingId, payload);
-        setToast({ message: 'Cập nhật thành công', type: 'success' });
       } else {
         await createBusiness(payload);
-        setToast({ message: 'Tạo thành công', type: 'success' });
       }
-    setName(''); setSelectedHardwareId(null); setQuantity(1);
-  setStatusValue('CARING'); setCommissionPercent(null);
+      setToast({ message: successMessage ?? (isUpdate ? 'Cập nhật thành công' : 'Tạo thành công'), type: 'success' });
+      setName('');
+      setSelectedHardwareId(null);
+      setSelectedHardwarePrice(null);
+      setQuantity(1);
+      setStatusValue('CARING');
+      setOriginalStatus('CARING');
+      setCommissionPercent(null);
+      setSelectedHospitalId(null);
+      setSelectedHospitalPhone(null);
+      setHospitalSearchInput('');
+      setCompletionDateValue('');
+      setStartDateValue(nowDateTimeLocal());
       setEditingId(null);
       setShowModal(false);
       // reload the first page so the new item is visible
@@ -413,11 +462,25 @@ const BusinessPage: React.FC = () => {
     const newStatus = e.target.value;
     setStatusValue(newStatus);
     if (newStatus === 'CONTRACTED') {
-      // only set locally — do NOT auto-save. User must click Lưu/Cập nhật to persist and trigger downstream actions
       const now = nowDateTimeLocal();
       setCompletionDateValue(now);
-      setToast({ message: 'Đã đặt ngày hoàn thành tạm thời. Vui lòng nhấn Lưu để xác nhận và tạo Task Triển khai.', type: 'success' });
     }
+  }
+
+  async function confirmStatusTransition() {
+    const submission = pendingSubmit;
+    setStatusConfirmOpen(false);
+    if (!submission) {
+      setPendingSubmit(null);
+      return;
+    }
+    setPendingSubmit(null);
+    await submitBusiness(submission.payload, submission.isUpdate, submission.successMessage);
+  }
+
+  function cancelStatusTransition() {
+    setPendingSubmit(null);
+    setStatusConfirmOpen(false);
   }
 
   function statusLabel(status?: string | null) {
@@ -460,10 +523,13 @@ const BusinessPage: React.FC = () => {
           setSelectedHospitalPhone(phone);
         }).catch(() => setSelectedHospitalPhone(null));
       } else setSelectedHospitalPhone(null);
-  setSelectedHardwareId(res.hardware?.id ?? null);
-  const remoteStart = (res.startDate ?? (res as unknown as Record<string, unknown>)['start_date'] ?? (res as unknown as Record<string, unknown>)['startDateTime']) as string | undefined | null;
-  setStartDateValue(remoteStart ? (remoteStart.length === 16 ? remoteStart : remoteStart.substring(0,16)) : '');
-  setCompletionDateValue(remoteCompletion ? (remoteCompletion.length === 16 ? remoteCompletion : remoteCompletion.substring(0,16)) : '');
+      const remoteStatus = (res.status as string | undefined) ?? 'CARING';
+      setStatusValue(remoteStatus);
+      setOriginalStatus(remoteStatus);
+      setSelectedHardwareId(res.hardware?.id ?? null);
+      const remoteStart = (res.startDate ?? (res as unknown as Record<string, unknown>)['start_date'] ?? (res as unknown as Record<string, unknown>)['startDateTime']) as string | undefined | null;
+      setStartDateValue(remoteStart ? (remoteStart.length === 16 ? remoteStart : remoteStart.substring(0, 16)) : '');
+      setCompletionDateValue(remoteCompletion ? (remoteCompletion.length === 16 ? remoteCompletion : remoteCompletion.substring(0, 16)) : '');
       // convert existing commission amount to percentage for the input
       const existingTotal = res.totalPrice != null ? Number(res.totalPrice) : null;
       if (res.commission != null && existingTotal && existingTotal > 0) {
@@ -472,7 +538,7 @@ const BusinessPage: React.FC = () => {
       } else {
         setCommissionPercent(null);
       }
-  setQuantity(res.quantity != null ? Number(String(res.quantity)) : 1);
+      setQuantity(res.quantity != null ? Number(String(res.quantity)) : 1);
       // fetch price
       if (res.hardware?.id) {
         try {
@@ -483,6 +549,8 @@ const BusinessPage: React.FC = () => {
         }
       } else setSelectedHardwarePrice(null);
       setFieldErrors({});
+      setPendingSubmit(null);
+      setStatusConfirmOpen(false);
       setShowModal(true);
     } catch (e) { console.error(e); setToast({ message: 'Không thể load mục để sửa', type: 'error' }); }
   }
@@ -513,8 +581,52 @@ const BusinessPage: React.FC = () => {
       {/* Toasts */}
       {toast && (
         <div className="fixed top-6 right-6 z-50">
-          <div className={`px-4 py-2 rounded shadow-lg text-white ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
-            {toast.message}
+          <div
+            className={`flex min-w-[220px] items-center gap-3 rounded-2xl border px-4 py-3 shadow-lg bg-white ${
+              toast.type === 'success' ? 'border-green-200' : 'border-red-200'
+            }`}
+          >
+            <span
+              className={`flex h-9 w-9 items-center justify-center rounded-full ${
+                toast.type === 'success' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+              }`}
+            >
+              {toast.type === 'success' ? <FiCheckCircle size={20} /> : <FiXCircle size={20} />}
+            </span>
+            <span className="text-sm font-medium text-gray-900">{toast.message}</span>
+          </div>
+        </div>
+      )}
+
+      {statusConfirmOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) cancelStatusTransition();
+          }}
+        >
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900">Xác nhận chuyển trạng thái</h3>
+            <p className="mt-3 text-sm text-red-600">
+              Bạn có muốn chuyển trạng thái sang ký hợp đồng và chuyển sang phòng triển khai không?
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={cancelStatusTransition}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={confirmStatusTransition}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 transition shadow-sm"
+              >
+                Xác nhận
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -528,12 +640,18 @@ const BusinessPage: React.FC = () => {
             if (!canManage) { setToast({ message: 'Bạn không có quyền', type: 'error' }); return; }
             setEditingId(null);
             setName('');
+            setOriginalStatus('CARING');
             setSelectedHardwareId(null);
+            setSelectedHardwarePrice(null);
+            setSelectedHospitalId(null);
+            setSelectedHospitalPhone(null);
             setQuantity(1);
             setStatusValue('CARING');
             setStartDateValue(nowDateTimeLocal());
             setCompletionDateValue('');
             setFieldErrors({});
+            setPendingSubmit(null);
+            setStatusConfirmOpen(false);
             setHospitalSearchInput('');
             setHospitalDropdownOpen(false);
             setShowModal(true);

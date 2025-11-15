@@ -157,6 +157,11 @@ export default function TaskCardNew({
     }
   })();
 
+  const taskTitle = (task.name || "").toString();
+  const titleIsLong = taskTitle.length > 36;
+  const headerAlignClass = titleIsLong ? "items-start" : "items-center";
+  const iconOffsetClass = titleIsLong ? "mt-0.5" : "";
+
   return (
     <div
       className="group relative w-full rounded-2xl bg-white dark:bg-gray-900 px-6 py-5 shadow-sm transition-all border border-gray-100 dark:border-gray-800 hover:border-blue-200 hover:shadow-lg"
@@ -167,7 +172,7 @@ export default function TaskCardNew({
           {leadingTopLeft}
         </div>
       )}
-      <div className={`flex gap-4 items-start ${leadingTopLeft ? 'pl-0   pt-0' : ''}`}>
+      <div className={`flex gap-4 ${headerAlignClass} ${leadingTopLeft ? 'pl-0   pt-0' : ''}`}>
         {/* Left badge + icon */}
         <div className="flex items-center gap-3">
           <div className="flex flex-col items-center">
@@ -175,7 +180,7 @@ export default function TaskCardNew({
               {orderLabel}
             </div>
           </div>
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900 text-blue-600 dark:text-blue-200 shadow-sm">
+          <div className={`flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900 text-blue-600 dark:text-blue-200 shadow-sm ${iconOffsetClass}`}>
             <FaTasks className="text-xl" />
           </div>
         </div>
@@ -313,9 +318,10 @@ export default function TaskCardNew({
                     onOpen(task);
                   }}
                   className="inline-flex items-center gap-2 bg-blue-50 dark:bg-blue-900 text-blue-600 dark:text-blue-200 px-3 py-1 rounded-lg text-sm hover:bg-blue-100 dark:hover:bg-blue-800"
+                  title="Xem"
                 >
-                  <AiOutlineEye />
-                  <span className="hidden md:inline">Xem</span>
+                  <AiOutlineEye className="text-base" />
+                  <span>Xem</span>
                 </button>
               )}
               {/* Non-clickable indicators shown next to Xem */}
