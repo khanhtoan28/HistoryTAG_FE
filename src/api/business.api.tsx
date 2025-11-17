@@ -117,3 +117,9 @@ export async function deleteBusiness(id: number) {
   const res = await api.delete(`${base}/business/${id}`);
   return res.data;
 }
+
+export async function getBusinessPicOptions() {
+  const base = getBase();
+  const res = await api.get(`${base}/business/pic-options`);
+  return res.data;
+}

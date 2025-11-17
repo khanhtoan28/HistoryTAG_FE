@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { searchHardware, searchHospitals, createBusiness, getBusinesses, updateBusiness, deleteBusiness, getBusinessById, getHardwareById } from '../../api/business.api';
+import { searchHardware, searchHospitals, createBusiness, getBusinesses, updateBusiness, deleteBusiness, getBusinessById, getHardwareById, getBusinessPicOptions } from '../../api/business.api';
 import api from '../../api/client';
 import {
   PlusIcon,
@@ -63,6 +63,8 @@ const BusinessPage: React.FC = () => {
   const [selectedHardwarePrice, setSelectedHardwarePrice] = useState<number | null>(null);
   const [selectedHospitalId, setSelectedHospitalId] = useState<number | null>(null);
   const [selectedHospitalPhone, setSelectedHospitalPhone] = useState<string | null>(null);
+  const [businessPicOptionsState, setBusinessPicOptionsState] = useState<Array<{ id: number; label: string; subLabel?: string }>>([]);
+  const [selectedPicId, setSelectedPicId] = useState<number | null>(null);
   const [hospitalDropdownOpen, setHospitalDropdownOpen] = useState<boolean>(false);
   const [hospitalSearchInput, setHospitalSearchInput] = useState<string>('');
   // commissionPercent is the user-facing input (entered as percent, e.g. 12 means 12%)
@@ -81,6 +83,7 @@ const BusinessPage: React.FC = () => {
     hospital?: { id?: number; label?: string } | null;
     hospitalPhone?: string | null;
     hardware?: { label?: string } | null;
+    picUser?: { id?: number; label?: string; subLabel?: string } | null;
     quantity?: number | null;
     unitPrice?: number | null;
     totalPrice?: number | null;
@@ -188,6 +191,19 @@ const BusinessPage: React.FC = () => {
         // accept multiple possible keys for start/completion
         const start = (c['startDate'] ?? c['start_date'] ?? c['start'] ?? c['startDateTime']) as string | undefined | null;
         const completion = (c['completionDate'] ?? c['finishDate'] ?? c['completion_date'] ?? c['finish_date'] ?? c['finishDate']) as string | undefined | null;
+        const picRaw = c['picUser'] ?? c['pic_user'] ?? null;
+        let picUser: BusinessItem['picUser'] = null;
+        if (picRaw && typeof picRaw === 'object') {
+          const pr = picRaw as Record<string, unknown>;
+          const pid = pr['id'];
+          const plabel = pr['label'] ?? pr['name'];
+          const psub = pr['subLabel'] ?? pr['sub_label'] ?? pr['email'];
+          picUser = {
+            id: pid != null ? Number(pid) : undefined,
+            label: plabel != null ? String(plabel) : undefined,
+            subLabel: psub != null ? String(psub) : undefined,
+          };
+        }
         return {
           ...c,
           unitPrice: unit != null ? Number(String(unit)) : null,
@@ -196,6 +212,7 @@ const BusinessPage: React.FC = () => {
           quantity: qty != null ? Number(String(qty)) : null,
           startDate: start ?? null,
           completionDate: completion ?? null,
+          picUser,
         } as BusinessItem;
       });
   setItems(sortBusinessItems(normalized));
@@ -245,9 +262,34 @@ const BusinessPage: React.FC = () => {
     return v ? (v.length === 16 ? `${v}:00` : v) : undefined;
   }
 
+  async function loadBusinessPicOptions() {
+    try {
+      const list = await getBusinessPicOptions();
+      if (Array.isArray(list)) {
+        const mapped = list.map((item: any) => ({
+          id: Number(item?.id ?? 0),
+          label: String(item?.label ?? ''),
+          subLabel: item?.subLabel ? String(item.subLabel) : undefined,
+        })).sort((a, b) => a.label.localeCompare(b.label, 'vi', { sensitivity: 'base' }));
+        setBusinessPicOptionsState((prev) => {
+          if (selectedPicId && !mapped.some((opt) => opt.id === selectedPicId)) {
+            const existing = prev.find((opt) => opt.id === selectedPicId);
+            return existing ? [...mapped, existing] : mapped;
+          }
+          return mapped;
+        });
+      } else {
+        setBusinessPicOptionsState([]);
+      }
+    } catch (err) {
+      console.error('Failed to load business PIC options', err);
+      setBusinessPicOptionsState([]);
+    }
+  }
+
   // run on mount and when pagination changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  React.useEffect(() => { fetchHardwareOptions(''); fetchHospitalOptions(''); loadList(currentPage, itemsPerPage); }, []);
+  React.useEffect(() => { fetchHardwareOptions(''); fetchHospitalOptions(''); loadBusinessPicOptions(); loadList(currentPage, itemsPerPage); }, []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useEffect(() => { loadList(currentPage, itemsPerPage); }, [currentPage, itemsPerPage]);
 
@@ -344,6 +386,7 @@ const BusinessPage: React.FC = () => {
     
     if (!selectedHospitalId) errors.selectedHospitalId = 'Vui lòng chọn bệnh viện';
     if (!selectedHardwareId) errors.selectedHardwareId = 'Vui lòng chọn phần cứng';
+    if (businessPicOptionsState.length > 0 && !selectedPicId) errors.selectedPicId = 'Vui lòng chọn người phụ trách';
     if (!quantity || quantity < 1) errors.quantity = 'Số lượng phải lớn hơn hoặc bằng 1';
 
     // Ensure startDate is set (default to now) so backend always receives a start date
@@ -380,6 +423,7 @@ const BusinessPage: React.FC = () => {
       completionDate: toLocalDateTimeStr(completionDateValue),
       // some backends use 'finishDate' instead of 'completionDate' — include both to be safe
       finishDate: toLocalDateTimeStr(completionDateValue),
+      picUserId: selectedPicId ?? null,
     };
     // compute commission amount from percent and total (backend expects absolute amount)
     const total = computeTotal();
@@ -425,6 +469,7 @@ const BusinessPage: React.FC = () => {
       setCommissionPercent(null);
       setSelectedHospitalId(null);
       setSelectedHospitalPhone(null);
+      setSelectedPicId(null);
       setHospitalSearchInput('');
       setCompletionDateValue('');
       setStartDateValue(nowDateTimeLocal());
@@ -433,6 +478,7 @@ const BusinessPage: React.FC = () => {
       // reload the first page so the new item is visible
       setCurrentPage(0);
       await loadList(0, itemsPerPage);
+      await loadBusinessPicOptions();
     } catch (err: unknown) {
       console.error(err);
       setToast({ message: 'Lỗi khi lưu dữ liệu', type: 'error' });
@@ -513,6 +559,21 @@ const BusinessPage: React.FC = () => {
       // Set hospital search input to the selected hospital label
       setHospitalSearchInput(res.hospital?.label ?? '');
       setHospitalDropdownOpen(false);
+      setSelectedPicId(res.picUser?.id ?? null);
+      if (res.picUser?.id != null) {
+        setBusinessPicOptionsState((prev) => {
+          const exists = prev.some((opt) => opt.id === res.picUser?.id);
+          if (exists) return prev;
+          return [
+            ...prev,
+            {
+              id: res.picUser.id,
+              label: res.picUser.label ?? res.picUser.fullname ?? res.picUser.email ?? `User #${res.picUser.id}`,
+              subLabel: res.picUser.subLabel ?? res.picUser.email ?? undefined,
+            },
+          ];
+        });
+      }
       // support older API that may use finishDate as the key
   const remoteCompletion = (res.completionDate ?? ((res as unknown as Record<string, unknown>).finishDate as string | undefined)) as string | undefined | null;
       if (res.hospital?.id) {
@@ -645,6 +706,7 @@ const BusinessPage: React.FC = () => {
             setSelectedHardwarePrice(null);
             setSelectedHospitalId(null);
             setSelectedHospitalPhone(null);
+            setSelectedPicId(null);
             setQuantity(1);
             setStatusValue('CARING');
             setStartDateValue(nowDateTimeLocal());
@@ -776,6 +838,26 @@ const BusinessPage: React.FC = () => {
                         {hardwareOptions.map(h => <option key={h.id} value={h.id}>{h.label} {h.subLabel ? `— ${h.subLabel}` : ''}</option>)}
                       </select>
                       {fieldErrors.selectedHardwareId && <div className="mt-1 text-sm text-red-600">{fieldErrors.selectedHardwareId}</div>}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Người phụ trách</label>
+                      <select
+                        value={selectedPicId ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setSelectedPicId(v ? Number(v) : null);
+                          clearFieldError('selectedPicId');
+                        }}
+                        className={`w-full rounded border px-3 py-2 ${fieldErrors.selectedPicId ? 'border-red-500' : ''}`}
+                      >
+                        <option value="">— Chọn người phụ trách —</option>
+                        {businessPicOptionsState.map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {user.label}{user.subLabel ? ` — ${user.subLabel}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      {fieldErrors.selectedPicId && <div className="mt-1 text-sm text-red-600">{fieldErrors.selectedPicId}</div>}
                     </div>
                     <div className="relative">
                       <label className="block text-sm font-medium mb-1">Bệnh viện</label>
@@ -922,6 +1004,12 @@ const BusinessPage: React.FC = () => {
                       <div className="mt-2 grid grid-cols-2 md:grid-cols-2 gap-3 text-sm text-gray-600">
                         <div>Điện thoại: <div className="font-medium text-gray-800">{it.hospitalPhone ?? '—'}</div></div>
                         <div>Phần cứng: <div className="font-medium text-gray-800">{it.hardware?.label ?? '—'}</div></div>
+                        <div className="col-span-2 md:col-span-2">Người phụ trách:
+                          <div className="font-medium text-gray-800">
+                            {it.picUser?.label ?? '—'}
+                            {it.picUser?.subLabel ? <span className="ml-2 text-xs text-gray-500">{it.picUser?.subLabel}</span> : null}
+                          </div>
+                        </div>
                       </div>
 
                       <div className="mt-3 flex items-center justify-between text-sm text-gray-700">
@@ -975,6 +1063,7 @@ const BusinessPage: React.FC = () => {
               <Info label="Bệnh viện" value={<div className="font-medium">{viewItem.hospital?.label ?? '—'}</div>} icon={<GroupIcon style={{ width: 18, height: 18 }} />} />
               <Info label="Điện thoại" value={<div className="font-medium">{viewItem.hospitalPhone ?? '—'}</div>} icon={<EnvelopeIcon style={{ width: 16, height: 16 }} />} />
               <Info label="Phần cứng" value={<div className="font-medium">{viewItem.hardware?.label ?? '—'}</div>} icon={<BoxCubeIcon style={{ width: 16, height: 16 }} />} />
+              <Info label="Người phụ trách" value={<div className="font-medium">{viewItem.picUser?.label ?? '—'}{viewItem.picUser?.subLabel ? <span className="ml-2 text-xs text-gray-500">{viewItem.picUser?.subLabel}</span> : null}</div>} icon={<UserCircleIcon style={{ width: 18, height: 18 }} />} />
               <Info label="Bắt đầu" value={<div className="font-medium">{formatDateShort(viewItem.startDate)}</div>} icon={<CalenderIcon style={{ width: 16, height: 16 }} />} />
               <Info label="Hoàn thành" value={<div className="font-medium">{formatDateShort(viewItem.completionDate)}</div>} icon={<TimeIcon style={{ width: 16, height: 16 }} />} />
               <Info label="Số lượng" value={<div className="font-medium">{viewItem.quantity ?? '—'}</div>} icon={<BoxIconLine style={{ width: 16, height: 16 }} />} />
