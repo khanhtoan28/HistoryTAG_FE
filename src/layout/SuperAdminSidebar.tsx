@@ -5,11 +5,15 @@ import {
   GridIcon,
   HorizontaLDots,
   TableIcon,
-  BoxCubeIcon,
   PlugInIcon,
   PageIcon,
   GroupIcon,
   UserCircleIcon,
+  TaskIcon,
+  DocsIcon,
+  BoxIconLine,
+  DollarLineIcon,
+  BoltIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 
@@ -36,7 +40,7 @@ const navItems: NavItem[] = [
   },
   {
     name: "Dữ liệu",
-    icon: <TableIcon />,
+    icon: <DocsIcon />,
     subItems: [
       { name: "Bệnh viện", path: "/superadmin/hospitals", pro: false },
       { name: "Đơn vị HIS", path: "/superadmin/his-systems", pro: false },
@@ -46,12 +50,12 @@ const navItems: NavItem[] = [
   },
   {
     name: "Phòng Kinh doanh",
-    icon: <BoxCubeIcon />,
+    icon: <BoxIconLine />,
     path: "/superadmin/business",
   },
   {
     name: "Tasks",
-    icon: <TableIcon />,
+    icon: <TaskIcon />,
     subItems: [
       { name: "Task Triển khai ", path: "/superadmin/implementation-tasks", pro: false },
       { name: "Dev Tasks", path: "/superadmin/dev-tasks", pro: false },
@@ -191,15 +195,17 @@ const SuperAdminSidebar: React.FC = () => {
                           {(() => {
                             switch (subItem.name) {
                               case "Bệnh viện":
-                                return <TableIcon className="w-4 h-4" />;
+                                return <PageIcon className="w-4 h-4" />;
                               case "Đơn vị HIS":
                                 return <PlugInIcon className="w-4 h-4" />;
                               case "Đại lý":
-                                return <BoxCubeIcon className="w-4 h-4" />;
+                                return <DollarLineIcon className="w-4 h-4" />;
+                              case "Phần cứng":
+                                return <BoltIcon className="w-4 h-4" />;
                               case "Danh sách người dùng":
                                 return <UserCircleIcon className="w-4 h-4" />;
                               default:
-                                return <PageIcon className="w-4 h-4" />;
+                                return <TableIcon className="w-4 h-4" />;
                             }
                           })()}
                         </span>

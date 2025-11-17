@@ -112,6 +112,8 @@ export async function filterUsers(params: {
   status?: boolean;
   fromDate?: string;
   toDate?: string;
+  team?: string;
+  department?: string;
 }) {
   const { data } = await api.get<UserResponseDTO[]>("/api/v1/superadmin/users/filter", { params });
   return data;
@@ -297,6 +299,13 @@ export type ImplementationTaskUpdateDTO = Partial<ImplementationTaskRequestDTO>;
 export async function getAllImplementationTasks(params: {
   search?: string;
   status?: string;
+  hospitalName?: string;
+  picDeploymentId?: number;
+  team?: string;
+  startDateFrom?: string;
+  startDateTo?: string;
+  quarter?: string;
+  year?: string;
   page?: number;
   size?: number;
   sortBy?: string;

@@ -258,14 +258,14 @@ export default function SignInForm() {
           </form>
   </div>
 
-        <div className="mt-5 text-center">
+        {/* <div className="mt-5 text-center">
           <p className="text-sm font-normal text-center text-white/90">
             Chưa có tài khoản?{' '}
             <Link to="/signup" className="underline text-blue-200 hover:text-white">
               Đăng ký
             </Link>
           </p>
-        </div>
+        </div> */}
       </div>
     </div>
   );

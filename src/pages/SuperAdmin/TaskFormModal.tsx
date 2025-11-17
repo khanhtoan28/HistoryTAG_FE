@@ -176,8 +176,30 @@ export default function TaskFormModal({
     });
     // Removed: agencyOpt, hisOpt, hardwareOpt states
 
+    // Helper function to normalize status (similar to admin form)
+    function normalizeStatus(status?: string | null): "RECEIVED" | "IN_PROCESS" | "COMPLETED" | "ISSUE" | "CANCELLED" | undefined {
+        if (!status) return undefined;
+        const s = String(status).trim().toUpperCase();
+        if (s === "RECEIVED" || s === "NOT_STARTED") return "RECEIVED";
+        if (s === "IN_PROCESS" || s === "IN_PROGRESS" || s === "API_TESTING" || s === "INTEGRATING") return "IN_PROCESS";
+        if (s === "COMPLETED" || s === "WAITING_FOR_DEV" || s === "ACCEPTED") return "COMPLETED";
+        if (s === "ISSUE" || s === "WAITING_FOR_DEV") return "ISSUE";
+        if (s === "CANCELLED") return "CANCELLED";
+        return undefined;
+    }
+
     useEffect(() => {
         if (open) {
+            const isNew = !(initial?.id);
+            const normalizedStatus = normalizeStatus(initial?.status) ?? "RECEIVED";
+            // Auto-set completionDate if status is COMPLETED
+            const completionDefault =
+                normalizedStatus === "COMPLETED"
+                    ? (initial?.completionDate ? toLocalInputValue(initial.completionDate) : localInputFromDate(new Date()))
+                    : (initial?.completionDate ? toLocalInputValue(initial.completionDate) : "");
+            // Auto-set startDate for new tasks
+            const defaultStart = initial?.startDate ? toLocalInputValue(initial.startDate) : (isNew ? localInputFromDate(new Date()) : "");
+
             setModel({
                 name: initial?.name || "",
                 hospitalId: initial?.hospitalId || 0,
@@ -187,10 +209,10 @@ export default function TaskFormModal({
                 // removed from form
                 additionalRequest: initial?.additionalRequest ?? "",
                 // removed from form
-                deadline: initial?.deadline ?? "",
-                completionDate: initial?.completionDate ?? "",
-                status: initial?.status ?? "RECEIVED",
-                startDate: initial?.startDate ?? "",
+                deadline: initial?.deadline ? toLocalInputValue(initial.deadline) : "",
+                completionDate: completionDefault,
+                status: normalizedStatus,
+                startDate: defaultStart,
             });
 
             const hid = initial?.hospitalId || 0;
@@ -219,40 +241,74 @@ export default function TaskFormModal({
 
     const pad = (n: number) => String(n).padStart(2, "0");
 
+    function toLocalISOString(date: Date) {
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+        const y = date.getFullYear();
+        const m = pad(date.getMonth() + 1);
+        const d = pad(date.getDate());
+        const hh = pad(date.getHours());
+        const mm = pad(date.getMinutes());
+        const ss = pad(date.getSeconds());
+        return `${y}-${m}-${d}T${hh}:${mm}:${ss}`;
+    }
+
     function localInputFromDate(date: Date) {
         if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
         return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
     }
 
-    function parseLocalInput(value: string) {
-        const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
-        if (!match) return null;
-        const [, y, m, d, h, min] = match;
-        const date = new Date();
-        date.setFullYear(Number(y), Number(m) - 1, Number(d));
-        date.setHours(Number(h), Number(min), 0, 0);
-        return date;
-    }
-
     function toISOOrNull(v?: string | Date | null) {
         if (!v) return null;
-        if (v instanceof Date) {
-            return Number.isNaN(v.getTime()) ? null : v.toISOString();
+        try {
+            if (v instanceof Date) {
+                return toLocalISOString(v);
+            }
+            const raw = String(v).trim();
+            if (!raw) return null;
+            // If has timezone, keep as is
+            if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) return raw;
+            // If datetime-local 'YYYY-MM-DDTHH:mm' or with seconds
+            const m1 = raw.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/);
+            if (m1) {
+                return raw.length === 16 ? `${raw}:00` : raw.slice(0, 19);
+            }
+            // Fallback: attempt parse and format local
+            const d = new Date(raw);
+            if (!Number.isNaN(d.getTime())) return toLocalISOString(d);
+            return raw;
+        } catch {
+            return null;
         }
-        if (typeof v === "string") {
-            const trimmed = v.trim();
-            if (!trimmed) return null;
-            const parsed = parseLocalInput(trimmed) ?? new Date(trimmed);
-            return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
-        }
-        return null;
     }
 
     function toLocalInputValue(v?: string | null) {
         if (!v) return "";
-        const parsed = new Date(v);
-        if (Number.isNaN(parsed.getTime())) return "";
-        return localInputFromDate(parsed);
+        try {
+            const raw = String(v).trim();
+            if (!raw) return "";
+
+            // If has timezone info (Z or +/-), parse and convert to local
+            if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) {
+                const date = new Date(raw);
+                if (Number.isNaN(date.getTime())) return raw.slice(0, 16);
+                return localInputFromDate(date);
+            }
+
+            // If already in datetime-local format (YYYY-MM-DDTHH:mm), return as is
+            if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw)) {
+                return raw.slice(0, 16);
+            }
+
+            // Try to parse as ISO and convert
+            const parsed = new Date(raw);
+            if (!Number.isNaN(parsed.getTime())) {
+                return localInputFromDate(parsed);
+            }
+
+            return raw;
+        } catch {
+            return "";
+        }
     }
 
     const [submitting, setSubmitting] = useState(false);
@@ -271,7 +327,7 @@ export default function TaskFormModal({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!model.name?.trim()) {
-            alert("Tên dự án không được để trống");
+            alert("Tên công việc không được để trống");
             return;
         }
         if (!hospitalOpt?.id) {
@@ -287,11 +343,14 @@ export default function TaskFormModal({
             return;
         }
 
-        const startDateIso = toISOOrNull(model.startDate) ?? (initial?.id ? null : new Date().toISOString());
+        // Use startDate from model if provided, otherwise use current date for new tasks
+        const startDateIso = toISOOrNull(model.startDate);
+        const finalStartDate = startDateIso ?? (initial?.id ? null : toLocalISOString(new Date()));
 
-        const statusUpper = String(model.status || "").toUpperCase();
+        // Use completionDate from model if provided, otherwise auto-set if status is COMPLETED
+        const normalizedStatus = normalizeStatus(model.status);
         const completionIso = toISOOrNull(model.completionDate);
-        const derivedCompletion = completionIso ?? (statusUpper === "COMPLETED" ? new Date().toISOString() : null);
+        const derivedCompletion = completionIso ?? (normalizedStatus === "COMPLETED" ? toLocalISOString(new Date()) : null);
 
         const payload: ImplementationTaskRequestDTO = {
             name: model.name!.trim(),
@@ -308,7 +367,7 @@ export default function TaskFormModal({
             deadline: toISOOrNull(model.deadline) ?? null,
             completionDate: derivedCompletion,
             status: model.status ?? null,
-            startDate: initial?.id ? startDateIso : new Date().toISOString(),
+            startDate: finalStartDate,
         };
 
         try {
@@ -455,8 +514,8 @@ export default function TaskFormModal({
                         {/* form content starts near top; header removed - only floating close button remains */}
                         <form onSubmit={handleSubmit} className="pt-6 px-6 pb-6 grid gap-4 max-h-[72vh] overflow-y-auto">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <Field label="Tên dự án" required>
-                                    <TextInput disabled={readOnly} value={model.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, name: e.target.value }))} placeholder="Nhập tên dự án" />
+                                <Field label="Tên công việc" required>
+                                    <TextInput disabled={readOnly} value={model.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, name: e.target.value }))} placeholder="Nhập tên công việc" />
                                 </Field>
 
                                 <RemoteSelect label="Bệnh viện" required placeholder="Nhập tên bệnh viện để tìm…" fetchOptions={searchHospitals} value={hospitalOpt} onChange={setHospitalOpt} disabled={readOnly || lockHospital} />
@@ -472,12 +531,24 @@ export default function TaskFormModal({
                                         onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                                             const nextStatus = e.target.value || null;
                                             setModel((s) => {
-                                                const upper = (nextStatus || "").toUpperCase();
-                                                let nextCompletion = s.completionDate;
-                                                if (upper === "COMPLETED") {
-                                                    const existingLocal = toLocalInputValue(s.completionDate);
-                                                    nextCompletion = existingLocal || localInputFromDate(new Date());
+                                                const prevNormalized = normalizeStatus(s.status);
+                                                const nextNormalized = normalizeStatus(nextStatus) ?? "RECEIVED";
+                                                const nowLocal = localInputFromDate(new Date());
+                                                const becameCompleted = nextNormalized === "COMPLETED";
+                                                const wasCompleted = prevNormalized === "COMPLETED";
+                                                
+                                                // Auto-set completionDate if status becomes COMPLETED
+                                                let nextCompletion = s.completionDate ?? "";
+                                                if (becameCompleted) {
+                                                    // If status becomes COMPLETED, set completionDate to now if empty or missing
+                                                    if (!nextCompletion || !nextCompletion.trim()) {
+                                                        nextCompletion = nowLocal;
+                                                    }
+                                                } else if (!becameCompleted && wasCompleted) {
+                                                    // If changing away from COMPLETED, clear completionDate
+                                                    nextCompletion = "";
                                                 }
+                                                
                                                 return {
                                                     ...s,
                                                     status: nextStatus,

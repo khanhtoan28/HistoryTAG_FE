@@ -9,7 +9,10 @@ import {
   HorizontaLDots,
   PageIcon,
   PlugInIcon,
-  TableIcon
+  TableIcon,
+  DocsIcon,
+  BoxIconLine,
+  TaskIcon,
 } from "../icons";
 import { UserIcon } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
@@ -27,7 +30,7 @@ const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
     name: "Bảng điều khiển",
-    subItems: [{ name: "Thương mại điện tử", path: "/home", pro: false }],
+    subItems: [{ name: "Báo cáo tổng quan", path: "/home", pro: false }],
   },
   {
     icon: <CalenderIcon />,
@@ -41,20 +44,25 @@ const navItems: NavItem[] = [
   // },
   {
     name: "Bảng dữ liệu",
-    icon: <TableIcon />,
+    icon: <DocsIcon />,
     subItems: [
       { name: "Bệnh viện", path: "/hospitals", pro: false },
       { name: "Đơn vị HIS", path: "/his-sys", pro: false }
     ],
   },
   {
-    name: "Trang",
-    icon: <PageIcon />,
+    name: "Công việc",
+    icon: <TaskIcon />,
     subItems: [
       { name: "Công việc triển khai", path: "/implementation-tasks", pro: false },
       { name: "Công việc DEV", path: "/dev-tasks", pro: false },
       { name: "Công việc bảo trì", path: "/maintenance-tasks", pro: false },
     ],
+  },
+  {
+    name: "Phòng kinh doanh",
+    icon: <BoxIconLine />,
+    path: "/admin/business",
   },
 ];
 

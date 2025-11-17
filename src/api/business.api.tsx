@@ -1,8 +1,28 @@
 import api, { getAuthToken } from './client';
 
 export async function searchHardware(q = '') {
-  const res = await api.get(`/api/v1/superadmin/hardware/search?search=${encodeURIComponent(q)}`);
-  return res.data; // expects array of { id, label, subLabel }
+  const base = getBase();
+  try {
+    const res = await api.get(`${base}/hardware/search?search=${encodeURIComponent(q)}`);
+    const data = res.data;
+    // Normalize possible shapes: either an array of EntitySelectDTO or a Page object with content
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray((data as { content?: unknown[] }).content)) {
+      const content = (data as { content?: unknown[] }).content as Record<string, unknown>[];
+      return content.map((h) => {
+        const hh = h as Record<string, unknown>;
+        const id = hh['id'] as number | string | undefined;
+        const name = hh['name'] ?? hh['label'] ?? id;
+        const type = hh['type'] ?? hh['subLabel'] ?? '';
+        return { id: Number(String(id ?? '0')), label: String(name ?? ''), subLabel: String(type ?? '') };
+      });
+    }
+    return [];
+  } catch (err) {
+    // admin API failed — do not call superadmin endpoints from admin UI
+    console.error('searchHardware admin API failed', err);
+    return [];
+  }
 }
 
 export async function searchHospitals(q = '') {
@@ -10,14 +30,9 @@ export async function searchHospitals(q = '') {
   try {
     const res = await api.get(`${base}/hospitals/search?name=${encodeURIComponent(q)}`);
     return res.data; // expects array of { id, label }
-  } catch {
-    // fallback to superadmin path if base failed
-    try {
-      const res = await api.get(`/api/v1/superadmin/hospitals/search?name=${encodeURIComponent(q)}`);
-      return res.data;
-    } catch (e) {
-      return [];
-    }
+  } catch (err) {
+    console.error('searchHospitals admin API failed', err);
+    return [];
   }
 }
 
@@ -85,8 +100,26 @@ export async function getBusinessById(id: number) {
   return res.data;
 }
 
+export async function getHardwareById(id: number) {
+  const base = getBase();
+  try {
+    const res = await api.get(`${base}/hardware/${id}`);
+    return res.data;
+  } catch (err) {
+    console.error('getHardwareById admin API failed', err);
+    // do not fallback to superadmin from admin UI
+    throw err;
+  }
+}
+
 export async function deleteBusiness(id: number) {
   const base = getBase();
   const res = await api.delete(`${base}/business/${id}`);
+  return res.data;
+}
+
+export async function getBusinessPicOptions() {
+  const base = getBase();
+  const res = await api.get(`${base}/business/pic-options`);
   return res.data;
 }

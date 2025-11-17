@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCardNew from "../SuperAdmin/TaskCardNew";
 import { toast } from "react-hot-toast";
 import { FaHospital } from "react-icons/fa";
 import { FiUser, FiMapPin, FiLink, FiClock, FiTag, FiPhone } from "react-icons/fi";
+import { isBusinessContractTaskName as isBusinessContractTask } from "../../utils/businessContract";
 
 
 export type ImplementationTaskResponseDTO = {
@@ -125,7 +127,14 @@ const apiBase = `${API_ROOT}/api/v1/admin/implementation/tasks`;
 
 
 function authHeaders(extra?: Record<string, string>) {
-  const token = localStorage.getItem("access_token");
+  // Support a few possible storage keys for the JWT to be resilient to different login flows
+  const token =
+    localStorage.getItem("access_token") ||
+    sessionStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    sessionStorage.getItem("token") ||
+    localStorage.getItem("accessToken") ||
+    sessionStorage.getItem("accessToken");
   return {
     Accept: "application/json",
     "Content-Type": "application/json",
@@ -436,6 +445,7 @@ function TaskFormModal({
   onClose,
   initial,
   onSubmit,
+  userTeam,
 }: {
   open: boolean;
   onClose: () => void;
@@ -445,6 +455,7 @@ function TaskFormModal({
     picDeploymentName?: string | null;
   };
   onSubmit: (payload: ImplementationTaskRequestDTO, id?: number) => Promise<void>;
+  userTeam: string;
 }) {
   const searchHospitals = useMemo(
     () => async (term: string) => {
@@ -465,7 +476,13 @@ function TaskFormModal({
 
   const searchPICs = useMemo(
     () => async (term: string) => {
-      const url = `${API_ROOT}/api/v1/admin/users/search?name=${encodeURIComponent(term)}`;
+      const params = new URLSearchParams({ name: term });
+      // Lọc theo team DEPLOYMENT cho implementation tasks
+      if (userTeam === "DEPLOYMENT") {
+        params.set("team", "DEPLOYMENT");
+      }
+      // Nếu SUPERADMIN hoặc team khác, không lọc team để hiện tất cả
+      const url = `${API_ROOT}/api/v1/admin/users/search?${params.toString()}`;
       const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
       if (!res.ok) return [];
       const list = await res.json();
@@ -477,7 +494,7 @@ function TaskFormModal({
         : [];
       return mapped.filter((x: { id: number; name: string }) => Number.isFinite(x.id) && x.name);
     },
-    []
+    [userTeam]
   );
 
   const currentUser = useMemo((): { id: number | null; name: string } => {
@@ -535,12 +552,14 @@ function TaskFormModal({
   const [model, setModel] = useState<ImplementationTaskRequestDTO>(() => {
     const normalized = normalizeStatus(initial?.status)?.toString() ?? "RECEIVED";
     const isNew = !initial?.id;
-    const defaultPicId = Number(initial?.picDeploymentId) || (isNew ? currentUserId ?? 0 : 0);
+    // Use explicit presence checks — don't coerce to 0 which is falsy and hides a valid id
+    const defaultPicId = initial?.picDeploymentId != null ? Number(initial.picDeploymentId) : (isNew && currentUserId ? currentUserId : undefined);
     const defaultStart = initial?.startDate || (isNew ? toLocalISOString(new Date()) : "");
     return {
       name: initial?.name || "",
       hospitalId: Number(initial?.hospitalId) || 0,
-      picDeploymentId: defaultPicId,
+      // model requires a number; use 0 when unknown but the select (picOpt) below controls validation
+      picDeploymentId: defaultPicId ?? 0,
       apiTestStatus: initial?.apiTestStatus ?? "",
       additionalRequest: initial?.additionalRequest ?? "",
       deadline: initial?.deadline ?? "",
@@ -558,9 +577,9 @@ function TaskFormModal({
 
   const [picOpt, setPicOpt] = useState<{ id: number; name: string } | null>(() => {
     const isNew = !initial?.id;
-    const id = (initial?.picDeploymentId as number) || (isNew ? currentUserId ?? 0 : 0);
+    const id = initial?.picDeploymentId != null ? Number(initial?.picDeploymentId) : (isNew && currentUserId ? currentUserId : undefined);
     const nm = (initial?.picDeploymentName as string) || (isNew ? currentUserName : "");
-    return id ? { id, name: nm && nm.trim() ? nm : String(id) } : null;
+    return id ? { id: Number(id), name: nm && nm.trim() ? nm : String(id) } : null;
   });
 
   // Removed: agencyOpt, hisOpt, hardwareOpt (fields hidden)
@@ -571,14 +590,14 @@ function TaskFormModal({
     const normalized = normalizeStatus(initial?.status)?.toString() ?? "RECEIVED";
     const isNew = !initial?.id;
     const nowIso = toLocalISOString(new Date());
-    const defaultPicId = Number(initial?.picDeploymentId) || (isNew ? currentUserId ?? 0 : 0);
-    const defaultPicName = (initial?.picDeploymentName as string) || (isNew ? currentUserName : "");
+  const defaultPicId = initial?.picDeploymentId != null ? Number(initial?.picDeploymentId) : (isNew && currentUserId ? currentUserId : undefined);
+  const defaultPicName = (initial?.picDeploymentName as string) || (isNew ? currentUserName : "");
     const defaultStart = initial?.startDate || (isNew ? nowIso : "");
 
     setModel({
       name: initial?.name || "",
       hospitalId: Number(initial?.hospitalId) || 0,
-      picDeploymentId: defaultPicId,
+      picDeploymentId: defaultPicId ?? 0,
       apiTestStatus: initial?.apiTestStatus ?? "",
       additionalRequest: initial?.additionalRequest ?? "",
       deadline: initial?.deadline ?? "",
@@ -592,9 +611,9 @@ function TaskFormModal({
     const hnm = (initial?.hospitalName as string) || "";
     setHospitalOpt(hid ? { id: hid, name: hnm || String(hid) } : null);
 
-    const pid = defaultPicId;
-    const pnm = defaultPicName;
-    setPicOpt(pid ? { id: pid, name: pnm && pnm.trim() ? pnm : String(pid) } : null);
+  const pid = defaultPicId;
+  const pnm = defaultPicName;
+  setPicOpt(pid ? { id: Number(pid), name: pnm && pnm.trim() ? pnm : String(pid) } : null);
 
     // removed resolve for agency/his/hardware
 
@@ -671,7 +690,7 @@ function TaskFormModal({
     const isNew = !(initial as any)?.id;
     const startDateRaw = model.startDate || (isNew ? toLocalISOString(new Date()) : "");
     const completionRaw = normalizedStatus === "COMPLETED"
-      ? (model.completionDate || new Date().toISOString())
+      ? (model.completionDate || toLocalISOString(new Date()))
       : "";
     const payload: ImplementationTaskRequestDTO = {
       ...model,
@@ -729,11 +748,11 @@ function TaskFormModal({
             </div>
             {/* Form fields */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field label="Tên dự án" required>
+              <Field label="Tên công việc" required>
                 <TextInput
                   value={model.name}
                   onChange={(e) => setModel((s) => ({ ...s, name: e.target.value }))}
-                  placeholder="Nhập tên dự án"
+                  placeholder="Nhập tên công việc"
                 />
               </Field>
 
@@ -773,7 +792,7 @@ function TaskFormModal({
                       return {
                         ...s,
                         status: value,
-                        completionDate: isCompleted ? (s.completionDate || new Date().toISOString()) : "",
+                        completionDate: isCompleted ? (s.completionDate || toLocalISOString(new Date())) : "",
                       };
                     });
                   }}
@@ -998,16 +1017,17 @@ const ImplementationTasksPage: React.FC = () => {
   const [detailItem, setDetailItem] = useState<ImplementationTaskResponseDTO | null>(null);
   // hospital list view state (like SuperAdmin page)
   const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
-  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number | null; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number }>>([]);
+  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number | null; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean }>>([]);
   const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
   const [hospitalPage, setHospitalPage] = useState<number>(0);
   const [hospitalSize, setHospitalSize] = useState<number>(20);
   const [selectedHospital, setSelectedHospital] = useState<string | null>(null);
-  const [acceptedCount, setAcceptedCount] = useState<number | null>(null);
   const [hospitalSearch, setHospitalSearch] = useState<string>("");
   const [hospitalStatusFilter, setHospitalStatusFilter] = useState<string>("");
   const [hospitalSortBy, setHospitalSortBy] = useState<string>("label");
   const [hospitalSortDir, setHospitalSortDir] = useState<string>("asc");
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
+  const [bulkCompleting, setBulkCompleting] = useState(false);
 
   const searchDebounce = useRef<number | null>(null);
   const readStored = <T = unknown>(key: string): T | null => {
@@ -1028,6 +1048,22 @@ const ImplementationTasksPage: React.FC = () => {
   );
   const canManage = isSuperAdmin || userTeam === "DEPLOYMENT";
   const filtered = useMemo(() => data, [data]);
+  const [completedCount, setCompletedCount] = useState<number | null>(null);
+  const navigate = useNavigate();
+  // Pending (Business -> Deployment) modal state
+  const [pendingOpen, setPendingOpen] = useState(false);
+  const [pendingGroups, setPendingGroups] = useState<Array<{ hospitalName: string; hospitalId: number | null; tasks: ImplementationTaskResponseDTO[] }>>([]);
+  const [loadingPending, setLoadingPending] = useState(false);
+  const pendingCountRef = useRef<number>(0);
+  const lastPendingCountRef = useRef<number>(0);
+  
+  // Tính số task đã hoàn thành từ data đã được filter (trong trang hiện tại)
+  const completedCountFromFiltered = useMemo(() => {
+    return filtered.filter((item) => {
+      const taskStatus = normalizeStatus(item.status);
+      return taskStatus === 'COMPLETED';
+    }).length;
+  }, [filtered]);
 
   async function fetchList() {
     const start = Date.now();
@@ -1053,10 +1089,25 @@ const ImplementationTasksPage: React.FC = () => {
         ...item,
         status: normalizeStatus(item.status) || item.status || "RECEIVED",
       }));
-      let finalItems = normalizedItems;
+      // Exclude tasks that were created from Business and are still pending acceptance by Deployment
+      const finalItems = normalizedItems.filter((it) => {
+        try {
+          const received = Boolean(it?.receivedById || it?.receivedByName);
+          const readOnlyPlaceholder = it?.readOnlyForDeployment === true;
+          const businessPlaceholder = isBusinessContractTask(
+            typeof it?.name === "string" ? it.name : String(it?.name ?? "")
+          );
+          if (readOnlyPlaceholder && !received) return false;
+          if (businessPlaceholder && !received) return false;
+          return true;
+        } catch {
+          return true;
+        }
+      });
       if (sortBy === "createdAt") {
         const dir = sortDir === "asc" ? 1 : -1;
-        finalItems = [...normalizedItems].sort((a, b) => {
+        // sort the final items list
+        const sorted = [...finalItems].sort((a, b) => {
           const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
           const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
           if (aTime !== bTime) return (aTime - bTime) * dir;
@@ -1064,10 +1115,57 @@ const ImplementationTasksPage: React.FC = () => {
           const bId = Number(b.id ?? 0);
           return (aId - bId) * dir;
         });
+        setData(sorted);
+      } else {
+        setData(finalItems);
       }
-      setData(finalItems);
       if (resp && typeof resp.totalElements === "number") setTotalCount(resp.totalElements);
       else setTotalCount(Array.isArray(resp) ? resp.length : null);
+
+      // Tính số task completed với cùng filter (search, hospitalName) nhưng không có statusFilter
+      // Nếu statusFilter đã là COMPLETED, thì completedCount = totalCount
+      // Nếu statusFilter khác COMPLETED, thì completedCount = 0 (đang filter status khác)
+      // Nếu không có statusFilter, fetch riêng để đếm completed
+      if (!showHospitalList) {
+        try {
+          if (statusFilter && statusFilter.toUpperCase() === 'COMPLETED') {
+            // Đang filter COMPLETED, nên completedCount = totalCount
+            setCompletedCount(resp && typeof resp.totalElements === "number" ? resp.totalElements : (Array.isArray(resp) ? resp.length : filtered.length));
+          } else if (statusFilter && statusFilter.toUpperCase() !== 'COMPLETED') {
+            // Đang filter status khác, nên completedCount = 0
+            setCompletedCount(0);
+          } else {
+            // Không có statusFilter, fetch riêng với cùng filter nhưng status=COMPLETED
+            const countParams = new URLSearchParams({
+              page: "0",
+              size: "1", // Chỉ cần totalElements
+              sortBy: sortBy,
+              sortDir: sortDir,
+            });
+            if (searchTerm) countParams.set("search", searchTerm.trim());
+            countParams.set("status", "COMPLETED"); // Chỉ lấy COMPLETED
+            if (selectedHospital) countParams.set("hospitalName", selectedHospital);
+            
+            const countUrl = `${apiBase}?${countParams.toString()}`;
+            const countRes = await fetch(countUrl, { method: "GET", headers: authHeaders(), credentials: "include" });
+            if (countRes.ok) {
+              const countResp = await countRes.json();
+              if (countResp && typeof countResp.totalElements === "number") {
+                setCompletedCount(countResp.totalElements);
+              } else if (Array.isArray(countResp)) {
+                setCompletedCount(countResp.length);
+              } else {
+                setCompletedCount(0);
+              }
+            } else {
+              setCompletedCount(completedCountFromFiltered);
+            }
+          }
+        } catch (e) {
+          // Nếu lỗi, tính từ data hiện tại (fallback)
+          setCompletedCount(completedCountFromFiltered);
+        }
+      }
 
       if (enableItemAnimation) {
         const itemCount = items.length;
@@ -1095,6 +1193,73 @@ const ImplementationTasksPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Poll pending groups periodically and show notifications when new pending tasks arrive
+  // BUT: Skip polling when modal is open to avoid blinking/flashing
+  useEffect(() => {
+    let mounted = true;
+
+    // Ask for notification permission once (non-blocking)
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+        // request in background; user may decline
+        Notification.requestPermission().catch(() => {});
+      }
+    } catch (err) {
+      console.debug('Notification permission request failed', err);
+    }
+
+    // Initial load (only if modal is not open)
+    if (!pendingOpen) {
+      (async () => {
+        try {
+          const initial = await fetchPendingGroups();
+          lastPendingCountRef.current = initial;
+        } catch (err) {
+          console.debug('Initial fetchPendingGroups failed', err);
+        }
+      })();
+    }
+
+    // Only set up interval if modal is closed
+    if (pendingOpen) {
+      return () => {
+        mounted = false;
+      };
+    }
+
+    const intervalId = window.setInterval(async () => {
+      try {
+        // Skip if modal is open or component unmounted
+        if (!mounted || pendingOpen) return;
+        const newCount = await fetchPendingGroups();
+        const last = lastPendingCountRef.current || 0;
+        if (!mounted || pendingOpen) return;
+        if (newCount > last) {
+          const diff = newCount - last;
+          // show in-app toast
+          toast.success(`Có ${diff} công việc chờ mới cần tiếp nhận`);
+          // show browser notification if permitted
+          try {
+            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+              new Notification('Công việc chờ mới', { body: `Có ${diff} công việc chờ cần tiếp nhận`, silent: false });
+            }
+          } catch (err) {
+            console.debug('Browser notification failed', err);
+          }
+        }
+        lastPendingCountRef.current = newCount;
+      } catch (err) {
+        console.debug('Polling fetchPendingGroups failed', err);
+      }
+    }, 8000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOpen]);
+
   // when page or size changes, refetch
   useEffect(() => {
     if (!showHospitalList && selectedHospital) fetchList();
@@ -1116,6 +1281,52 @@ const ImplementationTasksPage: React.FC = () => {
   // refetch when statusFilter or sort changes
   useEffect(() => { if (!showHospitalList) fetchList(); /* eslint-disable-line */ }, [statusFilter]);
   useEffect(() => { if (!showHospitalList) fetchList(); /* eslint-disable-line */ }, [sortBy, sortDir]);
+
+  // Clear selected tasks when switching views or filters
+  useEffect(() => {
+    setSelectedTaskIds(new Set());
+  }, [showHospitalList, page, statusFilter, searchTerm, selectedHospital]);
+
+  const handleBulkComplete = async () => {
+    if (selectedTaskIds.size === 0) return;
+    
+    setBulkCompleting(true);
+    try {
+      const taskIdsArray = Array.from(selectedTaskIds);
+      const res = await fetch(`${API_ROOT}/api/v1/admin/implementation/tasks/bulk-complete`, {
+        method: "POST",
+        headers: {
+          ...authHeaders(),
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ taskIds: taskIdsArray }),
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: "Lỗi khi hoàn thành tasks" }));
+        throw new Error(errorData.message || `HTTP ${res.status}`);
+      }
+      
+      const result = await res.json();
+      const completedCount = result.completedCount || 0;
+      
+      toast.success(`Đã hoàn thành ${completedCount} task${completedCount > 1 ? "s" : ""}`);
+      
+      // Clear selection and refresh list
+      setSelectedTaskIds(new Set());
+      await fetchList();
+      
+      // Refresh hospital summary if in hospital view
+      if (showHospitalList) {
+        await fetchHospitalsWithTasks();
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Lỗi khi hoàn thành tasks");
+    } finally {
+      setBulkCompleting(false);
+    }
+  };
 
   async function fetchHospitalOptions(q: string) {
     try {
@@ -1151,30 +1362,112 @@ const ImplementationTasksPage: React.FC = () => {
     setLoadingHospitals(true);
     setError(null);
     try {
-      // Fetch a large page of tasks and aggregate by hospital
-      const params = new URLSearchParams({ page: "0", size: "2000", sortBy: "id", sortDir: "asc" });
-      const endpoint = `${API_ROOT}/api/v1/admin/implementation/tasks?${params.toString()}`;
-      const res = await fetch(endpoint, {
+      // ✅ Fetch hospitals with transfer status (new endpoint - tối ưu hơn)
+      const res = await fetch(`${API_ROOT}/api/v1/admin/implementation/tasks/hospitals/with-status`, {
         method: "GET",
         headers: authHeaders(),
         credentials: "include",
       });
-      if (!res.ok) throw new Error(`Failed to fetch hospitals: ${res.status}`);
-      const payload = await res.json();
-      const items: ImplementationTaskResponseDTO[] = Array.isArray(payload?.content) ? payload.content : Array.isArray(payload) ? payload : [];
+      if (!res.ok) {
+        if (res.status === 401) {
+          throw new Error(`Unauthorized (401): Token may be expired or invalid. Please login again.`);
+        }
+        throw new Error(`Failed to fetch hospitals: ${res.status}`);
+      }
+      const hospitals = await res.json();
+      
+      // Parse task count from subLabel (format: "Province - X tasks" or "X tasks")
+      const baseList = (Array.isArray(hospitals) ? hospitals : []).map((hospital: { id: number; label: string; subLabel?: string; transferredToMaintenance?: boolean; acceptedByMaintenance?: boolean }) => {
+        let taskCount = 0;
+        let province = hospital.subLabel || "";
+        
+        // Parse task count from subLabel
+        if (hospital.subLabel) {
+          const match = hospital.subLabel.match(/(\d+)\s+tasks?/i);
+          if (match) {
+            taskCount = parseInt(match[1], 10);
+            // Extract province (everything before " - X tasks")
+            province = hospital.subLabel.replace(/\s*-\s*\d+\s+tasks?/i, "").trim();
+          }
+        }
+        
+        return {
+          ...hospital,
+          subLabel: province, // Keep only province without task count
+          taskCount: taskCount,
+          nearDueCount: 0, // Initialize to 0 - will be calculated in augment()
+          overdueCount: 0, // Initialize to 0 - will be calculated in augment()
+          transferredCount: 0,
+          // Use transfer status from backend
+          allTransferred: Boolean(hospital.transferredToMaintenance),
+          allAccepted: Boolean(hospital.acceptedByMaintenance),
+        };
+      });
+
+      // Fetch completed counts + near due/overdue for each hospital in parallel
+      const completedCounts = await Promise.all(
+        baseList.map(async (h) => {
+          try {
+            // count only COMPLETED as 'completed' for hospital aggregation
+            const p = new URLSearchParams({ page: "0", size: "1", status: "COMPLETED", hospitalName: h.label });
+            const u = `${API_ROOT}/api/v1/admin/implementation/tasks?${p.toString()}`;
+            const r = await fetch(u, { method: 'GET', headers: authHeaders(), credentials: 'include' });
+            if (!r.ok) return 0;
+            try {
+              const resp = await r.json();
+              if (resp && typeof resp.totalElements === 'number') return resp.totalElements as number;
+              else if (Array.isArray(resp)) return resp.length;
+            } catch {
+              // ignore individual parse errors
+            }
+            return 0;
+          } catch {
+            return 0;
+          }
+        })
+      );
+
+      // Fetch all tasks (limited) to compute near due/overdue per hospital
+      const allParams = new URLSearchParams({ page: "0", size: "2000", sortBy: "id", sortDir: "asc" });
+      const allRes = await fetch(`${API_ROOT}/api/v1/admin/implementation/tasks?${allParams.toString()}`, { method: 'GET', headers: authHeaders(), credentials: 'include' });
+      const allPayload = allRes.ok ? await allRes.json() : [];
+      const allItems = Array.isArray(allPayload?.content) ? allPayload.content : Array.isArray(allPayload) ? allPayload : [];
+      // Exclude Business-created pending tasks from hospital summaries (they are not yet in deployment list)
+      const visibleItems = (allItems as ImplementationTaskResponseDTO[]).filter((it) => {
+        try {
+          const received = Boolean(it?.receivedById || it?.receivedByName);
+          const readOnlyPlaceholder = it?.readOnlyForDeployment === true;
+          const businessPlaceholder = isBusinessContractTask(
+            typeof it?.name === "string" ? it.name : String(it?.name ?? "")
+          );
+          if (readOnlyPlaceholder && !received) return false;
+          if (businessPlaceholder && !received) return false;
+          return true;
+        } catch {
+          return true;
+        }
+      });
 
       // Aggregate by hospitalName
-      const acc = new Map<string, { id: number | null; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number }>();
-      for (const it of items) {
+      const acc = new Map<string, { id: number | null; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number; transferredCount: number; acceptedByMaintenanceCount: number }>();
+      for (const it of visibleItems) {
         const name = (it.hospitalName || "").toString().trim() || "—";
         const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
         const key = hospitalId != null ? `id-${hospitalId}` : `name-${name}`;
-        const current = acc.get(key) || { id: hospitalId, label: name, subLabel: "", taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0 };
+        const current = acc.get(key) || { id: hospitalId, label: name, subLabel: "", taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0, transferredCount: 0, acceptedByMaintenanceCount: 0 };
         if (current.id == null && hospitalId != null) current.id = hospitalId;
         if (!current.label && name) current.label = name;
         current.taskCount += 1;
         const taskStatus = normalizeStatus(it.status);
         if (taskStatus === 'COMPLETED') current.acceptedCount += 1;
+        // Count transferred tasks
+        if (it.transferredToMaintenance === true) {
+          current.transferredCount += 1;
+        }
+        // Count tasks accepted by maintenance (readOnlyForDeployment = true means maintenance accepted)
+        if (it.readOnlyForDeployment === true && it.transferredToMaintenance === true) {
+          current.acceptedByMaintenanceCount += 1;
+        }
         // Count near due / overdue for non-completed
         if (taskStatus !== 'COMPLETED' && it.deadline) {
           const d = new Date(it.deadline);
@@ -1183,60 +1476,165 @@ const ImplementationTasksPage: React.FC = () => {
             const today = new Date();
             const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
             const dayDiff = Math.round((d.getTime() - startToday) / (24 * 60 * 60 * 1000));
-            if (dayDiff === -1 || dayDiff === 0) current.nearDueCount += 1; // yesterday or today
-            if (dayDiff > 0) current.overdueCount += 1; // after today (the rule you set)
+            // Quá hạn: deadline đã qua (dayDiff < 0)
+            if (dayDiff < 0) current.overdueCount += 1;
+            // Sắp đến hạn: hôm nay hoặc trong 3 ngày tới (0 <= dayDiff <= 3)
+            if (dayDiff >= 0 && dayDiff <= 3) current.nearDueCount += 1;
           }
         }
         acc.set(key, current);
       }
-      const list = Array.from(acc.values());
-      // Enrich province/subLabel by querying hospitals search per name (best effort)
-      async function resolveHospitalMeta(name: string): Promise<{ province: string; id: number | null }> {
-        try {
-          const res = await fetch(`${API_ROOT}/api/v1/admin/hospitals/search?name=${encodeURIComponent(name)}`, { headers: authHeaders(), credentials: 'include' });
-          if (!res.ok) return { province: '', id: null };
-          const arr = await res.json();
-          if (!Array.isArray(arr) || arr.length === 0) return { province: '', id: null };
-          // Prefer exact match by label/name
-          const pick = (arr as any[]).find((x) => {
-            const label = String(x?.label ?? x?.name ?? '').trim();
-            return label.toLowerCase() === name.trim().toLowerCase();
-          }) || arr[0];
-          if (!pick || typeof pick !== 'object') return { province: '', id: null };
-          const obj: any = pick;
-          const resolvedId = typeof obj?.id === 'number' ? obj.id : obj?.id != null ? Number(obj.id) : null;
-          const keys = ['province', 'provinceName', 'city', 'cityName', 'addressProvince', 'addressProvinceName', 'region', 'subLabel'];
-          for (const k of keys) {
-            const v = obj[k];
-            if (typeof v === 'string' && v.trim()) {
-              // If backend returns multiple provinces separated by comma, pick the first
-              const value = String(v).split(',')[0].trim();
-              // remove trailing task counts if mistakenly included (" - X tasks")
-              return { province: value.replace(/\s*-\s*\d+\s+tasks?/i, '').trim(), id: resolvedId };
-            }
-          }
-          // As last resort, attempt to parse from label formatted like "Province - Hospital"
-          if (typeof obj.label === 'string') {
-            const m = obj.label.split(' - ');
-            if (m.length > 1) return { province: m[0].split(',')[0].trim(), id: resolvedId };
-          }
-          return { province: '', id: resolvedId };
-        } catch { return { province: '', id: null }; }
-      }
-
-      const withProvince = await Promise.all(list.map(async (h) => {
-        const meta = await resolveHospitalMeta(h.label);
-        return {
-          ...h,
-          id: h.id ?? meta.id ?? null,
-          subLabel: h.subLabel && h.subLabel.trim() ? h.subLabel : meta.province,
-        };
-      }));
-      setHospitalsWithTasks(withProvince);
+      // Merge baseList (có transfer status từ endpoint) với task counts từ aggregation
+      // Chỉ hiển thị các bệnh viện có task đã được tiếp nhận (không phải pending)
+      const withCompleted = baseList
+        .map((h, idx) => {
+          // Tìm matching hospital từ acc (aggregated from tasks - đã loại pending)
+          const hospitalId = h.id;
+          const hospitalName = h.label;
+          const key = hospitalId != null ? `id-${hospitalId}` : `name-${hospitalName}`;
+          const aggregated = acc.get(key);
+          
+          // Chỉ sử dụng taskCount từ aggregated (đã filter pending tasks)
+          // Không fallback về h.taskCount vì nó có thể bao gồm pending tasks
+          const finalTaskCount = aggregated?.taskCount ?? 0;
+          
+          return {
+            ...h,
+            taskCount: finalTaskCount,
+            acceptedCount: completedCounts[idx] ?? (aggregated?.acceptedCount ?? 0),
+            nearDueCount: aggregated?.nearDueCount ?? 0,
+            overdueCount: aggregated?.overdueCount ?? 0,
+            // Transfer status đã có từ backend endpoint
+          };
+        })
+        .filter((h) => h.taskCount > 0); // Chỉ hiển thị bệnh viện có task đã được tiếp nhận
+      
+      // Province đã có trong subLabel từ endpoint, không cần fetch thêm
+      setHospitalsWithTasks(withCompleted);
     } catch (e: any) {
       setError(e.message || "Lỗi tải danh sách bệnh viện");
     } finally {
       setLoadingHospitals(false);
+    }
+  }
+
+  // Fetch pending implementation tasks that were created from Business and not yet accepted by Deployment
+  async function fetchPendingGroups(): Promise<number> {
+    setLoadingPending(true);
+    try {
+      const url = `${API_ROOT}/api/v1/admin/implementation/pending`;
+      const res = await fetch(url, { method: 'GET', headers: authHeaders(), credentials: 'include' });
+      if (res.status === 401) {
+        toast.error('Bạn chưa đăng nhập hoặc phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        navigate('/signin');
+        return pendingCountRef.current;
+      }
+      if (!res.ok) throw new Error(`Failed to load pending: ${res.status}`);
+      const list: ImplementationTaskResponseDTO[] = await res.json();
+      // Defensive: only keep tasks without receivedBy
+      const filtered = (Array.isArray(list) ? list : []).filter((t) => !t.receivedById && !t.receivedByName);
+      const groups = new Map<string, { hospitalId: number | null; hospitalName: string; tasks: ImplementationTaskResponseDTO[] }>();
+      for (const t of filtered) {
+        const name = (t.hospitalName || '—').toString();
+        const key = `${t.hospitalId ?? 'null'}::${name}`;
+        const cur = groups.get(key) || { hospitalId: typeof t.hospitalId === 'number' ? t.hospitalId : null, hospitalName: name, tasks: [] };
+        cur.tasks.push(t);
+        groups.set(key, cur);
+      }
+      const grouped = Array.from(groups.values()).map(g => ({ hospitalName: g.hospitalName, hospitalId: g.hospitalId, tasks: g.tasks }));
+      setPendingGroups(grouped);
+      const count = grouped.reduce((s, g) => s + (g.tasks?.length || 0), 0);
+      pendingCountRef.current = count;
+      return count;
+    } catch (e: any) {
+      toast.error(e?.message || 'Lỗi khi tải danh sách chờ');
+    } finally {
+      setLoadingPending(false);
+    }
+    return pendingCountRef.current;
+  }
+
+  async function handleAcceptTask(taskId: number) {
+    try {
+      const url = `${API_ROOT}/api/v1/admin/implementation/accept/${taskId}`;
+      // Set startDate to current date/time and status to RECEIVED when accepting
+      const startDate = toLocalISOString(new Date());
+      const res = await fetch(url, { 
+        method: 'PUT', 
+        headers: authHeaders(), 
+        credentials: 'include',
+        body: JSON.stringify({ 
+          startDate,
+          status: 'RECEIVED'
+        })
+      });
+      if (res.status === 401) {
+        toast.error('Bạn chưa đăng nhập hoặc không có quyền. Vui lòng đăng nhập lại.');
+        navigate('/signin');
+        return;
+      }
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+      const updated: ImplementationTaskResponseDTO | null = await res.json().catch(() => null);
+      // Remove from pendingGroups
+      setPendingGroups((prev) => prev.map(g => ({ ...g, tasks: g.tasks.filter(t => t.id !== taskId) })).filter(g => g.tasks.length > 0));
+
+      // If server returned updated DTO, insert/update it into current view so accepter sees it immediately
+      if (updated) {
+        toast.success(`Đã nhận công việc: ${updated.name}`);
+        // If currently viewing tasks for a specific hospital, and it matches, add to data list
+        if (!showHospitalList && selectedHospital && updated.hospitalName === selectedHospital) {
+          setData((prev) => {
+            // avoid duplicates
+            const exists = prev.some((p) => p.id === updated.id);
+            if (exists) return prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
+            return [ { ...updated, status: normalizeStatus(updated.status) || updated.status }, ...prev ];
+          });
+        } else {
+          // Not viewing that hospital — update hospitals summary counters optimistically
+          setHospitalsWithTasks((prev) => prev.map(h => {
+            if ((h.id ?? null) === (updated.hospitalId ?? null) || h.label === updated.hospitalName) {
+              // task moved from pending -> active: increment taskCount and acceptedCount accordingly
+              return { ...h, taskCount: (h.taskCount || 0) + 1, acceptedCount: (h.acceptedCount || 0) + 1 };
+            }
+            return h;
+          }));
+        }
+      } else {
+        toast.success('Đã nhận công việc');
+      }
+
+      // Refresh hospital summary to keep counters in sync (best-effort)
+      fetchHospitalsWithTasks().catch(() => {});
+      
+      // Refresh task list if viewing tasks to show updated startDate and status
+      if (!showHospitalList && selectedHospital) {
+        await fetchList();
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Lỗi khi tiếp nhận công việc');
+    }
+  }
+
+  async function handleAcceptGroup(hospitalId: number | null) {
+    // Accept all tasks in a given hospital group sequentially
+    const group = pendingGroups.find(g => (g.hospitalId ?? null) === (hospitalId ?? null));
+    if (!group) return;
+    for (const t of [...group.tasks]) {
+      // eslint-disable-next-line no-await-in-loop
+      await handleAcceptTask(t.id as number);
+    }
+  }
+
+  async function handleAcceptAll() {
+    // Accept all tasks from all hospitals sequentially
+    for (const group of [...pendingGroups]) {
+      for (const t of [...group.tasks]) {
+        // eslint-disable-next-line no-await-in-loop
+        await handleAcceptTask(t.id as number);
+      }
     }
   }
 
@@ -1266,19 +1664,6 @@ const ImplementationTasksPage: React.FC = () => {
   useEffect(() => {
     if (!showHospitalList && selectedHospital) {
       fetchList();
-      // fetch accepted count for header summary
-      (async () => {
-        try {
-          const params = new URLSearchParams({ page: "0", size: "1", status: "COMPLETED", hospitalName: selectedHospital });
-          const url = `${apiBase}?${params.toString()}`;
-          const res = await fetch(url, { method: "GET", headers: authHeaders(), credentials: "include" });
-          if (!res.ok) return setAcceptedCount(null);
-          const resp = await res.json();
-          if (resp && typeof resp.totalElements === 'number') setAcceptedCount(resp.totalElements);
-          else if (Array.isArray(resp)) setAcceptedCount(resp.length);
-          else setAcceptedCount(0);
-        } catch { setAcceptedCount(null); }
-      })();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedHospital, showHospitalList]);
@@ -1304,18 +1689,8 @@ const ImplementationTasksPage: React.FC = () => {
       // We are on hospital table → refresh the aggregated list
       await fetchHospitalsWithTasks();
     } else {
-      // We are viewing tasks of a hospital → refresh tasks and accepted counter
+      // We are viewing tasks of a hospital → refresh tasks
       await fetchList();
-      try {
-        const params = new URLSearchParams({ page: "0", size: "1", status: "COMPLETED", hospitalName: selectedHospital || "" });
-        const urlCount = `${apiBase}?${params.toString()}`;
-        const r = await fetch(urlCount, { method: "GET", headers: authHeaders(), credentials: "include" });
-        if (r.ok) {
-          const resp = await r.json();
-          if (resp && typeof resp.totalElements === 'number') setAcceptedCount(resp.totalElements);
-          else if (Array.isArray(resp)) setAcceptedCount(resp.length);
-        }
-      } catch { /* ignore */ }
 
       // Optimistically bump hospital list counters so when user quay lại không cần reload
       if (!isUpdate && selectedHospital) {
@@ -1361,10 +1736,11 @@ const ImplementationTasksPage: React.FC = () => {
       toast.error("Không xác định được bệnh viện để chuyển sang bảo trì.");
       return;
     }
-    if (!confirm(`Chuyển ${accepted}/${total} tác vụ của ${hospital.label} sang bảo trì?`)) return;
+    if (!confirm(`Chuyển bệnh viện ${hospital.label} sang bảo trì?`)) return;
     try {
+      // ✅ API mới: Chuyển bệnh viện (không phải task)
       const res = await fetch(
-        `${API_ROOT}/api/v1/admin/implementation/hospital/${hospitalId}/convert-to-maintenance`,
+        `${API_ROOT}/api/v1/admin/hospitals/${hospitalId}/transfer-to-maintenance`,
         {
           method: "POST",
           headers: authHeaders(),
@@ -1376,34 +1752,23 @@ const ImplementationTasksPage: React.FC = () => {
         toast.error(`Chuyển sang bảo trì thất bại: ${text || res.status}`);
         return;
       }
-      let payload: {
-        convertedCount?: number;
-        failedTaskIds?: number[];
-        failedMessages?: string[];
-        alreadyTransferredCount?: number;
-        skippedCount?: number;
-      } | null = null;
+      
+      toast.success(`Đã chuyển bệnh viện ${hospital.label} sang bảo trì`);
 
-      try {
-        payload = await res.json();
-      } catch {
-        payload = null;
-      }
+      // ✅ Update state ngay lập tức để UI cập nhật (từ "Chuyển sang bảo trì" → "Chờ tiếp nhận")
+      setHospitalsWithTasks((prev) => prev.map((h) => {
+        if (h.id === hospitalId || h.label === hospital.label) {
+          return {
+            ...h,
+            allTransferred: true, // Đã chuyển
+            allAccepted: false,   // Chưa tiếp nhận
+          };
+        }
+        return h;
+      }));
 
-      const converted = payload?.convertedCount ?? accepted;
-      const already = payload?.alreadyTransferredCount ?? 0;
-      const failedList = Array.isArray(payload?.failedTaskIds) ? payload?.failedTaskIds ?? [] : [];
-      const failed = failedList.length;
-
-      let successMsg = `Đã yêu cầu chuyển ${converted} công việc của ${hospital.label} sang bảo trì`;
-      if (already > 0) successMsg += ` (đã đánh dấu trước đó: ${already})`;
-      toast.success(`${successMsg}.`);
-
-      if (failed > 0) {
-        const detail = (payload?.failedMessages || []).filter(Boolean).join("; ");
-        toast.error(`Có ${failed} công việc chuyển thất bại${detail ? `: ${detail}` : ""}`);
-      }
-
+      // ✅ Refresh để lấy data mới nhất từ backend (sau delay nhỏ để đảm bảo backend đã commit)
+      await new Promise(resolve => setTimeout(resolve, 300));
       await fetchHospitalsWithTasks();
       if (!showHospitalList && selectedHospital === hospital.label) {
         await fetchList();
@@ -1461,10 +1826,8 @@ const ImplementationTasksPage: React.FC = () => {
               </select>
             </div>
             <div className="mt-3 text-sm text-gray-600 dark:text-gray-300 flex items-center gap-4">
-              <span>Tổng: <span className="font-semibold text-gray-800 dark:text-gray-100">{loading ? '...' : (totalCount ?? data.length)}</span></span>
-              {typeof acceptedCount === 'number' && (
-                <span>Đã hoàn thành: <span className="font-semibold text-gray-800 dark:text-gray-100">{acceptedCount}/{totalCount ?? data.length} task</span></span>
-              )}
+              <span>Tổng: <span className="font-semibold text-gray-800 dark:text-gray-100">{loading ? '...' : (totalCount ?? filtered.length)}</span></span>
+              <span>Đã hoàn thành: <span className="font-semibold text-gray-800 dark:text-gray-100">{completedCount ?? completedCountFromFiltered}/{totalCount ?? filtered.length} task</span></span>
             </div>
           </div>
 
@@ -1481,6 +1844,21 @@ const ImplementationTasksPage: React.FC = () => {
                 <option value="desc">Giảm dần</option>
               </select>
             </div>
+            {/* Pending tasks button for Deployment team */}
+            {canManage && (
+              <Button
+                variant="ghost"
+                className="relative flex items-center gap-2 border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300"
+                onClick={() => { setPendingOpen(true); fetchPendingGroups(); }}
+              >
+                📨 Công việc chờ
+                {pendingGroups.reduce((s, g) => s + (g.tasks?.length || 0), 0) > 0 && (
+                  <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
+                    {pendingGroups.reduce((s, g) => s + (g.tasks?.length || 0), 0)}
+                  </span>
+                )}
+              </Button>
+            )}
 
             {canManage ? (
               <button
@@ -1501,17 +1879,7 @@ const ImplementationTasksPage: React.FC = () => {
                 <span>Thêm mới</span>
               </button>
             )}
-            <button className="rounded-full border px-4 py-2 text-sm shadow-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 flex items-center gap-2" onClick={async () => {
-              setSearchTerm(''); setStatusFilter(''); setSortBy('createdAt'); setSortDir('desc'); setPage(0);
-              setLoading(true);
-              const start = Date.now();
-              await fetchList();
-              const minMs = 800;
-              const elapsed = Date.now() - start;
-              if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
-              setLoading(false);
-            }}>
-            </button>
+          
           </div>
         </div>
       </div>
@@ -1553,6 +1921,9 @@ const ImplementationTasksPage: React.FC = () => {
                       <option value="unaccepted">Chưa có nghiệm thu</option>
                     </select>
                   </div>
+                  <div className="mt-3 text-sm text-gray-600 dark:text-gray-300">
+                    <span>Tổng: <span className="font-semibold text-gray-800 dark:text-gray-100">{loadingHospitals ? '...' : filteredHospitals.length}</span> viện</span>
+                  </div>
                 </div>
                   <div className="flex items-center gap-2">
                     <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900" value={hospitalSortBy} onChange={(e) => { setHospitalSortBy(e.target.value); setHospitalPage(0); }}>
@@ -1565,14 +1936,29 @@ const ImplementationTasksPage: React.FC = () => {
                       <option value="asc">Tăng dần</option>
                       <option value="desc">Giảm dần</option>
                     </select>
+                    {/* Pending tasks button (visible in hospital list header) */}
                     {canManage && (
-                      <button
-                        className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
-                        onClick={() => { setEditing(null); setModalOpen(true); }}
-                        type="button"
-                      >
-                        + Thêm task mới
-                      </button>
+                      <>
+                        <Button
+                          variant="ghost"
+                          className="relative flex items-center gap-2 border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 mr-2"
+                          onClick={() => { setPendingOpen(true); fetchPendingGroups(); }}
+                        >
+                          📨 Công việc chờ
+                          {pendingGroups.reduce((s, g) => s + (g.tasks?.length || 0), 0) > 0 && (
+                            <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
+                              {pendingGroups.reduce((s, g) => s + (g.tasks?.length || 0), 0)}
+                            </span>
+                          )}
+                        </Button>
+                        <button
+                          className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
+                          onClick={() => { setEditing(null); setModalOpen(true); }}
+                          type="button"
+                        >
+                          + Thêm task mới
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -1582,7 +1968,9 @@ const ImplementationTasksPage: React.FC = () => {
                   <div className="text-blue-600 text-4xl font-extrabold tracking-wider animate-pulse" aria-hidden="true">TAG</div>
                 </div>
               ) : filteredHospitals.length === 0 ? (
-                <div className="px-4 py-6 text-center text-gray-500">Không có bệnh viện nào có task</div>
+                <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center text-gray-600 dark:text-gray-400">
+                  Không có bệnh viện nào có task
+                </div>
               ) : (
                 <>
                   <div className="rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
@@ -1616,7 +2004,7 @@ const ImplementationTasksPage: React.FC = () => {
                                 <div className="flex flex-col items-start gap-1">
                                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task</span>
                                   {(hospital.nearDueCount ?? 0) > 0 && (
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Sắp hạn: {hospital.nearDueCount}</span>
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Sắp đến hạn: {hospital.nearDueCount}</span>
                                   )}
                                   {(hospital.overdueCount ?? 0) > 0 && (
                                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Quá hạn: {hospital.overdueCount}</span>
@@ -1636,7 +2024,7 @@ const ImplementationTasksPage: React.FC = () => {
                                   >
                                     Xem task
                                   </button>
-                                  {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) === (hospital.taskCount || 0) && (
+                                  {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) === (hospital.taskCount || 0) && !hospital.allTransferred && (
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -1648,7 +2036,23 @@ const ImplementationTasksPage: React.FC = () => {
                                       ➜ Chuyển sang bảo trì
                                     </button>
                                   )}
-                                  {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) < (hospital.taskCount || 0) && (
+                                  {canManage && (hospital.taskCount || 0) > 0 && hospital.allTransferred && !hospital.allAccepted && (
+                                    <span
+                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-yellow-100 text-yellow-700 text-sm font-medium"
+                                      title="Đã chuyển sang bảo trì, đang chờ bảo trì tiếp nhận"
+                                    >
+                                      ⏳ Chờ tiếp nhận
+                                    </span>
+                                  )}
+                                  {canManage && (hospital.taskCount || 0) > 0 && hospital.allTransferred && hospital.allAccepted && (
+                                    <span
+                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-100 text-green-700 text-sm font-medium"
+                                      title="Đã chuyển sang bảo trì và bảo trì đã tiếp nhận"
+                                    >
+                                      ✓ Đã chuyển sang bảo trì
+                                    </span>
+                                  )}
+                                  {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) < (hospital.taskCount || 0) && !hospital.allTransferred && (
                                     <span
                                       className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-sm"
                                       title={`Còn ${(hospital.taskCount || 0) - (hospital.acceptedCount || 0)} task chưa hoàn thành`}
@@ -1665,20 +2069,51 @@ const ImplementationTasksPage: React.FC = () => {
                       </table>
                     </div>
                   </div>
-                  <div className="mt-4 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <button className="px-3 py-1 border rounded" onClick={() => setHospitalPage((p) => Math.max(0, p - 1))} disabled={hospitalPage <= 0}>Prev</button>
-                      <span className="text-sm">Trang {hospitalPage + 1} / {Math.max(1, Math.ceil(filteredHospitals.length / hospitalSize))}</span>
-                      <button className="px-3 py-1 border rounded" onClick={() => setHospitalPage((p) => p + 1)} disabled={(hospitalPage + 1) * hospitalSize >= filteredHospitals.length}>Next</button>
+                  <div className="mt-4 flex items-center justify-between py-3">
+                    <div className="text-sm text-gray-600">
+                      {filteredHospitals.length === 0 ? (
+                        <span>Hiển thị 0 trong tổng số 0 mục</span>
+                      ) : (
+                        (() => {
+                          const total = filteredHospitals.length;
+                          const from = hospitalPage * hospitalSize + 1;
+                          const to = Math.min((hospitalPage + 1) * hospitalSize, total);
+                          return <span>Hiển thị {from} đến {to} trong tổng số {total} mục</span>;
+                        })()
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm">Số hàng:</label>
-                      <select value={String(hospitalSize)} onChange={(e) => { setHospitalSize(Number(e.target.value)); setHospitalPage(0); }} className="border rounded px-2 py-1 text-sm">
-                        <option value="10">10</option>
-                        <option value="20">20</option>
-                        <option value="50">50</option>
-                        <option value="100">100</option>
-                      </select>
+
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-gray-600">Hiển thị:</label>
+                        <select value={String(hospitalSize)} onChange={(e) => { setHospitalSize(Number(e.target.value)); setHospitalPage(0); }} className="border rounded px-2 py-1 text-sm">
+                          <option value="10">10</option>
+                          <option value="20">20</option>
+                          <option value="50">50</option>
+                          <option value="100">100</option>
+                        </select>
+                      </div>
+
+                      <div className="inline-flex items-center gap-1">
+                        <button onClick={() => setHospitalPage(0)} disabled={hospitalPage <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Đầu">«</button>
+                        <button onClick={() => setHospitalPage((p) => Math.max(0, p - 1))} disabled={hospitalPage <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Trước">‹</button>
+
+                        {(() => {
+                          const total = Math.max(1, Math.ceil(filteredHospitals.length / hospitalSize));
+                          const pages: number[] = [];
+                          const start = Math.max(1, hospitalPage + 1 - 2);
+                          const end = Math.min(total, start + 4);
+                          for (let i = start; i <= end; i++) pages.push(i);
+                          return pages.map((p) => (
+                            <button key={p} onClick={() => setHospitalPage(p - 1)} className={`px-3 py-1 border rounded text-sm ${hospitalPage + 1 === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}>
+                              {p}
+                            </button>
+                          ));
+                        })()}
+
+                        <button onClick={() => setHospitalPage((p) => Math.min(Math.max(0, Math.ceil(filteredHospitals.length / hospitalSize) - 1), p + 1))} disabled={(hospitalPage + 1) * hospitalSize >= filteredHospitals.length} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Tiếp">›</button>
+                        <button onClick={() => setHospitalPage(Math.max(0, Math.ceil(filteredHospitals.length / hospitalSize) - 1))} disabled={(hospitalPage + 1) * hospitalSize >= filteredHospitals.length} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Cuối">»</button>
+                      </div>
                     </div>
                   </div>
                 </>
@@ -1686,65 +2121,238 @@ const ImplementationTasksPage: React.FC = () => {
             </div>
           ) : (
             filtered.length === 0 ? (
-              <div className="px-4 py-6 text-center text-gray-500">Không có dữ liệu</div>
+              <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center text-gray-600 dark:text-gray-400">
+                Không có dữ liệu
+              </div>
             ) : (
-              filtered.map((row, idx) => (
-                <TaskCardNew
-                  key={row.id}
-                  task={row as any}
-                  idx={enableItemAnimation ? idx : undefined}
-                  displayIndex={page * size + idx}
-                  animate={enableItemAnimation}
-                  onOpen={() => { setDetailItem(row); setDetailOpen(true); }}
-                  onEdit={() => { setEditing(row); setModalOpen(true); }}
-                  onDelete={(id: number) => { handleDelete(id); }}
-                  canEdit={canManage && (() => { try { const uidRaw = localStorage.getItem("userId") || sessionStorage.getItem("userId"); const uid = uidRaw ? Number(uidRaw) : 0; return uid > 0 && Number(row.picDeploymentId) === uid; } catch { return false; } })()}
-                  canDelete={canManage && (() => { try { const uidRaw = localStorage.getItem("userId") || sessionStorage.getItem("userId"); const uid = uidRaw ? Number(uidRaw) : 0; return uid > 0 && Number(row.picDeploymentId) === uid; } catch { return false; } })()}
-                />
-
-              ))
+              <>
+                {/* Bulk actions toolbar */}
+                {selectedTaskIds.size > 0 && (
+                  <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800 flex items-center justify-between">
+                    <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                      Đã chọn {selectedTaskIds.size} task
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setSelectedTaskIds(new Set())}
+                        className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                      >
+                        Bỏ chọn
+                      </button>
+                      <button
+                        onClick={handleBulkComplete}
+                        disabled={bulkCompleting}
+                        className="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {bulkCompleting ? (
+                          <>
+                            <span className="animate-spin">⏳</span>
+                            <span>Đang xử lý...</span>
+                          </>
+                        ) : (
+                          <>
+                            
+                            <span>Hoàn thành đã chọn</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Task list with checkboxes */}
+                {filtered.map((row, idx) => {
+                  const taskId = row.id;
+                  const isSelected = selectedTaskIds.has(taskId);
+                  const canComplete = canManage && (() => { 
+                    try { 
+                      const uidRaw = localStorage.getItem("userId") || sessionStorage.getItem("userId"); 
+                      const uid = uidRaw ? Number(uidRaw) : 0; 
+                      return uid > 0 && Number(row.picDeploymentId) === uid && row.status !== "COMPLETED"; 
+                    } catch { 
+                      return false; 
+                    } 
+                  })();
+                  
+                  return (
+                    <div key={row.id}>
+                      <TaskCardNew
+                        task={row as unknown as ImplementationTaskResponseDTO}
+                        idx={enableItemAnimation ? idx : undefined}
+                        displayIndex={page * size + idx}
+                        animate={enableItemAnimation}
+                        onOpen={() => { setDetailItem(row); setDetailOpen(true); }}
+                        onEdit={() => { setEditing(row); setModalOpen(true); }}
+                        onDelete={(id: number) => { handleDelete(id); }}
+                        canEdit={canManage && (() => { try { const uidRaw = localStorage.getItem("userId") || sessionStorage.getItem("userId"); const uid = uidRaw ? Number(uidRaw) : 0; return uid > 0 && Number(row.picDeploymentId) === uid; } catch { return false; } })()}
+                        canDelete={canManage && (() => { try { const uidRaw = localStorage.getItem("userId") || sessionStorage.getItem("userId"); const uid = uidRaw ? Number(uidRaw) : 0; return uid > 0 && Number(row.picDeploymentId) === uid; } catch { return false; } })()}
+                        leadingTopLeft={canComplete ? (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              const newSet = new Set(selectedTaskIds);
+                              if (e.target.checked) newSet.add(taskId); else newSet.delete(taskId);
+                              setSelectedTaskIds(newSet);
+                            }}
+                            className="w-4.5 h-4.5 text-blue-600 border-blue-300 rounded focus:ring-blue-500 shadow-sm bg-white"
+                          />
+                        ) : undefined}
+                      />
+                    </div>
+                  );
+                })}
+              </>
             )
           )}
         </div>
       </div>
 
       {!showHospitalList && (
-      <div className="mt-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <button className="px-3 py-1 border rounded inline-flex items-center gap-2" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0}>
-            <ChevronLeftIcon />
-            <span>Prev</span>
-          </button>
-          <span>Trang {page + 1}{totalCount ? ` / ${Math.max(1, Math.ceil((totalCount || 0) / size))}` : ""}</span>
-          <button className="px-3 py-1 border rounded inline-flex items-center gap-2" onClick={() => setPage((p) => p + 1)} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)}>
-            <span>Next</span>
-            <ChevronRightIcon />
-          </button>
+      <div className="mt-4 flex items-center justify-between py-3">
+        <div className="text-sm text-gray-600">
+          {totalCount === null || totalCount === 0 ? (
+            <span>Hiển thị 0 trong tổng số 0 mục</span>
+          ) : (
+            (() => {
+              const from = page * size + 1;
+              const to = Math.min((page + 1) * size, totalCount);
+              return <span>Hiển thị {from} đến {to} trong tổng số {totalCount} mục</span>;
+            })()
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm">Số hàng:</label>
-          <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1">
-            <option value="5">5</option>
-            <option value="10">10</option>
-            <option value="20">20</option>
-            <option value="50">50</option>
-          </select>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">Hiển thị:</label>
+            <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1 text-sm">
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+            </select>
+          </div>
+
+          <div className="inline-flex items-center gap-1">
+            <button onClick={() => setPage(0)} disabled={page <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Đầu">«</button>
+            <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Trước">‹</button>
+
+            {(() => {
+              const total = Math.max(1, Math.ceil((totalCount || 0) / size));
+              const pages: number[] = [];
+              const start = Math.max(1, page + 1 - 2);
+              const end = Math.min(total, start + 4);
+              for (let i = start; i <= end; i++) pages.push(i);
+              return pages.map((p) => (
+                <button key={p} onClick={() => setPage(p - 1)} className={`px-3 py-1 border rounded text-sm ${page + 1 === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}>
+                  {p}
+                </button>
+              ));
+            })()}
+
+            <button onClick={() => setPage((p) => Math.min(Math.max(0, Math.ceil((totalCount || 0) / size) - 1), p + 1))} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Tiếp">›</button>
+            <button onClick={() => setPage(Math.max(0, Math.ceil((totalCount || 0) / size) - 1))} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Cuối">»</button>
+          </div>
         </div>
       </div>
       )}
 
-      <TaskFormModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        initial={editing as any || undefined}
-        onSubmit={handleSubmit}
-      />
+      {(() => {
+        const initialForForm = editing
+          ? ({
+              id: (editing as ImplementationTaskResponseDTO).id,
+              name: (editing as ImplementationTaskResponseDTO).name,
+              hospitalId: (editing as ImplementationTaskResponseDTO).hospitalId ?? undefined,
+              hospitalName: (editing as ImplementationTaskResponseDTO).hospitalName ?? null,
+              picDeploymentId: (editing as ImplementationTaskResponseDTO).picDeploymentId ?? undefined,
+              picDeploymentName: (editing as ImplementationTaskResponseDTO).picDeploymentName ?? null,
+              apiTestStatus: (editing as ImplementationTaskResponseDTO).apiTestStatus ?? undefined,
+              additionalRequest: (editing as ImplementationTaskResponseDTO).additionalRequest ?? undefined,
+              deadline: (editing as ImplementationTaskResponseDTO).deadline ?? undefined,
+              completionDate: (editing as ImplementationTaskResponseDTO).completionDate ?? undefined,
+              status: (editing as ImplementationTaskResponseDTO).status ?? undefined,
+              startDate: (editing as ImplementationTaskResponseDTO).startDate ?? undefined,
+            } as Partial<ImplementationTaskRequestDTO> & { id?: number; hospitalName?: string | null; picDeploymentName?: string | null })
+          : undefined;
+
+        return (
+          <TaskFormModal
+            open={modalOpen}
+            onClose={() => setModalOpen(false)}
+            initial={initialForForm}
+            onSubmit={handleSubmit}
+            userTeam={userTeam}
+          />
+        );
+      })()}
 
       <DetailModal
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         item={detailItem}
       />
+      {/* Pending tasks modal (Deployment acceptance for tasks created from Business) */}
+      {pendingOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/40" onMouseDown={(e) => { if (e.target === e.currentTarget) setPendingOpen(false); }}>
+          <div className="w-full max-w-4xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800 overflow-auto max-h-[80vh]">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">📨 Công việc chờ - Tiếp nhận từ Phòng Kinh Doanh</h3>
+              <div className="flex items-center gap-2">
+                <button 
+                  className="h-10 rounded-xl px-4 text-sm font-medium transition shadow-sm bg-transparent border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  onClick={() => { setPendingOpen(false); }}
+                >
+                  Đóng
+                </button>
+                <button 
+                  className="h-10 rounded-xl px-4 text-sm font-medium transition shadow-sm border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-900/20"
+                  onClick={async () => { await fetchPendingGroups(); }}
+                >
+                  Làm mới
+                </button>
+              </div>
+            </div>
+            <div className="p-4">
+              {loadingPending ? (
+                <div className="text-center py-8">Đang tải...</div>
+              ) : pendingGroups.length === 0 ? (
+                <div className="text-center py-8">Không có công việc chờ</div>
+              ) : (
+                <>
+                  <div className="mb-4 flex justify-end">
+                    <Button 
+                      variant="primary" 
+                      onClick={handleAcceptAll} 
+                      disabled={pendingGroups.reduce((sum, g) => sum + g.tasks.length, 0) === 0}
+                      className="!bg-green-600 !text-white !border-green-600 hover:!bg-green-700 hover:!border-green-700 disabled:!bg-green-300 disabled:!border-green-300 disabled:!text-white"
+                    >
+                      Tiếp nhận tất cả ({pendingGroups.reduce((sum, g) => sum + g.tasks.length, 0)})
+                    </Button>
+                  </div>
+                  <div className="space-y-3">
+                    {pendingGroups.map((g) => (
+                      <div key={`${g.hospitalId ?? 'null'}-${g.hospitalName}`} className="border rounded-lg p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                        <div className="font-semibold text-base">
+                          {g.hospitalName} <span className="text-sm text-gray-500 font-normal">({g.tasks.length} hợp đồng)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button 
+                            variant="primary" 
+                            onClick={() => handleAcceptGroup(g.hospitalId)}
+                            className="!bg-blue-600 !text-white !border-blue-600 hover:!bg-blue-700 hover:!border-blue-700 disabled:!bg-blue-300 disabled:!border-blue-300 disabled:!text-white"
+                          >
+                            Tiếp nhận
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
