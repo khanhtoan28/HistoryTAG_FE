@@ -40,14 +40,34 @@ export const useNotification = (): NotificationContextValue => {
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const MAX_NOTIFICATIONS = 200;
 
   const esRef = useRef<EventSource | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
+  const clampList = (list: Notification[]) => {
+    if (!Array.isArray(list)) return [];
+    return list.slice(0, MAX_NOTIFICATIONS);
+  };
+
+  const upsertNotification = (incoming: Notification): boolean => {
+    if (!incoming) return false;
+    let inserted = false;
+    setNotifications((prev) => {
+      const safePrev = Array.isArray(prev) ? prev : [];
+      const filtered = safePrev.filter((n) => !n || n.id !== incoming.id);
+      inserted = filtered.length === safePrev.length;
+      const next = [incoming, ...filtered];
+      return clampList(next);
+    });
+    return inserted;
+  };
+
   const loadNotifications = async (limit = 50) => {
     try {
-      const list = await apiGetNotifications(limit);
-      setNotifications(list || []);
+      const safeLimit = Math.min(limit, MAX_NOTIFICATIONS);
+      const list = await apiGetNotifications(safeLimit);
+      setNotifications(clampList(list || []));
     } catch {
       // ignore
     }
@@ -203,16 +223,18 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const handlePayload = (payload: any) => {
       if (!payload) return;
       if (payload.type === "notification") {
-        setNotifications((prev) => [payload.data, ...prev]);
-        setUnreadCount((c) => c + 1);
+        if (upsertNotification(payload.data)) {
+          setUnreadCount((c) => c + 1);
+        }
       } else if (payload.type === "unread-count") {
         setUnreadCount(payload.data || 0);
       } else if (payload.type === "refresh") {
-        loadNotifications(50);
+        loadNotifications(MAX_NOTIFICATIONS);
         loadUnread();
       } else if (payload.id) {
-        setNotifications((prev) => [payload, ...prev]);
-        setUnreadCount((c) => c + 1);
+        if (upsertNotification(payload)) {
+          setUnreadCount((c) => c + 1);
+        }
       }
     };
 

@@ -2,7 +2,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Chart from "react-apexcharts";
 import { ApexOptions } from "apexcharts";
 import { getSummaryReport, type SuperAdminSummaryDTO, HardwareAPI, getAllImplementationTasks, getAllDevTasks, getAllMaintenanceTasks, getAllUsers, UserResponseDTO, ImplementationTaskResponseDTO, DevTaskResponseDTO, MaintenanceTaskResponseDTO } from "../../api/superadmin.api";
@@ -121,6 +121,7 @@ export default function SuperAdminHome() {
   // Profile status filter (for "Báo cáo chi tiết theo từng viện")
   const [profileStatusFilter, setProfileStatusFilter] = useState<string>('all');
   const [profilePicFilter, setProfilePicFilter] = useState<string>('all');
+  const teamSelectRef = useRef<HTMLSelectElement | null>(null);
   useEffect(() => {
     // Reset PIC filter whenever team selection changes
     setProfilePicFilter('all');
@@ -526,13 +527,21 @@ export default function SuperAdminHome() {
     return () => { mounted = false; };
   }, []);
 
+  useEffect(() => {
+    // Reset filters when switching teams to avoid showing stale data
+    setProfileStatusFilter('all');
+    setProfilePicFilter('all');
+    setDetailCurrentPage(0);
+  }, [selectedTeam]);
+
   // Load team profile (load all tasks for selected team, grouped by hospital)
   const loadTeamProfile = async (teamName?: string) => {
-    const team = teamName || selectedTeam;
-    if (!team || team.trim() === '') {
+    const teamValue = (teamName ?? teamSelectRef.current?.value ?? selectedTeam ?? '').trim();
+    if (!teamValue) {
       toast.error('Vui lòng chọn team');
       return;
     }
+    const team = teamValue;
     setProfileLoading(true);
     try {
       // users in this team
@@ -1730,14 +1739,17 @@ export default function SuperAdminHome() {
               <div className="w-full sm:w-auto">
                 <label className="text-sm text-gray-500">Chọn team</label>
                 <div className="relative mt-1 flex items-center gap-3">
-                  <select 
-                    value={selectedTeam} 
-                    onChange={(e) => setSelectedTeam(e.target.value)} 
+                  <select
+                    ref={teamSelectRef}
+                    value={selectedTeam}
+                    onChange={(e) => setSelectedTeam(e.target.value)}
                     className="rounded-md border px-3 text-sm w-40 h-10 bg-white"
                   >
                     <option value="">— Chọn team —</option>
-                    {availableTeams.map(team => (
-                      <option key={team} value={team}>{team}</option>
+                    {availableTeams.map((team) => (
+                      <option key={team} value={team}>
+                        {team}
+                      </option>
                     ))}
                   </select>
                   <button 
