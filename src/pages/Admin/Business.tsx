@@ -61,14 +61,15 @@ const BusinessPage: React.FC = () => {
   const [hospitalOptions, setHospitalOptions] = useState<Array<{ id: number; label: string }>>([]);
   const [selectedHardwareId, setSelectedHardwareId] = useState<number | null>(null);
   const [selectedHardwarePrice, setSelectedHardwarePrice] = useState<number | null>(null);
+  const [unitPrice, setUnitPrice] = useState<number | ''>('');
   const [selectedHospitalId, setSelectedHospitalId] = useState<number | null>(null);
   const [selectedHospitalPhone, setSelectedHospitalPhone] = useState<string | null>(null);
   const [businessPicOptionsState, setBusinessPicOptionsState] = useState<Array<{ id: number; label: string; subLabel?: string }>>([]);
   const [selectedPicId, setSelectedPicId] = useState<number | null>(null);
   const [hospitalDropdownOpen, setHospitalDropdownOpen] = useState<boolean>(false);
   const [hospitalSearchInput, setHospitalSearchInput] = useState<string>('');
-  // commissionPercent is the user-facing input (entered as percent, e.g. 12 means 12%)
-  const [commissionPercent, setCommissionPercent] = useState<number | null>(null);
+  // commission is the user-facing input (entered as amount in VND)
+  const [commission, setCommission] = useState<number | ''>('');
   const [quantity, setQuantity] = useState<number | ''>(1);
   const [name, setName] = useState<string>('');
   const [statusValue, setStatusValue] = useState<string>('CARING');
@@ -77,6 +78,8 @@ const BusinessPage: React.FC = () => {
   const [originalStatus, setOriginalStatus] = useState<string>('CARING');
   const [statusConfirmOpen, setStatusConfirmOpen] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState<{ payload: Record<string, unknown>; isUpdate: boolean; successMessage?: string } | null>(null);
+  const [bankName, setBankName] = useState<string>('');
+  const [bankContactPerson, setBankContactPerson] = useState<string>('');
   type BusinessItem = {
     id: number;
     name?: string;
@@ -91,6 +94,8 @@ const BusinessPage: React.FC = () => {
     status?: string | null;
     startDate?: string | null;
     completionDate?: string | null;
+    bankName?: string | null;
+    bankContactPerson?: string | null;
   };
 
   function formatDateShort(value?: string | null) {
@@ -213,6 +218,8 @@ const BusinessPage: React.FC = () => {
           startDate: start ?? null,
           completionDate: completion ?? null,
           picUser,
+          bankName: c['bankName'] ?? c['bank_name'] ?? null,
+          bankContactPerson: c['bankContactPerson'] ?? c['bank_contact_person'] ?? null,
         } as BusinessItem;
       });
   setItems(sortBusinessItems(normalized));
@@ -413,6 +420,7 @@ const BusinessPage: React.FC = () => {
     // Clear errors if validation passes
     setFieldErrors({});
 
+    const finalUnitPrice = unitPrice !== '' ? Number(unitPrice) : (selectedHardwarePrice ?? null);
     const payload: Record<string, unknown> = {
       name,
       hospitalId: selectedHospitalId,
@@ -424,13 +432,13 @@ const BusinessPage: React.FC = () => {
       // some backends use 'finishDate' instead of 'completionDate' — include both to be safe
       finishDate: toLocalDateTimeStr(completionDateValue),
       picUserId: selectedPicId ?? null,
+      bankName: bankName?.trim() || null,
+      bankContactPerson: bankContactPerson?.trim() || null,
+      unitPrice: finalUnitPrice,
     };
-    // compute commission amount from percent and total (backend expects absolute amount)
-    const total = computeTotal();
-    if (commissionPercent != null && total > 0) {
-      // round to 2 decimals
-      const commissionAmount = Math.round(((commissionPercent / 100) * total) * 100) / 100;
-      payload.commission = commissionAmount;
+    // commission is entered directly as amount
+    if (commission !== '') {
+      payload.commission = Number(commission);
     }
 
     const isUpdate = Boolean(editingId);
@@ -463,16 +471,19 @@ const BusinessPage: React.FC = () => {
       setName('');
       setSelectedHardwareId(null);
       setSelectedHardwarePrice(null);
+      setUnitPrice('');
       setQuantity(1);
       setStatusValue('CARING');
       setOriginalStatus('CARING');
-      setCommissionPercent(null);
+      setCommission('');
       setSelectedHospitalId(null);
       setSelectedHospitalPhone(null);
       setSelectedPicId(null);
       setHospitalSearchInput('');
       setCompletionDateValue('');
       setStartDateValue(nowDateTimeLocal());
+      setBankName('');
+      setBankContactPerson('');
       setEditingId(null);
       setShowModal(false);
       // reload the first page so the new item is visible
@@ -488,8 +499,24 @@ const BusinessPage: React.FC = () => {
   }
 
   function computeTotal() {
-    if (selectedHardwarePrice == null) return 0;
-    return (selectedHardwarePrice) * (Number(quantity) || 0);
+    const price = unitPrice !== '' ? Number(unitPrice) : (selectedHardwarePrice ?? 0);
+    if (price === 0) return 0;
+    return price * (Number(quantity) || 0);
+  }
+
+  // Helper functions để format số với dấu chấm phân cách hàng nghìn
+  function formatNumber(value: number | ''): string {
+    if (value === '' || value === null || value === undefined) return '';
+    return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  }
+
+  function parseFormattedNumber(value: string): number | '' {
+    // Loại bỏ dấu chấm phân cách hàng nghìn (chỉ giữ lại số)
+    // Ví dụ: "1.000.000" -> "1000000", "1.234.56" -> "123456"
+    const cleaned = value.replace(/\./g, '').replace(/[^\d]/g, '');
+    if (cleaned === '' || cleaned === '0') return '';
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? '' : num;
   }
 
   // Helper function to clear field error when user changes value
@@ -591,16 +618,20 @@ const BusinessPage: React.FC = () => {
       const remoteStart = (res.startDate ?? (res as unknown as Record<string, unknown>)['start_date'] ?? (res as unknown as Record<string, unknown>)['startDateTime']) as string | undefined | null;
       setStartDateValue(remoteStart ? (remoteStart.length === 16 ? remoteStart : remoteStart.substring(0, 16)) : '');
       setCompletionDateValue(remoteCompletion ? (remoteCompletion.length === 16 ? remoteCompletion : remoteCompletion.substring(0, 16)) : '');
-      // convert existing commission amount to percentage for the input
-      const existingTotal = res.totalPrice != null ? Number(res.totalPrice) : null;
-      if (res.commission != null && existingTotal && existingTotal > 0) {
-        const pct = (Number(res.commission) / existingTotal) * 100;
-        setCommissionPercent(Number(pct.toFixed(2)));
+      // Load commission directly as amount
+      if (res.commission != null) {
+        setCommission(Number(res.commission));
       } else {
-        setCommissionPercent(null);
+        setCommission('');
       }
       setQuantity(res.quantity != null ? Number(String(res.quantity)) : 1);
-      // fetch price
+      // Load unitPrice từ response (có thể khác với giá mặc định từ phần cứng)
+      if (res.unitPrice != null) {
+        setUnitPrice(Number(res.unitPrice));
+      } else {
+        setUnitPrice('');
+      }
+      // fetch price từ phần cứng để hiển thị giá mặc định
       if (res.hardware?.id) {
         try {
           const hw = await getHardwareById(res.hardware.id);
@@ -609,6 +640,8 @@ const BusinessPage: React.FC = () => {
           setSelectedHardwarePrice(null);
         }
       } else setSelectedHardwarePrice(null);
+      setBankName(res.bankName ?? '');
+      setBankContactPerson(res.bankContactPerson ?? '');
       setFieldErrors({});
       setPendingSubmit(null);
       setStatusConfirmOpen(false);
@@ -704,6 +737,7 @@ const BusinessPage: React.FC = () => {
             setOriginalStatus('CARING');
             setSelectedHardwareId(null);
             setSelectedHardwarePrice(null);
+            setUnitPrice('');
             setSelectedHospitalId(null);
             setSelectedHospitalPhone(null);
             setSelectedPicId(null);
@@ -711,11 +745,14 @@ const BusinessPage: React.FC = () => {
             setStatusValue('CARING');
             setStartDateValue(nowDateTimeLocal());
             setCompletionDateValue('');
+            setCommission('');
             setFieldErrors({});
             setPendingSubmit(null);
             setStatusConfirmOpen(false);
             setHospitalSearchInput('');
             setHospitalDropdownOpen(false);
+            setBankName('');
+            setBankContactPerson('');
             setShowModal(true);
           }}
           disabled={!canManage}
@@ -766,8 +803,20 @@ const BusinessPage: React.FC = () => {
                 const found = hardwareOptions.find(h => String(h.id) === v);
                 if (found) {
                   // fetch hardware detail to read price (base-aware)
-                  getHardwareById(found.id).then(r => setSelectedHardwarePrice(r && r.price != null ? Number(r.price) : null)).catch(() => setSelectedHardwarePrice(null));
-                } else setSelectedHardwarePrice(null);
+                  getHardwareById(found.id).then(r => {
+                    const price = r && r.price != null ? Number(r.price) : null;
+                    setSelectedHardwarePrice(price);
+                    if (price != null) {
+                      setUnitPrice(price);
+                    }
+                  }).catch(() => {
+                    setSelectedHardwarePrice(null);
+                    setUnitPrice('');
+                  });
+                } else {
+                  setSelectedHardwarePrice(null);
+                  setUnitPrice('');
+                }
               }} className="w-full rounded border px-3 py-2">
                 <option value="">— Chọn phần cứng —</option>
                 {hardwareOptions.map(h => <option key={h.id} value={h.id}>{h.label} {h.subLabel ? `— ${h.subLabel}` : ''}</option>)}
@@ -785,7 +834,18 @@ const BusinessPage: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Đơn giá</label>
-              <div className="p-2">{selectedHardwarePrice != null ? selectedHardwarePrice.toLocaleString() : '—'}</div>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={unitPrice === '' ? '' : unitPrice}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setUnitPrice(val === '' ? '' : Number(val));
+                }}
+                placeholder={selectedHardwarePrice != null ? `Giá mặc định: ${selectedHardwarePrice.toLocaleString()} ₫` : 'Nhập đơn giá'}
+                className="w-full rounded border px-3 py-2"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Tổng tiền</label>
@@ -829,8 +889,21 @@ const BusinessPage: React.FC = () => {
                           clearFieldError('selectedHardwareId');
                           const found = hardwareOptions.find(h => String(h.id) === v);
                           if (found) {
-                            getHardwareById(found.id).then(r => setSelectedHardwarePrice(r && r.price != null ? Number(r.price) : null)).catch(() => setSelectedHardwarePrice(null));
-                          } else setSelectedHardwarePrice(null);
+                            getHardwareById(found.id).then(r => {
+                              const price = r && r.price != null ? Number(r.price) : null;
+                              setSelectedHardwarePrice(price);
+                              // Tự động điền giá vào input đơn giá khi chọn phần cứng
+                              if (price != null) {
+                                setUnitPrice(price);
+                              }
+                            }).catch(() => {
+                              setSelectedHardwarePrice(null);
+                              setUnitPrice('');
+                            });
+                          } else {
+                            setSelectedHardwarePrice(null);
+                            setUnitPrice('');
+                          }
                         }} 
                         className={`w-full rounded border px-3 py-2 ${fieldErrors.selectedHardwareId ? 'border-red-500' : ''}`}
                       >
@@ -937,16 +1010,70 @@ const BusinessPage: React.FC = () => {
                       {fieldErrors.quantity && <div className="mt-1 text-sm text-red-600">{fieldErrors.quantity}</div>}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">Hoa hồng (%)</label>
+                      <label className="block text-sm font-medium mb-1">Hoa hồng</label>
                       {isSuperAdmin ? (
-                        <input type="number" step="0.01" min={0} value={commissionPercent ?? ''} onChange={(e) => setCommissionPercent(e.target.value ? Number(e.target.value) : null)} className="w-40 rounded border px-3 py-2" />
+                        <input 
+                          type="text" 
+                          value={formatNumber(commission)} 
+                          onChange={(e) => {
+                            const parsed = parseFormattedNumber(e.target.value);
+                            setCommission(parsed);
+                            clearFieldError('commission');
+                          }}
+                          onBlur={(e) => {
+                            // Format lại khi blur
+                            const parsed = parseFormattedNumber(e.target.value);
+                            setCommission(parsed);
+                          }}
+                          className="w-full rounded border px-3 py-2" 
+                          placeholder="Nhập số tiền hoa hồng"
+                        />
                       ) : (
-                        <div className="p-2 text-gray-700">{commissionPercent != null ? commissionPercent + '%' : '—'}</div>
+                        <div className="p-2 text-gray-700">{commission !== '' ? formatNumber(commission) + ' ₫' : '—'}</div>
                       )}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">Đơn giá</label>
-                      <div className="p-2">{selectedHardwarePrice != null ? selectedHardwarePrice.toLocaleString() + ' ₫' : '—'}</div>
+                      <label className="block text-sm font-medium mb-1">Đơn vị tài trợ</label>
+                      <input
+                        type="text"
+                        value={bankName}
+                        onChange={(e) => setBankName(e.target.value)}
+                        className="w-full rounded border px-3 py-2"
+                        placeholder="Nhập đơn vị tài trợ"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Liên hệ đơn vị tài trợ</label>
+                      <input
+                        type="text"
+                        value={bankContactPerson}
+                        onChange={(e) => setBankContactPerson(e.target.value)}
+                        className="w-full rounded border px-3 py-2"
+                        placeholder="Nhập người liên hệ"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Đơn giá (VND)</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={formatNumber(unitPrice)}
+                          onChange={(e) => {
+                            const parsed = parseFormattedNumber(e.target.value);
+                            setUnitPrice(parsed);
+                            clearFieldError('unitPrice');
+                          }}
+                          onBlur={(e) => {
+                            // Format lại khi blur
+                            const parsed = parseFormattedNumber(e.target.value);
+                            setUnitPrice(parsed);
+                          }}
+                          placeholder={selectedHardwarePrice != null ? `Giá mặc định: ${formatNumber(selectedHardwarePrice)} ₫` : 'Nhập đơn giá'}
+                          className="flex-1 rounded border px-3 py-2"
+                        />
+                         
+                      </div>
+                      {fieldErrors.unitPrice && <div className="mt-1 text-sm text-red-600">{fieldErrors.unitPrice}</div>}
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">Ngày bắt đầu</label>
@@ -968,7 +1095,7 @@ const BusinessPage: React.FC = () => {
                     </div>
                   </div>
                       <div className="flex items-center gap-3 justify-between">
-                    <div className="text-sm text-gray-600">Tổng: <span className="font-semibold">{computeTotal() > 0 ? computeTotal().toLocaleString() + ' ₫' : '—'}</span></div>
+                    <div className="text-sm text-gray-600">Thành tiền: <span className="font-semibold">{computeTotal() > 0 ? computeTotal().toLocaleString() + ' ₫' : '—'}</span></div>
                     <div className="flex items-center gap-3">
                       <button type="button" onClick={() => { if (!saving) { setShowModal(false); setEditingId(null); setFieldErrors({}); } }} className="px-4 py-2 border rounded">Hủy</button>
                       <button type="submit" disabled={saving} className={`px-4 py-2 rounded text-white ${saving ? 'bg-gray-400' : 'bg-blue-600'}`}>{saving ? 'Đang lưu...' : (editingId ? 'Cập nhật' : 'Lưu')}</button>
@@ -1010,13 +1137,16 @@ const BusinessPage: React.FC = () => {
                             {it.picUser?.subLabel ? <span className="ml-2 text-xs text-gray-500">{it.picUser?.subLabel}</span> : null}
                           </div>
                         </div>
+                        {it.bankName && (
+                          <div className="col-span-2 md:col-span-2">Đơn vị tài trợ: <div className="font-medium text-gray-800">{it.bankName}</div></div>
+                        )}
                       </div>
 
                       <div className="mt-3 flex items-center justify-between text-sm text-gray-700">
                         <div className="flex items-center gap-6">
                           <div>Số lượng: <span className="font-medium">{it.quantity ?? '—'}</span></div>
-                          <div>Đơn giá: <span className="font-medium">{it.unitPrice != null ? it.unitPrice.toLocaleString() + ' ₫' : '—'}</span></div>
-                          <div>Tổng: <span className="font-semibold">{it.totalPrice != null ? it.totalPrice.toLocaleString() + ' ₫' : '—'}</span></div>
+                          <div>Đơn giá (VND): <span className="font-medium">{it.unitPrice != null ? it.unitPrice.toLocaleString() + ' ₫' : '—'}</span></div>
+                          <div>Thành tiền: <span className="font-semibold">{it.totalPrice != null ? it.totalPrice.toLocaleString() + ' ₫' : '—'}</span></div>
                         </div>
                         <div />
                       </div>
@@ -1068,9 +1198,11 @@ const BusinessPage: React.FC = () => {
               <Info label="Hoàn thành" value={<div className="font-medium">{formatDateShort(viewItem.completionDate)}</div>} icon={<TimeIcon style={{ width: 16, height: 16 }} />} />
               <Info label="Số lượng" value={<div className="font-medium">{viewItem.quantity ?? '—'}</div>} icon={<BoxIconLine style={{ width: 16, height: 16 }} />} />
               <Info label="Đơn giá" value={<div className="font-medium">{viewItem.unitPrice != null ? viewItem.unitPrice.toLocaleString() + ' ₫' : '—'}</div>} icon={<DollarLineIcon style={{ width: 16, height: 16 }} />} />
-              <Info label="Tổng" value={<div className="font-medium">{viewItem.totalPrice != null ? viewItem.totalPrice.toLocaleString() + ' ₫' : '—'}</div>} icon={<DollarLineIcon style={{ width: 16, height: 16 }} />} />
+              <Info label="Thành tiền" value={<div className="font-medium">{viewItem.totalPrice != null ? viewItem.totalPrice.toLocaleString() + ' ₫' : '—'}</div>} icon={<DollarLineIcon style={{ width: 16, height: 16 }} />} />
               <Info label="Hoa hồng" value={<div className="font-medium">{viewItem.commission != null ? (Number(viewItem.commission).toLocaleString() + ' ₫') : '—'} {viewItem.commission != null && viewItem.totalPrice ? `(${((Number(viewItem.commission) / Number(viewItem.totalPrice)) * 100).toFixed(2).replace(/\.00$/,'')}%)` : ''}</div>} icon={<CheckCircleIcon style={{ width: 16, height: 16 }} />} />
               <Info label="Trạng thái" value={<div className="font-medium">{statusLabel(viewItem.status) ?? '—'}</div>} icon={<TaskIcon style={{ width: 16, height: 16 }} />} />
+              <Info label="Đơn vị tài trợ" value={<div className="font-medium">{viewItem.bankName ?? '—'}</div>} icon={<UserCircleIcon style={{ width: 18, height: 18 }} />} />
+              <Info label="Liên hệ đơn vị tài trợ" value={<div className="font-medium">{viewItem.bankContactPerson ?? '—'}</div>} icon={<UserCircleIcon style={{ width: 18, height: 18 }} />} />
             </div>
             <div className="mt-4 text-right">
               <button onClick={closeView} className="px-3 py-1 bg-indigo-600 text-white rounded">Đóng</button>
