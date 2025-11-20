@@ -2,7 +2,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Chart from "react-apexcharts";
 import { ApexOptions } from "apexcharts";
 import { getSummaryReport, type SuperAdminSummaryDTO, HardwareAPI, getAllImplementationTasks, getAllDevTasks, getAllMaintenanceTasks, getAllUsers, UserResponseDTO, ImplementationTaskResponseDTO, DevTaskResponseDTO, MaintenanceTaskResponseDTO } from "../../api/superadmin.api";
@@ -120,6 +120,20 @@ export default function SuperAdminHome() {
   const [maintStatusFilter, setMaintStatusFilter] = useState<string>('all');
   // Profile status filter (for "Báo cáo chi tiết theo từng viện")
   const [profileStatusFilter, setProfileStatusFilter] = useState<string>('all');
+  const [profilePicFilter, setProfilePicFilter] = useState<string>('all');
+  const teamSelectRef = useRef<HTMLSelectElement | null>(null);
+  useEffect(() => {
+    // Reset PIC filter whenever team selection changes
+    setProfilePicFilter('all');
+  }, [selectedTeam]);
+
+  useEffect(() => {
+    if (profilePicFilter === 'all') return;
+    const exists = profileUsers.some((u) => u.id != null && String(u.id) === profilePicFilter);
+    if (!exists) {
+      setProfilePicFilter('all');
+    }
+  }, [profileUsers, profilePicFilter]);
   // Pagination for detail view
   const [detailCurrentPage, setDetailCurrentPage] = useState<number>(0);
   const [detailItemsPerPage, setDetailItemsPerPage] = useState<number>(50);
@@ -513,13 +527,21 @@ export default function SuperAdminHome() {
     return () => { mounted = false; };
   }, []);
 
+  useEffect(() => {
+    // Reset filters when switching teams to avoid showing stale data
+    setProfileStatusFilter('all');
+    setProfilePicFilter('all');
+    setDetailCurrentPage(0);
+  }, [selectedTeam]);
+
   // Load team profile (load all tasks for selected team, grouped by hospital)
   const loadTeamProfile = async (teamName?: string) => {
-    const team = teamName || selectedTeam;
-    if (!team || team.trim() === '') {
+    const teamValue = (teamName ?? teamSelectRef.current?.value ?? selectedTeam ?? '').trim();
+    if (!teamValue) {
       toast.error('Vui lòng chọn team');
       return;
     }
+    const team = teamValue;
     setProfileLoading(true);
     try {
       // users in this team
@@ -545,9 +567,8 @@ export default function SuperAdminHome() {
 
       // tasks - use server-side filtering
       const filterParams: any = {
-        team: team,
         page: 0,
-        size: 10000, // Load all filtered results (server-side filter reduces data significantly)
+        size: 10000, // Load all filtered results
         sortBy: 'startDate',
         sortDir: 'desc'
       };
@@ -572,7 +593,11 @@ export default function SuperAdminHome() {
       try {
         const impl = await getAllImplementationTasks(filterParams);
         const implList = Array.isArray(impl) ? (impl as ImplementationTaskResponseDTO[]) : (impl as any)?.content ?? [];
-        setProfileImplTasks(implList);
+        const filteredImpl = (implList as ImplementationTaskResponseDTO[]).filter((t) => {
+          const picId = t.picDeploymentId ?? (t as any).picId;
+          return picId && teamUserIds.includes(Number(picId));
+        });
+        setProfileImplTasks(filteredImpl);
       } catch (err) { console.warn('impl load', err); setProfileImplTasks([]); }
       try {
         const dev = await getAllDevTasks({ page: 0, size: 10000 });
@@ -597,8 +622,16 @@ export default function SuperAdminHome() {
       try {
         const b = await getBusinesses({ page: 0, size: 10000 } as any);
         const bList = Array.isArray(b) ? (b as Array<Record<string, unknown>>) : (b as any)?.content ?? [];
-        // Filter businesses where creator/owner is in the team (if available)
-        setProfileBusinesses(bList);
+        const filteredBusinesses = bList.filter((item) => {
+          const ownerId =
+            (item as any)?.picUserId ??
+            (item as any)?.picUser?.id ??
+            (item as any)?.picId ??
+            (item as any)?.ownerId ??
+            null;
+          return ownerId && teamUserIds.includes(Number(ownerId));
+        });
+        setProfileBusinesses(filteredBusinesses);
       } catch (err) { console.warn('business load', err); setProfileBusinesses([]); }
 
       // preload hardware map so we can display names instead of ids
@@ -712,10 +745,45 @@ export default function SuperAdminHome() {
     return parts.join(' | ');
   };
 
+  const matchesProfilePicFilter = (task: Record<string, unknown>) => {
+    if (!profilePicFilter || profilePicFilter === 'all') return true;
+    const targetId = profilePicFilter;
+    const candidateIds = [
+      task['picDeploymentId'],
+      task['picId'],
+      task['picUserId'],
+      (task as any)?.picUser?.id,
+      (task as any)?.picDeployment?.id,
+    ].filter((id) => id != null);
+    if (candidateIds.some((id) => String(id) === targetId)) return true;
+    const candidateName = String(
+      task['picDeploymentName'] ??
+        task['picName'] ??
+        task['picUserName'] ??
+        (task as any)?.picUser?.label ??
+        ''
+    )
+      .trim()
+      .toLowerCase();
+    if (!candidateName) return false;
+    const selectedUser = profileUsers.find((u) => u.id != null && String(u.id) === targetId);
+    const selectedName = String(selectedUser?.fullname ?? selectedUser?.username ?? '')
+      .trim()
+      .toLowerCase();
+    if (!selectedName) return false;
+    return candidateName === selectedName;
+  };
+
   // Derived (filtered) arrays according to quarter/year selection
-  const displayedImplTasks = profileImplTasks.filter((t) => inSelectedQuarter((t as any).startDate ?? (t as any).completionDate ?? (t as any).createdDate ?? null));
-  const displayedDevTasks = profileDevTasks.filter((t) => inSelectedQuarter((t as any).startDate ?? (t as any).endDate ?? (t as any).createdDate ?? null));
-  const displayedMaintTasks = profileMaintTasks.filter((t) => inSelectedQuarter((t as any).startDate ?? (t as any).endDate ?? (t as any).createdDate ?? null));
+  const displayedImplTasks = profileImplTasks.filter((t) =>
+    inSelectedQuarter((t as any).startDate ?? (t as any).completionDate ?? (t as any).createdDate ?? null)
+  );
+  const displayedDevTasks = profileDevTasks.filter((t) =>
+    inSelectedQuarter((t as any).startDate ?? (t as any).endDate ?? (t as any).createdDate ?? null)
+  );
+  const displayedMaintTasks = profileMaintTasks.filter((t) =>
+    inSelectedQuarter((t as any).startDate ?? (t as any).endDate ?? (t as any).createdDate ?? null)
+  );
   const displayedBusinesses = profileBusinesses.filter((b) => inSelectedQuarter((b as any).startDate ?? (b as any).completionDate ?? null));
 
   // compute available status options (from data) and apply per-table status filters
@@ -723,9 +791,20 @@ export default function SuperAdminHome() {
   const devStatusOptions = Array.from(new Set(displayedDevTasks.map(t => String((t as any).status ?? '').toUpperCase()).filter(s => s && s !== ''))).sort();
   const maintStatusOptions = Array.from(new Set(displayedMaintTasks.map(t => String((t as any).status ?? '').toUpperCase()).filter(s => s && s !== ''))).sort();
 
-  const filteredImplTasks = implStatusFilter === 'all' ? displayedImplTasks : displayedImplTasks.filter(t => String((t as any).status ?? '').toUpperCase() === implStatusFilter);
-  const filteredDevTasks = devStatusFilter === 'all' ? displayedDevTasks : displayedDevTasks.filter(t => String((t as any).status ?? '').toUpperCase() === devStatusFilter);
-  const filteredMaintTasks = maintStatusFilter === 'all' ? displayedMaintTasks : displayedMaintTasks.filter(t => String((t as any).status ?? '').toUpperCase() === maintStatusFilter);
+  const filteredImplTasks = (implStatusFilter === 'all'
+    ? displayedImplTasks
+    : displayedImplTasks.filter(t => String((t as any).status ?? '').toUpperCase() === implStatusFilter)
+  ).filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+
+  const filteredDevTasks = (devStatusFilter === 'all'
+    ? displayedDevTasks
+    : displayedDevTasks.filter(t => String((t as any).status ?? '').toUpperCase() === devStatusFilter)
+  ).filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+
+  const filteredMaintTasks = (maintStatusFilter === 'all'
+    ? displayedMaintTasks
+    : displayedMaintTasks.filter(t => String((t as any).status ?? '').toUpperCase() === maintStatusFilter)
+  ).filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
 
   // Prepare data for comparison charts
   const prepareComparisonData = useCallback(() => {
@@ -892,10 +971,14 @@ export default function SuperAdminHome() {
       ? allMaintTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
       : (maintStatusFilter === 'all' ? allMaintTasks : allMaintTasks.filter(t => String((t as any).status ?? '').toUpperCase() === maintStatusFilter));
 
+    const implTasksPicFiltered = implTasksFiltered.filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+    const devTasksPicFiltered = devTasksFiltered.filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+    const maintTasksPicFiltered = maintTasksFiltered.filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+
     const allTasks = [
-      ...implTasksFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
-      ...devTasksFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
-      ...maintTasksFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
+      ...implTasksPicFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
+      ...devTasksPicFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
+      ...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
     ];
 
     const grouped = new Map<string, Array<typeof allTasks[0]>>();
@@ -947,7 +1030,7 @@ export default function SuperAdminHome() {
     }
     
     return paginatedGroups;
-  }, [profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, profileDateFrom, profileDateTo, implStatusFilter, devStatusFilter, maintStatusFilter, profileStatusFilter, detailCurrentPage, detailItemsPerPage]);
+  }, [profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, profileDateFrom, profileDateTo, implStatusFilter, devStatusFilter, maintStatusFilter, profileStatusFilter, detailCurrentPage, detailItemsPerPage, profilePicFilter, profileUsers]);
 
   // Aggregations for implementation and maintenance (kept minimal per current UI needs)
 
@@ -1521,7 +1604,7 @@ export default function SuperAdminHome() {
               <div className="flex flex-col sm:flex-row gap-4 items-center">
                 <div className="flex flex-col">
                   <label className="block text-xs text-gray-500">Năm</label>
-                  <select value={reportYear} onChange={(e) => setReportYear(Number(e.target.value))} className="mt-1 rounded-md border px-3 py-2 text-sm bg-white w-36">
+                  <select value={reportYear} onChange={(e) => setReportYear(Number(e.target.value))} className="mt-1 rounded-md border px-1 py-2 text-sm bg-white w-25">
                     {Array.from({ length: new Date().getFullYear() - 2019 }).map((_, i) => {
                       const y = 2020 + i;
                       return <option key={y} value={y}>{y}</option>;
@@ -1531,7 +1614,7 @@ export default function SuperAdminHome() {
 
                 <div className="flex flex-col">
                   <label className="block text-xs text-gray-500">Tháng (tùy chọn)</label>
-                  <select value={reportMonth} onChange={(e) => setReportMonth(e.target.value === '' ? '' : Number(e.target.value))} className="mt-1 rounded-md border px-3 py-2 text-sm bg-white w-36">
+                  <select value={reportMonth} onChange={(e) => setReportMonth(e.target.value === '' ? '' : Number(e.target.value))} className="mt-1 rounded-md border px-3 py-1 text-sm bg-white w-36">
                     <option value="">Tất cả</option>
                     {Array.from({ length: 12 }).map((_, i) => {
                       const m = i + 1;
@@ -1656,14 +1739,17 @@ export default function SuperAdminHome() {
               <div className="w-full sm:w-auto">
                 <label className="text-sm text-gray-500">Chọn team</label>
                 <div className="relative mt-1 flex items-center gap-3">
-                  <select 
-                    value={selectedTeam} 
-                    onChange={(e) => setSelectedTeam(e.target.value)} 
-                    className="rounded-md border px-3 text-sm w-72 h-10 bg-white"
+                  <select
+                    ref={teamSelectRef}
+                    value={selectedTeam}
+                    onChange={(e) => setSelectedTeam(e.target.value)}
+                    className="rounded-md border px-3 text-sm w-40 h-10 bg-white"
                   >
                     <option value="">— Chọn team —</option>
-                    {availableTeams.map(team => (
-                      <option key={team} value={team}>{team}</option>
+                    {availableTeams.map((team) => (
+                      <option key={team} value={team}>
+                        {team}
+                      </option>
                     ))}
                   </select>
                   <button 
@@ -1683,7 +1769,7 @@ export default function SuperAdminHome() {
                       <option value="Q4">Q4</option>
                     </select>
                     <label className="text-sm text-gray-500">Năm</label>
-                    <select value={profileYear} onChange={(e) => { setProfileYear(e.target.value); setDetailCurrentPage(0); }} className="rounded-md border px-2 py-1 text-sm bg-white w-28">
+                    <select value={profileYear} onChange={(e) => { setProfileYear(e.target.value); setDetailCurrentPage(0); }} className="rounded-md border px-2 py-1 text-sm bg-white w-20">
                       <option value="">Tất cả</option>
                       {Array.from({ length: new Date().getFullYear() - 2019 }).map((_, i) => {
                         const y = String(2020 + i);
@@ -1723,6 +1809,21 @@ export default function SuperAdminHome() {
                       <option value="IN_PROCESS">Đang xử lý</option>
                       <option value="COMPLETED">Hoàn thành</option>
                       <option value="ISSUE">Gặp sự cố</option>
+                    </select>
+                    <label className="text-sm text-gray-500">Người phụ trách</label>
+                    <select
+                      value={profilePicFilter}
+                      onChange={(e) => { setProfilePicFilter(e.target.value); setDetailCurrentPage(0); }}
+                      className="rounded-md border px-2 py-1 text-sm bg-white"
+                    >
+                      <option value="all">Tất cả</option>
+                      {profileUsers
+                        .filter((u) => u.id != null)
+                        .map((u) => (
+                          <option key={u.id} value={String(u.id)}>
+                            {u.fullname ?? u.username ?? `User #${u.id}`}
+                          </option>
+                        ))}
                     </select>
                   </div>
                 </div>
@@ -2217,9 +2318,10 @@ export default function SuperAdminHome() {
                       plotOptions: { bar: { borderRadius: 6, columnWidth: '60%' } },
                       xaxis: { categories: hwRows.map(r => r.label) },
                       dataLabels: { enabled: false },
-                      tooltip: { y: { formatter: (v: number) => `${v.toLocaleString()} ₫` } },
+                      tooltip: { y: { formatter: (v: number) => `${v.toLocaleString()} VND` } },
                       colors: ['#465fff'],
                     }}
+                    
                     series={[{ name: 'Doanh thu', data: hwRows.map(r => Math.round(r.revenue)) }]}
                     type="bar"
                     height={320}
@@ -2239,7 +2341,7 @@ export default function SuperAdminHome() {
                       <tr className="text-left text-xs text-gray-500">
                         <th className="px-3 py-2">Sản phẩm</th>
                         <th className="px-3 py-2">Danh mục</th>
-                        <th className="px-3 py-2 text-right">Giá</th>
+                        <th className="px-3 py-2 text-right">Doanh thu</th>
                         <th className="px-3 py-2 text-right">Trạng thái</th>
                       </tr>
                     </thead>
@@ -2258,7 +2360,7 @@ export default function SuperAdminHome() {
                               )}
                               <div>
                                 <div className="font-medium text-gray-900">{r.label}</div>
-                                <div className="text-xs text-gray-500">{r.quantity} Biến thể</div>
+                                <div className="text-xs text-gray-500">{r.quantity} Cái</div>
                               </div>
                             </div>
                           </td>

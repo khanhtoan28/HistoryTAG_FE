@@ -20,8 +20,6 @@ export type Hospital = {
   // taxCode, contactPosition, and IT contact fields removed from this page model
   hisSystemId?: number | null;
   hisSystemName?: string | null;
-  bankName?: string | null;
-  bankContactPerson?: string | null;
   province?: string | null;
   projectStatus?: string | null;
   startDate?: string | null;
@@ -43,8 +41,6 @@ export type HospitalForm = {
   contactPerson?: string;
   contactEmail?: string;
   contactNumber?: string;
-  bankName?: string;
-  bankContactPerson?: string;
   province?: string;
   hisSystemId?: number;
   hardwareId?: number;
@@ -293,8 +289,6 @@ function DetailModal({
             <Info label="Đầu mối liên hệ viện" icon={<FiPhone />} value={item.contactNumber || "—"} />
             <Info label="Đơn vị HIS" icon={<FiMapPin />} value={item.hisSystemName || item.hisSystemId || "—"} />
             <Info label="Phần cứng" icon={<FiImage />} value={item.hardwareName || item.hardwareId || "—"} />
-            <Info label="Đơn vị tài trợ" icon={<FiUser />} value={item.bankName || "—"} />
-            <Info label="Liên hệ đơn vị tài trợ" icon={<FiUser />} value={item.bankContactPerson || "—"} />
             {/* Project dates are managed by BusinessProject (master) and are not shown here */}
             {/* Removed: Mã số thuế, Vị trí liên hệ, Phòng IT contact, and Tạo lúc per request */}
             <Info label="Cập nhật lúc" icon={<FiClock />} value={fmt(item.updatedAt)} />
@@ -400,8 +394,6 @@ export default function HospitalsPage() {
     contactPerson: "",
     contactEmail: "",
     contactNumber: "",
-    bankName: "",
-    bankContactPerson: "",
     province: "",
     hisSystemId: undefined,
     hardwareId: undefined,
@@ -435,8 +427,6 @@ export default function HospitalsPage() {
       contactPerson: h.contactPerson ?? "",
       contactEmail: h.contactEmail ?? "",
       contactNumber: h.contactNumber ?? "",
-      bankName: h.bankName ?? "",
-      bankContactPerson: h.bankContactPerson ?? "",
       province: h.province ?? "",
       hisSystemId: h.hisSystemId ?? undefined,
       hardwareId: h.hardwareId ?? undefined,
@@ -674,8 +664,6 @@ export default function HospitalsPage() {
       contactPerson: "",
       contactEmail: "",
       contactNumber: "",
-      bankName: "",
-      bankContactPerson: "",
       province: "",
       hisSystemId: undefined,
       hardwareId: undefined,
@@ -772,8 +760,6 @@ export default function HospitalsPage() {
     contactPerson: form.contactPerson?.trim() || undefined,
     contactEmail: form.contactEmail?.trim() || undefined,
     contactNumber: form.contactNumber?.trim() || undefined,
-    bankName: form.bankName?.trim() || undefined,
-    bankContactPerson: form.bankContactPerson?.trim() || undefined,
     province: form.province?.trim() || undefined,
     hisSystemId: form.hisSystemId ?? undefined,
     hardwareId: form.hardwareId ?? undefined,
@@ -966,18 +952,6 @@ export default function HospitalsPage() {
                                 <div>
                                   <span className="text-xs text-gray-400">Phần cứng:</span>
                                   <span className="font-medium text-gray-800 ml-2">{h.hardwareName}</span>
-                                </div>
-                              )}
-                              {h.bankName && (
-                                <div>
-                                  <span className="text-xs text-gray-400">Đơn vị tài trợ:</span>
-                                  <span className="font-medium text-gray-800 ml-2">{h.bankName}</span>
-                                </div>
-                              )}
-                              {h.bankContactPerson && (
-                                <div>
-                                  <span className="text-xs text-gray-400">Liên hệ tài trợ:</span>
-                                  <span className="font-medium text-gray-800 ml-2">{h.bankContactPerson}</span>
                                 </div>
                               )}
                             </div>
@@ -1276,27 +1250,6 @@ export default function HospitalsPage() {
                   </div>
 
                         {/* Project dates are managed on BusinessProject now; inputs removed from Hospital form */}
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="mb-1 block text-sm">Đơn vị tài trợ</label>
-                      <input
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                        value={form.bankName || ""}
-                        onChange={(e) => setForm((s) => ({ ...s, bankName: e.target.value }))}
-                        disabled={isViewing || !canEdit}
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm">Liên hệ đơn vị tài trợ</label>
-                      <input
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                        value={form.bankContactPerson || ""}
-                        onChange={(e) => setForm((s) => ({ ...s, bankContactPerson: e.target.value }))}
-                        disabled={isViewing || !canEdit}
-                      />
-                    </div>
-                  </div>
 
                   <div>
                     <label className="mb-1 block text-sm">Ghi chú</label>
