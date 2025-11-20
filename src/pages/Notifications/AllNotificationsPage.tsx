@@ -109,27 +109,27 @@ export default function AllNotificationsPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-2xl font-semibold">Notifications</h2>
-          <p className="text-sm text-gray-500">Manage all notifications and filters</p>
+          <h2 className="text-2xl font-semibold">Thông báo</h2>
+          <p className="text-sm text-gray-500">Quản lý toàn bộ thông báo</p>
         </div>
         <div className="flex items-center gap-3">
           <select className="px-3 py-1 border rounded" value={preset} onChange={(e) => setPreset(e.target.value)}>
-            <option value="all">All</option>
-            <option value="today">Today</option>
-            <option value="month">This Month</option>
-            <option value="year">This Year</option>
+            <option value="all">Tất cả</option>
+            <option value="today">Hôm nay</option>
+            <option value="month">Tháng này</option>
+            <option value="year">Năm này</option>
           </select>
           <input type="date" className="px-2 py-1 border rounded" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           <input type="date" className="px-2 py-1 border rounded" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          <button onClick={() => { setPreset("all"); setStartDate(""); setEndDate(""); }} className="px-3 py-1 border rounded">Reset</button>
-          <button onClick={() => navigate(-1)} className="px-3 py-1 border rounded">Back</button>
+          <button onClick={() => { setPreset("all"); setStartDate(""); setEndDate(""); }} className="px-3 py-1 border rounded">Làm mới</button>
+          <button onClick={() => navigate(-1)} className="px-3 py-1 border rounded">Quay lại</button>
         </div>
       </div>
 
       <div className="bg-white rounded-lg shadow p-3">
         <div className="max-h-[65vh] overflow-y-auto custom-scrollbar">
           {loading && <div className="p-4 text-center">Loading...</div>}
-          {!loading && filtered.length === 0 && <div className="p-4 text-center text-gray-500">No notifications</div>}
+          {!loading && filtered.length === 0 && <div className="p-4 text-center text-gray-500">Không có thông báo</div>}
 
           <ul className="flex flex-col gap-2">
             {filtered.map((n) => (

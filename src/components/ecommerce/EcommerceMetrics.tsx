@@ -181,7 +181,7 @@ export default function EcommerceMetrics() {
             </h4>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-auto">
-            Những task bạn tiếp nhận nhưng không phải người phụ trách chính.
+            Các công việc bạn đã chuyển giao lại cho người khác.
           </p>
         </div>
       </div>

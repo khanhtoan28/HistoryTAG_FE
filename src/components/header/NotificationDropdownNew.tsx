@@ -105,7 +105,7 @@ export default function NotificationDropdown() {
               />
             ) : null}
             <h5 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-              Notification
+              Thông báo
             </h5>
             {selectedNotification ? (
               <span className="ml-2 text-sm text-gray-500">{selectedNotification.actorName}</span>
@@ -185,7 +185,7 @@ export default function NotificationDropdown() {
           to={viewAllPath}
           className="block w-full px-4 py-2 mt-3 text-sm font-medium text-center text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 hover:shadow-md transition-shadow dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
         >
-          View All Notifications
+          Tất cả thông báo
         </Link>
       </Dropdown>
       <NotificationDetailModal
