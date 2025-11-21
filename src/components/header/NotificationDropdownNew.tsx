@@ -10,7 +10,8 @@ import { Link, useLocation } from "react-router-dom";
 export default function NotificationDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedNotification, setSelectedNotification] = useState<any | null>(null);
-  const [notifying, setNotifying] = useState(true);
+  // start false and reflect actual unreadCount via effect
+  const [notifying, setNotifying] = useState(false);
 
   const { notifications, unreadCount, loadNotifications, markAsRead } = useNotification();
   // no modal; we'll navigate to /notifications
@@ -25,7 +26,9 @@ export default function NotificationDropdown() {
 
   // reflect unreadCount into local notifying badge
   useEffect(() => {
-    setNotifying((unreadCount || 0) > 0);
+    const count = Number(unreadCount) || 0;
+    console.debug("[NotificationDropdown] unreadCount changed:", unreadCount, "=>", count);
+    setNotifying(count > 0);
   }, [unreadCount]);
 
   const refreshNotifications = async () => {

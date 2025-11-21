@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCardNew from "../SuperAdmin/TaskCardNew";
+import { AiOutlineEye } from "react-icons/ai";
 import toast from "react-hot-toast";
 import { FaHospital } from "react-icons/fa";
 import { FiUser, FiLink, FiClock, FiTag, FiCheckCircle } from "react-icons/fi";
@@ -1950,24 +1951,7 @@ const ImplementationTasksPage: React.FC = () => {
                     <div className="flex flex-wrap items-center gap-3 ml-auto justify-end">
                         {/* Sort */}
                         <div className="flex items-center gap-2">
-                            <select
-                                className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
-                                value={sortBy}
-                                onChange={(e) => { setSortBy(e.target.value); setPage(0); }}
-                            >
-                                <option value="createdAt">Sắp xếp theo: ngày tạo</option>
-                                <option value="id">Sắp xếp theo: id</option>
-                                <option value="hospitalName">Sắp xếp theo: bệnh viện</option>
-                                <option value="deadline">Sắp xếp theo: deadline</option>
-                            </select>
-                            <select
-                                className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
-                                value={sortDir}
-                                onChange={(e) => setSortDir(e.target.value)}
-                            >
-                                <option value="asc">Tăng dần</option>
-                                <option value="desc">Giảm dần</option>
-                            </select>
+                            
                         </div>
 
                         {/* Thêm mới */}
@@ -2041,16 +2025,7 @@ const ImplementationTasksPage: React.FC = () => {
                                     </div>
                                 </div>
                                     <div className="flex items-center gap-2">
-                                        <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900" value={hospitalSortBy} onChange={(e) => { setHospitalSortBy(e.target.value); setHospitalPage(0); }}>
-                                            <option value="label">Sắp xếp theo: tên</option>
-                                            <option value="taskCount">Sắp xếp theo: tổng task</option>
-                                            <option value="accepted">Sắp xếp theo: đã nghiệm thu</option>
-                                            <option value="ratio">Sắp xếp theo: tỉ lệ nghiệm thu</option>
-                                        </select>
-                                        <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900" value={hospitalSortDir} onChange={(e) => setHospitalSortDir(e.target.value)}>
-                                            <option value="asc">Tăng dần</option>
-                                            <option value="desc">Giảm dần</option>
-                                        </select>
+                                        
                                         {(isSuperAdmin || userTeam === "MAINTENANCE") && (
                                             <>
                                                 <button
@@ -2137,7 +2112,7 @@ const ImplementationTasksPage: React.FC = () => {
                                                                 </div>
                                                             </td>
                                                             <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                                <button onClick={(e) => { e.stopPropagation(); setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }} className="text-blue-600 hover:text-blue-800 font-medium">Xem task</button>
+                                                                <button onClick={(e) => { e.stopPropagation(); setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }} className="p-6 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition" title="Xem task"><AiOutlineEye className="text-lg" /></button>
                                                             </td>
                                                         </tr>
                                                     ))}
