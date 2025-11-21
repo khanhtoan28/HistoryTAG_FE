@@ -858,7 +858,18 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedHospital, showHospitalList]);
 
-  function handleHospitalClick(hospitalName: string) {
+  function handleHospitalClick(hospitalName: string, e?: React.MouseEvent) {
+    try {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    } catch (err) {
+      // ignore
+    }
+    // Debug: log click source to help diagnose unexpected reloads
+    // eslint-disable-next-line no-console
+    console.debug('[MaintenanceSuperTask] handleHospitalClick', { hospitalName, hasEvent: !!e });
     setSelectedHospital(hospitalName);
     setShowHospitalList(false);
     setPage(0);
@@ -1149,7 +1160,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                             <tr 
                               key={`${hospital.label}-${index}`}
                               className="hover:bg-gray-50 transition-colors cursor-pointer"
-                              onClick={() => handleHospitalClick(hospital.label)}
+                              onClick={(e) => handleHospitalClick(hospital.label, e)}
                             >
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                 {hospitalPage * hospitalSize + index + 1}
@@ -1193,10 +1204,10 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                               <td className="px-6 py-4 whitespace-nowrap text-sm">
                                 <button
                                   onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleHospitalClick(hospital.label);
+                                    // pass the event so handler can prevent default/stop propagation
+                                    handleHospitalClick(hospital.label, e);
                                   }}
-                                  className="p-2 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition"
+                                  className="p-6 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition"
                                   title="Xem task"
                                 >
                                   <AiOutlineEye className="text-lg" />
@@ -1325,22 +1336,9 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                 setModalOpen(true);
               }}
             >
-              + Thêm mới
+              + Thêm task mới
             </button>
-            <button
-              className="relative rounded-full border px-4 py-2 text-sm shadow-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 flex items-center gap-2"
-              onClick={() => {
-                setPendingOpen(true);
-                fetchPendingTasks();
-              }}
-            >
-              📨 Bệnh viện chờ
-              {pendingTasks.length > 0 && (
-                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
-                  {pendingTasks.length}
-                </span>
-              )}
-            </button>
+            
           </div>
         </div>
       </div>
