@@ -171,7 +171,14 @@ layer(base);
 [data-overlay-fix] {
   pointer-events: none;
 }
+html {
+  scrollbar-gutter: stable;
+}
 
+/* fallback cho trình duyệt chưa hỗ trợ */
+body {
+  overflow-y: scroll;
+}
 /*
   The default border color has changed to `currentColor` in Tailwind CSS v4,
   so we've added these compatibility styles to make sure everything still

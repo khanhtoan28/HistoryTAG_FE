@@ -196,7 +196,7 @@ const ImplementSuperTaskPage: React.FC = () => {
   
   // New state for hospital list view
   const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
-  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number; label: string; subLabel?: string; taskCount?: number; visibleTaskCount?: number; hiddenTaskCount?: number; hiddenPendingCount?: number; hiddenAcceptedCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean; picDeploymentIds?: string[]; picDeploymentNames?: string[]; acceptedFromBusiness?: boolean; hasBusinessPlaceholder?: boolean }>>([]);
+  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number; label: string; subLabel?: string; taskCount?: number; visibleTaskCount?: number; hiddenTaskCount?: number; hiddenPendingCount?: number; hiddenAcceptedCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean; picDeploymentIds?: string[]; picDeploymentNames?: string[]; acceptedFromBusiness?: boolean; hasBusinessPlaceholder?: boolean; personInChargeName?: string | null; personInChargeId?: number | null }>>([]);
   const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
   const [hospitalPage, setHospitalPage] = useState<number>(0);
   const [hospitalSize, setHospitalSize] = useState<number>(20);
@@ -246,11 +246,53 @@ const ImplementSuperTaskPage: React.FC = () => {
       setPicFilterQuery("");
     }
   }, [picFilterOpen]);
+  const picOptionLabelMap = React.useMemo(() => {
+    const map = new Map<string, string>();
+    picOptions.forEach((opt) => {
+      map.set(opt.id, opt.label);
+    });
+    return map;
+  }, [picOptions]);
+
   const filteredPicOptions = React.useMemo(() => {
     const q = picFilterQuery.trim().toLowerCase();
     if (!q) return picOptions;
     return picOptions.filter((opt) => opt.label.toLowerCase().includes(q));
   }, [picOptions, picFilterQuery]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const params = new URLSearchParams({
+          department: "IT",
+          status: "true",
+        });
+        const res = await fetch(`${API_ROOT}/api/v1/superadmin/users/filter?${params.toString()}`, {
+          method: "GET",
+          headers: authHeaders(),
+          credentials: "include",
+        });
+        if (!res.ok) {
+          return;
+        }
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : [];
+        const options = list
+          .map((u: any) => {
+            const id = u?.id;
+            const labelRaw = u?.fullname ?? u?.fullName ?? u?.username ?? u?.email ?? u?.id;
+            const label = typeof labelRaw === "string" ? labelRaw.trim() : String(labelRaw ?? "");
+            if (id == null || !label) return null;
+            return { id: String(id), label };
+          })
+          .filter((item): item is { id: string; label: string } => Boolean(item));
+        options.sort((a, b) => a.label.localeCompare(b.label, "vi", { sensitivity: "base" }));
+        setPicOptions(options);
+      } catch (err) {
+        console.debug("fetch IT users failed", err);
+      }
+    })();
+  }, []);
 
   async function fetchPendingGroups(): Promise<number> {
     setLoadingPending(true);
@@ -502,7 +544,7 @@ const ImplementSuperTaskPage: React.FC = () => {
       const hospitals = await res.json();
       
       // Parse task count from subLabel (format: "Province - X tasks" or "X tasks")
-      const baseList = (Array.isArray(hospitals) ? hospitals : []).map((hospital: { id: number; label: string; subLabel?: string; taskCount?: number; transferredToMaintenance?: boolean; acceptedByMaintenance?: boolean }) => {
+      const baseList = (Array.isArray(hospitals) ? hospitals : []).map((hospital: { id: number; label: string; subLabel?: string; taskCount?: number; transferredToMaintenance?: boolean; acceptedByMaintenance?: boolean; personInChargeName?: string | null; personInChargeId?: number | null }) => {
         let taskCount = Number(hospital.taskCount ?? 0);
         let province = hospital.subLabel || "";
 
@@ -528,10 +570,25 @@ const ImplementSuperTaskPage: React.FC = () => {
           nearDueCount: 0, // Initialize to 0 - will be calculated in augment()
           overdueCount: 0, // Initialize to 0 - will be calculated in augment()
           transferredCount: 0,
+          personInChargeName: (hospital as { personInChargeName?: string | null })?.personInChargeName ?? null,
+          personInChargeId: (hospital as { personInChargeId?: number | null })?.personInChargeId ?? null,
           // Use transfer status from backend
           allTransferred: Boolean(hospital.transferredToMaintenance),
           allAccepted: Boolean(hospital.acceptedByMaintenance),
         };
+      });
+
+      const personInChargeLookup = new Map<string, { id: number | null; name: string | null }>();
+      baseList.forEach((hospital) => {
+        if (!hospital) return;
+        const name = (hospital.personInChargeName ?? "").trim();
+        const id = hospital.personInChargeId ?? null;
+        if (hospital.id != null) {
+          personInChargeLookup.set(`id-${hospital.id}`, { id, name: name || null });
+        }
+        if (hospital.label) {
+          personInChargeLookup.set(`name-${hospital.label}`, { id, name: name || null });
+        }
       });
 
       // Fetch all tasks (limited) to compute near due/overdue per hospital
@@ -694,6 +751,16 @@ const ImplementSuperTaskPage: React.FC = () => {
             acceptedFromBusiness,
             hasBusinessPlaceholder:
               Boolean(businessInfo?.hasGeneratedTask) || hiddenTaskCount > 0,
+            personInChargeName:
+              ((keyById && personInChargeLookup.get(keyById)?.name) ||
+                personInChargeLookup.get(keyByName)?.name ||
+                h.personInChargeName ||
+                null),
+            personInChargeId:
+              ((keyById && personInChargeLookup.get(keyById)?.id) ||
+                personInChargeLookup.get(keyByName)?.id ||
+                h.personInChargeId ||
+                null),
           };
           return mapped;
         })
@@ -752,16 +819,6 @@ const ImplementSuperTaskPage: React.FC = () => {
       }
 
       setHospitalsWithTasks(mergedWithPersistentAcceptance);
-      const picOptionMap = new Map<string, { id: string; label: string }>();
-      mergedWithPersistentAcceptance.forEach((item) => {
-        (item.picDeploymentNames || []).forEach((name) => {
-          const trimmed = name.trim();
-          if (trimmed) {
-            picOptionMap.set(trimmed, { id: trimmed, label: trimmed });
-          }
-        });
-      });
-      setPicOptions(Array.from(picOptionMap.values()));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg || "Lỗi tải danh sách bệnh viện");
@@ -1048,11 +1105,19 @@ const ImplementSuperTaskPage: React.FC = () => {
     else if (hospitalStatusFilter === 'noneCompleted') list = list.filter(h => (h.acceptedCount || 0) === 0);
     else if (hospitalStatusFilter === 'transferred') list = list.filter(h => h.allTransferred);
     if (hospitalPicFilter.length > 0) {
-      const selected = new Set(hospitalPicFilter);
-      list = list.filter((h) =>
-        (h.picDeploymentIds || []).some((id) => selected.has(String(id))) ||
-        (h.picDeploymentNames || []).some((name) => selected.has(name))
+      const selectedIds = new Set(hospitalPicFilter.map(String));
+      const selectedNames = new Set(
+        hospitalPicFilter
+          .map((id) => picOptionLabelMap.get(String(id))?.toLowerCase().trim())
+          .filter((v): v is string => Boolean(v))
       );
+      list = list.filter((h) => {
+        const picId = h.personInChargeId != null ? String(h.personInChargeId) : null;
+        if (picId && selectedIds.has(picId)) return true;
+        const name = h.personInChargeName?.toLowerCase().trim();
+        if (name && selectedNames.has(name)) return true;
+        return false;
+      });
     }
     list = [...list].sort((a, b) => a.label.localeCompare(b.label, 'vi', { sensitivity: 'base' }));
     return list;
@@ -1526,6 +1591,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/Thành phố</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phụ trách chính</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượng task</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
                       </tr>
@@ -1575,6 +1641,9 @@ const ImplementSuperTaskPage: React.FC = () => {
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                 {hospital.subLabel || "—"}
                               </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {hospital.personInChargeName || "—"}
+                            </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm align-top">
                                 <div className="flex flex-col items-start gap-1">
                                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">

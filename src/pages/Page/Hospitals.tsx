@@ -5,7 +5,7 @@ import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
 // removed unused icons import (use react-icons instead)
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
-import { FiMapPin, FiMail, FiPhone, FiUser, FiClock, FiTag, FiImage, FiMap } from "react-icons/fi";
+import { FiMapPin, FiPhone, FiUser, FiClock, FiTag, FiImage, FiMap } from "react-icons/fi";
 import { FaHospitalAlt } from "react-icons/fa";
 import toast from "react-hot-toast";
 
@@ -14,7 +14,6 @@ export type Hospital = {
   hospitalCode?: string | null;
   name: string;
   address?: string | null;
-  contactPerson?: string | null;
   contactEmail?: string | null;
   contactNumber?: string | null;
   // taxCode, contactPosition, and IT contact fields removed from this page model
@@ -32,13 +31,16 @@ export type Hospital = {
   assignedUserIds?: number[];
   hardwareId?: number | null;
   hardwareName?: string | null;
+  personInChargeId?: number | null;
+  personInChargeName?: string | null;
+  personInChargeEmail?: string | null;
+  personInChargePhone?: string | null;
 };
 
 export type HospitalForm = {
   hospitalCode?: string;
   name: string;
   address?: string;
-  contactPerson?: string;
   contactEmail?: string;
   contactNumber?: string;
   province?: string;
@@ -51,6 +53,16 @@ export type HospitalForm = {
   imageUrl?: string | null;
   priority: string;
   // assignedUserIds removed from Hospital form UI; assignment managed elsewhere
+  personInChargeId?: number;
+  personInChargeName?: string;
+};
+
+type ITUserOption = {
+  id: number;
+  name: string;
+  username?: string;
+  email?: string | null;
+  phone?: string | null;
 };
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
@@ -284,9 +296,18 @@ function DetailModal({
               }
             />
 
-            <Info label="Người liên hệ" icon={<FiUser />} value={item.contactPerson || "—"} />
-            <Info label="Email người phụ trách" icon={<FiMail />} value={item.contactEmail || "—"} />
-            <Info label="Đầu mối liên hệ viện" icon={<FiPhone />} value={item.contactNumber || "—"} />
+            <Info
+              label="Người phụ trách (IT)"
+              icon={<FiUser />}
+              value={
+                item.personInChargeName ? (
+                  <span className="font-medium text-gray-900 dark:text-gray-100">{item.personInChargeName}</span>
+                ) : (
+                  "—"
+                )
+              }
+            />
+            <Info label="SĐT liên hệ viện" icon={<FiPhone />} value={item.contactNumber || "—"} />
             <Info label="Đơn vị HIS" icon={<FiMapPin />} value={item.hisSystemName || item.hisSystemId || "—"} />
             <Info label="Phần cứng" icon={<FiImage />} value={item.hardwareName || item.hardwareId || "—"} />
             {/* Project dates are managed by BusinessProject (master) and are not shown here */}
@@ -391,7 +412,6 @@ export default function HospitalsPage() {
     hospitalCode: "",
     name: "",
     address: "",
-    contactPerson: "",
     contactEmail: "",
     contactNumber: "",
     province: "",
@@ -404,6 +424,8 @@ export default function HospitalsPage() {
     imageFile: null,
     imageUrl: null,
   priority: "P2",
+    personInChargeId: undefined,
+    personInChargeName: "",
   });
 
   const isEditing = !!editing?.id;
@@ -424,7 +446,6 @@ export default function HospitalsPage() {
       hospitalCode: h.hospitalCode ?? "",
       name: h.name ?? "",
       address: h.address ?? "",
-      contactPerson: h.contactPerson ?? "",
       contactEmail: h.contactEmail ?? "",
       contactNumber: h.contactNumber ?? "",
       province: h.province ?? "",
@@ -438,6 +459,8 @@ export default function HospitalsPage() {
       imageUrl: (h.imageUrl && h.imageUrl.trim()) ? h.imageUrl : null,
       priority: h.priority ?? "P2",
       // assignedUserIds removed from form; we don't populate it here
+      personInChargeId: h.personInChargeId ?? undefined,
+      personInChargeName: h.personInChargeName ?? "",
     });
   }
 
@@ -451,6 +474,39 @@ export default function HospitalsPage() {
         const list = await res.json();
         const mapped = Array.isArray(list) ? list.map((x: any) => ({ id: Number(x.id), name: String(x.label ?? x.name ?? x.id) })) : [];
         return mapped.filter((x: any) => Number.isFinite(x.id) && x.name);
+      } catch (e) {
+        return [];
+      }
+    },
+    []
+  );
+
+  const searchItUsers = useMemo(
+    () => async (term: string) => {
+      try {
+        const params = new URLSearchParams({
+          department: "IT",
+          status: "true",
+        });
+        if (term && term.trim()) {
+          params.set("fullName", term.trim());
+        }
+        const res = await fetch(`${API_BASE}/api/v1/superadmin/users/filter?${params.toString()}`, {
+          headers: { ...authHeader() },
+          credentials: "include",
+        } as any);
+        if (!res.ok) return [];
+        const list = await res.json();
+        const array = Array.isArray(list) ? list : [];
+        return array
+          .map((u: any) => ({
+            id: Number(u.id),
+            name: String(u.fullname ?? u.username ?? u.email ?? u.id),
+            username: u.username ?? undefined,
+            email: u.email ?? null,
+            phone: u.phone ?? null,
+          }))
+          .filter((u: ITUserOption) => Number.isFinite(u.id) && u.name);
       } catch (e) {
         return [];
       }
@@ -552,7 +608,141 @@ export default function HospitalsPage() {
     );
   }
 
+  function RemoteSelectPersonInCharge({
+    label,
+    placeholder,
+    fetchOptions,
+    value,
+    onChange,
+    disabled,
+  }: {
+    label: string;
+    placeholder?: string;
+    fetchOptions: (q: string) => Promise<ITUserOption[]>;
+    value: ITUserOption | null;
+    onChange: (v: ITUserOption | null) => void;
+    disabled?: boolean;
+  }) {
+    const [openBox, setOpenBox] = useState(false);
+    const [q, setQ] = useState("");
+    const [loadingBox, setLoadingBox] = useState(false);
+    const [options, setOptions] = useState<ITUserOption[]>([]);
+    const [highlight, setHighlight] = useState(-1);
+
+    useEffect(() => {
+      if (!q.trim()) return;
+      let alive = true;
+      const t = setTimeout(async () => {
+        setLoadingBox(true);
+        try {
+          const res = await fetchOptions(q.trim());
+          if (alive) setOptions(res);
+        } finally {
+          if (alive) setLoadingBox(false);
+        }
+      }, 250);
+      return () => {
+        alive = false;
+        clearTimeout(t);
+      };
+    }, [q, fetchOptions]);
+
+    useEffect(() => {
+      let alive = true;
+      if (openBox && options.length === 0 && !q.trim()) {
+        (async () => {
+          setLoadingBox(true);
+          try {
+            const res = await fetchOptions("");
+            if (alive) setOptions(res);
+          } finally {
+            if (alive) setLoadingBox(false);
+          }
+        })();
+      }
+      return () => {
+        alive = false;
+      };
+    }, [openBox, fetchOptions, options.length, q]);
+
+    return (
+      <div>
+        <label className="mb-1 block text-sm font-medium">{label}</label>
+        <div className="relative">
+          <input
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
+            placeholder={placeholder || "Chọn người phụ trách..."}
+            value={openBox ? q : value?.name || ""}
+            onChange={(e) => {
+              setQ(e.target.value);
+              if (!openBox) setOpenBox(true);
+            }}
+            onFocus={() => setOpenBox(true)}
+            onKeyDown={(e) => {
+              if (!openBox) return;
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setHighlight((h) => Math.min(h + 1, options.length - 1));
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setHighlight((h) => Math.max(h - 1, 0));
+              } else if (e.key === "Enter") {
+                e.preventDefault();
+                if (highlight >= 0 && options[highlight]) {
+                  onChange(options[highlight]);
+                  setOpenBox(false);
+                }
+              } else if (e.key === "Escape") {
+                setOpenBox(false);
+              }
+            }}
+            disabled={disabled}
+          />
+          {value && !openBox && (
+            <button
+              type="button"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400"
+              onClick={() => onChange(null)}
+              aria-label="Clear"
+            >
+              ✕
+            </button>
+          )}
+          {openBox && (
+            <div className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-gray-200 bg-white shadow-lg">
+              {loadingBox && <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>}
+              {!loadingBox && options.length === 0 && (
+                <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>
+              )}
+              {!loadingBox &&
+                options.map((opt, idx) => (
+                  <div
+                    key={opt.id}
+                    className={`px-3 py-2 text-sm cursor-pointer ${idx === highlight ? "bg-gray-100" : ""}`}
+                    onMouseEnter={() => setHighlight(idx)}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      onChange(opt);
+                      setOpenBox(false);
+                    }}
+                  >
+                    <div className="font-medium text-gray-800">{opt.name}</div>
+                    {(opt.username || opt.email || opt.phone) && (
+                      <div className="text-xs text-gray-500">
+                        {[opt.username, opt.email, opt.phone].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const [hardwareOpt, setHardwareOpt] = useState<{ id: number; name: string } | null>(null);
+  const [personInChargeOpt, setPersonInChargeOpt] = useState<ITUserOption | null>(null);
 
   const [hisOptions, setHisOptions] = useState<Array<{ id: number; name: string }>>([]);
 
@@ -586,6 +776,30 @@ export default function HospitalsPage() {
       setHardwareOpt(null);
     }
   }, [open, form.hardwareId, viewing, editing]);
+
+  useEffect(() => {
+    if (!open) {
+      setPersonInChargeOpt(null);
+      return;
+    }
+    if (form.personInChargeId) {
+      const name =
+        viewing?.personInChargeName ??
+        editing?.personInChargeName ??
+        form.personInChargeName ??
+        `#${form.personInChargeId}`;
+      const email = viewing?.personInChargeEmail ?? editing?.personInChargeEmail ?? null;
+      const phone = viewing?.personInChargePhone ?? editing?.personInChargePhone ?? null;
+      setPersonInChargeOpt({
+        id: form.personInChargeId,
+        name,
+        email: email ?? null,
+        phone: phone ?? null,
+      });
+    } else {
+      setPersonInChargeOpt(null);
+    }
+  }, [open, form.personInChargeId, form.personInChargeName, viewing, editing]);
 
   // ✅ HÀM GỌI API GET CHI TIẾT
   async function fetchHospitalDetails(id: number): Promise<Hospital | null> {
@@ -661,7 +875,6 @@ export default function HospitalsPage() {
       hospitalCode: "",
       name: "",
       address: "",
-      contactPerson: "",
       contactEmail: "",
       contactNumber: "",
       province: "",
@@ -675,6 +888,8 @@ export default function HospitalsPage() {
       imageUrl: null,
       priority: "P2",
       // assignedUserIds removed from form
+      personInChargeId: undefined,
+      personInChargeName: "",
     });
     setOpen(true);
   }
@@ -757,7 +972,6 @@ export default function HospitalsPage() {
     hospitalCode: form.hospitalCode?.trim() || undefined,
     name: form.name.trim(),
     address: form.address?.trim() || undefined,
-    contactPerson: form.contactPerson?.trim() || undefined,
     contactEmail: form.contactEmail?.trim() || undefined,
     contactNumber: form.contactNumber?.trim() || undefined,
     province: form.province?.trim() || undefined,
@@ -768,6 +982,7 @@ export default function HospitalsPage() {
     notes: form.notes?.trim() || undefined,
     imageFile: form.imageFile || undefined,
     priority: form.priority,
+    personInChargeId: form.personInChargeId ?? undefined,
     // assignedUserIds intentionally not sent from Hospital form
   };
 
@@ -900,7 +1115,12 @@ export default function HospitalsPage() {
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3">
-                          <h4 title={h.name} className="text-lg font-semibold text-gray-900 truncate group-hover:text-blue-800">{h.name}</h4>
+                          <h4
+                            title={h.name}
+                            className="text-lg font-semibold text-gray-900 group-hover:text-blue-800 break-words whitespace-normal"
+                          >
+                            {h.name}
+                          </h4>
                           {showApiPill && (
                             <a
                               href={apiUrl ?? '#'}
@@ -925,19 +1145,13 @@ export default function HospitalsPage() {
                           <div className="truncate">{h.address || "—"}</div>
                           <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-700">
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-400">Người liên hệ:</span>
-                              <span className="font-medium text-gray-800">{h.contactPerson || "—"}</span>
+                              <span className="text-xs text-gray-400">Người phụ trách:</span>
+                              <span className="font-medium text-gray-800">{h.personInChargeName || "—"}</span>
                             </div>
                             {h.contactNumber && (
                               <div className="flex items-center gap-2">
                                 <span className="text-xs text-gray-400">•</span>
-                                <span className="text-sm text-gray-600">{h.contactNumber}</span>
-                              </div>
-                            )}
-                            {h.contactEmail && (
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-400">•</span>
-                                <span className="text-sm text-gray-600 truncate">{h.contactEmail}</span>
+                                <span className="text-sm text-gray-600">SĐT liên hệ viện: {h.contactNumber}</span>
                               </div>
                             )}
                           </div>
@@ -1123,11 +1337,11 @@ export default function HospitalsPage() {
                         disabled={isViewing || !canEdit}
                       />
                     </div>
-                    {/* Người phụ trách field removed — assignment handled elsewhere */}
+                    <div className="hidden md:block" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="mb-1 block text-sm">Số điện thoại liên hệ viện</label>
+                      <label className="mb-1 block text-sm">SĐT liên hệ viện</label>
                       <input
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
                         value={form.contactNumber || ""}
@@ -1147,15 +1361,21 @@ export default function HospitalsPage() {
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="mb-1 block text-sm">Người liên hệ</label>
-                      <input
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
-                        value={form.contactPerson || ""}
-                        onChange={(e) => setForm((s) => ({ ...s, contactPerson: e.target.value }))}
-                        disabled={isViewing || !canEdit}
-                      />
-                    </div>
+                    <RemoteSelectPersonInCharge
+                      label="Người phụ trách (IT)"
+                      placeholder="Chọn người phụ trách..."
+                      fetchOptions={searchItUsers}
+                      value={personInChargeOpt}
+                      onChange={(v) => {
+                        setPersonInChargeOpt(v);
+                        setForm((s) => ({
+                          ...s,
+                          personInChargeId: v ? v.id : undefined,
+                          personInChargeName: v ? v.name : "",
+                        }));
+                      }}
+                      disabled={isViewing || !canEdit}
+                    />
                     <div>
                       <label className="mb-1 block text-sm font-medium">Đơn vị HIS</label>
                       <select
