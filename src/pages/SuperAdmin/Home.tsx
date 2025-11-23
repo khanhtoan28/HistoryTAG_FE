@@ -110,7 +110,8 @@ export default function SuperAdminHome() {
   const [profileYear, setProfileYear] = useState<string>('');
   const [profileDateFrom, setProfileDateFrom] = useState<string>(''); // Date range filter from
   const [profileDateTo, setProfileDateTo] = useState<string>(''); // Date range filter to
-  const [exportChoice, setExportChoice] = useState<'users' | 'impl' | 'dev' | 'maint' | 'businesses' | 'all' | 'all_single'>('users');
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_exportChoice, _setExportChoice] = useState<'users' | 'impl' | 'dev' | 'maint' | 'businesses' | 'all' | 'all_single'>('users');
   const [viewMode, setViewMode] = useState<'detail' | 'comparison'>('detail');
   const [compareYear, setCompareYear] = useState<string>('');
   const [timeRange, setTimeRange] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
@@ -152,18 +153,6 @@ export default function SuperAdminHome() {
     setProfilePicFilter('all');
     setDetailCurrentPage(0);
   }, []);
-  
-  const toggleHospitalCollapse = (hospitalName: string) => {
-    setCollapsedHospitals(prev => {
-      const next = new Set(prev);
-      if (next.has(hospitalName)) {
-        next.delete(hospitalName);
-      } else {
-        next.add(hospitalName);
-      }
-      return next;
-    });
-  };
   useEffect(() => {
     let mounted = true;
     const load = async () => {
@@ -1145,7 +1134,17 @@ export default function SuperAdminHome() {
     const isMaintenanceTeam = normalizedTeam.includes('MAINT') || normalizedTeam.includes('BẢO TRÌ') || normalizedTeam.includes('BAOTRI');
     const isDevTeam = normalizedTeam.includes('DEV') || normalizedTeam.includes('PHÁT TRIỂN') || normalizedTeam.includes('PHATTRIEN');
 
-    const allTasks = [];
+    type TaskWithType = {
+      type: 'Triển khai' | 'Bảo trì' | 'Phát triển';
+      hospitalName: string | null | undefined;
+      startDate: string | null | undefined;
+      completionDate: string | null | undefined;
+      status: string | null | undefined;
+      name: string;
+      picName: string;
+      [key: string]: unknown;
+    };
+    const allTasks: TaskWithType[] = [];
     if (isDeploymentTeam) {
       allTasks.push(...implTasksPicFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
     }
@@ -1164,7 +1163,7 @@ export default function SuperAdminHome() {
       );
     }
 
-    const grouped = new Map<string, Array<typeof allTasks[0]>>();
+    const grouped = new Map<string, TaskWithType[]>();
     allTasks.forEach(task => {
       const hospitalName = task.hospitalName || 'Không xác định';
       if (!grouped.has(hospitalName)) {
@@ -1187,7 +1186,11 @@ export default function SuperAdminHome() {
     const startIndex = detailCurrentPage * detailItemsPerPage;
     const endIndex = startIndex + detailItemsPerPage;
     
-    const paginatedGroups: typeof sortedGroups = [];
+    type GroupedTask = {
+      hospitalName: string;
+      tasks: TaskWithType[];
+    };
+    const paginatedGroups: GroupedTask[] = [];
     for (const group of sortedGroups) {
       if (currentItemIndex >= endIndex) break;
       
@@ -1227,7 +1230,6 @@ export default function SuperAdminHome() {
 
   const salesPaginatedBusinesses = useMemo(() => {
     if (!isSalesSelected) return [];
-    const total = salesFilteredBusinesses.length;
     const startIndex = detailCurrentPage * detailItemsPerPage;
     const endIndex = startIndex + detailItemsPerPage;
     return salesFilteredBusinesses.slice(startIndex, endIndex);
@@ -1301,7 +1303,9 @@ export default function SuperAdminHome() {
     downloadCsv(makeFilename('businesses'), headers, rows);
   };
 
-  const exportAllCsv = () => {
+  // Reserved for future use
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _exportAllCsv = () => {
     exportUsersCsv();
     exportImplCsv();
     exportDevCsv();
@@ -1309,7 +1313,9 @@ export default function SuperAdminHome() {
     exportBusinessesCsv();
   };
 
-  const exportAllSingleCsv = () => {
+  // Reserved for future use
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _exportAllSingleCsv = () => {
     try {
       const sections: Array<{ title: string; headers: string[]; rows: Array<string[]> }> = [];
       sections.push({ title: 'Người dùng', headers: ['ID','Họ và tên','Username','Email','SĐT','Phòng/Team'], rows: profileUsers.map(u => [String(u.id ?? ''), String(u.fullname ?? ''), String(u.username ?? ''), String(u.email ?? ''), String(u.phone ?? ''), String((u as any).department ?? (u as any).team ?? '')]) });

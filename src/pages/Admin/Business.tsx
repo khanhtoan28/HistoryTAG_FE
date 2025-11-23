@@ -1573,8 +1573,11 @@ const BusinessPage: React.FC = () => {
                     <div className="flex-1">
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                          <div className="text-lg font-semibold text-gray-900">{it.name ?? '—'}</div>
-                          <div className="text-sm text-gray-500">{it.hospital?.label ?? '—'}</div>
+                          <div className="text-lg font-semibold text-gray-900">{it.hospital?.label ?? '—'}</div>
+                          <div className="text-sm">
+                            <span className="text-gray-500">Mã hợp đồng: </span>
+                            <span className="font-medium text-blue-600">{it.name ?? '—'}</span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           {renderStatusBadge(it.status)}
