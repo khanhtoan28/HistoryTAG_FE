@@ -73,6 +73,7 @@ const BusinessPage: React.FC = () => {
   const [hospitalSearchInput, setHospitalSearchInput] = useState<string>('');
   // commission is the user-facing input (entered as amount in VND)
   const [commission, setCommission] = useState<number | ''>('');
+  const [commissionDisplay, setCommissionDisplay] = useState<string>('');
   const [quantity, setQuantity] = useState<number | ''>(1);
   const [name, setName] = useState<string>('');
   const [statusValue, setStatusValue] = useState<string>('CARING');
@@ -708,7 +709,9 @@ const BusinessPage: React.FC = () => {
     };
     // commission is entered directly as amount
     if (commission !== '') {
-      payload.commission = Number(commission);
+      const commissionValue = Number(commission);
+      console.log('Submitting commission:', commission, 'As number:', commissionValue);
+      payload.commission = commissionValue;
     }
 
     const isUpdate = Boolean(editingId);
@@ -746,6 +749,7 @@ const BusinessPage: React.FC = () => {
       setStatusValue('CARING');
       setOriginalStatus('CARING');
       setCommission('');
+      setCommissionDisplay('');
       setSelectedHospitalId(null);
       setSelectedHospitalPhone(null);
       setSelectedPicId(null);
@@ -782,10 +786,11 @@ const BusinessPage: React.FC = () => {
 
   function parseFormattedNumber(value: string): number | '' {
     // Loại bỏ dấu chấm phân cách hàng nghìn (chỉ giữ lại số)
-    // Ví dụ: "1.000.000" -> "1000000", "1.234.56" -> "123456"
+    // Ví dụ: "1.000.000" -> "1000000", "7.000.000.000" -> "7000000000"
     const cleaned = value.replace(/\./g, '').replace(/[^\d]/g, '');
     if (cleaned === '' || cleaned === '0') return '';
-    const num = parseFloat(cleaned);
+    // Sử dụng parseInt thay vì parseFloat để tránh mất độ chính xác với số nguyên lớn
+    const num = parseInt(cleaned, 10);
     return isNaN(num) ? '' : num;
   }
 
@@ -893,8 +898,10 @@ const BusinessPage: React.FC = () => {
       // Load commission directly as amount
       if (res.commission != null) {
         setCommission(Number(res.commission));
+        setCommissionDisplay(formatNumber(Number(res.commission)));
       } else {
         setCommission('');
+      setCommissionDisplay('');
       }
       setQuantity(res.quantity != null ? Number(String(res.quantity)) : 1);
       // Load unitPrice từ response (có thể khác với giá mặc định từ phần cứng)
@@ -1020,6 +1027,7 @@ const BusinessPage: React.FC = () => {
             setStartDateValue(nowDateTimeLocal());
             setCompletionDateValue('');
             setCommission('');
+      setCommissionDisplay('');
             setFieldErrors({});
             setPendingSubmit(null);
             setStatusConfirmOpen(false);
@@ -1463,23 +1471,44 @@ const BusinessPage: React.FC = () => {
                       {fieldErrors.quantity && <div className="mt-1 text-sm text-red-600">{fieldErrors.quantity}</div>}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">Hoa hồng</label>
+                      <label className="block text-sm font-medium mb-1">Hoa hồng của viện</label>
                       {isSuperAdmin ? (
                         <input 
                           type="text" 
-                          value={formatNumber(commission)} 
+                          value={commissionDisplay || formatNumber(commission)} 
                           onChange={(e) => {
-                            const parsed = parseFormattedNumber(e.target.value);
+                            const inputValue = e.target.value;
+                            // Parse giá trị số từ input (loại bỏ dấu chấm và ký tự không phải số)
+                            const parsed = parseFormattedNumber(inputValue);
+                            // Lưu giá trị số
                             setCommission(parsed);
+                            // Format lại ngay lập tức với dấu chấm phân cách hàng nghìn
+                            if (parsed !== '') {
+                              const formatted = formatNumber(parsed);
+                              setCommissionDisplay(formatted);
+                            } else {
+                              setCommissionDisplay('');
+                            }
                             clearFieldError('commission');
                           }}
-                          onBlur={(e) => {
-                            // Format lại khi blur
-                            const parsed = parseFormattedNumber(e.target.value);
-                            setCommission(parsed);
+                          onBlur={() => {
+                            // Đảm bảo format đúng khi blur
+                            if (commission !== '') {
+                              setCommissionDisplay(formatNumber(commission));
+                            } else {
+                              setCommissionDisplay('');
+                            }
+                          }}
+                          onFocus={() => {
+                            // Khi focus, hiển thị giá trị đã format
+                            if (commission !== '') {
+                              setCommissionDisplay(formatNumber(commission));
+                            } else {
+                              setCommissionDisplay('');
+                            }
                           }}
                           className="w-full rounded border px-3 py-2" 
-                          placeholder="Nhập số tiền hoa hồng"
+                          placeholder="Nhập số tiền hoa hồng (ví dụ: 7000000000 cho 7 tỷ)"
                         />
                       ) : (
                         <div className="p-2 text-gray-700">{commission !== '' ? formatNumber(commission) + ' ₫' : '—'}</div>
@@ -1655,7 +1684,7 @@ const BusinessPage: React.FC = () => {
               <Info label="Số lượng" value={<div className="font-medium">{viewItem.quantity ?? '—'}</div>} icon={<BoxIconLine style={{ width: 16, height: 16 }} />} />
               <Info label="Đơn giá" value={<div className="font-medium">{viewItem.unitPrice != null ? viewItem.unitPrice.toLocaleString() + ' ₫' : '—'}</div>} icon={<DollarLineIcon style={{ width: 16, height: 16 }} />} />
               <Info label="Thành tiền" value={<div className="font-medium">{viewItem.totalPrice != null ? viewItem.totalPrice.toLocaleString() + ' ₫' : '—'}</div>} icon={<DollarLineIcon style={{ width: 16, height: 16 }} />} />
-              <Info label="Hoa hồng" value={<div className="font-medium">{viewItem.commission != null ? (Number(viewItem.commission).toLocaleString() + ' ₫') : '—'} {viewItem.commission != null && viewItem.totalPrice ? `(${((Number(viewItem.commission) / Number(viewItem.totalPrice)) * 100).toFixed(2).replace(/\.00$/,'')}%)` : ''}</div>} icon={<CheckCircleIcon style={{ width: 16, height: 16 }} />} />
+              <Info label="Hoa hồng của viện" value={<div className="font-medium">{viewItem.commission != null ? (Number(viewItem.commission).toLocaleString() + ' ₫') : '—'} {viewItem.commission != null && viewItem.totalPrice ? `(${((Number(viewItem.commission) / Number(viewItem.totalPrice)) * 100).toFixed(2).replace(/\.00$/,'')}%)` : ''}</div>} icon={<CheckCircleIcon style={{ width: 16, height: 16 }} />} />
               <Info label="Trạng thái" value={<div className="font-medium">{statusLabel(viewItem.status) ?? '—'}</div>} icon={<TaskIcon style={{ width: 16, height: 16 }} />} />
               <Info label="Đơn vị tài trợ" value={<div className="font-medium">{viewItem.bankName ?? '—'}</div>} icon={<UserCircleIcon style={{ width: 18, height: 18 }} />} />
               <Info label="Liên hệ đơn vị tài trợ" value={<div className="font-medium">{viewItem.bankContactPerson ?? '—'}</div>} icon={<UserCircleIcon style={{ width: 18, height: 18 }} />} />
