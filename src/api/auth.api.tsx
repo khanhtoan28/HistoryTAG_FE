@@ -151,6 +151,43 @@ export async function resetPassword(data: ResetPasswordPayload) {
 }
 
 // ==========================
+// Clear all user data from storage
+// ==========================
+export const clearUserStorage = () => {
+  // Clear localStorage
+  localStorage.removeItem("access_token");
+  localStorage.removeItem("token");
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("username");
+  localStorage.removeItem("roles");
+  localStorage.removeItem("user");
+  localStorage.removeItem("userId");
+  
+  // Clear sessionStorage
+  sessionStorage.removeItem("access_token");
+  sessionStorage.removeItem("token");
+  sessionStorage.removeItem("accessToken");
+  sessionStorage.removeItem("username");
+  sessionStorage.removeItem("roles");
+  sessionStorage.removeItem("user");
+  sessionStorage.removeItem("userId");
+  
+  // Clear cookies
+  const name = "access_token";
+  const host = window.location.hostname;
+  const base = `${name}=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0`;
+  
+  document.cookie = `${base}; Path=/; SameSite=Lax`;
+  document.cookie = `${base}; Path=/; SameSite=None; Secure`;
+  document.cookie = `${base}; Path=/; Domain=${host}; SameSite=Lax`;
+  document.cookie = `${base}; Path=/; Domain=${host}; SameSite=None; Secure`;
+  if (host !== "127.0.0.1") {
+    document.cookie = `${base}; Path=/; Domain=127.0.0.1; SameSite=Lax`;
+    document.cookie = `${base}; Path=/; Domain=127.0.0.1; SameSite=None; Secure`;
+  }
+};
+
+// ==========================
 // Logout
 // ==========================
 export const logout = async () => {
@@ -159,30 +196,8 @@ export const logout = async () => {
   } catch (e) {
     console.warn("Logout API error:", e);
   } finally {
-    const name = "access_token";
-    const host = window.location.hostname;
-    const base = `${name}=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0`;
-
-    document.cookie = `${base}; Path=/; SameSite=Lax`;
-    document.cookie = `${base}; Path=/; SameSite=None; Secure`;
-
-    document.cookie = `${base}; Path=/; Domain=${host}; SameSite=Lax`;
-    document.cookie = `${base}; Path=/; Domain=${host}; SameSite=None; Secure`;
-    if (host !== "127.0.0.1") {
-      document.cookie = `${base}; Path=/; Domain=127.0.0.1; SameSite=Lax`;
-      document.cookie = `${base}; Path=/; Domain=127.0.0.1; SameSite=None; Secure`;
-    }
-
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("token");
-    localStorage.removeItem("username");
-    localStorage.removeItem("roles");
-  localStorage.removeItem("user");
-  localStorage.removeItem("userId");
-    sessionStorage.removeItem("access_token");
-  sessionStorage.removeItem("user");
-  sessionStorage.removeItem("userId");
-    console.log("Cookies sau khi logout:", document.cookie);
+    clearUserStorage();
+    console.log("User data cleared after logout");
   }
 };
 

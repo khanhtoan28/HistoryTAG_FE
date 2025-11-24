@@ -1025,7 +1025,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                                                 </svg>
                     </button>
                     {picFilterOpen && (
-                      <div className="absolute z-30 mt-2 w-60 rounded-xl border border-gray-200 bg-white shadow-xl p-3 space-y-3">
+                      <div className="absolute z-30 mt-2 w-60 max-h-[360px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl p-3 space-y-3">
                         <input
                           type="text"
                           value={picFilterQuery}
@@ -1033,7 +1033,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                           placeholder="Tìm người phụ trách"
                           className="w-full rounded-lg border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
                         />
-                        <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                        <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1">
                           {filteredPicOptions.length === 0 ? (
                             <div className="text-sm text-gray-500 text-center py-6">
                               Không có dữ liệu người phụ trách
@@ -1043,7 +1043,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                               const value = opt.id;
                               const checked = hospitalPicFilter.includes(value);
                               return (
-                                <label key={value} className="flex items-center gap-2 text-sm text-gray-700">
+                                <label key={value} className="flex items-center gap-2 text-sm text-gray-700 hover:bg-gray-50 px-2 py-1.5 rounded cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={checked}

@@ -1118,11 +1118,11 @@ function FilterToolbar({
                         : `Đã chọn ${picFilter.hospitalPicFilter.length} người phụ trách`}
                   </span>
                   <svg className={`w-4 h-4 transition-transform ${picFilter.picFilterOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
                 </button>
                 {picFilter.picFilterOpen && (
-                  <div className="absolute z-30 mt-2 w-60 rounded-xl border border-gray-200 bg-white shadow-xl p-3 space-y-3 dark:border-gray-700 dark:bg-gray-800">
+                  <div className="absolute z-30 mt-2 w-60 max-h-[360px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl p-3 space-y-3 dark:border-gray-700 dark:bg-gray-800">
                     <input
                       type="text"
                       value={picFilter.picFilterQuery}
@@ -1130,7 +1130,7 @@ function FilterToolbar({
                       placeholder="Tìm người phụ trách"
                       className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 border-gray-200 dark:border-gray-700 dark:bg-gray-900"
                     />
-                    <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                    <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1">
                       {picFilter.filteredPicOptions.length === 0 ? (
                         <div className="text-sm text-gray-500 text-center py-6">
                           Không có dữ liệu người phụ trách
@@ -1140,7 +1140,7 @@ function FilterToolbar({
                           const value = String(option.id);
                           const checked = picFilter.hospitalPicFilter.includes(value);
                           return (
-                            <label key={option.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                            <label key={option.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 px-2 py-1.5 rounded cursor-pointer">
                               <input
                                 type="checkbox"
                                 checked={checked}
