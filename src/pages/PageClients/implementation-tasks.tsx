@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCardNew from "../SuperAdmin/TaskCardNew";
+import { AiOutlineEye } from "react-icons/ai";
 import { toast } from "react-hot-toast";
 import { FaHospital } from "react-icons/fa";
 import { FiUser, FiMapPin, FiLink, FiClock, FiTag, FiPhone } from "react-icons/fi";
@@ -996,6 +997,99 @@ function Info({
   );
 }
 
+type FilterToolbarOption = { value: string; label: string };
+type FilterToolbarTotals = { label: string; value: React.ReactNode };
+
+function FilterToolbar({
+  mode,
+  searchValue,
+  placeholder,
+  onSearchChange,
+  onSearchSubmit,
+  statusValue,
+  onStatusChange,
+  statusOptions,
+  totals,
+  datalistId,
+  datalistOptions,
+  actions,
+}: {
+  mode: "tasks" | "hospitals";
+  searchValue: string;
+  placeholder: string;
+  onSearchChange: (value: string) => void;
+  onSearchSubmit?: () => void;
+  statusValue?: string;
+  onStatusChange?: (value: string) => void;
+  statusOptions?: FilterToolbarOption[];
+  totals?: FilterToolbarTotals[];
+  datalistId?: string;
+  datalistOptions?: Array<{ id: number | string; label: string }>;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div className="mb-6 rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-[220px] flex-1">
+          <h3 className="text-lg font-semibold mb-3">
+            {mode === "hospitals" ? "Tìm kiếm & Lọc" : "Tìm kiếm & Thao tác"}
+          </h3>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[220px]">
+              <input
+                type="text"
+                className="w-full rounded-full border px-4 py-3 text-sm shadow-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                placeholder={placeholder}
+                value={searchValue}
+                onChange={(e) => onSearchChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && onSearchSubmit) {
+                    onSearchSubmit();
+                  }
+                }}
+                list={datalistId}
+              />
+              {datalistId && datalistOptions && datalistOptions.length > 0 && (
+                <datalist id={datalistId}>
+                  {datalistOptions.map((opt) => (
+                    <option key={opt.id ?? opt.label} value={opt.label} />
+                  ))}
+                </datalist>
+              )}
+            </div>
+
+            {statusOptions && statusOptions.length > 0 && onStatusChange && (
+              <select
+                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[180px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                value={statusValue ?? ""}
+                onChange={(e) => onStatusChange(e.target.value)}
+              >
+                {statusOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {totals && totals.length > 0 && (
+            <div className="mt-3 text-sm text-gray-600 dark:text-gray-300 flex items-center gap-4 flex-wrap">
+              {totals.map((item) => (
+                <span key={item.label}>
+                  {item.label}:{" "}
+                  <span className="font-semibold text-gray-800 dark:text-gray-100">{item.value}</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap justify-end">{actions}</div>
+      </div>
+    </div>
+  );
+}
+
 const ImplementationTasksPage: React.FC = () => {
   const [data, setData] = useState<ImplementationTaskResponseDTO[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1064,6 +1158,81 @@ const ImplementationTasksPage: React.FC = () => {
       return taskStatus === 'COMPLETED';
     }).length;
   }, [filtered]);
+
+  const pendingCount = pendingGroups.reduce((sum, group) => sum + (group.tasks?.length || 0), 0);
+
+  const pendingButton = canManage ? (
+    <Button
+      variant="ghost"
+      className="relative flex items-center gap-2 border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300"
+      onClick={() => {
+        setPendingOpen(true);
+        fetchPendingGroups();
+      }}
+    >
+      📨 Công việc chờ
+      {pendingCount > 0 && (
+        <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
+          {pendingCount}
+        </span>
+      )}
+    </Button>
+  ) : null;
+
+  const handleNewTaskClick = async () => {
+    if (!canManage) return;
+    if (!showHospitalList && selectedHospital) {
+      const hid = await resolveHospitalIdByName(selectedHospital);
+      if (hid) {
+        setEditing({ hospitalId: hid, hospitalName: selectedHospital } as any);
+      } else {
+        setEditing({ hospitalName: selectedHospital } as any);
+      }
+    } else {
+      setEditing(null);
+    }
+    setModalOpen(true);
+  };
+
+  const addTaskButton = canManage ? (
+    <button
+      className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700 flex items-center gap-2"
+      onClick={() => {
+        void handleNewTaskClick();
+      }}
+      type="button"
+    >
+      <PlusIcon />
+      <span>Thêm task mới</span>
+    </button>
+  ) : (
+    <button
+      disabled
+      className="rounded-xl bg-gray-200 text-gray-500 px-5 py-2 shadow-sm flex items-center gap-2"
+      title="Không có quyền"
+      type="button"
+    >
+      <PlusIcon />
+      <span>Thêm mới</span>
+    </button>
+  );
+
+  const toolbarActions = (
+    <>
+      {pendingButton}
+      {addTaskButton}
+    </>
+  );
+
+  const hospitalStatusOptions = useMemo<FilterToolbarOption[]>(
+    () => [
+      { value: "", label: "— Tất cả —" },
+      { value: "accepted", label: "Có nghiệm thu" },
+      { value: "incomplete", label: "Chưa nghiệm thu hết" },
+      { value: "unaccepted", label: "Chưa có nghiệm thu" },
+    ],
+    []
+  );
 
   async function fetchList() {
     const start = Date.now();
@@ -1779,6 +1948,39 @@ const ImplementationTasksPage: React.FC = () => {
     }
   };
 
+  const filterToolbarProps: React.ComponentProps<typeof FilterToolbar> = {
+    mode: "hospitals",
+    searchValue: hospitalSearch,
+    placeholder: "Tìm theo tên bệnh viện / tỉnh",
+    onSearchChange: (value: string) => {
+      setHospitalSearch(value);
+      setHospitalPage(0);
+    },
+    statusValue: hospitalStatusFilter,
+    onStatusChange: (value: string) => {
+      setHospitalStatusFilter(value);
+      setHospitalPage(0);
+    },
+    statusOptions: hospitalStatusOptions,
+    totals: [
+      {
+        label: "Tổng",
+        value: loadingHospitals ? "..." : `${filteredHospitals.length} viện`,
+      },
+    ],
+    actions: toolbarActions,
+  };
+
+  const handleBackToHospitals = () => {
+    setSelectedHospital(null);
+    setShowHospitalList(true);
+    setSearchTerm("");
+    setStatusFilter("");
+    setPage(0);
+    setData([]);
+    fetchHospitalsWithTasks();
+  };
+
   return (
     <div className="p-6 xl:p-10">
       <div className="mb-6 flex items-center justify-between">
@@ -1790,100 +1992,7 @@ const ImplementationTasksPage: React.FC = () => {
 
       {error && <div className="text-red-600 mb-4">{error}</div>}
 
-      {!showHospitalList && (
-      <div className="mb-6 rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-5 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Thao tác</h3>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative">
-                <input
-                  list="hospital-list"
-                  type="text"
-                  className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
-                  placeholder="Tìm theo tên (gõ để gợi ý bệnh viện)"
-                  value={searchTerm}
-                  onChange={(e) => { setSearchTerm(e.target.value); setHospitalQuery(e.target.value); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { fetchList(); } }}
-                  onBlur={() => { /* keep search as-is */ }}
-                />
-                <datalist id="hospital-list">
-                  {hospitalOptions.map((h) => (
-                    <option key={h.id ?? h.label} value={h.label} />
-                  ))}
-                </datalist>
-              </div>
-
-              <select
-                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[160px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-              >
-                <option value="">— Chọn trạng thái —</option>
-                {STATUS_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="mt-3 text-sm text-gray-600 dark:text-gray-300 flex items-center gap-4">
-              <span>Tổng: <span className="font-semibold text-gray-800 dark:text-gray-100">{loading ? '...' : (totalCount ?? filtered.length)}</span></span>
-              <span>Đã hoàn thành: <span className="font-semibold text-gray-800 dark:text-gray-100">{completedCount ?? completedCountFromFiltered}/{totalCount ?? filtered.length} task</span></span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900" value={sortBy} onChange={(e) => { setSortBy(e.target.value); setPage(0); }}>
-                <option value="id">Sắp xếp theo: id</option>
-                <option value="hospitalName">Sắp xếp theo: bệnh viện</option>
-                <option value="deadline">Sắp xếp theo: deadline</option>
-                <option value="createdAt">Sắp xếp theo: ngày tạo</option>
-              </select>
-              <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900" value={sortDir} onChange={(e) => setSortDir(e.target.value)}>
-                <option value="asc">Tăng dần</option>
-                <option value="desc">Giảm dần</option>
-              </select>
-            </div>
-            {/* Pending tasks button for Deployment team */}
-            {canManage && (
-              <Button
-                variant="ghost"
-                className="relative flex items-center gap-2 border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300"
-                onClick={() => { setPendingOpen(true); fetchPendingGroups(); }}
-              >
-                📨 Công việc chờ
-                {pendingGroups.reduce((s, g) => s + (g.tasks?.length || 0), 0) > 0 && (
-                  <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
-                    {pendingGroups.reduce((s, g) => s + (g.tasks?.length || 0), 0)}
-                  </span>
-                )}
-              </Button>
-            )}
-
-            {canManage ? (
-              <button
-                className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700 flex items-center gap-2"
-                onClick={async () => { 
-                  let hid: number | null = null;
-                  if (selectedHospital) hid = await resolveHospitalIdByName(selectedHospital);
-                  setEditing(hid ? ({ hospitalId: hid, hospitalName: selectedHospital } as any) : ({ hospitalName: selectedHospital } as any));
-                  setModalOpen(true);
-                }}
-              >
-                <PlusIcon />
-                <span>Thêm mới</span>
-              </button>
-            ) : (
-              <button disabled className="rounded-xl bg-gray-200 text-gray-500 px-5 py-2 shadow-sm flex items-center gap-2" title="Không có quyền">
-                <PlusIcon />
-                <span>Thêm mới</span>
-              </button>
-            )}
-          
-          </div>
-        </div>
-      </div>
-      )}
+      <FilterToolbar {...filterToolbarProps} />
 
       <div>
         <style>{`
@@ -1898,71 +2007,6 @@ const ImplementationTasksPage: React.FC = () => {
           ) : showHospitalList ? (
             // hospital list table
             <div className="mb-6">
-              <div className="mb-4 rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Lọc</h3>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <input
-                      type="text"
-                      className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
-                      placeholder="Tìm theo tên bệnh viện / tỉnh"
-                      value={hospitalSearch}
-                      onChange={(e) => { setHospitalSearch(e.target.value); setHospitalPage(0); }}
-                    />
-                    <select
-                      className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[180px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
-                      value={hospitalStatusFilter}
-                      onChange={(e) => { setHospitalStatusFilter(e.target.value); setHospitalPage(0); }}
-                    >
-                      <option value="">— Tất cả —</option>
-                      <option value="accepted">Có nghiệm thu</option>
-                      <option value="incomplete">Chưa nghiệm thu hết</option>
-                      <option value="unaccepted">Chưa có nghiệm thu</option>
-                    </select>
-                  </div>
-                  <div className="mt-3 text-sm text-gray-600 dark:text-gray-300">
-                    <span>Tổng: <span className="font-semibold text-gray-800 dark:text-gray-100">{loadingHospitals ? '...' : filteredHospitals.length}</span> viện</span>
-                  </div>
-                </div>
-                  <div className="flex items-center gap-2">
-                    <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900" value={hospitalSortBy} onChange={(e) => { setHospitalSortBy(e.target.value); setHospitalPage(0); }}>
-                      <option value="label">Sắp xếp theo: tên</option>
-                      <option value="taskCount">Sắp xếp theo: tổng task</option>
-                      <option value="accepted">Sắp xếp theo: đã nghiệm thu</option>
-                      <option value="ratio">Sắp xếp theo: tỉ lệ nghiệm thu</option>
-                    </select>
-                    <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900" value={hospitalSortDir} onChange={(e) => setHospitalSortDir(e.target.value)}>
-                      <option value="asc">Tăng dần</option>
-                      <option value="desc">Giảm dần</option>
-                    </select>
-                    {/* Pending tasks button (visible in hospital list header) */}
-                    {canManage && (
-                      <>
-                        <Button
-                          variant="ghost"
-                          className="relative flex items-center gap-2 border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 mr-2"
-                          onClick={() => { setPendingOpen(true); fetchPendingGroups(); }}
-                        >
-                          📨 Công việc chờ
-                          {pendingGroups.reduce((s, g) => s + (g.tasks?.length || 0), 0) > 0 && (
-                            <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
-                              {pendingGroups.reduce((s, g) => s + (g.tasks?.length || 0), 0)}
-                            </span>
-                          )}
-                        </Button>
-                        <button
-                          className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
-                          onClick={() => { setEditing(null); setModalOpen(true); }}
-                          type="button"
-                        >
-                          + Thêm task mới
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
               {loadingHospitals ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="text-blue-600 text-4xl font-extrabold tracking-wider animate-pulse" aria-hidden="true">TAG</div>
@@ -2020,9 +2064,9 @@ const ImplementationTasksPage: React.FC = () => {
                                       setShowHospitalList(false);
                                       setPage(0);
                                     }}
-                                    className="text-blue-600 hover:text-blue-800 font-medium"
+                                    className="p-2 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition" title="Xem task"
                                   >
-                                    Xem task
+                                    <AiOutlineEye className="text-lg" />
                                   </button>
                                   {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) === (hospital.taskCount || 0) && !hospital.allTransferred && (
                                     <button

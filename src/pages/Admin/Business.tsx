@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { searchHardware, searchHospitals, createBusiness, getBusinesses, updateBusiness, deleteBusiness, getBusinessById, getHardwareById, getBusinessPicOptions } from '../../api/business.api';
+import { getAllUsers } from '../../api/superadmin.api';
 import api from '../../api/client';
 import {
   PlusIcon,
@@ -61,14 +62,18 @@ const BusinessPage: React.FC = () => {
   const [hospitalOptions, setHospitalOptions] = useState<Array<{ id: number; label: string }>>([]);
   const [selectedHardwareId, setSelectedHardwareId] = useState<number | null>(null);
   const [selectedHardwarePrice, setSelectedHardwarePrice] = useState<number | null>(null);
+  const [unitPrice, setUnitPrice] = useState<number | ''>('');
   const [selectedHospitalId, setSelectedHospitalId] = useState<number | null>(null);
   const [selectedHospitalPhone, setSelectedHospitalPhone] = useState<string | null>(null);
   const [businessPicOptionsState, setBusinessPicOptionsState] = useState<Array<{ id: number; label: string; subLabel?: string }>>([]);
   const [selectedPicId, setSelectedPicId] = useState<number | null>(null);
+  const [picDropdownOpen, setPicDropdownOpen] = useState<boolean>(false);
+  const [picSearchInput, setPicSearchInput] = useState<string>('');
   const [hospitalDropdownOpen, setHospitalDropdownOpen] = useState<boolean>(false);
   const [hospitalSearchInput, setHospitalSearchInput] = useState<string>('');
-  // commissionPercent is the user-facing input (entered as percent, e.g. 12 means 12%)
-  const [commissionPercent, setCommissionPercent] = useState<number | null>(null);
+  // commission is the user-facing input (entered as amount in VND)
+  const [commission, setCommission] = useState<number | ''>('');
+  const [commissionDisplay, setCommissionDisplay] = useState<string>('');
   const [quantity, setQuantity] = useState<number | ''>(1);
   const [name, setName] = useState<string>('');
   const [statusValue, setStatusValue] = useState<string>('CARING');
@@ -77,6 +82,8 @@ const BusinessPage: React.FC = () => {
   const [originalStatus, setOriginalStatus] = useState<string>('CARING');
   const [statusConfirmOpen, setStatusConfirmOpen] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState<{ payload: Record<string, unknown>; isUpdate: boolean; successMessage?: string } | null>(null);
+  const [bankName, setBankName] = useState<string>('');
+  const [bankContactPerson, setBankContactPerson] = useState<string>('');
   type BusinessItem = {
     id: number;
     name?: string;
@@ -91,6 +98,9 @@ const BusinessPage: React.FC = () => {
     status?: string | null;
     startDate?: string | null;
     completionDate?: string | null;
+    createdAt?: string | null;
+    bankName?: string | null;
+    bankContactPerson?: string | null;
   };
 
   function formatDateShort(value?: string | null) {
@@ -111,6 +121,44 @@ const BusinessPage: React.FC = () => {
     const n = Number(id);
     if (Number.isNaN(n)) return String(id);
     return `HD${String(n).padStart(2, '0')}`;
+  }
+
+  function formatFilterDateLabel(value?: string | null) {
+    if (!value) return '—';
+    if (value.includes('T')) {
+      const d = new Date(value);
+      if (!Number.isNaN(d.getTime())) return d.toLocaleDateString('vi-VN');
+    }
+    const parts = value.split('-');
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return value;
+  }
+
+  function parseDateForFilter(value?: string | null, isEnd = false) {
+    if (!value || value.trim() === '') return null;
+    const base = value.includes('T') ? new Date(value) : new Date(`${value}T00:00:00`);
+    if (Number.isNaN(base.getTime())) return null;
+    if (isEnd) {
+      base.setHours(23, 59, 59, 999);
+    } else {
+      base.setHours(0, 0, 0, 0);
+    }
+    return base;
+  }
+
+  function applyLocalDateFilter(source: BusinessItem[]): BusinessItem[] {
+    const fromDate = parseDateForFilter(filterStartFrom, false);
+    const toDate = parseDateForFilter(filterStartTo, true);
+    if (!fromDate && !toDate) return source;
+    return source.filter((item) => {
+      const candidateRaw = item.startDate ?? item.createdAt ?? null;
+      if (!candidateRaw) return false;
+      const candidate = new Date(candidateRaw);
+      if (Number.isNaN(candidate.getTime())) return false;
+      if (fromDate && candidate < fromDate) return false;
+      if (toDate && candidate > toDate) return false;
+      return true;
+    });
   }
 
   // Ensure items with status 'CARING' (Đang chăm sóc) are shown first.
@@ -148,6 +196,7 @@ const BusinessPage: React.FC = () => {
   const [filterStartFrom, setFilterStartFrom] = useState<string>('');
   const [filterStartTo, setFilterStartTo] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  const [filterSearch, setFilterSearch] = useState<string>('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [viewItem, setViewItem] = useState<BusinessItem | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -155,7 +204,42 @@ const BusinessPage: React.FC = () => {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  
+  const picDropdownRef = React.useRef<HTMLDivElement | null>(null);
+  const filteredBusinessPicOptions = React.useMemo(() => {
+    const q = picSearchInput.trim().toLowerCase();
+    if (!q) return businessPicOptionsState;
+    return businessPicOptionsState.filter((opt) => opt.label.toLowerCase().includes(q) || (opt.subLabel ?? '').toLowerCase().includes(q));
+  }, [businessPicOptionsState, picSearchInput]);
+  const selectedPicOption = React.useMemo(() => {
+    if (selectedPicId == null) return null;
+    return businessPicOptionsState.find((opt) => opt.id === selectedPicId) ?? null;
+  }, [selectedPicId, businessPicOptionsState]);
+  const searchFilterTimeoutRef = React.useRef<number | null>(null);
+  const [dateFilterOpen, setDateFilterOpen] = useState<boolean>(false);
+  const [pendingFilterStart, setPendingFilterStart] = useState<string>('');
+  const [pendingFilterEnd, setPendingFilterEnd] = useState<string>('');
+  const dateFilterRef = React.useRef<HTMLDivElement | null>(null);
+  const hospitalPhoneCacheRef = React.useRef<Map<number, string | null>>(new Map());
+  const reloadTimeoutRef = React.useRef<number | null>(null);
+  const initialSearchAppliedRef = React.useRef(false);
+  const initialStatusAppliedRef = React.useRef(false);
+  const initialDateAppliedRef = React.useRef(false);
+  const initialPicAppliedRef = React.useRef(false);
+  const [filterPicId, setFilterPicId] = useState<number | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const pendingStartInputRef = React.useRef<HTMLInputElement | null>(null);
+  const pendingEndInputRef = React.useRef<HTMLInputElement | null>(null);
+  React.useEffect(() => {
+    if (!dateFilterOpen) return;
+    const handleOutside = (event: MouseEvent) => {
+      if (dateFilterRef.current && !dateFilterRef.current.contains(event.target as Node)) {
+        setDateFilterOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [dateFilterOpen]);
+
 
   async function fetchHardwareOptions(q: string) {
     try {
@@ -164,6 +248,22 @@ const BusinessPage: React.FC = () => {
     } catch (e) {
       console.error(e);
     }
+  }
+
+  function normalizeDateForStart(value?: string | null) {
+    if (!value || value.trim() === '') return undefined;
+    if (value.length === 10) return `${value}T00:00:00`;
+    if (value.length === 16) return `${value}:00`;
+    if (value.length >= 19) return value.substring(0, 19);
+    return value;
+  }
+
+  function normalizeDateForEnd(value?: string | null) {
+    if (!value || value.trim() === '') return undefined;
+    if (value.length === 10) return `${value}T23:59:59`;
+    if (value.length === 16) return `${value}:59`;
+    if (value.length >= 19) return value.substring(0, 19);
+    return value;
   }
 
   async function fetchHospitalOptions(q: string) {
@@ -177,9 +277,19 @@ const BusinessPage: React.FC = () => {
 
   async function loadList(page = currentPage, size = itemsPerPage) {
     try {
-      const toParam = (v?: string | null) => v ? (v.length === 16 ? `${v}:00` : v) : undefined;
-      const params: Record<string, unknown> = { page, size, startDateFrom: toParam(filterStartFrom), startDateTo: toParam(filterStartTo) };
+  const usePicFilter = Boolean(filterPicId);
+  const effectivePage = page;
+  const effectiveSize = size;
+  const params: Record<string, unknown> = { page: effectivePage, size: effectiveSize };
+      const startFromParam = normalizeDateForStart(filterStartFrom);
+      const startToParam = normalizeDateForEnd(filterStartTo);
+      if (startFromParam) params.startDateFrom = startFromParam;
+      if (startToParam) params.startDateTo = startToParam;
+      const trimmedSearch = filterSearch.trim();
+      if (trimmedSearch) params.search = trimmedSearch;
       if (filterStatus && filterStatus !== 'ALL') params.status = filterStatus;
+      if (filterPicId) params.picUserId = filterPicId;
+      console.debug('[Business] loadList params', params);
       const res = await getBusinesses(params);
       const content = Array.isArray(res?.content) ? res.content : (Array.isArray(res) ? res : []);
       // ensure numeric fields are numbers
@@ -191,6 +301,7 @@ const BusinessPage: React.FC = () => {
         // accept multiple possible keys for start/completion
         const start = (c['startDate'] ?? c['start_date'] ?? c['start'] ?? c['startDateTime']) as string | undefined | null;
         const completion = (c['completionDate'] ?? c['finishDate'] ?? c['completion_date'] ?? c['finish_date'] ?? c['finishDate']) as string | undefined | null;
+        const created = (c['createdAt'] ?? c['created_at']) as string | undefined | null;
         const picRaw = c['picUser'] ?? c['pic_user'] ?? null;
         let picUser: BusinessItem['picUser'] = null;
         if (picRaw && typeof picRaw === 'object') {
@@ -212,35 +323,79 @@ const BusinessPage: React.FC = () => {
           quantity: qty != null ? Number(String(qty)) : null,
           startDate: start ?? null,
           completionDate: completion ?? null,
+          createdAt: created ?? null,
           picUser,
+          bankName: c['bankName'] ?? c['bank_name'] ?? null,
+          bankContactPerson: c['bankContactPerson'] ?? c['bank_contact_person'] ?? null,
         } as BusinessItem;
       });
-  setItems(sortBusinessItems(normalized));
-      // fetch phone numbers for each hospital in the list (best-effort)
+      const locallyFiltered = applyLocalDateFilter(normalized);
+      const filteredByPic = filterPicId
+        ? locallyFiltered.filter((item) => {
+            const rawId = item.picUser?.id;
+            const numericId = rawId != null ? Number(rawId) : null;
+            return numericId != null && Number.isFinite(numericId) && numericId === filterPicId;
+          })
+        : locallyFiltered;
+      const finalList = sortBusinessItems(filteredByPic);
+      setItems(finalList);
+      let listForTotals = finalList;
+      // fetch phone numbers for each unique hospital in the list (best-effort, cache results)
       try {
-        const withPhones = await Promise.all((normalized as BusinessItem[]).map(async (it) => {
-          const out = { ...it } as BusinessItem;
-          const hid = it.hospital?.id;
-          if (hid) {
-            try {
-              const r = await api.get(`/api/v1/auth/hospitals/${hid}`);
-              const d = r.data || {};
-              out.hospitalPhone = d.contactNumber || d.contact_number || d.contactPhone || d.contact_phone || null;
-            } catch {
-              out.hospitalPhone = null;
-            }
-          } else out.hospitalPhone = null;
-          return out;
-        }));
-  setItems(sortBusinessItems(withPhones));
-        // pagination metadata (when backend returns Page)
-        setTotalItems(res?.totalElements ?? (Array.isArray(res) ? res.length : content.length));
-        setTotalPages(res?.totalPages ?? 1);
-        setCurrentPage(res?.number ?? page);
+        const cache = hospitalPhoneCacheRef.current;
+        const hospitalIds = (normalized as BusinessItem[])
+          .map((it) => {
+            const id = it.hospital?.id;
+            if (id == null) return null;
+            const numericId = Number(id);
+            return Number.isFinite(numericId) ? numericId : null;
+          })
+          .filter((id): id is number => id != null);
+
+        const uniqueIds = Array.from(new Set(hospitalIds));
+        const idsToFetch = uniqueIds.filter((id) => !cache.has(id));
+
+        if (idsToFetch.length) {
+          await Promise.all(
+            idsToFetch.map(async (hid) => {
+              try {
+                const r = await api.get(`/api/v1/auth/hospitals/${hid}`);
+                const d = r.data || {};
+                const phone = d.contactNumber || d.contact_number || d.contactPhone || d.contact_phone || null;
+                cache.set(hid, phone ?? null);
+              } catch {
+                cache.set(hid, null);
+              }
+            }),
+          );
+        }
+
+        const withPhones = (normalized as BusinessItem[]).map((it) => {
+          const hidRaw = it.hospital?.id;
+          const hid = hidRaw != null ? Number(hidRaw) : null;
+          const phone = hid != null && Number.isFinite(hid) ? cache.get(hid) ?? null : null;
+          return { ...it, hospitalPhone: phone };
+        });
+
+        const withPhonesFiltered = applyLocalDateFilter(withPhones);
+        const withPhonesPicFiltered = filterPicId
+          ? withPhonesFiltered.filter((item) => {
+              const rawId = item.picUser?.id;
+              const numericId = rawId != null ? Number(rawId) : null;
+              return numericId != null && Number.isFinite(numericId) && numericId === filterPicId;
+            })
+          : withPhonesFiltered;
+        const finalWithPhones = sortBusinessItems(withPhonesPicFiltered);
+        setItems(finalWithPhones);
+        listForTotals = finalWithPhones;
       } catch (e) {
         // ignore phone enrichment failures
         console.warn('Failed to enrich hospitals with phone', e);
       }
+      const fallbackTotal = res?.totalElements ?? (Array.isArray(res) ? res.length : content.length);
+      setTotalItems(fallbackTotal);
+      setTotalPages(res?.totalPages ?? 1);
+      setCurrentPage(res?.number ?? page);
     } catch (e) {
       console.error(e);
     }
@@ -265,33 +420,97 @@ const BusinessPage: React.FC = () => {
   async function loadBusinessPicOptions() {
     try {
       const list = await getBusinessPicOptions();
-      if (Array.isArray(list)) {
-        const mapped = list.map((item: any) => ({
-          id: Number(item?.id ?? 0),
-          label: String(item?.label ?? ''),
-          subLabel: item?.subLabel ? String(item.subLabel) : undefined,
-        })).sort((a, b) => a.label.localeCompare(b.label, 'vi', { sensitivity: 'base' }));
-        setBusinessPicOptionsState((prev) => {
-          if (selectedPicId && !mapped.some((opt) => opt.id === selectedPicId)) {
-            const existing = prev.find((opt) => opt.id === selectedPicId);
-            return existing ? [...mapped, existing] : mapped;
-          }
-          return mapped;
-        });
-      } else {
-        setBusinessPicOptionsState([]);
+      const baseOptions = Array.isArray(list)
+        ? list.map((item: any) => ({
+            id: Number(item?.id ?? 0),
+            label: String(item?.label ?? ''),
+            subLabel: item?.subLabel ? String(item.subLabel) : undefined,
+          }))
+        : [];
+
+      let superAdminOptions: Array<{ id: number; label: string; subLabel?: string }> = [];
+      try {
+        const res = await getAllUsers({ page: 0, size: 200 });
+        const content = Array.isArray(res?.content)
+          ? res.content
+          : Array.isArray(res)
+          ? res
+          : [];
+        superAdminOptions = content
+          .filter((user: any) => {
+            const roles = user?.roles;
+            if (!roles) return false;
+            const roleArr = Array.isArray(roles) ? roles : [];
+            return roleArr.some((r: any) => {
+              if (!r) return false;
+              if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
+              const roleName = r.roleName ?? r.role_name ?? r.role;
+              return typeof roleName === 'string' && roleName.toUpperCase() === 'SUPERADMIN';
+            });
+          })
+          .map((user: any) => ({
+            id: Number(user?.id ?? 0),
+            label: String(user?.fullname ?? user?.fullName ?? user?.username ?? user?.email ?? `User #${user?.id ?? ''}`),
+            subLabel: user?.email ? String(user.email) : undefined,
+          }));
+      } catch (err) {
+        // ignore if superadmin endpoint not accessible
+        console.warn('Failed to fetch superadmin users for PIC options', err);
       }
+
+      const mergedMap = new Map<number, { id: number; label: string; subLabel?: string }>();
+      [...baseOptions, ...superAdminOptions].forEach((opt) => {
+        if (!opt || !opt.id) return;
+        if (!opt.label || !opt.label.trim()) return;
+        if (!mergedMap.has(opt.id)) {
+          mergedMap.set(opt.id, { ...opt, label: opt.label.trim() });
+        }
+      });
+
+      const merged = Array.from(mergedMap.values()).sort((a, b) =>
+        a.label.localeCompare(b.label, 'vi', { sensitivity: 'base' })
+      );
+
+      setBusinessPicOptionsState((prev) => {
+        if (selectedPicId && !merged.some((opt) => opt.id === selectedPicId)) {
+          const existing = prev.find((opt) => opt.id === selectedPicId);
+          return existing ? [...merged, existing] : merged;
+        }
+        return merged;
+      });
     } catch (err) {
       console.error('Failed to load business PIC options', err);
       setBusinessPicOptionsState([]);
     }
   }
 
-  // run on mount and when pagination changes
+  React.useEffect(() => {
+    fetchHardwareOptions('');
+    fetchHospitalOptions('');
+    loadBusinessPicOptions();
+  }, []);
+  React.useEffect(() => {
+    return () => {
+      if (reloadTimeoutRef.current) {
+        window.clearTimeout(reloadTimeoutRef.current);
+      }
+    };
+  }, []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  React.useEffect(() => { fetchHardwareOptions(''); fetchHospitalOptions(''); loadBusinessPicOptions(); loadList(currentPage, itemsPerPage); }, []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  React.useEffect(() => { loadList(currentPage, itemsPerPage); }, [currentPage, itemsPerPage]);
+  React.useEffect(() => { loadList(currentPage, itemsPerPage); }, [currentPage, itemsPerPage, reloadKey]);
+
+  const scheduleReload = React.useCallback((options?: { resetPage?: boolean; delay?: number }) => {
+    const { resetPage = false, delay = 0 } = options || {};
+    if (reloadTimeoutRef.current) {
+      window.clearTimeout(reloadTimeoutRef.current);
+    }
+    const execute = () => {
+      if (resetPage) setCurrentPage(0);
+      setReloadKey((key) => key + 1);
+      reloadTimeoutRef.current = null;
+    };
+    reloadTimeoutRef.current = window.setTimeout(execute, delay > 0 ? delay : 0);
+  }, []);
 
   // Debounce hospital search
   React.useEffect(() => {
@@ -302,6 +521,65 @@ const BusinessPage: React.FC = () => {
     }, 300);
     return () => clearTimeout(timer);
   }, [hospitalSearchInput, hospitalDropdownOpen]);
+
+  React.useEffect(() => {
+    if (!initialSearchAppliedRef.current) {
+      initialSearchAppliedRef.current = true;
+      return;
+    }
+    if (searchFilterTimeoutRef.current) {
+      window.clearTimeout(searchFilterTimeoutRef.current);
+    }
+    searchFilterTimeoutRef.current = window.setTimeout(() => {
+      scheduleReload({ resetPage: true });
+    }, 400);
+    return () => {
+      if (searchFilterTimeoutRef.current) {
+        window.clearTimeout(searchFilterTimeoutRef.current);
+      }
+    };
+  }, [filterSearch, scheduleReload]);
+
+  React.useEffect(() => {
+    if (!initialStatusAppliedRef.current) {
+      initialStatusAppliedRef.current = true;
+      return;
+    }
+    scheduleReload({ resetPage: true });
+  }, [filterStatus, scheduleReload]);
+
+  React.useEffect(() => {
+    if (!initialDateAppliedRef.current) {
+      initialDateAppliedRef.current = true;
+      return;
+    }
+    scheduleReload({ resetPage: true });
+  }, [filterStartFrom, filterStartTo, scheduleReload]);
+
+  React.useEffect(() => {
+    if (!initialPicAppliedRef.current) {
+      initialPicAppliedRef.current = true;
+      return;
+    }
+    scheduleReload({ resetPage: true });
+  }, [filterPicId, scheduleReload]);
+
+  React.useEffect(() => {
+    if (!picDropdownOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (picDropdownRef.current && !picDropdownRef.current.contains(event.target as Node)) {
+        setPicDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [picDropdownOpen]);
+
+  React.useEffect(() => {
+    if (!picDropdownOpen) {
+      setPicSearchInput('');
+    }
+  }, [picDropdownOpen]);
 
   // Close dropdown when clicking outside
   React.useEffect(() => {
@@ -317,16 +595,16 @@ const BusinessPage: React.FC = () => {
   }, [hospitalDropdownOpen]);
 
   function applyFilters() {
-    setCurrentPage(0);
-    loadList(0, itemsPerPage);
+    scheduleReload({ resetPage: true });
   }
 
   function clearFilters() {
     setFilterStartFrom('');
     setFilterStartTo('');
     setFilterStatus('ALL');
-    setCurrentPage(0);
-    loadList(0, itemsPerPage);
+    setFilterSearch('');
+    setFilterPicId(null);
+    scheduleReload({ resetPage: true });
   }
 
   async function handleSubmit(e?: React.FormEvent) {
@@ -413,6 +691,7 @@ const BusinessPage: React.FC = () => {
     // Clear errors if validation passes
     setFieldErrors({});
 
+    const finalUnitPrice = unitPrice !== '' ? Number(unitPrice) : (selectedHardwarePrice ?? null);
     const payload: Record<string, unknown> = {
       name,
       hospitalId: selectedHospitalId,
@@ -424,13 +703,15 @@ const BusinessPage: React.FC = () => {
       // some backends use 'finishDate' instead of 'completionDate' — include both to be safe
       finishDate: toLocalDateTimeStr(completionDateValue),
       picUserId: selectedPicId ?? null,
+      bankName: bankName?.trim() || null,
+      bankContactPerson: bankContactPerson?.trim() || null,
+      unitPrice: finalUnitPrice,
     };
-    // compute commission amount from percent and total (backend expects absolute amount)
-    const total = computeTotal();
-    if (commissionPercent != null && total > 0) {
-      // round to 2 decimals
-      const commissionAmount = Math.round(((commissionPercent / 100) * total) * 100) / 100;
-      payload.commission = commissionAmount;
+    // commission is entered directly as amount
+    if (commission !== '') {
+      const commissionValue = Number(commission);
+      console.log('Submitting commission:', commission, 'As number:', commissionValue);
+      payload.commission = commissionValue;
     }
 
     const isUpdate = Boolean(editingId);
@@ -463,16 +744,20 @@ const BusinessPage: React.FC = () => {
       setName('');
       setSelectedHardwareId(null);
       setSelectedHardwarePrice(null);
+      setUnitPrice('');
       setQuantity(1);
       setStatusValue('CARING');
       setOriginalStatus('CARING');
-      setCommissionPercent(null);
+      setCommission('');
+      setCommissionDisplay('');
       setSelectedHospitalId(null);
       setSelectedHospitalPhone(null);
       setSelectedPicId(null);
       setHospitalSearchInput('');
       setCompletionDateValue('');
       setStartDateValue(nowDateTimeLocal());
+      setBankName('');
+      setBankContactPerson('');
       setEditingId(null);
       setShowModal(false);
       // reload the first page so the new item is visible
@@ -488,8 +773,25 @@ const BusinessPage: React.FC = () => {
   }
 
   function computeTotal() {
-    if (selectedHardwarePrice == null) return 0;
-    return (selectedHardwarePrice) * (Number(quantity) || 0);
+    const price = unitPrice !== '' ? Number(unitPrice) : (selectedHardwarePrice ?? 0);
+    if (price === 0) return 0;
+    return price * (Number(quantity) || 0);
+  }
+
+  // Helper functions để format số với dấu chấm phân cách hàng nghìn
+  function formatNumber(value: number | ''): string {
+    if (value === '' || value === null || value === undefined) return '';
+    return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  }
+
+  function parseFormattedNumber(value: string): number | '' {
+    // Loại bỏ dấu chấm phân cách hàng nghìn (chỉ giữ lại số)
+    // Ví dụ: "1.000.000" -> "1000000", "7.000.000.000" -> "7000000000"
+    const cleaned = value.replace(/\./g, '').replace(/[^\d]/g, '');
+    if (cleaned === '' || cleaned === '0') return '';
+    // Sử dụng parseInt thay vì parseFloat để tránh mất độ chính xác với số nguyên lớn
+    const num = parseInt(cleaned, 10);
+    return isNaN(num) ? '' : num;
   }
 
   // Helper function to clear field error when user changes value
@@ -560,6 +862,8 @@ const BusinessPage: React.FC = () => {
       setHospitalSearchInput(res.hospital?.label ?? '');
       setHospitalDropdownOpen(false);
       setSelectedPicId(res.picUser?.id ?? null);
+      setPicDropdownOpen(false);
+      setPicSearchInput('');
       if (res.picUser?.id != null) {
         setBusinessPicOptionsState((prev) => {
           const exists = prev.some((opt) => opt.id === res.picUser?.id);
@@ -591,16 +895,22 @@ const BusinessPage: React.FC = () => {
       const remoteStart = (res.startDate ?? (res as unknown as Record<string, unknown>)['start_date'] ?? (res as unknown as Record<string, unknown>)['startDateTime']) as string | undefined | null;
       setStartDateValue(remoteStart ? (remoteStart.length === 16 ? remoteStart : remoteStart.substring(0, 16)) : '');
       setCompletionDateValue(remoteCompletion ? (remoteCompletion.length === 16 ? remoteCompletion : remoteCompletion.substring(0, 16)) : '');
-      // convert existing commission amount to percentage for the input
-      const existingTotal = res.totalPrice != null ? Number(res.totalPrice) : null;
-      if (res.commission != null && existingTotal && existingTotal > 0) {
-        const pct = (Number(res.commission) / existingTotal) * 100;
-        setCommissionPercent(Number(pct.toFixed(2)));
+      // Load commission directly as amount
+      if (res.commission != null) {
+        setCommission(Number(res.commission));
+        setCommissionDisplay(formatNumber(Number(res.commission)));
       } else {
-        setCommissionPercent(null);
+        setCommission('');
+      setCommissionDisplay('');
       }
       setQuantity(res.quantity != null ? Number(String(res.quantity)) : 1);
-      // fetch price
+      // Load unitPrice từ response (có thể khác với giá mặc định từ phần cứng)
+      if (res.unitPrice != null) {
+        setUnitPrice(Number(res.unitPrice));
+      } else {
+        setUnitPrice('');
+      }
+      // fetch price từ phần cứng để hiển thị giá mặc định
       if (res.hardware?.id) {
         try {
           const hw = await getHardwareById(res.hardware.id);
@@ -609,6 +919,8 @@ const BusinessPage: React.FC = () => {
           setSelectedHardwarePrice(null);
         }
       } else setSelectedHardwarePrice(null);
+      setBankName(res.bankName ?? '');
+      setBankContactPerson(res.bankContactPerson ?? '');
       setFieldErrors({});
       setPendingSubmit(null);
       setStatusConfirmOpen(false);
@@ -704,18 +1016,25 @@ const BusinessPage: React.FC = () => {
             setOriginalStatus('CARING');
             setSelectedHardwareId(null);
             setSelectedHardwarePrice(null);
+            setUnitPrice('');
             setSelectedHospitalId(null);
             setSelectedHospitalPhone(null);
             setSelectedPicId(null);
+            setPicDropdownOpen(false);
+            setPicSearchInput('');
             setQuantity(1);
             setStatusValue('CARING');
             setStartDateValue(nowDateTimeLocal());
             setCompletionDateValue('');
+            setCommission('');
+      setCommissionDisplay('');
             setFieldErrors({});
             setPendingSubmit(null);
             setStatusConfirmOpen(false);
             setHospitalSearchInput('');
             setHospitalDropdownOpen(false);
+            setBankName('');
+            setBankContactPerson('');
             setShowModal(true);
           }}
           disabled={!canManage}
@@ -725,34 +1044,171 @@ const BusinessPage: React.FC = () => {
           <span>Thêm mới</span>
         </button>
       </div>
-      {/* Filters: start date range */}
-      <div className="mb-4 flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <label className="text-sm">Bắt đầu từ</label>
-          <input type="datetime-local" value={filterStartFrom} onChange={(e) => setFilterStartFrom(e.target.value)} className="rounded border px-2 py-1" />
+      <ComponentCard title="Tìm kiếm & Lọc">
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            type="text"
+            placeholder="Tìm theo mã hợp đồng / bệnh viện"
+            value={filterSearch}
+            onChange={(e) => setFilterSearch(e.target.value)}
+            className="rounded-full border border-gray-200 px-4 py-2.5 text-sm shadow-sm min-w-[240px] focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
+          />
+          <div className="relative" ref={dateFilterRef}>
+            <button
+              type="button"
+              onClick={() => {
+                setPendingFilterStart(filterStartFrom);
+                setPendingFilterEnd(filterStartTo);
+                setDateFilterOpen((prev) => !prev);
+              }}
+              className="rounded-full border border-gray-200 px-4 py-2.5 text-sm shadow-sm hover:bg-gray-50 transition flex items-center gap-2"
+            >
+              <span>📅</span>
+              <span>Lọc theo thời gian</span>
+            </button>
+            {dateFilterOpen && (
+              <div className="absolute z-40 mt-2 w-72 rounded-xl border border-gray-200 bg-white shadow-xl p-4 space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Bắt đầu từ</label>
+                  <input
+                    type="date"
+                    value={pendingFilterStart}
+                    onChange={(e) => setPendingFilterStart(e.target.value)}
+                    ref={pendingStartInputRef}
+                    onFocus={(e) => {
+                      if (typeof e.currentTarget.showPicker === 'function') {
+                        e.currentTarget.showPicker();
+                      }
+                    }}
+                    onClick={(e) => {
+                      if (typeof e.currentTarget.showPicker === 'function') {
+                        e.currentTarget.showPicker();
+                      }
+                    }}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Đến</label>
+                  <input
+                    type="date"
+                    value={pendingFilterEnd}
+                    onChange={(e) => setPendingFilterEnd(e.target.value)}
+                    ref={pendingEndInputRef}
+                    onFocus={(e) => {
+                      if (typeof e.currentTarget.showPicker === 'function') {
+                        e.currentTarget.showPicker();
+                      }
+                    }}
+                    onClick={(e) => {
+                      if (typeof e.currentTarget.showPicker === 'function') {
+                        e.currentTarget.showPicker();
+                      }
+                    }}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 cursor-pointer"
+                  />
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPendingFilterStart('');
+                      setPendingFilterEnd('');
+                    }}
+                    className="text-sm text-gray-500 hover:text-gray-700"
+                  >
+                    Xóa chọn
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDateFilterOpen(false)}
+                      className="px-3 py-1.5 text-sm rounded-full border border-gray-300 text-gray-600 hover:bg-gray-50"
+                    >
+                      Đóng
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDateFilterOpen(false);
+                        setFilterStartFrom(pendingFilterStart);
+                        setFilterStartTo(pendingFilterEnd);
+                      }}
+                      className="px-3 py-1.5 text-sm rounded-full bg-blue-600 text-white hover:bg-blue-700"
+                    >
+                      Lọc
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">Trạng thái</span>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
+            >
+              <option value="ALL">— Tất cả —</option>
+              <option value="CARING">Đang chăm sóc</option>
+              <option value="CONTRACTED">Ký hợp đồng</option>
+              <option value="CANCELLED">Hủy</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">Người phụ trách</span>
+            <select
+              value={filterPicId ?? ''}
+              onChange={(e) => setFilterPicId(e.target.value ? Number(e.target.value) : null)}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm min-w-[180px] focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
+            >
+              <option value="">— Tất cả —</option>
+              {businessPicOptionsState.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={applyFilters}
+              className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700 transition"
+            >
+              <span>Lọc</span>
+            </button>
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
+            >
+              <span>Xóa</span>
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm">Đến</label>
-          <input type="datetime-local" value={filterStartTo} onChange={(e) => setFilterStartTo(e.target.value)} className="rounded border px-2 py-1" />
+        <div className="mt-4 text-sm font-semibold text-gray-700">
+          Tổng hợp đồng:
+          <span className="ml-1 text-gray-900">{totalItems}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm">Trạng thái</label>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="rounded border px-2 py-1">
-            <option value="ALL">— Tất cả —</option>
-            <option value="CARING">Đang chăm sóc</option>
-            <option value="CONTRACTED">Ký hợp đồng</option>
-            <option value="CANCELLED">Hủy</option>
-          </select>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <button onClick={applyFilters} className="px-3 py-1 bg-blue-600 text-white rounded">Lọc</button>
-          <button onClick={clearFilters} className="px-3 py-1 border rounded">Xóa</button>
-        </div>
-      </div>
+        {(filterStartFrom || filterStartTo) && (
+          <div className="mt-2 text-xs text-gray-500">
+            Đang lọc từ{' '}
+            <span className="font-semibold text-blue-600">
+              {formatFilterDateLabel(filterStartFrom)}
+            </span>{' '}
+            đến{' '}
+            <span className="font-semibold text-blue-600">
+              {formatFilterDateLabel(filterStartTo)}
+            </span>
+          </div>
+        )}
+      </ComponentCard>
       {!pageAllowed ? (
         <div className="text-red-600">Bạn không có quyền truy cập trang này.</div>
       ) : (
-        <div>
+        <div className="mt-6">
           {/* Inline form kept for legacy but hidden on modal-enabled UI - keep for fallback */}
           <form onSubmit={handleSubmit} className="hidden space-y-3 mb-6 bg-white/60 p-4 rounded shadow-sm">
             <div>
@@ -766,8 +1222,20 @@ const BusinessPage: React.FC = () => {
                 const found = hardwareOptions.find(h => String(h.id) === v);
                 if (found) {
                   // fetch hardware detail to read price (base-aware)
-                  getHardwareById(found.id).then(r => setSelectedHardwarePrice(r && r.price != null ? Number(r.price) : null)).catch(() => setSelectedHardwarePrice(null));
-                } else setSelectedHardwarePrice(null);
+                  getHardwareById(found.id).then(r => {
+                    const price = r && r.price != null ? Number(r.price) : null;
+                    setSelectedHardwarePrice(price);
+                    if (price != null) {
+                      setUnitPrice(price);
+                    }
+                  }).catch(() => {
+                    setSelectedHardwarePrice(null);
+                    setUnitPrice('');
+                  });
+                } else {
+                  setSelectedHardwarePrice(null);
+                  setUnitPrice('');
+                }
               }} className="w-full rounded border px-3 py-2">
                 <option value="">— Chọn phần cứng —</option>
                 {hardwareOptions.map(h => <option key={h.id} value={h.id}>{h.label} {h.subLabel ? `— ${h.subLabel}` : ''}</option>)}
@@ -785,7 +1253,18 @@ const BusinessPage: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Đơn giá</label>
-              <div className="p-2">{selectedHardwarePrice != null ? selectedHardwarePrice.toLocaleString() : '—'}</div>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={unitPrice === '' ? '' : unitPrice}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setUnitPrice(val === '' ? '' : Number(val));
+                }}
+                placeholder={selectedHardwarePrice != null ? `Giá mặc định: ${selectedHardwarePrice.toLocaleString()} ₫` : 'Nhập đơn giá'}
+                className="w-full rounded border px-3 py-2"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Tổng tiền</label>
@@ -829,8 +1308,21 @@ const BusinessPage: React.FC = () => {
                           clearFieldError('selectedHardwareId');
                           const found = hardwareOptions.find(h => String(h.id) === v);
                           if (found) {
-                            getHardwareById(found.id).then(r => setSelectedHardwarePrice(r && r.price != null ? Number(r.price) : null)).catch(() => setSelectedHardwarePrice(null));
-                          } else setSelectedHardwarePrice(null);
+                            getHardwareById(found.id).then(r => {
+                              const price = r && r.price != null ? Number(r.price) : null;
+                              setSelectedHardwarePrice(price);
+                              // Tự động điền giá vào input đơn giá khi chọn phần cứng
+                              if (price != null) {
+                                setUnitPrice(price);
+                              }
+                            }).catch(() => {
+                              setSelectedHardwarePrice(null);
+                              setUnitPrice('');
+                            });
+                          } else {
+                            setSelectedHardwarePrice(null);
+                            setUnitPrice('');
+                          }
                         }} 
                         className={`w-full rounded border px-3 py-2 ${fieldErrors.selectedHardwareId ? 'border-red-500' : ''}`}
                       >
@@ -841,22 +1333,64 @@ const BusinessPage: React.FC = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">Người phụ trách</label>
-                      <select
-                        value={selectedPicId ?? ''}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setSelectedPicId(v ? Number(v) : null);
-                          clearFieldError('selectedPicId');
-                        }}
-                        className={`w-full rounded border px-3 py-2 ${fieldErrors.selectedPicId ? 'border-red-500' : ''}`}
-                      >
-                        <option value="">— Chọn người phụ trách —</option>
-                        {businessPicOptionsState.map((user) => (
-                          <option key={user.id} value={user.id}>
-                            {user.label}{user.subLabel ? ` — ${user.subLabel}` : ''}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="relative" ref={picDropdownRef}>
+                        <input
+                          type="text"
+                          value={picDropdownOpen ? picSearchInput : (selectedPicOption?.label ?? '')}
+                          placeholder="Tìm người phụ trách..."
+                          onFocus={() => {
+                            setPicDropdownOpen(true);
+                            setPicSearchInput('');
+                          }}
+                          onChange={(e) => {
+                            setPicDropdownOpen(true);
+                            setPicSearchInput(e.target.value);
+                            clearFieldError('selectedPicId');
+                          }}
+                          className={`w-full rounded border px-3 py-2 ${fieldErrors.selectedPicId ? 'border-red-500' : ''}`}
+                        />
+                        {selectedPicOption && !picDropdownOpen && (
+                          <button
+                            type="button"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400"
+                            onClick={() => {
+                              setSelectedPicId(null);
+                              setPicSearchInput('');
+                              clearFieldError('selectedPicId');
+                            }}
+                            aria-label="Clear PIC"
+                          >
+                            ✕
+                          </button>
+                        )}
+                        {picDropdownOpen && (
+                          <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-52 overflow-auto">
+                            {filteredBusinessPicOptions.length === 0 ? (
+                              <div className="px-4 py-3 text-sm text-gray-500">Không tìm thấy người phù hợp</div>
+                            ) : (
+                              filteredBusinessPicOptions.map((opt) => {
+                                const isSelected = opt.id === selectedPicId;
+                                return (
+                                  <div
+                                    key={opt.id}
+                                    className={`px-4 py-2 text-sm cursor-pointer hover:bg-blue-50 ${isSelected ? 'bg-blue-100' : ''}`}
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      setSelectedPicId(opt.id);
+                                      setPicDropdownOpen(false);
+                                      setPicSearchInput('');
+                                      clearFieldError('selectedPicId');
+                                    }}
+                                  >
+                                    <div className="font-medium text-gray-800">{opt.label}</div>
+                                    {opt.subLabel && <div className="text-xs text-gray-500">{opt.subLabel}</div>}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        )}
+                      </div>
                       {fieldErrors.selectedPicId && <div className="mt-1 text-sm text-red-600">{fieldErrors.selectedPicId}</div>}
                     </div>
                     <div className="relative">
@@ -937,16 +1471,91 @@ const BusinessPage: React.FC = () => {
                       {fieldErrors.quantity && <div className="mt-1 text-sm text-red-600">{fieldErrors.quantity}</div>}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">Hoa hồng (%)</label>
+                      <label className="block text-sm font-medium mb-1">Hoa hồng của viện</label>
                       {isSuperAdmin ? (
-                        <input type="number" step="0.01" min={0} value={commissionPercent ?? ''} onChange={(e) => setCommissionPercent(e.target.value ? Number(e.target.value) : null)} className="w-40 rounded border px-3 py-2" />
+                        <input 
+                          type="text" 
+                          value={commissionDisplay || formatNumber(commission)} 
+                          onChange={(e) => {
+                            const inputValue = e.target.value;
+                            // Parse giá trị số từ input (loại bỏ dấu chấm và ký tự không phải số)
+                            const parsed = parseFormattedNumber(inputValue);
+                            // Lưu giá trị số
+                            setCommission(parsed);
+                            // Format lại ngay lập tức với dấu chấm phân cách hàng nghìn
+                            if (parsed !== '') {
+                              const formatted = formatNumber(parsed);
+                              setCommissionDisplay(formatted);
+                            } else {
+                              setCommissionDisplay('');
+                            }
+                            clearFieldError('commission');
+                          }}
+                          onBlur={() => {
+                            // Đảm bảo format đúng khi blur
+                            if (commission !== '') {
+                              setCommissionDisplay(formatNumber(commission));
+                            } else {
+                              setCommissionDisplay('');
+                            }
+                          }}
+                          onFocus={() => {
+                            // Khi focus, hiển thị giá trị đã format
+                            if (commission !== '') {
+                              setCommissionDisplay(formatNumber(commission));
+                            } else {
+                              setCommissionDisplay('');
+                            }
+                          }}
+                          className="w-full rounded border px-3 py-2" 
+                          placeholder="Nhập số tiền hoa hồng (ví dụ: 7000000000 cho 7 tỷ)"
+                        />
                       ) : (
-                        <div className="p-2 text-gray-700">{commissionPercent != null ? commissionPercent + '%' : '—'}</div>
+                        <div className="p-2 text-gray-700">{commission !== '' ? formatNumber(commission) + ' ₫' : '—'}</div>
                       )}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">Đơn giá</label>
-                      <div className="p-2">{selectedHardwarePrice != null ? selectedHardwarePrice.toLocaleString() + ' ₫' : '—'}</div>
+                      <label className="block text-sm font-medium mb-1">Đơn vị tài trợ</label>
+                      <input
+                        type="text"
+                        value={bankName}
+                        onChange={(e) => setBankName(e.target.value)}
+                        className="w-full rounded border px-3 py-2"
+                        placeholder="Nhập đơn vị tài trợ"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Liên hệ đơn vị tài trợ</label>
+                      <input
+                        type="text"
+                        value={bankContactPerson}
+                        onChange={(e) => setBankContactPerson(e.target.value)}
+                        className="w-full rounded border px-3 py-2"
+                        placeholder="Nhập người liên hệ"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Đơn giá (VND)</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={formatNumber(unitPrice)}
+                          onChange={(e) => {
+                            const parsed = parseFormattedNumber(e.target.value);
+                            setUnitPrice(parsed);
+                            clearFieldError('unitPrice');
+                          }}
+                          onBlur={(e) => {
+                            // Format lại khi blur
+                            const parsed = parseFormattedNumber(e.target.value);
+                            setUnitPrice(parsed);
+                          }}
+                          placeholder={selectedHardwarePrice != null ? `Giá mặc định: ${formatNumber(selectedHardwarePrice)} ₫` : 'Nhập đơn giá'}
+                          className="flex-1 rounded border px-3 py-2"
+                        />
+                         
+                      </div>
+                      {fieldErrors.unitPrice && <div className="mt-1 text-sm text-red-600">{fieldErrors.unitPrice}</div>}
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">Ngày bắt đầu</label>
@@ -968,7 +1577,7 @@ const BusinessPage: React.FC = () => {
                     </div>
                   </div>
                       <div className="flex items-center gap-3 justify-between">
-                    <div className="text-sm text-gray-600">Tổng: <span className="font-semibold">{computeTotal() > 0 ? computeTotal().toLocaleString() + ' ₫' : '—'}</span></div>
+                    <div className="text-sm text-gray-600">Thành tiền: <span className="font-semibold">{computeTotal() > 0 ? computeTotal().toLocaleString() + ' ₫' : '—'}</span></div>
                     <div className="flex items-center gap-3">
                       <button type="button" onClick={() => { if (!saving) { setShowModal(false); setEditingId(null); setFieldErrors({}); } }} className="px-4 py-2 border rounded">Hủy</button>
                       <button type="submit" disabled={saving} className={`px-4 py-2 rounded text-white ${saving ? 'bg-gray-400' : 'bg-blue-600'}`}>{saving ? 'Đang lưu...' : (editingId ? 'Cập nhật' : 'Lưu')}</button>
@@ -993,8 +1602,11 @@ const BusinessPage: React.FC = () => {
                     <div className="flex-1">
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                          <div className="text-lg font-semibold text-gray-900">{it.name ?? '—'}</div>
-                          <div className="text-sm text-gray-500">{it.hospital?.label ?? '—'}</div>
+                          <div className="text-lg font-semibold text-gray-900">{it.hospital?.label ?? '—'}</div>
+                          <div className="text-sm">
+                            <span className="text-gray-500">Mã hợp đồng: </span>
+                            <span className="font-medium text-blue-600">{it.name ?? '—'}</span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           {renderStatusBadge(it.status)}
@@ -1010,13 +1622,16 @@ const BusinessPage: React.FC = () => {
                             {it.picUser?.subLabel ? <span className="ml-2 text-xs text-gray-500">{it.picUser?.subLabel}</span> : null}
                           </div>
                         </div>
+                        {it.bankName && (
+                          <div className="col-span-2 md:col-span-2">Đơn vị tài trợ: <div className="font-medium text-gray-800">{it.bankName}</div></div>
+                        )}
                       </div>
 
                       <div className="mt-3 flex items-center justify-between text-sm text-gray-700">
                         <div className="flex items-center gap-6">
                           <div>Số lượng: <span className="font-medium">{it.quantity ?? '—'}</span></div>
-                          <div>Đơn giá: <span className="font-medium">{it.unitPrice != null ? it.unitPrice.toLocaleString() + ' ₫' : '—'}</span></div>
-                          <div>Tổng: <span className="font-semibold">{it.totalPrice != null ? it.totalPrice.toLocaleString() + ' ₫' : '—'}</span></div>
+                          <div>Đơn giá (VND): <span className="font-medium">{it.unitPrice != null ? it.unitPrice.toLocaleString() + ' ₫' : '—'}</span></div>
+                          <div>Thành tiền: <span className="font-semibold">{it.totalPrice != null ? it.totalPrice.toLocaleString() + ' ₫' : '—'}</span></div>
                         </div>
                         <div />
                       </div>
@@ -1068,9 +1683,11 @@ const BusinessPage: React.FC = () => {
               <Info label="Hoàn thành" value={<div className="font-medium">{formatDateShort(viewItem.completionDate)}</div>} icon={<TimeIcon style={{ width: 16, height: 16 }} />} />
               <Info label="Số lượng" value={<div className="font-medium">{viewItem.quantity ?? '—'}</div>} icon={<BoxIconLine style={{ width: 16, height: 16 }} />} />
               <Info label="Đơn giá" value={<div className="font-medium">{viewItem.unitPrice != null ? viewItem.unitPrice.toLocaleString() + ' ₫' : '—'}</div>} icon={<DollarLineIcon style={{ width: 16, height: 16 }} />} />
-              <Info label="Tổng" value={<div className="font-medium">{viewItem.totalPrice != null ? viewItem.totalPrice.toLocaleString() + ' ₫' : '—'}</div>} icon={<DollarLineIcon style={{ width: 16, height: 16 }} />} />
-              <Info label="Hoa hồng" value={<div className="font-medium">{viewItem.commission != null ? (Number(viewItem.commission).toLocaleString() + ' ₫') : '—'} {viewItem.commission != null && viewItem.totalPrice ? `(${((Number(viewItem.commission) / Number(viewItem.totalPrice)) * 100).toFixed(2).replace(/\.00$/,'')}%)` : ''}</div>} icon={<CheckCircleIcon style={{ width: 16, height: 16 }} />} />
+              <Info label="Thành tiền" value={<div className="font-medium">{viewItem.totalPrice != null ? viewItem.totalPrice.toLocaleString() + ' ₫' : '—'}</div>} icon={<DollarLineIcon style={{ width: 16, height: 16 }} />} />
+              <Info label="Hoa hồng của viện" value={<div className="font-medium">{viewItem.commission != null ? (Number(viewItem.commission).toLocaleString() + ' ₫') : '—'} {viewItem.commission != null && viewItem.totalPrice ? `(${((Number(viewItem.commission) / Number(viewItem.totalPrice)) * 100).toFixed(2).replace(/\.00$/,'')}%)` : ''}</div>} icon={<CheckCircleIcon style={{ width: 16, height: 16 }} />} />
               <Info label="Trạng thái" value={<div className="font-medium">{statusLabel(viewItem.status) ?? '—'}</div>} icon={<TaskIcon style={{ width: 16, height: 16 }} />} />
+              <Info label="Đơn vị tài trợ" value={<div className="font-medium">{viewItem.bankName ?? '—'}</div>} icon={<UserCircleIcon style={{ width: 18, height: 18 }} />} />
+              <Info label="Liên hệ đơn vị tài trợ" value={<div className="font-medium">{viewItem.bankContactPerson ?? '—'}</div>} icon={<UserCircleIcon style={{ width: 18, height: 18 }} />} />
             </div>
             <div className="mt-4 text-right">
               <button onClick={closeView} className="px-3 py-1 bg-indigo-600 text-white rounded">Đóng</button>

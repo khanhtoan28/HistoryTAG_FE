@@ -2,7 +2,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Chart from "react-apexcharts";
 import { ApexOptions } from "apexcharts";
 import { getSummaryReport, type SuperAdminSummaryDTO, HardwareAPI, getAllImplementationTasks, getAllDevTasks, getAllMaintenanceTasks, getAllUsers, UserResponseDTO, ImplementationTaskResponseDTO, DevTaskResponseDTO, MaintenanceTaskResponseDTO } from "../../api/superadmin.api";
@@ -110,7 +110,8 @@ export default function SuperAdminHome() {
   const [profileYear, setProfileYear] = useState<string>('');
   const [profileDateFrom, setProfileDateFrom] = useState<string>(''); // Date range filter from
   const [profileDateTo, setProfileDateTo] = useState<string>(''); // Date range filter to
-  const [exportChoice, setExportChoice] = useState<'users' | 'impl' | 'dev' | 'maint' | 'businesses' | 'all' | 'all_single'>('users');
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_exportChoice, _setExportChoice] = useState<'users' | 'impl' | 'dev' | 'maint' | 'businesses' | 'all' | 'all_single'>('users');
   const [viewMode, setViewMode] = useState<'detail' | 'comparison'>('detail');
   const [compareYear, setCompareYear] = useState<string>('');
   const [timeRange, setTimeRange] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
@@ -120,6 +121,22 @@ export default function SuperAdminHome() {
   const [maintStatusFilter, setMaintStatusFilter] = useState<string>('all');
   // Profile status filter (for "Báo cáo chi tiết theo từng viện")
   const [profileStatusFilter, setProfileStatusFilter] = useState<string>('all');
+  const [profilePicFilter, setProfilePicFilter] = useState<string>('all');
+  const teamSelectRef = useRef<HTMLSelectElement | null>(null);
+  const normalizedSelectedTeam = selectedTeam.trim().toUpperCase();
+  const isSalesSelected = normalizedSelectedTeam === 'SALES' || normalizedSelectedTeam === 'KINH DOANH';
+
+  // Validate profilePicFilter when profileUsers changes
+  // Temporarily disabled to debug infinite loop
+  // useEffect(() => {
+  //   if (profilePicFilter === 'all' || profileUsers.length === 0) return;
+  //   const exists = profileUsers.some((u) => u.id != null && String(u.id) === profilePicFilter);
+  //   if (!exists) {
+  //     setProfilePicFilter('all');
+  //   }
+  //   // Only depend on profileUsers, not profilePicFilter to avoid loop
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [profileUsers]);
   // Pagination for detail view
   const [detailCurrentPage, setDetailCurrentPage] = useState<number>(0);
   const [detailItemsPerPage, setDetailItemsPerPage] = useState<number>(50);
@@ -127,18 +144,15 @@ export default function SuperAdminHome() {
   const [detailTotalPages, setDetailTotalPages] = useState<number>(1);
   // Collapsible groups (hospital names)
   const [collapsedHospitals, setCollapsedHospitals] = useState<Set<string>>(new Set());
-  
-  const toggleHospitalCollapse = (hospitalName: string) => {
-    setCollapsedHospitals(prev => {
-      const next = new Set(prev);
-      if (next.has(hospitalName)) {
-        next.delete(hospitalName);
-      } else {
-        next.add(hospitalName);
-      }
-      return next;
-    });
-  };
+  const resetTeamFilters = useCallback(() => {
+    setProfileQuarter('all');
+    setProfileYear('');
+    setProfileDateFrom('');
+    setProfileDateTo('');
+    setProfileStatusFilter('all');
+    setProfilePicFilter('all');
+    setDetailCurrentPage(0);
+  }, []);
   useEffect(() => {
     let mounted = true;
     const load = async () => {
@@ -262,7 +276,8 @@ export default function SuperAdminHome() {
   // load on mount
   useEffect(() => {
     void loadBusinessReport();
-  }, [loadBusinessReport]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // aggregate when items or grouping change
   useEffect(() => {
@@ -494,7 +509,7 @@ export default function SuperAdminHome() {
     }
   }, [hwGroupBy, hwTopN]);
 
-  useEffect(() => { void loadHardwareReport(); }, [loadHardwareReport]);
+  useEffect(() => { void loadHardwareReport(); }, [hwGroupBy, hwTopN]);
 
   // Load available teams
   useEffect(() => {
@@ -513,41 +528,128 @@ export default function SuperAdminHome() {
     return () => { mounted = false; };
   }, []);
 
+  useEffect(() => {
+    // Reset filters when switching teams to avoid showing stale data
+    setProfileStatusFilter('all');
+    setProfilePicFilter('all');
+    setDetailCurrentPage(0);
+  }, [selectedTeam]);
+
   // Load team profile (load all tasks for selected team, grouped by hospital)
   const loadTeamProfile = async (teamName?: string) => {
-    const team = teamName || selectedTeam;
-    if (!team || team.trim() === '') {
+    const teamValue = (teamName ?? teamSelectRef.current?.value ?? selectedTeam ?? '').trim();
+    if (!teamValue) {
       toast.error('Vui lòng chọn team');
       return;
     }
+    const team = teamValue;
     setProfileLoading(true);
     try {
-      // users in this team
+      let allUsers: UserResponseDTO[] = [];
+      const normalizedTeam = team.toUpperCase();
+      const isSalesLikeTeam = normalizedTeam === 'SALES' || normalizedTeam === 'KINH DOANH';
+      const isDeploymentTeam = normalizedTeam.includes('DEPLOY');
+      const isMaintenanceTeam = normalizedTeam.includes('MAINT');
+      const needsITSupport = isDeploymentTeam || isMaintenanceTeam;
+
+      const isSuperAdminUser = (u: UserResponseDTO) => {
+        const roles = (u as any)?.roles;
+        if (!roles) return false;
+        const list = Array.isArray(roles) ? roles : [roles];
+        return list.some((r) => {
+          if (!r) return false;
+          if (typeof r === 'string') return r.toUpperCase().includes('SUPERADMIN');
+          const roleName = (r as any)?.roleName ?? (r as any)?.role_name ?? (r as any)?.role;
+          return typeof roleName === 'string' && roleName.toUpperCase().includes('SUPERADMIN');
+        });
+      };
+
+      const isITDepartmentUser = (u: UserResponseDTO) => {
+        const dept = ((u as any)?.department ?? '').toString().toUpperCase();
+        return dept.includes('IT');
+      };
+
       try {
         const uResp = await getAllUsers({ page: 0, size: 10000 });
         const uList = Array.isArray(uResp) ? (uResp as UserResponseDTO[]) : (uResp as any)?.content ?? [];
-        const filtered = (uList as UserResponseDTO[]).filter((u) => {
+        allUsers = uList as UserResponseDTO[];
+        const teamUsers = (allUsers as UserResponseDTO[]).filter((u) => {
           const userTeam = (u.team ?? '').toString().toUpperCase();
-          return userTeam === team.toUpperCase();
+          return userTeam === normalizedTeam;
         });
-        setProfileUsers(filtered);
+        const extraUsers: UserResponseDTO[] = [];
+        if (needsITSupport) {
+          extraUsers.push(
+            ...(allUsers as UserResponseDTO[]).filter((u) => isITDepartmentUser(u) || isSuperAdminUser(u))
+          );
+        }
+        if (isSalesLikeTeam) {
+          extraUsers.push(...(allUsers as UserResponseDTO[]).filter((u) => isSuperAdminUser(u)));
+        }
+        const userMap = new Map<number | string, UserResponseDTO>();
+        [...teamUsers, ...extraUsers].forEach((u) => {
+          if (!u) return;
+          const key = u.id ?? `user-${u.username ?? u.fullname ?? Math.random()}`;
+          if (!userMap.has(key)) userMap.set(key, u);
+        });
+        setProfileUsers(Array.from(userMap.values()));
       } catch (err) {
         console.warn('load users for team failed', err);
         setProfileUsers([]);
       }
 
-      // Get user IDs in this team to filter tasks
-      const uResp = await getAllUsers({ page: 0, size: 10000 });
-      const uList = Array.isArray(uResp) ? (uResp as UserResponseDTO[]) : (uResp as any)?.content ?? [];
-      const teamUserIds = (uList as UserResponseDTO[])
-        .filter((u) => ((u.team ?? '').toString().toUpperCase() === team.toUpperCase()))
-        .map((u) => u.id);
+      const combinedUsers = (() => {
+        const baseUsers = (allUsers as UserResponseDTO[]).filter((u) => ((u.team ?? '').toString().toUpperCase() === normalizedTeam));
+        const extraUsers: UserResponseDTO[] = [];
+        if (needsITSupport) {
+          extraUsers.push(
+            ...(allUsers as UserResponseDTO[]).filter((u) => isITDepartmentUser(u) || isSuperAdminUser(u))
+          );
+        }
+        if (isSalesLikeTeam) {
+          extraUsers.push(...(allUsers as UserResponseDTO[]).filter((u) => isSuperAdminUser(u)));
+        }
+        const userMap = new Map<number | string, UserResponseDTO>();
+        [...baseUsers, ...extraUsers].forEach((u) => {
+          if (!u) return;
+          const key = u.id ?? `user-${u.username ?? u.fullname ?? Math.random()}`;
+          if (!userMap.has(key)) userMap.set(key, u);
+        });
+        return Array.from(userMap.values());
+      })();
+
+      const teamUserIds = combinedUsers
+        .map((u) => u.id)
+        .filter((id): id is number => id != null);
+      const teamUserIdsSet = new Set(teamUserIds);
+
+      const taskMatchesTeam = (task: Record<string, unknown>) => {
+        const candidateTeamKeys = ['team', 'teamType', 'teamName', 'department', 'ownerTeam'];
+        for (const key of candidateTeamKeys) {
+          const raw = task[key as keyof typeof task];
+          if (raw) {
+            const value = String(raw).toUpperCase();
+            if (value === normalizedTeam) return true;
+            if (needsITSupport && value.includes('IT')) return true;
+          }
+        }
+        const candidateIds = [
+          task['picDeploymentId'],
+          task['picId'],
+          task['picUserId'],
+          (task as any)?.picUser?.id,
+          (task as any)?.assigneeId,
+        ]
+          .map((id) => (id != null ? Number(id) : null))
+          .filter((id): id is number => Number.isFinite(id));
+        if (candidateIds.length === 0) return false;
+        return candidateIds.some((id) => teamUserIdsSet.has(id));
+      };
 
       // tasks - use server-side filtering
       const filterParams: any = {
-        team: team,
         page: 0,
-        size: 10000, // Load all filtered results (server-side filter reduces data significantly)
+        size: 10000, // Load all filtered results
         sortBy: 'startDate',
         sortDir: 'desc'
       };
@@ -569,36 +671,78 @@ export default function SuperAdminHome() {
         filterParams.status = profileStatusFilter;
       }
       
-      try {
-        const impl = await getAllImplementationTasks(filterParams);
-        const implList = Array.isArray(impl) ? (impl as ImplementationTaskResponseDTO[]) : (impl as any)?.content ?? [];
-        setProfileImplTasks(implList);
-      } catch (err) { console.warn('impl load', err); setProfileImplTasks([]); }
-      try {
-        const dev = await getAllDevTasks({ page: 0, size: 10000 });
-        const devList = Array.isArray(dev) ? (dev as DevTaskResponseDTO[]) : (dev as any)?.content ?? [];
-        const filtered = (devList as DevTaskResponseDTO[]).filter((t) => {
-          const picId = (t as any).picDeploymentId ?? (t as any).picId;
-          return picId && teamUserIds.includes(Number(picId));
-        });
-        setProfileDevTasks(filtered);
-      } catch (err) { console.warn('dev load', err); setProfileDevTasks([]); }
-      try {
-        const m = await getAllMaintenanceTasks({ page: 0, size: 10000 });
-        const mList = Array.isArray(m) ? (m as MaintenanceTaskResponseDTO[]) : (m as any)?.content ?? [];
-        const filtered = (mList as MaintenanceTaskResponseDTO[]).filter((t) => {
-          const picId = (t as any).picDeploymentId ?? (t as any).picId;
-          return picId && teamUserIds.includes(Number(picId));
-        });
-        setProfileMaintTasks(filtered);
-      } catch (err) { console.warn('maint load', err); setProfileMaintTasks([]); }
+      if (!isSalesLikeTeam) {
+        try {
+          const impl = await getAllImplementationTasks(filterParams);
+          const implList = Array.isArray(impl) ? (impl as ImplementationTaskResponseDTO[]) : (impl as any)?.content ?? [];
+          const filteredImpl = (implList as ImplementationTaskResponseDTO[]).filter((t) => taskMatchesTeam(t as any));
+          setProfileImplTasks(filteredImpl);
+        } catch (err) { console.warn('impl load', err); setProfileImplTasks([]); }
+        try {
+          const dev = await getAllDevTasks({ page: 0, size: 10000 });
+          const devList = Array.isArray(dev) ? (dev as DevTaskResponseDTO[]) : (dev as any)?.content ?? [];
+          const filtered = (devList as DevTaskResponseDTO[]).filter((t) => taskMatchesTeam(t as any));
+          setProfileDevTasks(filtered);
+        } catch (err) { console.warn('dev load', err); setProfileDevTasks([]); }
+        try {
+          const m = await getAllMaintenanceTasks({ page: 0, size: 10000 });
+          const mList = Array.isArray(m) ? (m as MaintenanceTaskResponseDTO[]) : (m as any)?.content ?? [];
+          const filtered = (mList as MaintenanceTaskResponseDTO[]).filter((t) => taskMatchesTeam(t as any));
+          setProfileMaintTasks(filtered);
+        } catch (err) { console.warn('maint load', err); setProfileMaintTasks([]); }
+      } else {
+        setProfileImplTasks([]);
+        setProfileDevTasks([]);
+        setProfileMaintTasks([]);
+      }
 
       // businesses - filter by team users
       try {
         const b = await getBusinesses({ page: 0, size: 10000 } as any);
         const bList = Array.isArray(b) ? (b as Array<Record<string, unknown>>) : (b as any)?.content ?? [];
-        // Filter businesses where creator/owner is in the team (if available)
-        setProfileBusinesses(bList);
+        const filteredBusinesses = isSalesLikeTeam
+          ? bList
+          : bList.filter((item) => {
+              const ownerId =
+                (item as any)?.picUserId ??
+                (item as any)?.picUser?.id ??
+                (item as any)?.picId ??
+                (item as any)?.ownerId ??
+                null;
+              const ownerTeam =
+                (item as any)?.team ??
+                (item as any)?.teamName ??
+                (item as any)?.department ??
+                (item as any)?.picUser?.team ??
+                null;
+              const teamMatch = ownerTeam && String(ownerTeam).toUpperCase() === normalizedTeam;
+              const idMatch = ownerId != null && teamUserIds.includes(Number(ownerId));
+              return teamMatch || idMatch;
+            });
+        setProfileBusinesses(filteredBusinesses);
+        if (isSalesLikeTeam && filteredBusinesses.length) {
+          setProfileUsers((prev) => {
+            const map = new Map<(number | string), UserResponseDTO>();
+            prev.forEach((u) => {
+              const key = u.id ?? `user-${u.fullname ?? u.username ?? Math.random()}`;
+              map.set(key, u);
+            });
+            filteredBusinesses.forEach((item) => {
+              const pic = (item as any)?.picUser;
+              if (!pic) return;
+              const picId = pic.id != null ? Number(pic.id) : null;
+              const key = picId ?? `biz-${pic.label ?? pic.name ?? Math.random()}`;
+              if (map.has(key)) return;
+              map.set(key, {
+                id: picId ?? undefined,
+                fullname: pic.label ?? pic.name ?? pic.fullName ?? pic.fullname ?? undefined,
+                email: pic.subLabel ?? pic.email ?? undefined,
+                team: 'SALES',
+              } as UserResponseDTO);
+            });
+            return Array.from(map.values());
+          });
+        }
       } catch (err) { console.warn('business load', err); setProfileBusinesses([]); }
 
       // preload hardware map so we can display names instead of ids
@@ -712,28 +856,113 @@ export default function SuperAdminHome() {
     return parts.join(' | ');
   };
 
+  const hasCustomTeamFilter =
+    profileQuarter !== 'all' ||
+    (profileYear ?? '') !== '' ||
+    Boolean(profileDateFrom) ||
+    Boolean(profileDateTo) ||
+    profileStatusFilter !== 'all' ||
+    profilePicFilter !== 'all';
+
+  const matchesProfilePicFilter = (task: Record<string, unknown>) => {
+    if (!profilePicFilter || profilePicFilter === 'all') return true;
+    const targetId = profilePicFilter;
+    const candidateIds = [
+      task['picDeploymentId'],
+      task['picId'],
+      task['picUserId'],
+      (task as any)?.picUser?.id,
+      (task as any)?.picDeployment?.id,
+    ].filter((id) => id != null);
+    if (candidateIds.some((id) => String(id) === targetId)) return true;
+    const candidateName = String(
+      task['picDeploymentName'] ??
+        task['picName'] ??
+        task['picUserName'] ??
+        (task as any)?.picUser?.label ??
+        ''
+    )
+      .trim()
+      .toLowerCase();
+    if (!candidateName) return false;
+    const selectedUser = profileUsers.find((u) => u.id != null && String(u.id) === targetId);
+    const selectedName = String(selectedUser?.fullname ?? selectedUser?.username ?? '')
+      .trim()
+      .toLowerCase();
+    if (!selectedName) return false;
+    return candidateName === selectedName;
+  };
+
   // Derived (filtered) arrays according to quarter/year selection
-  const displayedImplTasks = profileImplTasks.filter((t) => inSelectedQuarter((t as any).startDate ?? (t as any).completionDate ?? (t as any).createdDate ?? null));
-  const displayedDevTasks = profileDevTasks.filter((t) => inSelectedQuarter((t as any).startDate ?? (t as any).endDate ?? (t as any).createdDate ?? null));
-  const displayedMaintTasks = profileMaintTasks.filter((t) => inSelectedQuarter((t as any).startDate ?? (t as any).endDate ?? (t as any).createdDate ?? null));
-  const displayedBusinesses = profileBusinesses.filter((b) => inSelectedQuarter((b as any).startDate ?? (b as any).completionDate ?? null));
+  const displayedImplTasks = useMemo(() => 
+    profileImplTasks.filter((t) =>
+      inSelectedQuarter((t as any).startDate ?? (t as any).completionDate ?? (t as any).createdDate ?? null)
+    ), [profileImplTasks, profileQuarter, profileYear]);
+  const displayedDevTasks = useMemo(() =>
+    profileDevTasks.filter((t) =>
+      inSelectedQuarter((t as any).startDate ?? (t as any).endDate ?? (t as any).createdDate ?? null)
+    ), [profileDevTasks, profileQuarter, profileYear]);
+  const displayedMaintTasks = useMemo(() =>
+    profileMaintTasks.filter((t) =>
+      inSelectedQuarter((t as any).startDate ?? (t as any).endDate ?? (t as any).createdDate ?? null)
+    ), [profileMaintTasks, profileQuarter, profileYear]);
+  const displayedBusinesses = useMemo(() => 
+    profileBusinesses.filter((b) => {
+      const dateCandidate =
+        (b as any).startDate ??
+        (b as any).completionDate ??
+        (b as any).createdAt ??
+        (b as any).created_at ??
+        null;
+      return inSelectedQuarter(dateCandidate);
+    }), [profileBusinesses, profileQuarter, profileYear]);
+  const salesFilteredBusinesses = useMemo(() => {
+    if (!isSalesSelected) return [];
+    let list = displayedBusinesses.slice();
+    if (profileStatusFilter !== 'all') {
+      const target = profileStatusFilter.toUpperCase();
+      list = list.filter((b) => String((b as any).status ?? '').toUpperCase() === target);
+    }
+    list = list.filter((b) => matchesProfilePicFilter(b as Record<string, unknown>));
+    return list;
+  }, [isSalesSelected, displayedBusinesses, profileStatusFilter, profilePicFilter, profileUsers]);
 
   // compute available status options (from data) and apply per-table status filters
   const implStatusOptions = Array.from(new Set(displayedImplTasks.map(t => String((t as any).status ?? '').toUpperCase()).filter(s => s && s !== ''))).sort();
   const devStatusOptions = Array.from(new Set(displayedDevTasks.map(t => String((t as any).status ?? '').toUpperCase()).filter(s => s && s !== ''))).sort();
   const maintStatusOptions = Array.from(new Set(displayedMaintTasks.map(t => String((t as any).status ?? '').toUpperCase()).filter(s => s && s !== ''))).sort();
 
-  const filteredImplTasks = implStatusFilter === 'all' ? displayedImplTasks : displayedImplTasks.filter(t => String((t as any).status ?? '').toUpperCase() === implStatusFilter);
-  const filteredDevTasks = devStatusFilter === 'all' ? displayedDevTasks : displayedDevTasks.filter(t => String((t as any).status ?? '').toUpperCase() === devStatusFilter);
-  const filteredMaintTasks = maintStatusFilter === 'all' ? displayedMaintTasks : displayedMaintTasks.filter(t => String((t as any).status ?? '').toUpperCase() === maintStatusFilter);
+  const filteredImplTasks = (implStatusFilter === 'all'
+    ? displayedImplTasks
+    : displayedImplTasks.filter(t => String((t as any).status ?? '').toUpperCase() === implStatusFilter)
+  ).filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+
+  const filteredDevTasks = (devStatusFilter === 'all'
+    ? displayedDevTasks
+    : displayedDevTasks.filter(t => String((t as any).status ?? '').toUpperCase() === devStatusFilter)
+  ).filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+
+  const filteredMaintTasks = (maintStatusFilter === 'all'
+    ? displayedMaintTasks
+    : displayedMaintTasks.filter(t => String((t as any).status ?? '').toUpperCase() === maintStatusFilter)
+  ).filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
 
   // Prepare data for comparison charts
   const prepareComparisonData = useCallback(() => {
-    const allTasks = [
-      ...profileImplTasks.map(t => ({ ...t, type: 'impl' as const, hospitalName: t.hospitalName, receivedDate: (t as any).receivedDate ?? (t as any).startDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name })),
-      ...profileDevTasks.map(t => ({ ...t, type: 'dev' as const, hospitalName: (t as any).hospitalName, receivedDate: (t as any).receivedDate ?? (t as any).startDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name })),
-      ...profileMaintTasks.map(t => ({ ...t, type: 'maint' as const, hospitalName: (t as any).hospitalName, receivedDate: (t as any).receivedDate ?? (t as any).startDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name })),
-    ];
+      const allTasks = [
+        ...profileImplTasks.map(t => ({ ...t, type: 'impl' as const, hospitalName: t.hospitalName, receivedDate: (t as any).receivedDate ?? (t as any).startDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name })),
+        ...profileDevTasks.map(t => ({ ...t, type: 'dev' as const, hospitalName: (t as any).hospitalName, receivedDate: (t as any).receivedDate ?? (t as any).startDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name })),
+        ...profileMaintTasks.map(t => ({ ...t, type: 'maint' as const, hospitalName: (t as any).hospitalName, receivedDate: (t as any).receivedDate ?? (t as any).startDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name })),
+        ...profileBusinesses.map(t => ({
+          ...t,
+          type: 'business' as const,
+          hospitalName: (t as any).hospital?.label ?? (t as any).hospitalName ?? (t as any).hospital ?? 'Hợp đồng',
+          receivedDate: (t as any).startDate ?? (t as any).createdAt ?? (t as any).created_at,
+          completionDate: (t as any).completionDate ?? (t as any).updatedAt ?? (t as any).updated_at,
+          status: (t as any).status,
+          name: (t as any).name ?? (t as any).projectName ?? 'Hợp đồng',
+        })),
+      ];
 
     const currentYear = profileYear || String(new Date().getFullYear());
     const compareYearValue = compareYear || String(Number(currentYear) - 1);
@@ -804,6 +1033,9 @@ export default function SuperAdminHome() {
   // Group tasks by hospital for visual table view
   // Use startDate for filtering and display
   const tasksByHospital = useMemo(() => {
+    if (isSalesSelected) {
+      return [];
+    }
     // Helper to check if startDate matches date range filter
     const matchesDateRangeFilter = (startDate?: string | null) => {
       // Priority: Date range > Quarter/Year
@@ -892,13 +1124,46 @@ export default function SuperAdminHome() {
       ? allMaintTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
       : (maintStatusFilter === 'all' ? allMaintTasks : allMaintTasks.filter(t => String((t as any).status ?? '').toUpperCase() === maintStatusFilter));
 
-    const allTasks = [
-      ...implTasksFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
-      ...devTasksFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
-      ...maintTasksFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
-    ];
+    const implTasksPicFiltered = implTasksFiltered.filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+    const devTasksPicFiltered = devTasksFiltered.filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+    const maintTasksPicFiltered = maintTasksFiltered.filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
 
-    const grouped = new Map<string, Array<typeof allTasks[0]>>();
+    // Filter tasks by team type - only show tasks matching the selected team
+    const normalizedTeam = normalizedSelectedTeam;
+    const isDeploymentTeam = normalizedTeam.includes('DEPLOY') || normalizedTeam.includes('TRIỂN KHAI') || normalizedTeam.includes('TRIENKHAI');
+    const isMaintenanceTeam = normalizedTeam.includes('MAINT') || normalizedTeam.includes('BẢO TRÌ') || normalizedTeam.includes('BAOTRI');
+    const isDevTeam = normalizedTeam.includes('DEV') || normalizedTeam.includes('PHÁT TRIỂN') || normalizedTeam.includes('PHATTRIEN');
+
+    type TaskWithType = {
+      type: 'Triển khai' | 'Bảo trì' | 'Phát triển';
+      hospitalName: string | null | undefined;
+      startDate: string | null | undefined;
+      completionDate: string | null | undefined;
+      status: string | null | undefined;
+      name: string;
+      picName: string;
+      [key: string]: unknown;
+    };
+    const allTasks: TaskWithType[] = [];
+    if (isDeploymentTeam) {
+      allTasks.push(...implTasksPicFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
+    }
+    if (isMaintenanceTeam) {
+      allTasks.push(...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
+    }
+    if (isDevTeam) {
+      allTasks.push(...devTasksPicFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
+    }
+    // If no specific team type detected, show all tasks
+    if (!isDeploymentTeam && !isMaintenanceTeam && !isDevTeam) {
+      allTasks.push(
+        ...implTasksPicFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
+        ...devTasksPicFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
+        ...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' }))
+      );
+    }
+
+    const grouped = new Map<string, TaskWithType[]>();
     allTasks.forEach(task => {
       const hospitalName = task.hospitalName || 'Không xác định';
       if (!grouped.has(hospitalName)) {
@@ -916,17 +1181,16 @@ export default function SuperAdminHome() {
       })
     }));
     
-    // Calculate total items for pagination
-    const totalItems = sortedGroups.reduce((sum, group) => sum + group.tasks.length, 0);
-    setDetailTotalItems(totalItems);
-    setDetailTotalPages(Math.ceil(totalItems / detailItemsPerPage));
-    
     // Apply pagination - show only current page items
     let currentItemIndex = 0;
     const startIndex = detailCurrentPage * detailItemsPerPage;
     const endIndex = startIndex + detailItemsPerPage;
     
-    const paginatedGroups: typeof sortedGroups = [];
+    type GroupedTask = {
+      hospitalName: string;
+      tasks: TaskWithType[];
+    };
+    const paginatedGroups: GroupedTask[] = [];
     for (const group of sortedGroups) {
       if (currentItemIndex >= endIndex) break;
       
@@ -947,7 +1211,29 @@ export default function SuperAdminHome() {
     }
     
     return paginatedGroups;
-  }, [profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, profileDateFrom, profileDateTo, implStatusFilter, devStatusFilter, maintStatusFilter, profileStatusFilter, detailCurrentPage, detailItemsPerPage]);
+  }, [profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, profileDateFrom, profileDateTo, implStatusFilter, devStatusFilter, maintStatusFilter, profileStatusFilter, detailCurrentPage, detailItemsPerPage, profilePicFilter, profileUsers, isSalesSelected, displayedBusinesses, salesFilteredBusinesses, normalizedSelectedTeam]);
+
+  // Calculate total items for pagination
+  const detailTotalItemsComputed = useMemo(() => {
+    if (isSalesSelected) {
+      return salesFilteredBusinesses.length;
+    } else {
+      return tasksByHospital.reduce((sum, group) => sum + (group.tasks?.length ?? 0), 0);
+    }
+  }, [isSalesSelected, salesFilteredBusinesses, tasksByHospital]);
+
+  // Update pagination totals when computed value changes
+  useEffect(() => {
+    setDetailTotalItems(detailTotalItemsComputed);
+    setDetailTotalPages(Math.max(1, Math.ceil(Math.max(detailTotalItemsComputed, 1) / detailItemsPerPage)));
+  }, [detailTotalItemsComputed, detailItemsPerPage]);
+
+  const salesPaginatedBusinesses = useMemo(() => {
+    if (!isSalesSelected) return [];
+    const startIndex = detailCurrentPage * detailItemsPerPage;
+    const endIndex = startIndex + detailItemsPerPage;
+    return salesFilteredBusinesses.slice(startIndex, endIndex);
+  }, [isSalesSelected, salesFilteredBusinesses, detailCurrentPage, detailItemsPerPage]);
 
   // Aggregations for implementation and maintenance (kept minimal per current UI needs)
 
@@ -1012,12 +1298,14 @@ export default function SuperAdminHome() {
   };
 
   const exportBusinessesCsv = () => {
-    const headers = ['ID','Tên dự án','Doanh thu','Hoa hồng','Trạng thái','Ngày'];
+    const headers = ['ID','Tên dự án','Doanh thu','Hoa hồng của viện','Trạng thái','Ngày'];
     const rows = displayedBusinesses.map(b => [String(b['id'] ?? ''), String(b['name'] ?? b['projectName'] ?? ''), String(Number(b['totalPrice'] ?? b['unitPrice'] ?? 0)), String(Number(b['commission'] ?? 0)), translateStatus(String(b['status'] ?? '')), String(b['startDate'] ?? b['completionDate'] ?? '')]);
     downloadCsv(makeFilename('businesses'), headers, rows);
   };
 
-  const exportAllCsv = () => {
+  // Reserved for future use
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _exportAllCsv = () => {
     exportUsersCsv();
     exportImplCsv();
     exportDevCsv();
@@ -1025,14 +1313,16 @@ export default function SuperAdminHome() {
     exportBusinessesCsv();
   };
 
-  const exportAllSingleCsv = () => {
+  // Reserved for future use
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _exportAllSingleCsv = () => {
     try {
       const sections: Array<{ title: string; headers: string[]; rows: Array<string[]> }> = [];
       sections.push({ title: 'Người dùng', headers: ['ID','Họ và tên','Username','Email','SĐT','Phòng/Team'], rows: profileUsers.map(u => [String(u.id ?? ''), String(u.fullname ?? ''), String(u.username ?? ''), String(u.email ?? ''), String(u.phone ?? ''), String((u as any).department ?? (u as any).team ?? '')]) });
   sections.push({ title: 'Triển khai', headers: ['ID','Tên','PIC','Trạng thái','Ngày bắt đầu','Ngày hoàn thành','Phần cứng','Số lượng'], rows: filteredImplTasks.map(t => [String(t.id ?? ''), String(t.name ?? ''), String((t as any).picDeploymentName ?? ''), translateStatus(String(t.status ?? '')), String((t as any).startDate ?? ''), String((t as any).completionDate ?? ''), hardwareMap[String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? '')] ?? String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? ''), String(t.quantity ?? '')]) });
   sections.push({ title: 'Phát triển', headers: ['ID','Tên','PIC','Trạng thái','Ngày bắt đầu','Ngày kết thúc','Phần cứng','Số lượng'], rows: filteredDevTasks.map(t => [String(t.id ?? ''), String(t.name ?? ''), String((t as any).picDeploymentName ?? ''), translateStatus(String(t.status ?? '')), String((t as any).startDate ?? ''), String((t as any).endDate ?? ''), hardwareMap[String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? '')] ?? String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? ''), String(t.quantity ?? '')]) });
   sections.push({ title: 'Bảo trì', headers: ['ID','Tên','PIC','Trạng thái','Ngày bắt đầu','Ngày kết thúc','Phần cứng','Số lượng','Yêu cầu bổ sung'], rows: filteredMaintTasks.map(t => [String(t.id ?? ''), String(t.name ?? ''), String((t as any).picDeploymentName ?? ''), translateStatus(String(t.status ?? '')), String((t as any).startDate ?? ''), String((t as any).endDate ?? ''), hardwareMap[String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? '')] ?? String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? ''), String(t.quantity ?? ''), getSupplementRequest(t as unknown as Record<string, unknown>)]) });
-      sections.push({ title: 'Hợp đồng', headers: ['ID','Tên dự án','Doanh thu','Hoa hồng','Trạng thái','Ngày'], rows: displayedBusinesses.map(b => [String(b['id'] ?? ''), String(b['name'] ?? b['projectName'] ?? ''), String(Number(b['totalPrice'] ?? b['unitPrice'] ?? 0)), String(Number(b['commission'] ?? 0)), translateStatus(String(b['status'] ?? '')), String(b['startDate'] ?? b['completionDate'] ?? '')]) });
+      sections.push({ title: 'Hợp đồng', headers: ['ID','Tên dự án','Doanh thu','Hoa hồng của viện','Trạng thái','Ngày'], rows: displayedBusinesses.map(b => [String(b['id'] ?? ''), String(b['name'] ?? b['projectName'] ?? ''), String(Number(b['totalPrice'] ?? b['unitPrice'] ?? 0)), String(Number(b['commission'] ?? 0)), translateStatus(String(b['status'] ?? '')), String(b['startDate'] ?? b['completionDate'] ?? '')]) });
 
       const lines: string[] = [];
       sections.forEach((s, idx) => {
@@ -1473,7 +1763,7 @@ export default function SuperAdminHome() {
                     options={{
                       chart: { toolbar: { show: false } },
                       plotOptions: { bar: { borderRadius: 8, columnWidth: '30%' } },
-                      xaxis: { categories: ['Dự kiến', 'Thực tế', 'Hoa hồng'] },
+                      xaxis: { categories: ['Dự kiến', 'Thực tế', 'Hoa hồng của viện'] },
                       dataLabels: { enabled: false },
                       colors: ['#465fff', '#10b981', '#ef4444'],
                     }}
@@ -1521,7 +1811,7 @@ export default function SuperAdminHome() {
               <div className="flex flex-col sm:flex-row gap-4 items-center">
                 <div className="flex flex-col">
                   <label className="block text-xs text-gray-500">Năm</label>
-                  <select value={reportYear} onChange={(e) => setReportYear(Number(e.target.value))} className="mt-1 rounded-md border px-3 py-2 text-sm bg-white w-36">
+                  <select value={reportYear} onChange={(e) => setReportYear(Number(e.target.value))} className="mt-1 rounded-md border px-1 py-2 text-sm bg-white w-25">
                     {Array.from({ length: new Date().getFullYear() - 2019 }).map((_, i) => {
                       const y = 2020 + i;
                       return <option key={y} value={y}>{y}</option>;
@@ -1531,7 +1821,7 @@ export default function SuperAdminHome() {
 
                 <div className="flex flex-col">
                   <label className="block text-xs text-gray-500">Tháng (tùy chọn)</label>
-                  <select value={reportMonth} onChange={(e) => setReportMonth(e.target.value === '' ? '' : Number(e.target.value))} className="mt-1 rounded-md border px-3 py-2 text-sm bg-white w-36">
+                  <select value={reportMonth} onChange={(e) => setReportMonth(e.target.value === '' ? '' : Number(e.target.value))} className="mt-1 rounded-md border px-3 py-1 text-sm bg-white w-36">
                     <option value="">Tất cả</option>
                     {Array.from({ length: 12 }).map((_, i) => {
                       const m = i + 1;
@@ -1656,14 +1946,17 @@ export default function SuperAdminHome() {
               <div className="w-full sm:w-auto">
                 <label className="text-sm text-gray-500">Chọn team</label>
                 <div className="relative mt-1 flex items-center gap-3">
-                  <select 
-                    value={selectedTeam} 
-                    onChange={(e) => setSelectedTeam(e.target.value)} 
-                    className="rounded-md border px-3 text-sm w-72 h-10 bg-white"
+                  <select
+                    ref={teamSelectRef}
+                    value={selectedTeam}
+                    onChange={(e) => setSelectedTeam(e.target.value)}
+                    className="rounded-md border px-3 text-sm w-40 h-10 bg-white"
                   >
                     <option value="">— Chọn team —</option>
-                    {availableTeams.map(team => (
-                      <option key={team} value={team}>{team}</option>
+                    {availableTeams.map((team) => (
+                      <option key={team} value={team}>
+                        {team}
+                      </option>
                     ))}
                   </select>
                   <button 
@@ -1672,6 +1965,14 @@ export default function SuperAdminHome() {
                     className="h-10 inline-flex items-center rounded-md bg-indigo-600 px-4 text-sm font-semibold text-white hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
                   >
                     Tải hồ sơ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetTeamFilters}
+                    disabled={!hasCustomTeamFilter}
+                    className="h-10 inline-flex items-center rounded-md border border-gray-300 px-4 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Xóa lọc
                   </button>
                   <div className="flex items-center gap-2 ml-2 flex-wrap">
                     <label className="text-sm text-gray-500">Quý</label>
@@ -1683,7 +1984,7 @@ export default function SuperAdminHome() {
                       <option value="Q4">Q4</option>
                     </select>
                     <label className="text-sm text-gray-500">Năm</label>
-                    <select value={profileYear} onChange={(e) => { setProfileYear(e.target.value); setDetailCurrentPage(0); }} className="rounded-md border px-2 py-1 text-sm bg-white w-28">
+                    <select value={profileYear} onChange={(e) => { setProfileYear(e.target.value); setDetailCurrentPage(0); }} className="rounded-md border px-2 py-1 text-sm bg-white w-20">
                       <option value="">Tất cả</option>
                       {Array.from({ length: new Date().getFullYear() - 2019 }).map((_, i) => {
                         const y = String(2020 + i);
@@ -1723,6 +2024,21 @@ export default function SuperAdminHome() {
                       <option value="IN_PROCESS">Đang xử lý</option>
                       <option value="COMPLETED">Hoàn thành</option>
                       <option value="ISSUE">Gặp sự cố</option>
+                    </select>
+                    <label className="text-sm text-gray-500">Người phụ trách</label>
+                    <select
+                      value={profilePicFilter}
+                      onChange={(e) => { setProfilePicFilter(e.target.value); setDetailCurrentPage(0); }}
+                      className="rounded-md border px-2 py-1 text-sm bg-white"
+                    >
+                      <option value="all">Tất cả</option>
+                      {profileUsers
+                        .filter((u) => u.id != null)
+                        .map((u) => (
+                          <option key={u.id} value={String(u.id)}>
+                            {u.fullname ?? u.username ?? `User #${u.id}`}
+                          </option>
+                        ))}
                     </select>
                   </div>
                 </div>
@@ -1845,7 +2161,7 @@ export default function SuperAdminHome() {
 
             {/* Detail View */}
             {viewMode === 'detail' && (
-              <>
+              <div className="space-y-6">
                 {/* Visual Table View - Grouped by Hospital */}
                 {profileLoading ? (
                   <div className="mb-6 mt-4 rounded-2xl bg-white p-8 shadow-sm border border-gray-100 flex items-center justify-center">
@@ -1854,91 +2170,171 @@ export default function SuperAdminHome() {
                       <div className="text-sm text-gray-500">Đang tải dữ liệu...</div>
                     </div>
                   </div>
+                ) : isSalesSelected ? (
+                  salesFilteredBusinesses.length > 0 ? (
+                    <div className="mb-6 mt-4 rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm font-medium text-gray-700">Danh sách hợp đồng kinh doanh</h3>
+                        <div className="text-xs text-gray-500">Tổng: {detailTotalItems} hợp đồng</div>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr className="text-xs text-gray-600">
+                              <th className="px-3 py-2 text-left">ID</th>
+                              <th className="px-3 py-2 text-left">Tên dự án</th>
+                              <th className="px-3 py-2 text-left">Người phụ trách</th>
+                              <th className="px-3 py-2 text-center">Trạng thái</th>
+                              <th className="px-3 py-2 text-center">Ngày bắt đầu</th>
+                              <th className="px-3 py-2 text-center">Ngày hoàn thành</th>
+                              <th className="px-3 py-2 text-right">Doanh thu</th>
+                              <th className="px-3 py-2 text-right">Hoa hồng của viện</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {salesPaginatedBusinesses.map((b) => (
+                              <tr key={String(b['id'] ?? Math.random())} className="border-t odd:bg-white even:bg-gray-50 hover:bg-gray-100">
+                                <td className="px-3 py-2">{String(b['id'] ?? '—')}</td>
+                                <td className="px-3 py-2">
+                                  <div className="font-medium text-gray-900">{String(b['name'] ?? b['projectName'] ?? '—')}</div>
+                                  <div className="text-xs text-gray-500">{(b as any)?.hospital?.label ?? (b as any)?.hospitalName ?? '—'}</div>
+                                </td>
+                                <td className="px-3 py-2 text-left">{(b as any)?.picUser?.label ?? (b as any)?.picName ?? '—'}</td>
+                                <td className="px-3 py-2 text-center">
+                                  <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                                    String(b['status'] ?? '').toUpperCase() === 'CONTRACTED'
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-yellow-100 text-yellow-800'
+                                  }`}>
+                                    {translateStatus(String(b['status'] ?? ''))}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-center">{(b['startDate'] ?? b['createdAt'] ?? b['created_at']) ? new Date(String(b['startDate'] ?? b['createdAt'] ?? b['created_at'])).toLocaleDateString('vi-VN') : '—'}</td>
+                                <td className="px-3 py-2 text-center">{(b['completionDate'] ?? b['updatedAt'] ?? b['updated_at']) ? new Date(String(b['completionDate'] ?? b['updatedAt'] ?? b['updated_at'])).toLocaleDateString('vi-VN') : '—'}</td>
+                                <td className="px-3 py-2 text-right">{new Intl.NumberFormat('vi-VN').format(Number(b['totalPrice'] ?? b['unitPrice'] ?? 0))} ₫</td>
+                                <td className="px-3 py-2 text-right">{new Intl.NumberFormat('vi-VN').format(Number(b['commission'] ?? 0))} ₫</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {detailTotalItems > detailItemsPerPage && (
+                        <Pagination
+                          currentPage={detailCurrentPage}
+                          totalPages={detailTotalPages}
+                          totalItems={detailTotalItems}
+                          itemsPerPage={detailItemsPerPage}
+                          onPageChange={(page) => {
+                            setDetailCurrentPage(page);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          onItemsPerPageChange={(size) => {
+                            setDetailItemsPerPage(size);
+                            setDetailCurrentPage(0);
+                          }}
+                          itemsPerPageOptions={[20, 50, 100, 200]}
+                          showItemsPerPage={true}
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mb-6 mt-4 rounded-2xl bg-white p-8 shadow-sm border border-gray-100 text-center">
+                      <div className="text-sm text-gray-500">Không có dữ liệu hợp đồng để hiển thị</div>
+                    </div>
+                  )
                 ) : tasksByHospital.length > 0 ? (
                   <div className="mb-6 mt-4 rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-sm font-medium text-gray-700">Tổng quan công việc theo bệnh viện</h3>
-                      <div className="text-xs text-gray-500">
-                        Tổng: {detailTotalItems} công việc
-                      </div>
+                      <div className="text-xs text-gray-500">Tổng: {detailTotalItems} công việc</div>
                     </div>
-                    <div className="overflow-x-auto relative" style={{ maxHeight: '600px', overflowY: 'auto' }}>
+                    <div className="overflow-x-auto">
                       <table className="min-w-full text-sm">
-                        <thead className="bg-gray-50 border-b sticky top-0 z-10">
+                        <thead className="bg-gray-50">
                           <tr className="text-xs text-gray-600">
-                            <th className="px-4 py-3 text-left bg-gray-50">Tên bệnh viện</th>
-                            <th className="px-4 py-3 text-left bg-gray-50">Nội dung công việc</th>
-                            <th className="px-4 py-3 text-center bg-gray-50">Ngày bắt đầu</th>
-                            <th className="px-4 py-3 text-center bg-gray-50">Người phụ trách</th>
-                            <th className="px-4 py-3 text-center bg-gray-50">Trạng thái</th>
-                            <th className="px-4 py-3 text-center bg-gray-50">Ngày hoàn thành</th>
-                            <th className="px-4 py-3 text-center bg-gray-50">Số ngày thực hiện</th>
+                            <th className="px-3 py-2 text-left">Tên bệnh viện</th>
+                            <th className="px-3 py-2 text-left">Nội dung công việc</th>
+                            <th className="px-3 py-2 text-center">Ngày bắt đầu</th>
+                            <th className="px-3 py-2 text-left">Người phụ trách</th>
+                            <th className="px-3 py-2 text-center">Trạng thái</th>
+                            <th className="px-3 py-2 text-center">Ngày hoàn thành</th>
+                            <th className="px-3 py-2 text-center">Số ngày thực hiện</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {tasksByHospital.map((group) => {
+                          {tasksByHospital.map((group, groupIdx) => {
+                            const calculateDays = (startDate: string | null | undefined, completionDate: string | null | undefined): number => {
+                              if (!startDate || !completionDate) return 0;
+                              try {
+                                const start = new Date(startDate);
+                                const end = new Date(completionDate);
+                                if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
+                                const diffTime = Math.abs(end.getTime() - start.getTime());
+                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                return diffDays;
+                              } catch {
+                                return 0;
+                              }
+                            };
+
                             const isCollapsed = collapsedHospitals.has(group.hospitalName);
-                            // For paginated view, use current group's tasks length (which is already filtered)
-                            const totalTasksForHospital = group.tasks.length;
-                            
+                            const toggleCollapse = () => {
+                              setCollapsedHospitals(prev => {
+                                const next = new Set(prev);
+                                if (next.has(group.hospitalName)) {
+                                  next.delete(group.hospitalName);
+                                } else {
+                                  next.add(group.hospitalName);
+                                }
+                                return next;
+                              });
+                            };
+
                             return (
-                              <React.Fragment key={group.hospitalName}>
-                                <tr className={`border-b ${'bg-blue-50'} hover:bg-gray-50 cursor-pointer`} onClick={() => toggleHospitalCollapse(group.hospitalName)}>
-                                  <td colSpan={7} className="px-4 py-3 font-semibold text-gray-900">
+                              <React.Fragment key={groupIdx}>
+                                {/* Hospital header row */}
+                                <tr className="bg-gray-100 hover:bg-gray-200 cursor-pointer" onClick={toggleCollapse}>
+                                  <td colSpan={7} className="px-3 py-2">
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-2">
-                                        <span className="text-sm">{isCollapsed ? '▶' : '▼'}</span>
-                                        <span>{group.hospitalName}</span>
+                                        <span className="text-sm font-semibold text-gray-900">
+                                          {isCollapsed ? '▶' : '▼'} {group.hospitalName}
+                                        </span>
+                                        <span className="text-xs text-gray-500">Tổng: {group.tasks.length} task</span>
                                       </div>
-                                      <span className="text-xs font-normal text-gray-500">
-                                        Tổng: {totalTasksForHospital} task{isCollapsed ? ` (đã thu gọn)` : ''}
-                                      </span>
                                     </div>
                                   </td>
                                 </tr>
+                                {/* Task rows - only show if not collapsed */}
                                 {!isCollapsed && group.tasks.map((task, taskIdx) => (
-                                  <tr key={`${group.hospitalName}-${taskIdx}`} className="border-b hover:bg-gray-50">
-                                    <td className="px-4 py-2"></td>
-                                    <td className="px-4 py-2">
-                                      <div className="font-medium">{task.name || '—'}</div>
-                                      <div className="text-xs text-gray-500 mt-1">{task.type}</div>
+                                  <tr key={`${groupIdx}-${taskIdx}`} className="border-t odd:bg-white even:bg-gray-50 hover:bg-gray-100">
+                                    <td className="px-3 py-2"></td>
+                                    <td className="px-3 py-2">
+                                      <div className="font-medium text-gray-900">{task.name ?? '—'}</div>
+                                      <div className="text-xs text-gray-500 mt-0.5">{task.type}</div>
                                     </td>
-                                    <td className="px-4 py-2 text-center">
-                                      {(task as any).startDate ? new Date((task as any).startDate).toLocaleDateString('vi-VN') : '—'}
-                                    </td>
-                                    <td className="px-4 py-2 text-center">
-                                      {(task as any).picName ?? '—'}
-                                    </td>
-                                    <td className="px-4 py-2 text-center">
+                                    <td className="px-3 py-2 text-center">{task.startDate ? new Date(task.startDate).toLocaleDateString('vi-VN') : '—'}</td>
+                                    <td className="px-3 py-2">{task.picName ?? '—'}</td>
+                                    <td className="px-3 py-2 text-center">
                                       <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                                        String(task.status).toUpperCase() === 'COMPLETED'
+                                        String(task.status ?? '').toUpperCase() === 'COMPLETED' || String(task.status ?? '').toUpperCase() === 'HOÀN THÀNH'
                                           ? 'bg-green-100 text-green-800'
-                                          : String(task.status).toUpperCase() === 'IN_PROCESS'
-                                          ? 'bg-yellow-100 text-yellow-800'
-                                          : 'bg-gray-100 text-gray-800'
+                                          : String(task.status ?? '').toUpperCase() === 'IN_PROCESS' || String(task.status ?? '').toUpperCase() === 'ĐANG XỬ LÝ'
+                                          ? 'bg-blue-100 text-blue-800'
+                                          : 'bg-yellow-100 text-yellow-800'
                                       }`}>
-                                        {translateStatus(String(task.status))}
+                                        {translateStatus(String(task.status ?? ''))}
                                       </span>
                                     </td>
-                                    <td className="px-4 py-2 text-center">
-                                      {task.completionDate ? new Date(task.completionDate).toLocaleDateString('vi-VN') : '—'}
-                                    </td>
-                                    <td className="px-4 py-2 text-center">
-                                      {(() => {
-                                        const startDate = (task as any).startDate;
-                                        if (!startDate) return '—';
-                                        const start = new Date(startDate);
-                                        const endDate = task.completionDate ? new Date(task.completionDate) : new Date();
-                                        if (Number.isNaN(start.getTime()) || Number.isNaN(endDate.getTime())) return '—';
-                                        
-                                        // Reset time to 00:00:00 to calculate days based on date only, not time
-                                        const startDateOnly = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-                                        const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-                                        
-                                        const diffTime = endDateOnly.getTime() - startDateOnly.getTime();
-                                        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                                        return diffDays >= 0 ? `${diffDays} ngày` : '—';
-                                      })()}
+                                    <td className="px-3 py-2 text-center">{task.completionDate ? new Date(task.completionDate).toLocaleDateString('vi-VN') : '—'}</td>
+                                    <td className="px-3 py-2 text-center">
+                                      {task.startDate && task.completionDate ? (
+                                        <span className="text-gray-700">{calculateDays(task.startDate, task.completionDate)} ngày</span>
+                                      ) : task.startDate ? (
+                                        <span className="text-gray-500">{calculateDays(task.startDate, new Date().toISOString())} ngày</span>
+                                      ) : (
+                                        <span className="text-gray-400">—</span>
+                                      )}
                                     </td>
                                   </tr>
                                 ))}
@@ -1948,7 +2344,7 @@ export default function SuperAdminHome() {
                         </tbody>
                       </table>
                     </div>
-                    {detailTotalItems > 0 && (
+                    {detailTotalItems > detailItemsPerPage && (
                       <Pagination
                         currentPage={detailCurrentPage}
                         totalPages={detailTotalPages}
@@ -1956,7 +2352,6 @@ export default function SuperAdminHome() {
                         itemsPerPage={detailItemsPerPage}
                         onPageChange={(page) => {
                           setDetailCurrentPage(page);
-                          // Scroll to top of table when page changes
                           window.scrollTo({ top: 0, behavior: 'smooth' });
                         }}
                         onItemsPerPageChange={(size) => {
@@ -1969,217 +2364,214 @@ export default function SuperAdminHome() {
                     )}
                   </div>
                 ) : (
-                  !profileLoading && (
-                    <div className="mb-6 mt-4 rounded-2xl bg-white p-8 shadow-sm border border-gray-100 text-center">
-                      <div className="text-sm text-gray-500">Không có dữ liệu để hiển thị</div>
-                    </div>
-                  )
+                  <div className="mb-6 mt-4 rounded-2xl bg-white p-8 shadow-sm border border-gray-100 text-center">
+                    <div className="text-sm text-gray-500">Không có dữ liệu công việc để hiển thị</div>
+                  </div>
+                )
+                }
+
+                {hasLoadedProfile && (
+                  <div className="mt-4 grid grid-cols-1 gap-4">
+                    {/* Triển khai */}
+                    {(selectedTeam?.toLowerCase().includes('triển khai') || selectedTeam?.toLowerCase().includes('trienkhai')) && (
+                      <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="text-sm font-medium text-gray-700">Triển khai ({profileImplTasks.length})</h3>
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs text-gray-500">Lọc trạng thái</label>
+                            <select value={implStatusFilter} onChange={(e) => setImplStatusFilter(e.target.value)} className="rounded-md border px-2 py-1 text-sm bg-white">
+                              <option value="all">Tất cả</option>
+                              {implStatusOptions.map(s => <option key={s} value={s}>{translateStatus(s)}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="mt-3">
+                          {profileImplTasks.length === 0 ? (
+                            <div className="text-sm text-gray-500">Không có</div>
+                          ) : (
+                            <div className="overflow-x-auto mt-2">
+                              <table className="min-w-full text-sm table-auto">
+                                <thead>
+                                  <tr className="text-xs text-gray-600 bg-gray-50">
+                                    <th className="px-2 py-1 text-center">ID</th>
+                                    <th className="px-2 py-1 text-center">Tên</th>
+                                    <th className="px-2 py-1 text-center">PIC</th>
+                                    <th className="px-2 py-1 text-center">Trạng thái</th>
+                                    <th className="px-2 py-1 text-center">Ngày bắt đầu</th>
+                                    <th className="px-2 py-1 text-center">Ngày hoàn thành</th>
+                                    <th className="px-2 py-1 text-center">Phần cứng</th>
+                                    <th className="px-2 py-1 text-center">Số lượng</th>
+                                    <th className="px-2 py-1 text-center">Yêu cầu bổ sung</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {filteredImplTasks.map((t) => (
+                                    <tr key={t.id} className="border-t odd:bg-white even:bg-gray-50 hover:bg-gray-100">
+                                      <td className="px-2 py-2 align-middle text-center">{t.id}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{t.name ?? '—'}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{t.picDeploymentName ?? '—'}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{translateStatus(String(t.status ?? ''))}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{t.startDate ?? '—'}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{t.completionDate ?? '—'}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{hardwareMap[String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? '')] ?? String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? '—')}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{t.quantity ?? 0}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{getSupplementRequest(t as unknown as Record<string, unknown>) ?? '—'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Phát triển */}
+                    {(selectedTeam?.toLowerCase().includes('phát triển') || selectedTeam?.toLowerCase().includes('phattrien') || selectedTeam?.toLowerCase().includes('dev')) && (
+                      <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="text-sm font-medium text-gray-700">Phát triển ({profileDevTasks.length})</h3>
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs text-gray-500">Lọc trạng thái</label>
+                            <select value={devStatusFilter} onChange={(e) => setDevStatusFilter(e.target.value)} className="rounded-md border px-2 py-1 text-sm bg-white">
+                              <option value="all">Tất cả</option>
+                              {devStatusOptions.map(s => <option key={s} value={s}>{translateStatus(s)}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="mt-3">
+                          {profileDevTasks.length === 0 ? (
+                            <div className="text-sm text-gray-500">Không có</div>
+                          ) : (
+                            <div className="overflow-x-auto mt-2">
+                              <table className="min-w-full text-sm table-auto">
+                                <thead>
+                                  <tr className="text-xs text-gray-600 bg-gray-50">
+                                    <th className="px-2 py-1 text-center">ID</th>
+                                    <th className="px-2 py-1 text-center">Tên</th>
+                                    <th className="px-2 py-1 text-center">PIC</th>
+                                    <th className="px-2 py-1 text-center">Trạng thái</th>
+                                    <th className="px-2 py-1 text-center">Ngày bắt đầu</th>
+                                    <th className="px-2 py-1 text-center">Ngày kết thúc</th>
+                                    <th className="px-2 py-1 text-center">Phần cứng</th>
+                                    <th className="px-2 py-1 text-center">Số lượng</th>
+                                    <th className="px-2 py-1 text-center">Yêu cầu bổ sung</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {filteredDevTasks.map((t) => (
+                                    <tr key={t.id} className="border-t odd:bg-white even:bg-gray-50 hover:bg-gray-100">
+                                      <td className="px-2 py-2 align-middle text-center">{t.id}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{t.name ?? '—'}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{t.picDeploymentName ?? '—'}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{translateStatus(String(t.status ?? ''))}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{t.startDate ?? '—'}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{t.endDate ?? '—'}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{hardwareMap[String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? '')] ?? String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? '—')}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{t.quantity ?? 0}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Bảo trì - own card - chỉ hiển thị nếu team chứa "Bảo trì" */}
+                    {(selectedTeam?.toLowerCase().includes('bảo trì') || selectedTeam?.toLowerCase().includes('baotri')) && (
+                      <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="text-sm font-medium text-gray-700">Bảo trì ({profileMaintTasks.length})</h3>
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs text-gray-500">Lọc trạng thái</label>
+                            <select value={maintStatusFilter} onChange={(e) => setMaintStatusFilter(e.target.value)} className="rounded-md border px-2 py-1 text-sm bg-white">
+                              <option value="all">Tất cả</option>
+                              {maintStatusOptions.map(s => <option key={s} value={s}>{translateStatus(s)}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="mt-3">
+                          {profileMaintTasks.length === 0 ? (
+                            <div className="text-sm text-gray-500">Không có</div>
+                          ) : (
+                            <div className="overflow-x-auto mt-2">
+                              <table className="min-w-full text-sm table-auto">
+                                <thead>
+                                  <tr className="text-xs text-gray-600 bg-gray-50">
+                                    <th className="px-2 py-1 text-center">ID</th>
+                                    <th className="px-2 py-1 text-center">Tên</th>
+                                    <th className="px-2 py-1 text-center">PIC</th>
+                                    <th className="px-2 py-1 text-center">Trạng thái</th>
+                                    <th className="px-2 py-1 text-center">Ngày bắt đầu</th>
+                                    <th className="px-2 py-1 text-center">Ngày kết thúc</th>
+                                    <th className="px-2 py-1 text-center">Phần cứng</th>
+                                    <th className="px-2 py-1 text-center">Số lượng</th>
+                                    <th className="px-2 py-1 text-center">Yêu cầu bổ sung</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {filteredMaintTasks.map((t) => (
+                                    <tr key={t.id} className="border-t odd:bg-white even:bg-gray-50 hover:bg-gray-100">
+                                      <td className="px-2 py-2 align-middle text-center">{t.id}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{t.name ?? '—'}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{t.picDeploymentName ?? '—'}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{translateStatus(String(t.status ?? ''))}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{t.startDate ?? '—'}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{t.endDate ?? '—'}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{hardwareMap[String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? '')] ?? String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? '—')}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{t.quantity ?? 0}</td>
+                                      <td className="px-2 py-2 align-middle text-center">{getSupplementRequest(t as unknown as Record<string, unknown>) ?? '—'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Lịch sử hợp đồng - chỉ hiển thị nếu team chứa "Kinh doanh" hoặc "Business" */}
+                    {(isSalesSelected || selectedTeam?.toLowerCase().includes('kinh doanh') || selectedTeam?.toLowerCase().includes('kinhdoanh') || selectedTeam?.toLowerCase().includes('business')) && (
+                      <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+                        <h3 className="text-sm font-medium text-gray-700">Lịch sử hợp đồng</h3>
+                        {profileBusinesses.length === 0 ? (
+                          <div className="text-sm text-gray-500 mt-2">Không có hợp đồng</div>
+                        ) : (
+                          <div className="overflow-x-auto mt-2">
+                            <table className="min-w-full text-sm table-auto">
+                              <thead>
+                                <tr className="text-xs text-gray-600 bg-gray-50">
+                                  <th className="px-2 py-1 text-center">ID</th>
+                                  <th className="px-2 py-1 text-center">Tên dự án</th>
+                                  <th className="px-2 py-1 text-center">Doanh thu</th>
+                                  <th className="px-2 py-1 text-center">Hoa hồng của viện</th>
+                                  <th className="px-2 py-1 text-center">Trạng thái</th>
+                                  <th className="px-2 py-1 text-center">Ngày</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {displayedBusinesses.map((b) => (
+                                  <tr key={String(b['id'] ?? Math.random())} className="border-t odd:bg-white even:bg-gray-50 hover:bg-gray-100">
+                                    <td className="px-2 py-2 align-middle text-center">{String(b['id'] ?? '—')}</td>
+                                    <td className="px-2 py-2 align-middle text-left">{String(b['name'] ?? b['projectName'] ?? '—')}</td>
+                                    <td className="px-2 py-2 align-middle text-center">{new Intl.NumberFormat('vi-VN').format(Number(b['totalPrice'] ?? b['unitPrice'] ?? 0))} ₫</td>
+                                    <td className="px-2 py-2 align-middle text-center">{new Intl.NumberFormat('vi-VN').format(Number(b['commission'] ?? 0))} ₫</td>
+                                    <td className="px-2 py-2 align-middle text-center">{translateStatus(String(b['status'] ?? ''))}</td>
+                                    <td className="px-2 py-2 align-middle text-center">{String(b['startDate'] ?? b['completionDate'] ?? '—')}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
-
-            {hasLoadedProfile && (
-            <div className="mt-4 grid grid-cols-1 gap-4">
-              {/* Triển khai - own card - chỉ hiển thị nếu team chứa "Triển khai" */}
-              {(selectedTeam.toLowerCase().includes('triển khai') || selectedTeam.toLowerCase().includes('trienkhai')) && (
-              <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-medium text-gray-700">Triển khai ({profileImplTasks.length})</h3>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-gray-500">Lọc trạng thái</label>
-                    <select value={implStatusFilter} onChange={(e) => setImplStatusFilter(e.target.value)} className="rounded-md border px-2 py-1 text-sm bg-white">
-                      <option value="all">Tất cả</option>
-                      {implStatusOptions.map(s => <option key={s} value={s}>{translateStatus(s)}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div className="mt-3">
-                  {profileImplTasks.length === 0 ? (
-                    <div className="text-sm text-gray-500">Không có</div>
-                  ) : (
-                    <div className="overflow-x-auto mt-2">
-                      <table className="min-w-full text-sm table-auto">
-                        <thead>
-                          <tr className="text-xs text-gray-600 bg-gray-50">
-                            <th className="px-2 py-1 text-center">ID</th>
-                            <th className="px-2 py-1 text-center">Tên</th>
-                            <th className="px-2 py-1 text-center">PIC</th>
-                            <th className="px-2 py-1 text-center">Trạng thái</th>
-                            <th className="px-2 py-1 text-center">Ngày bắt đầu</th>
-                            <th className="px-2 py-1 text-center">Ngày hoàn thành</th>
-                            <th className="px-2 py-1 text-center">Phần cứng</th>
-                            <th className="px-2 py-1 text-center">Số lượng</th>
-                            <th className="px-2 py-1 text-center">Yêu cầu bổ sung</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredImplTasks.map((t) => (
-                            <tr key={t.id} className="border-t odd:bg-white even:bg-gray-50 hover:bg-gray-100">
-                              <td className="px-2 py-2 align-middle text-center">{t.id}</td>
-                              <td className="px-2 py-2 align-middle text-center">{t.name ?? '—'}</td>
-                              <td className="px-2 py-2 align-middle text-center">{t.picDeploymentName ?? '—'}</td>
-                              <td className="px-2 py-2 align-middle text-center">{translateStatus(String(t.status ?? ''))}</td>
-                              <td className="px-2 py-2 align-middle text-center">{t.startDate ?? '—'}</td>
-                              <td className="px-2 py-2 align-middle text-center">{t.completionDate ?? '—'}</td>
-                              <td className="px-2 py-2 align-middle text-center">{hardwareMap[String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? '')] ?? String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? '—')}</td>
-                              <td className="px-2 py-2 align-middle text-center">{t.quantity ?? 0}</td>
-                              <td className="px-2 py-2 align-middle text-center">{getSupplementRequest(t as unknown as Record<string, unknown>) ?? '—'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
               </div>
-              )}
-
-              {/* Phát triển - own card - chỉ hiển thị nếu team chứa "Phát triển" hoặc "Dev" */}
-              {(selectedTeam.toLowerCase().includes('phát triển') || selectedTeam.toLowerCase().includes('phattrien') || selectedTeam.toLowerCase().includes('dev')) && (
-              <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-medium text-gray-700">Phát triển ({profileDevTasks.length})</h3>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-gray-500">Lọc trạng thái</label>
-                    <select value={devStatusFilter} onChange={(e) => setDevStatusFilter(e.target.value)} className="rounded-md border px-2 py-1 text-sm bg-white">
-                      <option value="all">Tất cả</option>
-                      {devStatusOptions.map(s => <option key={s} value={s}>{translateStatus(s)}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div className="mt-3">
-                  {profileDevTasks.length === 0 ? (
-                    <div className="text-sm text-gray-500">Không có</div>
-                  ) : (
-                    <div className="overflow-x-auto mt-2">
-                      <table className="min-w-full text-sm table-auto">
-                        <thead>
-                          <tr className="text-xs text-gray-600 bg-gray-50">
-                            <th className="px-2 py-1 text-center">ID</th>
-                            <th className="px-2 py-1 text-center">Tên</th>
-                            <th className="px-2 py-1 text-center">PIC</th>
-                            <th className="px-2 py-1 text-center">Trạng thái</th>
-                            <th className="px-2 py-1 text-center">Ngày bắt đầu</th>
-                            <th className="px-2 py-1 text-center">Ngày kết thúc</th>
-                            <th className="px-2 py-1 text-center">Phần cứng</th>
-                            <th className="px-2 py-1 text-center">Số lượng</th>
-                            <th className="px-2 py-1 text-center">Yêu cầu bổ sung</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                            {filteredDevTasks.map((t) => (
-                            <tr key={t.id} className="border-t odd:bg-white even:bg-gray-50 hover:bg-gray-100">
-                              <td className="px-2 py-2 align-middle text-center">{t.id}</td>
-                              <td className="px-2 py-2 align-middle text-center">{t.name ?? '—'}</td>
-                              <td className="px-2 py-2 align-middle text-center">{t.picDeploymentName ?? '—'}</td>
-                              <td className="px-2 py-2 align-middle text-center">{translateStatus(String(t.status ?? ''))}</td>
-                              <td className="px-2 py-2 align-middle text-center">{t.startDate ?? '—'}</td>
-                              <td className="px-2 py-2 align-middle text-center">{t.endDate ?? '—'}</td>
-                              <td className="px-2 py-2 align-middle text-center">{hardwareMap[String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? '')] ?? String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? '—')}</td>
-                              <td className="px-2 py-2 align-middle text-center">{t.quantity ?? 0}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-              )}
-
-              {/* Bảo trì - own card - chỉ hiển thị nếu team chứa "Bảo trì" */}
-              {(selectedTeam.toLowerCase().includes('bảo trì') || selectedTeam.toLowerCase().includes('baotri')) && (
-              <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-medium text-gray-700">Bảo trì ({profileMaintTasks.length})</h3>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-gray-500">Lọc trạng thái</label>
-                    <select value={maintStatusFilter} onChange={(e) => setMaintStatusFilter(e.target.value)} className="rounded-md border px-2 py-1 text-sm bg-white">
-                      <option value="all">Tất cả</option>
-                      {maintStatusOptions.map(s => <option key={s} value={s}>{translateStatus(s)}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div className="mt-3">
-                  {profileMaintTasks.length === 0 ? (
-                    <div className="text-sm text-gray-500">Không có</div>
-                  ) : (
-                    <div className="overflow-x-auto mt-2">
-                      <table className="min-w-full text-sm table-auto">
-                        <thead>
-                          <tr className="text-xs text-gray-600 bg-gray-50">
-                            <th className="px-2 py-1 text-center">ID</th>
-                            <th className="px-2 py-1 text-center">Tên</th>
-                            <th className="px-2 py-1 text-center">PIC</th>
-                            <th className="px-2 py-1 text-center">Trạng thái</th>
-                            <th className="px-2 py-1 text-center">Ngày bắt đầu</th>
-                            <th className="px-2 py-1 text-center">Ngày kết thúc</th>
-                            <th className="px-2 py-1 text-center">Phần cứng</th>
-                            <th className="px-2 py-1 text-center">Số lượng</th>
-                            <th className="px-2 py-1 text-center">Yêu cầu bổ sung</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                            {filteredMaintTasks.map((t) => (
-                            <tr key={t.id} className="border-t odd:bg-white even:bg-gray-50 hover:bg-gray-100">
-                              <td className="px-2 py-2 align-middle text-center">{t.id}</td>
-                              <td className="px-2 py-2 align-middle text-center">{t.name ?? '—'}</td>
-                              <td className="px-2 py-2 align-middle text-center">{t.picDeploymentName ?? '—'}</td>
-                              <td className="px-2 py-2 align-middle text-center">{translateStatus(String(t.status ?? ''))}</td>
-                              <td className="px-2 py-2 align-middle text-center">{t.startDate ?? '—'}</td>
-                              <td className="px-2 py-2 align-middle text-center">{t.endDate ?? '—'}</td>
-                              <td className="px-2 py-2 align-middle text-center">{hardwareMap[String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? '')] ?? String((((t as unknown) as Record<string, unknown>)['hardwareId']) ?? '—')}</td>
-                              <td className="px-2 py-2 align-middle text-center">{t.quantity ?? 0}</td>
-                              <td className="px-2 py-2 align-middle text-center">{getSupplementRequest(t as unknown as Record<string, unknown>) ?? '—'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-              )}
-
-              {/* Lịch sử hợp đồng - chỉ hiển thị nếu team chứa "Kinh doanh" hoặc "Business" */}
-              {(selectedTeam.toLowerCase().includes('kinh doanh') || selectedTeam.toLowerCase().includes('kinhdoanh') || selectedTeam.toLowerCase().includes('business')) && (
-              <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
-                <h3 className="text-sm font-medium text-gray-700">Lịch sử hợp đồng</h3>
-                {profileBusinesses.length === 0 ? (
-                  <div className="text-sm text-gray-500 mt-2">Không có hợp đồng</div>
-                ) : (
-                  <div className="overflow-x-auto mt-2">
-                    <table className="min-w-full text-sm table-auto">
-                        <thead>
-                          <tr className="text-xs text-gray-600 bg-gray-50">
-                            <th className="px-2 py-1 text-center">ID</th>
-                            <th className="px-2 py-1 text-center">Tên dự án</th>
-                            <th className="px-2 py-1 text-center">Doanh thu</th>
-                            <th className="px-2 py-1 text-center">Hoa hồng</th>
-                              <th className="px-2 py-1 text-center">Trạng thái</th>
-                            <th className="px-2 py-1 text-center">Ngày</th>
-                          </tr>
-                      </thead>
-                      <tbody>
-            {displayedBusinesses.map((b) => (
-                            <tr key={String(b['id'] ?? Math.random())} className="border-t odd:bg-white even:bg-gray-50 hover:bg-gray-100">
-                            <td className="px-2 py-2 align-middle text-center">{String(b['id'] ?? '—')}</td>
-                            <td className="px-2 py-2 align-middle text-left">{String(b['name'] ?? b['projectName'] ?? '—')}</td>
-                            <td className="px-2 py-2 align-middle text-center">{new Intl.NumberFormat('vi-VN').format(Number(b['totalPrice'] ?? b['unitPrice'] ?? 0))} ₫</td>
-                            <td className="px-2 py-2 align-middle text-center">{new Intl.NumberFormat('vi-VN').format(Number(b['commission'] ?? 0))} ₫</td>
-                            <td className="px-2 py-2 align-middle text-center">{translateStatus(String(b['status'] ?? ''))}</td>
-                            <td className="px-2 py-2 align-middle text-center">{String(b['startDate'] ?? b['completionDate'] ?? '—')}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-              )}
-
-              {/* HIS & hardware summary intentionally removed from UI */}
-            </div>
-            )}
-            </>
             )}
           </div>
         </section>
@@ -2217,9 +2609,10 @@ export default function SuperAdminHome() {
                       plotOptions: { bar: { borderRadius: 6, columnWidth: '60%' } },
                       xaxis: { categories: hwRows.map(r => r.label) },
                       dataLabels: { enabled: false },
-                      tooltip: { y: { formatter: (v: number) => `${v.toLocaleString()} ₫` } },
+                      tooltip: { y: { formatter: (v: number) => `${v.toLocaleString()} VND` } },
                       colors: ['#465fff'],
                     }}
+                    
                     series={[{ name: 'Doanh thu', data: hwRows.map(r => Math.round(r.revenue)) }]}
                     type="bar"
                     height={320}
@@ -2239,7 +2632,7 @@ export default function SuperAdminHome() {
                       <tr className="text-left text-xs text-gray-500">
                         <th className="px-3 py-2">Sản phẩm</th>
                         <th className="px-3 py-2">Danh mục</th>
-                        <th className="px-3 py-2 text-right">Giá</th>
+                        <th className="px-3 py-2 text-right">Doanh thu</th>
                         <th className="px-3 py-2 text-right">Trạng thái</th>
                       </tr>
                     </thead>
@@ -2258,7 +2651,7 @@ export default function SuperAdminHome() {
                               )}
                               <div>
                                 <div className="font-medium text-gray-900">{r.label}</div>
-                                <div className="text-xs text-gray-500">{r.quantity} Biến thể</div>
+                                <div className="text-xs text-gray-500">{r.quantity} Cái</div>
                               </div>
                             </div>
                           </td>

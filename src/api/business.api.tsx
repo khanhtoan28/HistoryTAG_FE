@@ -90,7 +90,16 @@ export async function updateBusiness(id: number, payload: Record<string, unknown
 
 export async function getBusinesses(params = {}) {
   const base = getBase();
-  const res = await api.get(`${base}/business`, { params });
+  const query = new URLSearchParams();
+  Object.entries(params as Record<string, unknown>).forEach(([key, value]) => {
+    if (value === undefined || value === null) return;
+    if (typeof value === 'string' && value.trim() === '') return;
+    query.append(key, String(value));
+  });
+  const qs = query.toString();
+  const url = qs ? `${base}/business?${qs}` : `${base}/business`;
+  console.debug('[Business API] GET', url);
+  const res = await api.get(url);
   return res.data;
 }
 

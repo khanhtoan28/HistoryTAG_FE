@@ -6,25 +6,13 @@ import {
 } from "../api/notification.api";
 import { getAuthToken } from "../api/client";
 
-// Optional STOMP support
-let StompClient: any | null = null;
-let SockJSClient: any | null = null;
-// try {
-//   // dynamically require so tests/other environments without the deps won't crash
-//   // eslint-disable-next-line @typescript-eslint/no-var-requires
-//   StompClient = require("@stomp/stompjs").Client;
-//   // eslint-disable-next-line @typescript-eslint/no-var-requires
-//   SockJSClient = require("sockjs-client");
-// } catch {
-//   StompClient = null;
-//   SockJSClient = null;
-// }
-
 type Notification = any;
 
 type NotificationContextValue = {
   notifications: Notification[];
   unreadCount: number;
+  // the latest realtime notification (transient) for UI to show an in-app toast
+  liveNotification?: Notification | null;
   loadNotifications: (limit?: number) => Promise<void>;
   markAsRead: (id: number) => Promise<void>;
 };
@@ -40,14 +28,35 @@ export const useNotification = (): NotificationContextValue => {
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const MAX_NOTIFICATIONS = 200;
 
   const esRef = useRef<EventSource | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
+  const clampList = (list: Notification[]) => {
+    if (!Array.isArray(list)) return [];
+    return list.slice(0, MAX_NOTIFICATIONS);
+  };
+
+  const upsertNotification = (incoming: Notification): boolean => {
+    if (!incoming) return false;
+    let inserted = false;
+    setNotifications((prev) => {
+      const safePrev = Array.isArray(prev) ? prev : [];
+      const filtered = safePrev.filter((n) => !n || n.id !== incoming.id);
+      inserted = filtered.length === safePrev.length;
+      const next = [incoming, ...filtered];
+      return clampList(next);
+    });
+    return inserted;
+  };
+
   const loadNotifications = async (limit = 50) => {
     try {
-      const list = await apiGetNotifications(limit);
-      setNotifications(list || []);
+      const safeLimit = Math.min(limit, MAX_NOTIFICATIONS);
+      const list = await apiGetNotifications(safeLimit);
+      console.debug("[NotificationContext] loadNotifications got:", Array.isArray(list) ? list.length : typeof list);
+      setNotifications(clampList(list || []));
     } catch {
       // ignore
     }
@@ -56,6 +65,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const loadUnread = async () => {
     try {
       const c = await apiGetUnreadCount();
+      console.debug("[NotificationContext] loadUnread got:", c);
       setUnreadCount(c || 0);
     } catch {
       // ignore
@@ -68,11 +78,55 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     } catch {
       // ignore server error but still update UI optimistically
     }
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
-    setUnreadCount((c) => Math.max(0, c - 1));
+    setNotifications((prev) => {
+      const nxt = prev.map((n) => (n.id === id ? { ...n, read: true } : n));
+      console.debug("[NotificationContext] markAsRead updated notifications (id):", id);
+      return nxt;
+    });
+    setUnreadCount((c) => {
+      const newC = Math.max(0, c - 1);
+      console.debug("[NotificationContext] markAsRead unreadCount:", c, "->", newC);
+      return newC;
+    });
+  };
+
+  // transient in-app notification state and native browser notification helper
+  const [liveNotification, setLiveNotification] = useState<Notification | null>(null);
+  const showTransientNotification = (n: Notification) => {
+    try {
+      setLiveNotification(n);
+      // clear after 6s
+      window.setTimeout(() => setLiveNotification(null), 6000);
+    } catch {
+      // ignore
+    }
+
+    try {
+      if (typeof window !== "undefined" && "Notification" in window) {
+        if (Notification.permission === "granted") {
+          new Notification(n.title || "Thông báo", {
+            body: n.message || n.title || "Bạn có thông báo mới",
+            icon: n.actorAvatar || undefined,
+          });
+        } else if (Notification.permission !== "denied") {
+          Notification.requestPermission().then((perm) => {
+            if (perm === "granted") {
+              new Notification(n.title || "Thông báo", {
+                body: n.message || n.title || "Bạn có thông báo mới",
+                icon: n.actorAvatar || undefined,
+              });
+            }
+          }).catch(() => {});
+        }
+      }
+    } catch {
+      // ignore notification errors
+    }
   };
 
   useEffect(() => {
+    console.log("[NotificationContext] useEffect started");
+    
     // initial load
     loadUnread();
     loadNotifications(20);
@@ -84,15 +138,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const wsUrl = import.meta.env.VITE_NOTIFICATION_WS_URL as string | undefined;
     const token = getAuthToken();
 
+    console.log("[NotificationContext] STOMP env", { stompUrl, stompDest, hasToken: !!token });
+
     let reconnectAttempts = 0;
+    let stompClientInstance: any = null;
 
     const attemptReconnect = () => {
       reconnectAttempts += 1;
       const wait = Math.min(30000, 1000 * Math.pow(2, Math.min(reconnectAttempts, 6)));
       window.setTimeout(() => {
-        if (esRef.current || wsRef.current) return;
+        if (esRef.current || wsRef.current || stompClientInstance) return;
         if (sseUrl) trySSE();
         if (wsUrl) tryWS();
+        if (stompUrl) tryStomp();
       }, wait);
     };
 
@@ -156,79 +214,253 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
     };
 
-    const tryStomp = () => {
-      if (!stompUrl || !StompClient) return false;
+    const tryStomp = async () => {
+      console.log("[NotificationContext] tryStomp called, stompUrl:", stompUrl);
+      if (!stompUrl) {
+          console.log("[NotificationContext] No stompUrl, skipping STOMP");
+          return false;
+      }
       try {
-        const url = stompUrl as string;
-        // create client; use SockJS if available
-        const client = StompClient
-          ? new StompClient({
-              webSocketFactory: SockJSClient ? () => new SockJSClient(url) : undefined,
-              connectHeaders: token ? { Authorization: `Bearer ${token}` } : {},
-              reconnectDelay: 5000,
-              debug: () => {},
-            })
-          : null;
+        // Polyfill global for sockjs-client
+        if (typeof window !== "undefined" && typeof (window as any).global === "undefined") {
+          (window as any).global = window;
+        }
+        
+        console.log("[NotificationContext] Starting STOMP dynamic import...");
+        // Dynamic import STOMP and SockJS
+        let stompMod, sockjsMod;
+        try {
+          [stompMod, sockjsMod] = await Promise.all([
+            import("@stomp/stompjs"),
+            import("sockjs-client"),
+          ]);
+          console.log("[NotificationContext] STOMP modules loaded successfully");
+        } catch (importErr) {
+          console.error("[NotificationContext] Failed to import STOMP modules:", importErr);
+          return false;
+        }
+        
+        const StompClientClass = stompMod.Client;
+        const SockJSClass = sockjsMod.default;
+        console.log("[NotificationContext] Creating STOMP client...");
 
-        if (!client) return false;
+        // Add token to URL for SockJS handshake (backend reads from query param)
+        const urlWithToken = token 
+          ? `${stompUrl}${stompUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`
+          : stompUrl;
+        let client;
+        try {
+          client = new StompClientClass({
+            webSocketFactory: () => {
+              console.log("[NotificationContext] Creating SockJS connection to:", urlWithToken);
+              return new SockJSClass(urlWithToken);
+            },
+            connectHeaders: token ? { Authorization: `Bearer ${token}` } : {},
+            reconnectDelay: 5000,
+            debug: (str) => {
+              console.debug("[NotificationContext] STOMP debug:", str);
+            },
+          });
+        } catch (clientErr) {
+          console.error("[NotificationContext] Failed to create STOMP client:", clientErr);
+          return false;
+        }
 
         client.onConnect = () => {
+          console.log("[NotificationContext] STOMP connected successfully!");
           try {
             client.subscribe(stompDest, (msg: any) => {
+              console.log("[NotificationContext] Received STOMP message:", msg);
               if (msg.body) {
                 try {
-                  const payload = JSON.parse(msg.body);
-                  handlePayload(payload as any);
-                } catch {
-                  // ignore
+                  const parsed = JSON.parse(msg.body);
+                  // Create a plain object to avoid any STOMP Frame prototype issues
+                  const payload = JSON.parse(JSON.stringify(parsed));
+                  console.log("[NotificationContext] Parsed payload (plain object):", payload);
+                  console.log("[NotificationContext] payload.type direct access:", payload.type);
+                  handlePayload(payload);
+                } catch (parseErr) {
+                  console.error("[NotificationContext] Failed to parse message:", parseErr, "Raw body:", msg.body);
                 }
+              } else {
+                console.warn("[NotificationContext] Message has no body:", msg);
               }
             });
-          } catch {
-            // ignore
+            console.log("[NotificationContext] Subscribed to:", stompDest);
+          } catch (subErr) {
+            console.error("[NotificationContext] Failed to subscribe:", subErr);
           }
         };
 
         client.onStompError = (frame: any) => {
-          console.debug("STOMP error", frame);
+          console.error("[NotificationContext] STOMP error:", frame);
+          stompClientInstance = null;
+          attemptReconnect();
         };
 
+        client.onWebSocketClose = () => {
+          console.log("[NotificationContext] STOMP closed");
+          stompClientInstance = null;
+          attemptReconnect();
+        };
+
+        stompClientInstance = client;
+        console.log("[NotificationContext] Activating STOMP client...");
         client.activate();
         return true;
-      } catch {
+      } catch (err) {
+        console.error("[NotificationContext] STOMP init failed:", err);
         return false;
       }
     };
 
-    const handlePayload = (payload: any) => {
-      if (!payload) return;
-      if (payload.type === "notification") {
-        setNotifications((prev) => [payload.data, ...prev]);
-        setUnreadCount((c) => c + 1);
-      } else if (payload.type === "unread-count") {
-        setUnreadCount(payload.data || 0);
-      } else if (payload.type === "refresh") {
-        loadNotifications(50);
-        loadUnread();
-      } else if (payload.id) {
-        setNotifications((prev) => [payload, ...prev]);
-        setUnreadCount((c) => c + 1);
+    const handlePayload = (rawPayload: any) => {
+      console.log("[NotificationContext] handlePayload processing:", rawPayload);
+      if (!rawPayload) return;
+
+      // If rawPayload is a JSON string, parse it first
+      let payloadObj: any = rawPayload;
+      if (typeof rawPayload === "string") {
+        try {
+          payloadObj = JSON.parse(rawPayload);
+        } catch (e) {
+          console.warn("[NotificationContext] rawPayload is string but failed to parse:", e);
+        }
       }
+
+      console.debug("[NotificationContext] payload keys:", payloadObj && typeof payloadObj === "object" ? Object.keys(payloadObj) : null);
+
+      // Recursive helper to try parsing JSON strings
+      const tryParseIfString = (v: any) => {
+        if (typeof v !== "string") return v;
+        const s = v.trim();
+        if (!(s.startsWith("{") || s.startsWith("["))) return v;
+        try {
+          return JSON.parse(v);
+        } catch (e) {
+          try {
+            // sometimes backslashes are double-escaped, try replace
+            const cleaned = v.replace(/\\"/g, '\"');
+            return JSON.parse(cleaned);
+          } catch (e2) {
+            console.warn("[NotificationContext] tryParseIfString failed:", e2);
+            return v;
+          }
+        }
+      };
+
+      // Normalize: try parse payloadObj.data if it's a string
+      let finalData: any = payloadObj;
+      try {
+        if (payloadObj && payloadObj.data !== undefined && payloadObj.data !== null) {
+          const parsed = tryParseIfString(payloadObj.data);
+          if (parsed && typeof parsed === "object") finalData = parsed;
+        }
+      } catch (e) {
+        console.warn("[NotificationContext] error normalizing payload.data:", e);
+      }
+
+      // If finalData still contains a data string, try parse recursively
+      if (finalData && finalData.data && typeof finalData.data === "string") {
+        finalData.data = tryParseIfString(finalData.data);
+      }
+
+      // Detect type robustly
+      let detectedType: any = undefined;
+      if (payloadObj && typeof payloadObj === "object") {
+        if (typeof payloadObj.type !== "undefined") detectedType = payloadObj.type;
+      }
+      if (!detectedType && finalData && typeof finalData === "object" && typeof finalData.type !== "undefined") detectedType = finalData.type;
+      if (!detectedType && payloadObj && typeof payloadObj === "object") {
+        const keys = Object.keys(payloadObj || {});
+        const k = keys.find((x) => x && x.trim && x.trim().toLowerCase() === "type");
+        if (k) detectedType = payloadObj[k];
+      }
+      if (!detectedType && finalData && typeof finalData === "object") {
+        const keys = Object.keys(finalData || {});
+        const k = keys.find((x) => x && x.trim && x.trim().toLowerCase() === "type");
+        if (k) detectedType = finalData[k];
+      }
+
+      console.log("[NotificationContext] Detected Type:", detectedType, "finalData keys:", finalData && typeof finalData === "object" ? Object.keys(finalData) : null);
+
+      const looksLikeNotification = (obj: any) => {
+        if (!obj || typeof obj !== "object") return false;
+        return !!(obj.id || obj.title || obj.message || obj.link || obj.actorName || obj.actorAvatar);
+      };
+
+      const isNotification = detectedType === "notification" || looksLikeNotification(finalData) || looksLikeNotification(payloadObj);
+
+      if (isNotification) {
+        const notificationContent = (finalData && (finalData.title || finalData.message)) ? finalData : payloadObj;
+        upsertNotification(notificationContent);
+        try { showTransientNotification(notificationContent); } catch {}
+        console.log("[NotificationContext] Realtime notification received and applied");
+        setUnreadCount((c) => {
+          const newCount = c + 1;
+          console.log("[NotificationContext] Badge count:", c, "->", newCount);
+          return newCount;
+        });
+        return;
+      }
+
+      if (detectedType === "unread-count") {
+        const count = (finalData && (finalData.count ?? finalData)) || 0;
+        setUnreadCount(Number(count) || 0);
+        return;
+      }
+
+      if (detectedType === "refresh") {
+        loadNotifications(MAX_NOTIFICATIONS);
+        loadUnread();
+        return;
+      }
+
+      if (payloadObj && payloadObj.id) {
+        if (upsertNotification(payloadObj)) {
+          try { showTransientNotification(payloadObj); } catch {}
+          setUnreadCount((c) => c + 1);
+        }
+        return;
+      }
+
+      console.warn("[NotificationContext] Unknown payload structure after normalization:", payloadObj);
     };
 
     // prefer STOMP -> SSE -> WS -> polling
     let connected = false;
-    if (stompUrl) connected = tryStomp();
-    if (!connected && sseUrl) connected = trySSE();
-    if (!connected && wsUrl) connected = tryWS();
-
     let pollInterval: number | null = null;
-    if (!connected) {
-      loadUnread();
-      pollInterval = window.setInterval(() => {
+
+    const setupConnections = async () => {
+      console.log("[NotificationContext] setupConnections started");
+      if (stompUrl) {
+        console.log("[NotificationContext] Attempting STOMP connection...");
+        connected = await tryStomp();
+        console.log("[NotificationContext] STOMP connection result:", connected);
+      } else {
+        console.log("[NotificationContext] No stompUrl, skipping STOMP");
+      }
+      if (!connected && sseUrl) {
+        console.log("[NotificationContext] Attempting SSE connection...");
+        connected = trySSE();
+      }
+      if (!connected && wsUrl) {
+        console.log("[NotificationContext] Attempting WS connection...");
+        connected = tryWS();
+      }
+
+      if (!connected) {
+        console.log("[NotificationContext] No realtime connection, falling back to polling");
         loadUnread();
-      }, 10000);
-    }
+        pollInterval = window.setInterval(() => {
+          loadUnread();
+        }, 10000);
+      } else {
+        console.log("[NotificationContext] Realtime connection established!");
+      }
+    };
+
+    setupConnections();
 
     return () => {
       if (esRef.current) {
@@ -239,6 +471,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         try { wsRef.current.close(); } catch { /* ignore */ }
         wsRef.current = null;
       }
+      if (stompClientInstance) {
+        try { stompClientInstance.deactivate(); } catch { /* ignore */ }
+        stompClientInstance = null;
+      }
       if (pollInterval) window.clearInterval(pollInterval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -247,6 +483,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const value: NotificationContextValue = {
     notifications,
     unreadCount,
+    liveNotification,
     loadNotifications,
     markAsRead,
   };
