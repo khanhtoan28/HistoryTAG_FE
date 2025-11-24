@@ -1331,6 +1331,8 @@ const ImplementationTasksPage: React.FC = () => {
         overdueCount?: number;
         fromDeployment?: boolean;
         acceptedByMaintenance?: boolean;
+        picDeploymentIds?: Array<string | number>;
+        picDeploymentNames?: string[];
     }>>([]);
     const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
     const [hospitalPage, setHospitalPage] = useState<number>(0);
@@ -1338,10 +1340,44 @@ const ImplementationTasksPage: React.FC = () => {
     const [selectedHospital, setSelectedHospital] = useState<string | null>(null);
     const [hospitalSearch, setHospitalSearch] = useState<string>("");
     const [hospitalStatusFilter, setHospitalStatusFilter] = useState<string>("");
+    const [hospitalPicFilter, setHospitalPicFilter] = useState<string[]>([]);
+    const [picFilterOpen, setPicFilterOpen] = useState<boolean>(false);
+    const [picFilterQuery, setPicFilterQuery] = useState<string>("");
+    const [picOptions, setPicOptions] = useState<Array<{ id: string; label: string }>>([]);
+    const picFilterDropdownRef = useRef<HTMLDivElement | null>(null);
     const [hospitalSortBy, setHospitalSortBy] = useState<string>("label");
     const [hospitalSortDir, setHospitalSortDir] = useState<string>("asc");
     const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
     const [bulkCompleting, setBulkCompleting] = useState(false);
+
+    // Click outside to close PIC filter dropdown
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (picFilterDropdownRef.current && !picFilterDropdownRef.current.contains(event.target as Node)) {
+                setPicFilterOpen(false);
+            }
+        }
+        if (picFilterOpen) {
+            document.addEventListener("mousedown", handleClickOutside);
+        } else {
+            document.removeEventListener("mousedown", handleClickOutside);
+        }
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [picFilterOpen]);
+
+    // Reset PIC search when closing dropdown
+    useEffect(() => {
+        if (!picFilterOpen) {
+            setPicFilterQuery("");
+        }
+    }, [picFilterOpen]);
+
+    // Filtered PIC options based on search query
+    const filteredPicOptions = useMemo(() => {
+        const q = picFilterQuery.trim().toLowerCase();
+        if (!q) return picOptions;
+        return picOptions.filter((opt) => opt.label.toLowerCase().includes(q));
+    }, [picOptions, picFilterQuery]);
 
     const currentUser = useMemo<UserInfo>(() => readStored<UserInfo>("user"), []);
     const roles = useMemo<string[]>(() => {
@@ -1665,6 +1701,24 @@ const ImplementationTasksPage: React.FC = () => {
         };
     }, [fetchPendingTasks, pendingOpen]);
 
+    const togglePicFilterValue = (value: string, checked: boolean) => {
+        setHospitalPicFilter((prev) => {
+            if (checked) {
+                if (prev.includes(value)) return prev;
+                return [...prev, value];
+            }
+            return prev.filter((id) => id !== value);
+        });
+        setHospitalPage(0);
+    };
+
+    const clearPicFilter = () => {
+        setHospitalPicFilter([]);
+        setHospitalPage(0);
+        setPicFilterOpen(false);
+        setPicFilterQuery("");
+    };
+
     async function fetchHospitalOptions(q: string) {
         try {
             const res = await fetch(`${API_ROOT}/api/v1/admin/hospitals/search?name=${encodeURIComponent(q || "")}`, { headers: authHeaders() });
@@ -1709,14 +1763,28 @@ const ImplementationTasksPage: React.FC = () => {
             const tasksPayload = await tasksRes.json();
             const tasks: ImplementationTaskResponseDTO[] = Array.isArray(tasksPayload?.content) ? tasksPayload.content : Array.isArray(tasksPayload) ? tasksPayload : [];
 
-            // Aggregate tasks by hospital để đếm taskCount và acceptedCount (COMPLETED)
-            const tasksByHospital = new Map<number, { taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number }>();
+            // Aggregate tasks by hospital để đếm taskCount, acceptedCount, và collect PIC info
+            const tasksByHospital = new Map<number, { taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number; picIds: Set<string>; picNames: Set<string> }>();
+            const picOptionMap = new Map<string, { id: string; label: string }>();
+            
             for (const task of tasks) {
                 const hospitalId = typeof task.hospitalId === "number" ? task.hospitalId : task.hospitalId != null ? Number(task.hospitalId) : null;
                 if (!hospitalId) continue;
                 
-                const current = tasksByHospital.get(hospitalId) || { taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0 };
+                const current = tasksByHospital.get(hospitalId) || { taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0, picIds: new Set<string>(), picNames: new Set<string>() };
                 current.taskCount += 1;
+                
+                // Collect PIC info
+                const picIdValue = task.picDeploymentId != null ? String(task.picDeploymentId) : null;
+                const picLabel = (task.picDeploymentName || "").toString().trim();
+                if (picLabel) {
+                    if (picIdValue) {
+                        current.picIds.add(picIdValue);
+                        picOptionMap.set(picIdValue, { id: picIdValue, label: picLabel });
+                    }
+                    current.picNames.add(picLabel);
+                }
+                
                 const taskStatus = normalizeStatus(task.status);
                 if (taskStatus === 'COMPLETED') {
                     current.acceptedCount += 1;
@@ -1741,7 +1809,7 @@ const ImplementationTasksPage: React.FC = () => {
             // Merge summary với task counts
             const normalized = summaries.map((item: any, idx: number) => {
                 const hospitalId = Number(item?.hospitalId ?? -(idx + 1));
-                const taskStats = tasksByHospital.get(hospitalId) || { taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0 };
+                const taskStats = tasksByHospital.get(hospitalId) || { taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0, picIds: new Set<string>(), picNames: new Set<string>() };
                 return {
                     id: hospitalId,
                     label: String(item?.hospitalName ?? "—"),
@@ -1752,6 +1820,8 @@ const ImplementationTasksPage: React.FC = () => {
                     overdueCount: taskStats.overdueCount,
                     fromDeployment: Boolean(item?.transferredFromDeployment),
                     acceptedByMaintenance: Boolean(item?.acceptedByMaintenance),
+                    picDeploymentIds: Array.from(taskStats.picIds),
+                    picDeploymentNames: Array.from(taskStats.picNames),
                 };
             });
 
@@ -1774,10 +1844,14 @@ const ImplementationTasksPage: React.FC = () => {
                             overdueCount: taskStats.overdueCount,
                             fromDeployment: false,
                             acceptedByMaintenance: false,
+                            picDeploymentIds: Array.from(taskStats.picIds),
+                            picDeploymentNames: Array.from(taskStats.picNames),
                         });
                     }
                 }
             }
+
+            setPicOptions(Array.from(picOptionMap.values()));
 
             setHospitalsWithTasks((prev) => {
                 const prevMap = new Map(prev.map((entry) => [entry.id, entry]));
@@ -1812,6 +1886,15 @@ const ImplementationTasksPage: React.FC = () => {
         else if (hospitalStatusFilter === 'incomplete') list = list.filter(h => (h.acceptedCount || 0) < (h.taskCount || 0));
         else if (hospitalStatusFilter === 'unaccepted') list = list.filter(h => !h.acceptedByMaintenance);
 
+        // Filter by PIC
+        if (hospitalPicFilter.length > 0) {
+            const selected = new Set(hospitalPicFilter);
+            list = list.filter((h) =>
+                (h.picDeploymentIds || []).some((id) => selected.has(String(id))) ||
+                (h.picDeploymentNames || []).some((name) => selected.has(name))
+            );
+        }
+
         const dir = hospitalSortDir === 'desc' ? -1 : 1;
         list = [...list].sort((a, b) => {
             if (hospitalSortBy === 'taskCount') return ((a.taskCount || 0) - (b.taskCount || 0)) * dir;
@@ -1825,7 +1908,7 @@ const ImplementationTasksPage: React.FC = () => {
             return a.label.localeCompare(b.label) * dir;
         });
         return list;
-    }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalSortBy, hospitalSortDir]);
+    }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir]);
 
     useEffect(() => {
         if (!showHospitalList && selectedHospital) {
@@ -2022,6 +2105,64 @@ const ImplementationTasksPage: React.FC = () => {
                                             <option value="unaccepted">Chưa có nghiệm thu</option>
                                         </select>
                                     </div>
+                                    
+                                    {/* PIC Filter Dropdown - second row */}
+                                    <div className="flex flex-wrap items-center gap-3 mt-3">
+                                        <div ref={picFilterDropdownRef} className="relative">
+                                            <button
+                                                type="button"
+                                                onClick={() => setPicFilterOpen(!picFilterOpen)}
+                                                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[180px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 flex items-center justify-between gap-2"
+                                            >
+                                                <span>
+                                                    {hospitalPicFilter.length === 0 
+                                                        ? "Lọc người phụ trách" 
+                                                        : `${hospitalPicFilter.length} người được chọn`}
+                                                </span>
+                                                <svg className={`w-4 h-4 transition-transform ${picFilterOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </button>
+                                            {picFilterOpen && (
+                                                <div className="absolute z-50 mt-2 w-[280px] max-h-[360px] overflow-auto rounded-xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-lg p-3">
+                                                    <input
+                                                        type="text"
+                                                        className="w-full rounded-lg border px-3 py-2 text-sm mb-2 border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                                                        placeholder="Tìm người phụ trách"
+                                                        value={picFilterQuery}
+                                                        onChange={(e) => setPicFilterQuery(e.target.value)}
+                                                    />
+                                                    <div className="space-y-1 max-h-[220px] overflow-y-auto">
+                                                        {filteredPicOptions.length === 0 ? (
+                                                            <div className="text-sm text-gray-500 dark:text-gray-400 py-2 text-center">Không tìm thấy</div>
+                                                        ) : (
+                                                            filteredPicOptions.map((opt) => (
+                                                                <label key={opt.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 rounded cursor-pointer">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={hospitalPicFilter.includes(opt.id)}
+                                                                        onChange={(e) => togglePicFilterValue(opt.id, e.target.checked)}
+                                                                        className="rounded"
+                                                                    />
+                                                                    <span className="text-sm">{opt.label}</span>
+                                                                </label>
+                                                            ))
+                                                        )}
+                                                    </div>
+                                                    {hospitalPicFilter.length > 0 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={clearPicFilter}
+                                                            className="mt-2 w-full rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-3 py-2 text-sm hover:bg-gray-200 dark:hover:bg-gray-700"
+                                                        >
+                                                            Bỏ lọc
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    
                                     <div className="mt-3 text-sm text-gray-600 dark:text-gray-300">
                                         <span>Tổng: <span className="font-semibold text-gray-800 dark:text-gray-100">{loadingHospitals ? '...' : filteredHospitals.length}</span> viện</span>
                                     </div>

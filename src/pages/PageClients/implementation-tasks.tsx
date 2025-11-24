@@ -1117,7 +1117,9 @@ function FilterToolbar({
                         ? picFilter.picOptions.find((opt) => opt.id === picFilter.hospitalPicFilter[0])?.label ?? "Đã chọn 1"
                         : `Đã chọn ${picFilter.hospitalPicFilter.length} người phụ trách`}
                   </span>
-                  <span className="text-xs text-gray-400">{picFilter.picFilterOpen ? "▲" : "▼"}</span>
+                  <svg className={`w-4 h-4 transition-transform ${picFilter.picFilterOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
                 </button>
                 {picFilter.picFilterOpen && (
                   <div className="absolute z-30 mt-2 w-60 rounded-xl border border-gray-200 bg-white shadow-xl p-3 space-y-3 dark:border-gray-700 dark:bg-gray-800">
