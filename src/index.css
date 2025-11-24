@@ -283,6 +283,14 @@ layer(base);
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none; /* Firefox */
 }
+html {
+  scrollbar-gutter: stable;
+}
+
+/* fallback cho trình duyệt chưa hỗ trợ */
+body {
+  overflow-y: scroll;
+}
 @utility custom-scrollbar {
   &::-webkit-scrollbar {
     @apply size-1.5;
