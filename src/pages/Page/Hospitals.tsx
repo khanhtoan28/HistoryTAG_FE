@@ -66,7 +66,8 @@ type ITUserOption = {
 };
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
-const BASE = `${API_BASE}/api/v1/auth/hospitals`;
+const BASE = `${API_BASE}/api/v1/auth/hospitals`; // GET, Search endpoints
+const SUPERADMIN_BASE = `${API_BASE}/api/v1/superadmin/hospitals`; // CREATE, UPDATE, DELETE
 
 const MIN_LOADING_MS = 800;
 
@@ -297,7 +298,7 @@ function DetailModal({
             />
 
             <Info
-              label="Người phụ trách (IT)"
+              label="Người phụ trách chính (IT)"
               icon={<FiUser />}
               value={
                 item.personInChargeName ? (
@@ -386,10 +387,15 @@ export default function HospitalsPage() {
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
-  // Filters (client-side)
+  // Filters (server-side)
   const [qName, setQName] = useState("");
   const [qProvince, setQProvince] = useState("");
   const [qStatus, setQStatus] = useState("");
+  
+  // Reset về trang đầu khi filter thay đổi
+  useEffect(() => {
+    setPage(0);
+  }, [qName, qProvince, qStatus]);
 
   const [priorityOptions] = useState<EnumOption[]>(PRIORITY_FALLBACK);
   const [statusOptions] = useState<EnumOption[]>(STATUS_FALLBACK);
@@ -831,6 +837,12 @@ export default function HospitalsPage() {
       url.searchParams.set("size", String(size));
       url.searchParams.set("sortBy", sortBy);
       url.searchParams.set("sortDir", sortDir);
+      
+      // Thêm filter params
+      if (qName.trim()) url.searchParams.set("name", qName.trim());
+      if (qProvince.trim()) url.searchParams.set("province", qProvince.trim());
+      if (qStatus.trim()) url.searchParams.set("status", qStatus.trim());
+      
       const res = await fetch(url.toString(), { headers: { ...authHeader() } });
       if (!res.ok) throw new Error(`GET failed ${res.status}`);
       const data = await res.json();
@@ -863,10 +875,10 @@ export default function HospitalsPage() {
 
   useEffect(() => {
     fetchList();
-  }, [page, size, sortBy, sortDir]);
+  }, [page, size, sortBy, sortDir, qName, qProvince, qStatus]);
 
-  // ✅ Bỏ client-side filter, dùng server pagination
-  const filtered = useMemo(() => items, [items]);
+  // Server đã filter rồi, dùng trực tiếp items
+  const filtered = items;
 
   function onCreate() {
     setEditing(null);
@@ -932,7 +944,7 @@ export default function HospitalsPage() {
     if (!confirm("Xóa bệnh viện này?")) return;
     setLoading(true);
     try {
-      const res = await fetch(`${BASE}/${id}`, {
+      const res = await fetch(`${SUPERADMIN_BASE}/${id}`, {
         method: "DELETE",
         headers: { ...authHeader() },
       });
@@ -987,7 +999,7 @@ export default function HospitalsPage() {
   };
 
       const method = isEditing ? "PUT" : "POST";
-      const url = isEditing ? `${BASE}/${editing!.id}` : BASE;
+      const url = isEditing ? `${SUPERADMIN_BASE}/${editing!.id}` : SUPERADMIN_BASE;
 
       const res = await fetch(url, {
         method,
@@ -1145,7 +1157,7 @@ export default function HospitalsPage() {
                           <div className="truncate">{h.address || "—"}</div>
                           <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-700">
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-400">Người phụ trách:</span>
+                              <span className="text-xs text-gray-400">Người phụ trách chính:</span>
                               <span className="font-medium text-gray-800">{h.personInChargeName || "—"}</span>
                             </div>
                             {h.contactNumber && (
@@ -1362,7 +1374,7 @@ export default function HospitalsPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <RemoteSelectPersonInCharge
-                      label="Người phụ trách (IT)"
+                      label="Người phụ trách chính (IT)"
                       placeholder="Chọn người phụ trách..."
                       fetchOptions={searchItUsers}
                       value={personInChargeOpt}
