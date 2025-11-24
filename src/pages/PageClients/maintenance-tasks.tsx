@@ -1790,9 +1790,11 @@ const ImplementationTasksPage: React.FC = () => {
                         acceptedByMaintenance: entry.acceptedByMaintenance || prevEntry?.acceptedByMaintenance || false,
                     };
                 });
-                // ✅ Chỉ hiển thị bệnh viện đã được tiếp nhận (acceptedByMaintenance = true)
-                // Bệnh viện chưa tiếp nhận sẽ chỉ hiện ở "Bệnh viện chờ tiếp nhận" (pending-hospitals)
-                return merged.filter((h) => h.acceptedByMaintenance === true);
+                // Hiển thị bệnh viện nếu:
+                // 1. Đã được tiếp nhận (acceptedByMaintenance = true), hoặc
+                // 2. Có task nhưng không phải từ Triển khai (fromDeployment = false)
+                // Bệnh viện từ Triển khai nhưng chưa tiếp nhận sẽ chỉ hiện ở "Viện chờ tiếp nhận"
+                return merged.filter((h) => h.acceptedByMaintenance === true || (h.fromDeployment === false && h.taskCount > 0));
             });
         } catch (e: any) {
             setError(e.message || "Lỗi tải danh sách bệnh viện");
@@ -2100,9 +2102,9 @@ const ImplementationTasksPage: React.FC = () => {
                                                                 </div>
                                                             </td>
                                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.subLabel || "—"}</td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm align-top">
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm align-center">
                                                                 <div className="flex flex-col items-start gap-1">
-                                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task</span>
+                                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task</span>
                                                                     {(hospital.nearDueCount ?? 0) > 0 && (
                                                                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Sắp đến hạn: {hospital.nearDueCount}</span>
                                                                     )}

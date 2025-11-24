@@ -1007,42 +1007,42 @@ const BusinessPage: React.FC = () => {
 
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-extrabold mb-0">Quản lý Kinh doanh</h1>
-        <button
-          type="button"
-          onClick={() => {
-            if (!canManage) { setToast({ message: 'Bạn không có quyền', type: 'error' }); return; }
-            setEditingId(null);
-            setName('');
-            setOriginalStatus('CARING');
-            setSelectedHardwareId(null);
-            setSelectedHardwarePrice(null);
-            setUnitPrice('');
-            setSelectedHospitalId(null);
-            setSelectedHospitalPhone(null);
-            setSelectedPicId(null);
-            setPicDropdownOpen(false);
-            setPicSearchInput('');
-            setQuantity(1);
-            setStatusValue('CARING');
-            setStartDateValue(nowDateTimeLocal());
-            setCompletionDateValue('');
-            setCommission('');
-      setCommissionDisplay('');
-            setFieldErrors({});
-            setPendingSubmit(null);
-            setStatusConfirmOpen(false);
-            setHospitalSearchInput('');
-            setHospitalDropdownOpen(false);
-            setBankName('');
-            setBankContactPerson('');
-            setShowModal(true);
-          }}
-          disabled={!canManage}
-          className={`rounded-xl border px-6 py-3 text-sm font-medium text-white transition-all flex items-center gap-2 ${canManage ? 'border-blue-500 bg-blue-500 hover:bg-blue-600 hover:shadow-md' : 'border-gray-200 bg-gray-300 cursor-not-allowed'}`}
-        >
-          <PlusIcon style={{ width: 18, height: 18, fill: 'white' }} />
-          <span>Thêm mới</span>
-        </button>
+        {canManage && (
+          <button
+            type="button"
+            onClick={() => {
+              setEditingId(null);
+              setName('');
+              setOriginalStatus('CARING');
+              setSelectedHardwareId(null);
+              setSelectedHardwarePrice(null);
+              setUnitPrice('');
+              setSelectedHospitalId(null);
+              setSelectedHospitalPhone(null);
+              setSelectedPicId(null);
+              setPicDropdownOpen(false);
+              setPicSearchInput('');
+              setQuantity(1);
+              setStatusValue('CARING');
+              setStartDateValue(nowDateTimeLocal());
+              setCompletionDateValue('');
+              setCommission('');
+        setCommissionDisplay('');
+              setFieldErrors({});
+              setPendingSubmit(null);
+              setStatusConfirmOpen(false);
+              setHospitalSearchInput('');
+              setHospitalDropdownOpen(false);
+              setBankName('');
+              setBankContactPerson('');
+              setShowModal(true);
+            }}
+            className="rounded-xl border px-6 py-3 text-sm font-medium text-white transition-all flex items-center gap-2 border-blue-500 bg-blue-500 hover:bg-blue-600 hover:shadow-md"
+          >
+            <PlusIcon style={{ width: 18, height: 18, fill: 'white' }} />
+            <span>Thêm mới</span>
+          </button>
+        )}
       </div>
       <ComponentCard title="Tìm kiếm & Lọc">
         <div className="flex flex-wrap items-center gap-3">
@@ -1642,14 +1642,18 @@ const BusinessPage: React.FC = () => {
                         <EyeIcon style={{ width: 16, height: 16 }} />
                         <span className="text-sm">Xem</span>
                       </button>
-                      <button onClick={() => { if (!canManage) { setToast({ message: 'Bạn không có quyền', type: 'error' }); return; } if (it.status === 'CONTRACTED' && !isSuperAdmin) { setToast({ message: 'Không thể sửa dự án đã ký hợp đồng', type: 'error' }); return; } openEditModal(it.id); }} disabled={!canManage || (it.status === 'CONTRACTED' && !isSuperAdmin)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${( !canManage || (it.status === 'CONTRACTED' && !isSuperAdmin) ) ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed' : 'border-yellow-100 text-orange-600 bg-yellow-50 hover:bg-yellow-100'}`}>
-                        <PencilIcon style={{ width: 16, height: 16 }} />
-                        <span className="text-sm">Sửa</span>
-                      </button>
-                      <button onClick={() => { if (!canManage) { setToast({ message: 'Bạn không có quyền', type: 'error' }); return; } if (it.status === 'CONTRACTED' && !isSuperAdmin) { setToast({ message: 'Không thể xóa dự án đã ký hợp đồng', type: 'error' }); return; } handleDelete(it.id); }} disabled={!canManage || deletingId === it.id || (it.status === 'CONTRACTED' && !isSuperAdmin)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${( !canManage || deletingId === it.id || (it.status === 'CONTRACTED' && !isSuperAdmin) ) ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed' : 'border-red-100 text-red-600 bg-red-50 hover:bg-red-100'}`}>
-                        <TrashBinIcon style={{ width: 16, height: 16 }} />
-                        <span className="text-sm">Xóa</span>
-                      </button>
+                      {canManage && !(it.status === 'CONTRACTED' && !isSuperAdmin) && (
+                        <button onClick={() => { if (it.status === 'CONTRACTED' && !isSuperAdmin) { setToast({ message: 'Không thể sửa dự án đã ký hợp đồng', type: 'error' }); return; } openEditModal(it.id); }} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-yellow-100 text-orange-600 bg-yellow-50 hover:bg-yellow-100">
+                          <PencilIcon style={{ width: 16, height: 16 }} />
+                          <span className="text-sm">Sửa</span>
+                        </button>
+                      )}
+                      {canManage && !(it.status === 'CONTRACTED' && !isSuperAdmin) && (
+                        <button onClick={() => { if (it.status === 'CONTRACTED' && !isSuperAdmin) { setToast({ message: 'Không thể xóa dự án đã ký hợp đồng', type: 'error' }); return; } handleDelete(it.id); }} disabled={deletingId === it.id} className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${deletingId === it.id ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed' : 'border-red-100 text-red-600 bg-red-50 hover:bg-red-100'}`}>
+                          <TrashBinIcon style={{ width: 16, height: 16 }} />
+                          <span className="text-sm">Xóa</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
