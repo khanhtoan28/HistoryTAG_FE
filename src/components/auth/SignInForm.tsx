@@ -30,11 +30,9 @@ export default function SignInForm() {
       (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setForm((s) => ({ ...s, [k]: value }));
-        // validate realtime từng field
         setErrors((prev) => ({ ...prev, [k]: validateField(k, value) }));
       };
 
-  // --- VALIDATION ---
   const validateField = (
     k: "username" | "password",
     value: string
@@ -59,7 +57,6 @@ export default function SignInForm() {
     const passwordErr = validateField("password", form.password);
     const nextErrors: FormErrors = { username: usernameErr, password: passwordErr };
     setErrors(nextErrors);
-    // có lỗi nào thì không cho submit
     return !usernameErr && !passwordErr;
   };
 
@@ -67,12 +64,10 @@ export default function SignInForm() {
     e.preventDefault();
     setErr(null);
 
-    // chặn submit khi form chưa hợp lệ
     if (!validateForm()) return;
 
     setLoading(true);
     try {
-      // 🔹 Clear all old user data AND notifications first to prevent cache conflicts
       clearNotifications();
       localStorage.removeItem("access_token");
       localStorage.removeItem("token");
@@ -94,14 +89,12 @@ export default function SignInForm() {
         password: form.password,
       });
 
-      // 🔹 Store new user data
       const storage = remember ? localStorage : sessionStorage;
       storage.setItem("access_token", data.accessToken);
       storage.setItem("username", data.username);
       storage.setItem("roles", JSON.stringify(normalizeRoles(data.roles)));
       if (data.userId != null) storage.setItem("userId", String(data.userId));
 
-      // 🔹 Fetch and persist full user profile BEFORE redirect
       api.defaults.headers.common.Authorization = `Bearer ${data.accessToken}`;
       
       try {
@@ -109,18 +102,14 @@ export default function SignInForm() {
           const profile = await getUserAccount(Number(data.userId));
           storage.setItem("user", JSON.stringify(profile));
           console.log("User profile fetched and stored:", profile.team, profile.roles);
-          
-          // 🔹 Load new user's notifications
           await loadNotifications(20);
         }
       } catch (err) {
         console.warn("Could not fetch user profile after sign-in:", err);
-        // Continue anyway - some pages will fetch on demand
       }
 
       toast.success("Đăng nhập thành công!");
       
-      // Redirect based on user role
       const roles = normalizeRoles(data.roles);
       const isSuperAdmin = roles.some((role: string) => role === "SUPERADMIN" || role === "SUPER_ADMIN" || role === "Super Admin");
       
@@ -130,7 +119,6 @@ export default function SignInForm() {
         navigate("/home");
       }
     } catch (err: unknown) {
-      // lỗi từ BE (sai tài khoản/mật khẩu, v.v…)
       const errorMsg = pickErrMsg(err);
       setErr(errorMsg);
       toast.error(errorMsg || "Đăng nhập thất bại!");
@@ -139,41 +127,31 @@ export default function SignInForm() {
     }
   };
 
-  const FIELD_CLASS =
-    "w-full h-12 px-5 text-[16px] font-medium text-gray-900 placeholder-gray-500 rounded-lg border";
-
-  const errorStyle =
-    "border-red-500 ring-2 ring-red-400/30 focus:ring-red-400/50";
-  const normalStyle =
-    "border-gray-200 focus:ring-2 focus:ring-blue-400/40 focus:border-blue-400";
-
   return (
-    <div className="auth-bg flex flex-col w-full text-white min-h-screen justify-center items-center py-12">
-      <div className="w-full max-w-[720px] px-6">
-        <div className="mb-6 text-center sm:text-left flex items-center gap-4">
-          {/* Animated flame/logo */}
-          <div className="flex-none">
-            <div className="flame-logo" aria-hidden />
-          </div>
-          <div>
-            <h1 className="mb-2 font-semibold text-white text-[28px] sm:text-3xl">
-              Đăng nhập
-            </h1>
-            <p className="text-sm text-blue-100/80">Đăng nhập để tiếp tục trải nghiệm</p>
-          </div>
-        </div>
+    <div className="w-full max-w-md mx-auto">
+      {/* Header */}
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold text-white mb-2">
+          Đăng nhập
+        </h1>
+        <p className="text-blue-100 text-sm">
+          Đăng nhập để tiếp tục trải nghiệm
+        </p>
+      </div>
 
-        <div className="auth-card mx-auto bg-white/6 backdrop-blur-md border border-white/10 rounded-2xl p-8 shadow-xl">
-          <form onSubmit={onSubmit} noValidate className="space-y-5">
+      {/* Form Card */}
+      <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-8 shadow-2xl">
+        <form onSubmit={onSubmit} noValidate className="space-y-6">
           {err && (
-            <div className="text-sm text-red-600 bg-red-100/80 border border-red-300 rounded p-2">
+            <div className="bg-red-500/20 border border-red-400/50 text-red-100 text-sm rounded-lg p-3">
               {err}
             </div>
           )}
 
-          <div className="space-y-2 field-row group">
-            <Label className="text-white">
-              Tên đăng nhập <span className="text-red-500">*</span>
+          {/* Username Field */}
+          <div className="space-y-2">
+            <Label className="text-white/90 text-sm font-medium">
+              Tên đăng nhập <span className="text-red-400">*</span>
             </Label>
             <Input
               placeholder="Nhập tên đăng nhập"
@@ -188,18 +166,23 @@ export default function SignInForm() {
               autoComplete="username"
               aria-invalid={!!errors.username}
               aria-describedby="username-error"
-              className={`${FIELD_CLASS} ${errors.username ? errorStyle : normalStyle}`}
+              className={`w-full h-12 px-4 text-gray-900 bg-white/95 border rounded-lg transition-all ${
+                errors.username
+                  ? "border-red-400 ring-2 ring-red-400/30"
+                  : "border-white/30 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/30"
+              }`}
             />
             {errors.username && (
-              <p id="username-error" className="text-sm text-red-400">
+              <p id="username-error" className="text-sm text-red-300">
                 {errors.username}
               </p>
             )}
           </div>
 
-          <div className="space-y-2 field-row group">
-            <Label className="text-white">
-              Mật khẩu <span className="text-red-500">*</span>
+          {/* Password Field */}
+          <div className="space-y-2">
+            <Label className="text-white/90 text-sm font-medium">
+              Mật khẩu <span className="text-red-400">*</span>
             </Label>
             <div className="relative">
               <Input
@@ -210,79 +193,71 @@ export default function SignInForm() {
                 onBlur={() => {
                   setErrors((prev: FormErrors) => ({
                     ...prev,
-                    // ✅ set đúng vào errors.password (trước đây gán nhầm username)
                     password: validateField("password", form.password),
                   }));
                 }}
                 autoComplete="current-password"
                 aria-invalid={!!errors.password}
                 aria-describedby="password-error"
-                className={`${FIELD_CLASS} ${errors.password ? errorStyle : normalStyle}`}
+                className={`w-full h-12 px-4 pr-12 text-gray-900 bg-white/95 border rounded-lg transition-all ${
+                  errors.password
+                    ? "border-red-400 ring-2 ring-red-400/30"
+                    : "border-white/30 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/30"
+                }`}
               />
-
-              {/* 👇 icon đổi sang màu xám để nhìn rõ */}
-              <span
+              <button
+                type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute z-30 -translate-y-1/2 cursor-pointer right-4 top-1/2"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
                 aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
               >
                 {showPassword ? (
-                  <EyeIcon className="fill-gray-300 size-5" />
+                  <EyeIcon className="fill-gray-500 size-5" />
                 ) : (
-                  <EyeCloseIcon className="fill-gray-300 size-5" />
+                  <EyeCloseIcon className="fill-gray-500 size-5" />
                 )}
-              </span>
+              </button>
             </div>
             {errors.password && (
-              <p id="password-error" className="text-sm text-red-400">
+              <p id="password-error" className="text-sm text-red-300">
                 {errors.password}
               </p>
             )}
           </div>
 
-          <div className="flex items-center justify-between field-row group">
-            <label className="flex items-center gap-3 cursor-pointer select-none">
+          {/* Remember & Forgot */}
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-2 cursor-pointer">
               <Checkbox
                 checked={remember}
                 onChange={(e: React.ChangeEvent<HTMLInputElement> | boolean) => {
                   if (typeof e === "boolean") setRemember(e);
                   else setRemember(e.target.checked);
                 }}
-                className="w-5 h-5"
+                className="w-4 h-4"
               />
-              <span className="block font-normal text-white text-[14px]">
+              <span className="text-sm text-white/80">
                 Ghi nhớ đăng nhập
               </span>
             </label>
 
             <Link
               to="/forgot-password"
-              className="text-sm text-blue-300 hover:text-blue-200 underline"
+              className="text-sm text-blue-300 hover:text-blue-200 transition-colors"
             >
               Quên mật khẩu?
             </Link>
           </div>
 
-          <div>
-            <Button
-              className="neon-btn w-full py-3 text-base font-semibold rounded-lg disabled:opacity-50"
-              disabled={loading}
-              type="submit"
-            >
-              {loading ? "Đang đăng nhập..." : "Đăng nhập"}
-            </Button>
-          </div>
-          </form>
-  </div>
-
-        {/* <div className="mt-5 text-center">
-          <p className="text-sm font-normal text-center text-white/90">
-            Chưa có tài khoản?{' '}
-            <Link to="/signup" className="underline text-blue-200 hover:text-white">
-              Đăng ký
-            </Link>
-          </p>
-        </div> */}
+          {/* Submit Button */}
+          <Button
+            type="submit"
+            disabled={loading}
+            className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? "Đang đăng nhập..." : "Đăng nhập"}
+          </Button>
+        </form>
       </div>
     </div>
   );

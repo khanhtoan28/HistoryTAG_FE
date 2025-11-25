@@ -873,9 +873,9 @@ const ImplementSuperTaskPage: React.FC = () => {
     const remainingCount = taskCount - acceptedCount;
     const hiddenPendingCount = hospital.hiddenPendingCount ?? 0;
     
-    // Validate: chỉ cho phép chuyển khi tất cả task đã hoàn thành
+    // Validate: chỉ cho phép chuyển khi tất cả công việc đã hoàn thành
     if (taskCount === 0) {
-      toastError(`Bệnh viện ${hospital.label} chưa có task nào.`);
+      toastError(`Bệnh viện ${hospital.label} chưa có công việc nào.`);
       return;
     }
     
@@ -891,12 +891,12 @@ const ImplementSuperTaskPage: React.FC = () => {
       const visibleRemaining = Math.max(0, remainingCount - hiddenPendingCount);
       const detail =
         hiddenPendingCount > 0
-          ? `${hiddenPendingCount} task từ Phòng KD`
+          ? `${hiddenPendingCount} công việc từ Phòng KD`
           : visibleRemaining > 0
-          ? `${visibleRemaining} task triển khai`
-          : `${remainingCount} task`;
+          ? `${visibleRemaining} công việc triển khai`
+          : `${remainingCount} công việc`;
       toastError(
-        `Không thể chuyển! Bạn vẫn còn ${detail} chưa hoàn thành (${acceptedCount}/${taskCount} task đã hoàn thành).`,
+        `Không thể chuyển! Bạn vẫn còn ${detail} chưa hoàn thành (${acceptedCount}/${taskCount} công việc đã hoàn thành).`,
         { duration: 5000 }
       );
       return;
@@ -949,7 +949,7 @@ const ImplementSuperTaskPage: React.FC = () => {
             const outstanding = await fetchOutstandingTasksForHospital(hospital.label);
             if (outstanding.length > 0) {
               toastError(
-                `Không thể chuyển: vẫn còn ${outstanding.length} task chưa hoàn thành (${outstanding
+                `Không thể chuyển: vẫn còn ${outstanding.length} công việc chưa hoàn thành (${outstanding
                   .slice(0, 5)
                   .map((task) => `#${task.id ?? ""} ${task.name ?? ""}`.trim())
                   .join(", ")}${outstanding.length > 5 ? ", ..." : ""}).`
@@ -1408,7 +1408,7 @@ const ImplementSuperTaskPage: React.FC = () => {
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">
-          {showHospitalList ? "Danh sách bệnh viện có task" : `Danh sách công việc triển khai - ${selectedHospital}`}
+          {showHospitalList ? "Danh sách bệnh viện có công việc" : `Danh sách công việc triển khai - ${selectedHospital}`}
         </h1>
         <div className="flex items-center gap-3">
           {showHospitalList && null}
@@ -1447,9 +1447,9 @@ const ImplementSuperTaskPage: React.FC = () => {
                       onChange={(e) => { setHospitalStatusFilter(e.target.value); setHospitalPage(0); }}
                     >
                       <option value="" disabled hidden>— Trạng thái —</option>
-                      <option value="hasCompleted">Có task hoàn thành</option>
+                      <option value="hasCompleted">Có công việc hoàn thành</option>
                       <option value="notCompleted">Chưa hoàn thành hết</option>
-                      <option value="noneCompleted">Chưa có task hoàn thành</option>
+                      <option value="noneCompleted">Chưa có công việc hoàn thành</option>
                       <option value="transferred">Đã chuyển sang bảo trì</option>
                     </select>
                     <button
@@ -1555,7 +1555,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                   onClick={() => { setViewOnly(false); setEditing(null); setModalOpen(true); }}
                   type="button"
                 >
-                  + Thêm task mới
+                  + Thêm công việc mới
                 </button>
                 <button
                   className="relative inline-flex items-center gap-2 rounded-full border border-gray-300 text-gray-800 px-4 py-2 text-sm bg-white hover:bg-gray-50"
@@ -1680,7 +1680,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                                       handleHospitalClick(hospital.label);
                                     }}
                                     className="p-2 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition"
-                                    title="Xem task"
+                                    title="Xem công việc"
                                   >
                                     <AiOutlineEye className="text-lg" />
                                   </button>

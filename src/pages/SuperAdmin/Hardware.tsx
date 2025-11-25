@@ -241,24 +241,24 @@ export default function HardwarePage() {
 
       <div className="space-y-10">
         <ComponentCard title="Tìm kiếm & Thao tác">
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-6">
-            <input className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" placeholder="Tìm theo tên" value={search} onChange={(e) => setSearch(e.target.value)} />
-            <select className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+          <div className="flex flex-wrap items-center gap-3">
+            <input className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px] border-gray-300 bg-white" placeholder="Tìm theo tên" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 bg-white min-w-[180px]" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
               <option value="">Tất cả loại</option>
               {Array.from(new Set(items.map((i) => i.type).filter(Boolean))).map((t) => (
                 <option key={t as string} value={t as string}>{t as string}</option>
               ))}
             </select>
-            <span className="hidden md:block col-span-2" />
-            <select className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-              {["id", "name", "type"].map((k) => (
-                <option key={k} value={k}>Sắp xếp theo: {k}</option>
-              ))}
-            </select>
-            <select className="w-full rounded-xl border border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" value={sortDir} onChange={(e) => setSortDir(e.target.value as any)}>
-              <option value="asc">Tăng dần</option>
-              <option value="desc">Giảm dần</option>
-            </select>
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setFilterType("");
+              }}
+              className="rounded-full border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition shadow-sm"
+            >
+              Bỏ lọc
+            </button>
           </div>
           <div className="mt-6 flex items-center justify-between">
             <p className="text-sm text-gray-600">Tổng: <span className="font-semibold text-gray-900">{totalElements}</span></p>

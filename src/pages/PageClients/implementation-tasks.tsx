@@ -2338,7 +2338,7 @@ const ImplementationTasksPage: React.FC = () => {
   return (
     <div className="p-6 xl:p-10">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-3xl font-extrabold">{showHospitalList ? "Danh sách bệnh viện có task triển khai" : `Danh sách công việc triển khai - ${selectedHospital}`}</h1>
+        <h1 className="text-3xl font-extrabold">{showHospitalList ? "Danh sách bệnh viện có công việc triển khai" : `Danh sách công việc triển khai - ${selectedHospital}`}</h1>
         {!showHospitalList && (
           <button onClick={() => { setSelectedHospital(null); setShowHospitalList(true); setSearchTerm(""); setStatusFilter(""); setPage(0); setData([]); fetchHospitalsWithTasks(); }} className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-medium">← Quay lại danh sách bệnh viện</button>
         )}
@@ -2435,7 +2435,7 @@ const ImplementationTasksPage: React.FC = () => {
                                       setShowHospitalList(false);
                                       setPage(0);
                                     }}
-                                    className="p-2 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition" title="Xem task"
+                                    className="p-2 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition" title="Xem công việc"
                                   >
                                     <AiOutlineEye className="text-lg" />
                                   </button>

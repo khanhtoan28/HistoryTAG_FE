@@ -470,10 +470,11 @@ body {
 /* --- Custom styles for a flashy login (auth) --- */
 /* background gradient + subtle moving particles */
 .auth-bg {
-  /* layered radial accents + deep base gradient */
-  background: radial-gradient(1200px 400px at 10% 10%, rgba(255,120,80,0.12), transparent 8%),
-              radial-gradient(800px 300px at 90% 80%, rgba(120,80,255,0.12), transparent 12%),
-              linear-gradient(120deg,#0f172a 0%, #0b1220 50%, #071022 100%);
+  /* layered radial accents + vibrant colorful gradient */
+  background: radial-gradient(1200px 400px at 10% 10%, rgba(255,120,80,0.18), transparent 8%),
+              radial-gradient(800px 300px at 90% 80%, rgba(120,80,255,0.18), transparent 12%),
+              radial-gradient(600px 300px at 50% 50%, rgba(255,193,7,0.15), transparent 15%),
+              linear-gradient(135deg, #4c1d95 0%, #6d28d9 25%, #9333ea 50%, #c026d3 75%, #db2777 100%);
   position: relative;
   overflow: hidden;
   /* subtle animated gradient shift for liveliness */
@@ -482,10 +483,10 @@ body {
 }
 
 .auth-card {
-  /* glass effect */
-  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
-  box-shadow: 0 10px 30px rgba(2,6,23,0.6), 0 2px 6px rgba(0,0,0,0.4);
-  border: 1px solid rgba(255,255,255,0.06);
+  /* warm glass effect with colorful tint */
+  background: linear-gradient(180deg, rgba(255,247,237,0.95), rgba(255,237,213,0.92));
+  box-shadow: 0 20px 60px rgba(139,92,246,0.3), 0 8px 24px rgba(251,146,60,0.2), 0 2px 8px rgba(0,0,0,0.1);
+  border: 2px solid rgba(251,146,60,0.3);
 }
 
 .auth-card {
@@ -549,11 +550,11 @@ body {
   pointer-events: none;
 }
 
-/* focus styles for inputs to look neon */
+/* focus styles for inputs to look warm */
 .auth-card input:focus {
   outline: none;
-  box-shadow: 0 0 0 4px rgba(122,90,248,0.12);
-  border-color: rgba(122,90,248,0.6);
+  box-shadow: 0 0 0 4px rgba(251,146,60,0.2);
+  border-color: rgba(249,115,22,0.7);
 }
 
 /* Field row hover/focus styles - affects label + input when hovering or focus-within */
@@ -562,7 +563,7 @@ body {
   border-radius: 10px;
 }
 .field-row:hover {
-  background: linear-gradient(180deg, rgba(63,182,255,0.03), rgba(10,40,70,0.02));
+  background: linear-gradient(180deg, rgba(251,146,60,0.08), rgba(249,115,22,0.05));
 }
 .field-row:focus-within {
   transform: translateY(-2px);
@@ -572,23 +573,23 @@ body {
 }
 .field-row:hover label,
 .field-row:focus-within label {
-  color: #dfe9ff;
+  color: #9a3412;
 }
 .field-row input {
   transition: box-shadow .18s ease, border-color .18s ease, background .18s ease;
 }
 .field-row:hover input,
 .field-row:focus-within input {
-  box-shadow: 0 8px 30px rgba(63,182,255,0.08), 0 4px 12px rgba(0,0,0,0.12) inset;
-  border-color: rgba(63,182,255,0.9);
-  background: rgba(255,255,255,0.96);
+  box-shadow: 0 8px 30px rgba(251,146,60,0.15), 0 4px 12px rgba(0,0,0,0.08) inset;
+  border-color: rgba(249,115,22,0.8);
+  background: rgba(255,255,255,0.98);
 }
 
 /* keyboard focus visible for accessibility */
 .field-row input:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 5px rgba(63,182,255,0.18);
-  border-color: rgba(63,182,255,0.95);
+  box-shadow: 0 0 0 5px rgba(251,146,60,0.25);
+  border-color: rgba(249,115,22,0.95);
 }
 
 /* smaller helper: subtle floating particles using pseudo elements */
@@ -603,8 +604,8 @@ body {
   opacity: 0.09;
   pointer-events: none;
 }
-.auth-bg::before { left: 6%; top: 10%; background: radial-gradient(circle,#ff7a59,#ff2d95); }
-.auth-bg::after { right: 6%; bottom: 8%; background: radial-gradient(circle,#7a5af8,#3fb6ff); }
+.auth-bg::before { left: 6%; top: 10%; background: radial-gradient(circle,#f59e0b,#f97316,#ec4899); }
+.auth-bg::after { right: 6%; bottom: 8%; background: radial-gradient(circle,#a855f7,#8b5cf6,#6366f1); }
 
 @media (max-width: 640px) {
   .flame-logo { width: 48px; height: 48px }
@@ -642,9 +643,9 @@ body {
   position: absolute;
   inset: -12px;
   border-radius: 20px;
-  background: linear-gradient(90deg,#ff416c, #ff8a00, #7a5af8 80%);
-  filter: blur(28px) saturate(140%);
-  opacity: 0.22;
+  background: linear-gradient(135deg, #f59e0b, #f97316, #ec4899, #a855f7);
+  filter: blur(32px) saturate(150%);
+  opacity: 0.35;
   z-index: -1;
 }
 
@@ -669,8 +670,8 @@ body {
 }
 
 /* ensure inputs and labels pick up the brighter accent for readability */
-.auth-card label, .auth-card .text-white { color: #e6eefc; }
-.auth-card input { background: rgba(255,255,255,0.94); }
+.auth-card label { color: #78350f; }
+.auth-card input { background: rgba(255,255,255,0.98); }
 
 /* Success overlay (used on ResetPasswordForm) */
 .success-overlay {

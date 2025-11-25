@@ -334,7 +334,7 @@ const DevSuperTaskPage: React.FC = () => {
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Dev Tasks (SuperAdmin)</h1>
+        <h1 className="text-2xl font-semibold">Công việc Dev (SuperAdmin)</h1>
       </div>
 
       {error && <div className="text-red-600">{error}</div>}

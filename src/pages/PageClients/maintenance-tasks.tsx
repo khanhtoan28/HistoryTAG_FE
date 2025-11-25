@@ -2193,7 +2193,7 @@ const ImplementationTasksPage: React.FC = () => {
                                                     onClick={() => { setEditing(null); setModalOpen(true); }}
                                                     type="button"
                                                 >
-                                                    + Thêm task mới
+                                                    + Thêm công việc mới
                                                 </button>
                                                 <button
                                                     className="relative inline-flex items-center gap-2 rounded-full border border-gray-300 text-gray-800 px-4 py-2 text-sm bg-white hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:bg-gray-900"
@@ -2272,7 +2272,7 @@ const ImplementationTasksPage: React.FC = () => {
                                                                     </div>
                                                                 </td>
                                                                 <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                                    <button onClick={(e) => { e.stopPropagation(); setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }} className="p-6 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition" title="Xem task"><AiOutlineEye className="text-lg" /></button>
+                                                                    <button onClick={(e) => { e.stopPropagation(); setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }} className="p-6 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition" title="Xem công việc"><AiOutlineEye className="text-lg" /></button>
                                                                 </td>
                                                             </tr>
                                                         ))}
