@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import TaskCardNew from "../SuperAdmin/TaskCardNew";
 import { AiOutlineEye } from "react-icons/ai";
 import { toast } from "react-hot-toast";
-import { FaHospital } from "react-icons/fa";
 import { FiUser, FiMapPin, FiLink, FiClock, FiTag, FiPhone } from "react-icons/fi";
 import { isBusinessContractTaskName as isBusinessContractTask } from "../../utils/businessContract";
 
@@ -901,7 +900,7 @@ function DetailModal({
         <div className="p-6 space-y-6 text-sm text-gray-800 dark:text-gray-200">
           {/* Grid Info */}
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <Info icon={<FaHospital />} label="Tên" value={item.name} />
+            <Info icon={<FiMapPin />} label="Tên" value={item.name} />
             <Info icon={<FiMapPin />} label="Bệnh viện" value={item.hospitalName} />
             <Info icon={<FiUser />} label="Người phụ trách" value={item.picDeploymentName} />
             <Info icon={<FiUser />} label="Tiếp nhận bởi" value={item.receivedByName || "—"} />
@@ -999,6 +998,18 @@ function Info({
 
 type FilterToolbarOption = { value: string; label: string };
 type FilterToolbarTotals = { label: string; value: React.ReactNode };
+type FilterToolbarPicFilterProps = {
+  picFilterOpen: boolean;
+  setPicFilterOpen: (open: boolean) => void;
+  picFilterQuery: string;
+  setPicFilterQuery: (query: string) => void;
+  picOptions: Array<{ id: string; label: string }>;
+  filteredPicOptions: Array<{ id: string; label: string }>;
+  hospitalPicFilter: string[];
+  togglePicFilterValue: (value: string, checked: boolean) => void;
+  clearPicFilter: () => void;
+  picFilterDropdownRef: React.RefObject<HTMLDivElement | null>;
+};
 
 function FilterToolbar({
   mode,
@@ -1013,6 +1024,7 @@ function FilterToolbar({
   datalistId,
   datalistOptions,
   actions,
+  picFilter,
 }: {
   mode: "tasks" | "hospitals";
   searchValue: string;
@@ -1026,65 +1038,166 @@ function FilterToolbar({
   datalistId?: string;
   datalistOptions?: Array<{ id: number | string; label: string }>;
   actions?: React.ReactNode;
+  picFilter?: FilterToolbarPicFilterProps;
 }) {
-  return (
-    <div className="mb-6 rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="min-w-[220px] flex-1">
-          <h3 className="text-lg font-semibold mb-3">
-            {mode === "hospitals" ? "Tìm kiếm & Lọc" : "Tìm kiếm & Thao tác"}
-          </h3>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-[220px]">
-              <input
-                type="text"
-                className="w-full rounded-full border px-4 py-3 text-sm shadow-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
-                placeholder={placeholder}
-                value={searchValue}
-                onChange={(e) => onSearchChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && onSearchSubmit) {
-                    onSearchSubmit();
-                  }
-                }}
-                list={datalistId}
-              />
-              {datalistId && datalistOptions && datalistOptions.length > 0 && (
-                <datalist id={datalistId}>
-                  {datalistOptions.map((opt) => (
-                    <option key={opt.id ?? opt.label} value={opt.label} />
-                  ))}
-                </datalist>
-              )}
-            </div>
+  const clearStatusFilter = () => {
+    if (onStatusChange) {
+      onStatusChange("");
+    }
+  };
 
-            {statusOptions && statusOptions.length > 0 && onStatusChange && (
-              <select
-                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[180px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
-                value={statusValue ?? ""}
-                onChange={(e) => onStatusChange(e.target.value)}
-              >
-                {statusOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
+  return (
+    <div className="rounded-2xl border bg-white border-gray-200 p-5 shadow-sm dark:bg-gray-900 dark:border-gray-800">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Lọc</h3>
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              type="text"
+              className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px] border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition dark:border-gray-700 dark:bg-gray-900"
+              placeholder={placeholder}
+              value={searchValue}
+              onChange={(e) => onSearchChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && onSearchSubmit) {
+                  onSearchSubmit();
+                }
+              }}
+              list={datalistId}
+            />
+            {datalistId && datalistOptions && datalistOptions.length > 0 && (
+              <datalist id={datalistId}>
+                {datalistOptions.map((opt) => (
+                  <option key={opt.id ?? opt.label} value={opt.label} />
                 ))}
-              </select>
+              </datalist>
+            )}
+            
+            {statusOptions && statusOptions.length > 0 && onStatusChange && (
+              <div className="flex items-center gap-2 w-[280px]">
+                <select
+                  className="w-[200px] rounded-full border px-4 py-3 text-sm shadow-sm border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition dark:border-gray-700 dark:bg-gray-900"
+                  value={statusValue ?? ""}
+                  onChange={(e) => onStatusChange(e.target.value)}
+                >
+                  {statusOptions.map((opt, index) => (
+                    <option 
+                      key={opt.value} 
+                      value={opt.value}
+                      disabled={index === 0 && opt.value === ""}
+                      hidden={index === 0 && opt.value === ""}
+                    >
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className={`px-3 py-1.5 text-xs text-blue-600 hover:underline focus:outline-none ${statusValue ? "visible" : "invisible pointer-events-none"}`}
+                  onClick={clearStatusFilter}
+                >
+                  Bỏ lọc
+                </button>
+              </div>
             )}
           </div>
 
+          {picFilter && (
+            <div ref={picFilter.picFilterDropdownRef} className="flex flex-col gap-2 mt-3">
+              <div className="relative w-full max-w-[200px]">
+                <button
+                  type="button"
+                  className="w-full rounded-full border px-3 py-2 text-sm shadow-sm text-left flex items-center justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition border-gray-200 dark:border-gray-700 dark:bg-gray-900"
+                  onClick={() => picFilter.setPicFilterOpen(!picFilter.picFilterOpen)}
+                >
+                  <span className="truncate">
+                    {picFilter.hospitalPicFilter.length === 0
+                      ? "Lọc người phụ trách"
+                      : picFilter.hospitalPicFilter.length === 1
+                        ? picFilter.picOptions.find((opt) => opt.id === picFilter.hospitalPicFilter[0])?.label ?? "Đã chọn 1"
+                        : `Đã chọn ${picFilter.hospitalPicFilter.length} người phụ trách`}
+                  </span>
+                  <svg className={`w-4 h-4 transition-transform ${picFilter.picFilterOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {picFilter.picFilterOpen && (
+                  <div className="absolute z-30 mt-2 w-60 max-h-[360px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl p-3 space-y-3 dark:border-gray-700 dark:bg-gray-800">
+                    <input
+                      type="text"
+                      value={picFilter.picFilterQuery}
+                      onChange={(e) => picFilter.setPicFilterQuery(e.target.value)}
+                      placeholder="Tìm người phụ trách"
+                      className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 border-gray-200 dark:border-gray-700 dark:bg-gray-900"
+                    />
+                    <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1">
+                      {picFilter.filteredPicOptions.length === 0 ? (
+                        <div className="text-sm text-gray-500 text-center py-6">
+                          Không có dữ liệu người phụ trách
+                        </div>
+                      ) : (
+                        picFilter.filteredPicOptions.map((option) => {
+                          const value = String(option.id);
+                          const checked = picFilter.hospitalPicFilter.includes(value);
+                          return (
+                            <label key={option.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 px-2 py-1.5 rounded cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => picFilter.togglePicFilterValue(value, e.target.checked)}
+                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="truncate">{option.label}</span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 text-sm text-blue-600 hover:underline focus:outline-none disabled:opacity-50"
+                        onClick={picFilter.clearPicFilter}
+                        disabled={picFilter.hospitalPicFilter.length === 0}
+                      >
+                        Bỏ lọc
+                      </button>
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 text-sm rounded-full border border-gray-300 text-gray-600 hover:bg-gray-50 focus:outline-none dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                        onClick={() => picFilter.setPicFilterOpen(false)}
+                      >
+                        Đóng
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                className={`self-start px-3 py-1.5 text-xs text-blue-600 hover:underline focus:outline-none ${picFilter.hospitalPicFilter.length === 0 ? "invisible pointer-events-none" : ""}`}
+                onClick={picFilter.clearPicFilter}
+              >
+                Bỏ lọc người phụ trách
+              </button>
+            </div>
+          )}
+
           {totals && totals.length > 0 && (
-            <div className="mt-3 text-sm text-gray-600 dark:text-gray-300 flex items-center gap-4 flex-wrap">
+            <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
               {totals.map((item) => (
-                <span key={item.label}>
-                  {item.label}:{" "}
-                  <span className="font-semibold text-gray-800 dark:text-gray-100">{item.value}</span>
+                <span key={item.label} className="font-normal text-gray-800 dark:text-gray-100">
+                  {item.label}{" "}
+                  <span className="ml-1 font-bold text-gray-900 dark:text-gray-100">{item.value}</span>
                 </span>
               ))}
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2 flex-wrap justify-end">{actions}</div>
+
+        <div className="flex items-center gap-2">
+          {actions}
+        </div>
       </div>
     </div>
   );
@@ -1111,17 +1224,23 @@ const ImplementationTasksPage: React.FC = () => {
   const [detailItem, setDetailItem] = useState<ImplementationTaskResponseDTO | null>(null);
   // hospital list view state (like SuperAdmin page)
   const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
-  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number | null; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean }>>([]);
+  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number | null; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean; personInChargeId?: number | null; personInChargeName?: string | null; hiddenPendingCount?: number; hiddenTaskCount?: number }>>([]);
   const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
   const [hospitalPage, setHospitalPage] = useState<number>(0);
   const [hospitalSize, setHospitalSize] = useState<number>(20);
   const [selectedHospital, setSelectedHospital] = useState<string | null>(null);
   const [hospitalSearch, setHospitalSearch] = useState<string>("");
   const [hospitalStatusFilter, setHospitalStatusFilter] = useState<string>("");
+  const [hospitalPicFilter, setHospitalPicFilter] = useState<string[]>([]);
+  const [picFilterOpen, setPicFilterOpen] = useState(false);
+  const [picFilterQuery, setPicFilterQuery] = useState("");
+  const [picOptions, setPicOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [hospitalSortBy, setHospitalSortBy] = useState<string>("label");
   const [hospitalSortDir, setHospitalSortDir] = useState<string>("asc");
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
   const [bulkCompleting, setBulkCompleting] = useState(false);
+
+  const picFilterDropdownRef = useRef<HTMLDivElement>(null);
 
   const searchDebounce = useRef<number | null>(null);
   const readStored = <T = unknown>(key: string): T | null => {
@@ -1141,7 +1260,22 @@ const ImplementationTasksPage: React.FC = () => {
     (r: any) => (typeof r === "string" ? r : r.roleName)?.toUpperCase() === "SUPERADMIN"
   );
   const canManage = isSuperAdmin || userTeam === "DEPLOYMENT";
-  const filtered = useMemo(() => data, [data]);
+  
+  // Filter out tasks from Business that haven't been received yet
+  const filtered = useMemo(() => {
+    return data.filter((r) => {
+      const rr = r as Record<string, unknown>;
+      const rod = (rr['readOnlyForDeployment'] as unknown as boolean) === true;
+      const received = Boolean(rr['receivedById'] || rr['receivedByName']);
+      const nameRaw = typeof rr['name'] === 'string' ? (rr['name'] as string) : String(rr['name'] ?? '');
+      const businessPlaceholder = isBusinessContractTask(nameRaw);
+      // Hide if it's from Business and not received yet
+      if (rod && !received) return false;
+      if (businessPlaceholder && !received) return false;
+      return true;
+    });
+  }, [data]);
+  
   const [completedCount, setCompletedCount] = useState<number | null>(null);
   const navigate = useNavigate();
   // Pending (Business -> Deployment) modal state
@@ -1161,23 +1295,51 @@ const ImplementationTasksPage: React.FC = () => {
 
   const pendingCount = pendingGroups.reduce((sum, group) => sum + (group.tasks?.length || 0), 0);
 
-  const pendingButton = canManage ? (
-    <Button
-      variant="ghost"
-      className="relative flex items-center gap-2 border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300"
-      onClick={() => {
-        setPendingOpen(true);
-        fetchPendingGroups();
-      }}
-    >
-      📨 Công việc chờ
-      {pendingCount > 0 && (
-        <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
-          {pendingCount}
-        </span>
-      )}
-    </Button>
-  ) : null;
+  // Calculate hidden pending count for selected hospital from hospitalsWithTasks (like SuperAdmin)
+  const selectedHospitalMeta = useMemo(() => {
+    if (!selectedHospital) return null;
+    return hospitalsWithTasks.find(h => h.label === selectedHospital) ?? null;
+  }, [selectedHospital, hospitalsWithTasks]);
+  
+  const hiddenPendingSummary = selectedHospitalMeta?.hiddenPendingCount ?? 0;
+
+  // Filter PIC options based on search query
+  const filteredPicOptions = useMemo(() => {
+    const q = picFilterQuery.trim().toLowerCase();
+    if (!q) return picOptions;
+    return picOptions.filter(opt => opt.label.toLowerCase().includes(q));
+  }, [picOptions, picFilterQuery]);
+
+  // Toggle PIC filter value
+  const togglePicFilterValue = (value: string, checked: boolean) => {
+    setHospitalPicFilter(prev => {
+      if (checked) {
+        return [...prev, value];
+      } else {
+        return prev.filter(v => v !== value);
+      }
+    });
+    setHospitalPage(0);
+  };
+
+  // Clear PIC filter
+  const clearPicFilter = () => {
+    setHospitalPicFilter([]);
+    setHospitalPage(0);
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (picFilterDropdownRef.current && !picFilterDropdownRef.current.contains(event.target as Node)) {
+        setPicFilterOpen(false);
+      }
+    };
+    if (picFilterOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [picFilterOpen]);
 
   const handleNewTaskClick = async () => {
     if (!canManage) return;
@@ -1196,40 +1358,57 @@ const ImplementationTasksPage: React.FC = () => {
 
   const addTaskButton = canManage ? (
     <button
-      className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700 flex items-center gap-2"
+      className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
       onClick={() => {
         void handleNewTaskClick();
       }}
       type="button"
     >
-      <PlusIcon />
-      <span>Thêm task mới</span>
+      + Thêm task mới
     </button>
   ) : (
     <button
       disabled
-      className="rounded-xl bg-gray-200 text-gray-500 px-5 py-2 shadow-sm flex items-center gap-2"
+      className="rounded-xl bg-gray-200 text-gray-500 px-5 py-2 shadow-sm"
       title="Không có quyền"
       type="button"
     >
-      <PlusIcon />
-      <span>Thêm mới</span>
+      + Thêm mới
     </button>
   );
 
+  const pendingButton = canManage ? (
+    <button
+      className="relative inline-flex items-center gap-2 rounded-full border border-gray-300 text-gray-800 px-4 py-2 text-sm bg-white hover:bg-gray-50"
+      onClick={() => {
+        setPendingOpen(true);
+        fetchPendingGroups();
+      }}
+      type="button"
+    >
+      📨 Công việc chờ tiếp nhận
+      {pendingCount > 0 && (
+        <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
+          {pendingCount}
+        </span>
+      )}
+    </button>
+  ) : null;
+
   const toolbarActions = (
     <>
-      {pendingButton}
       {addTaskButton}
+      {pendingButton}
     </>
   );
 
   const hospitalStatusOptions = useMemo<FilterToolbarOption[]>(
     () => [
-      { value: "", label: "— Tất cả —" },
-      { value: "accepted", label: "Có nghiệm thu" },
-      { value: "incomplete", label: "Chưa nghiệm thu hết" },
-      { value: "unaccepted", label: "Chưa có nghiệm thu" },
+      { value: "", label: "— Trạng thái —" },
+      { value: "hasCompleted", label: "Có task hoàn thành" },
+      { value: "notCompleted", label: "Chưa hoàn thành hết" },
+      { value: "noneCompleted", label: "Chưa có task hoàn thành" },
+      { value: "transferred", label: "Đã chuyển sang bảo trì" },
     ],
     []
   );
@@ -1288,8 +1467,8 @@ const ImplementationTasksPage: React.FC = () => {
       } else {
         setData(finalItems);
       }
-      if (resp && typeof resp.totalElements === "number") setTotalCount(resp.totalElements);
-      else setTotalCount(Array.isArray(resp) ? resp.length : null);
+      // Use finalItems length (after filtering out pending tasks) instead of resp.totalElements
+      setTotalCount(finalItems.length);
 
       // Tính số task completed với cùng filter (search, hospitalName) nhưng không có statusFilter
       // Nếu statusFilter đã là COMPLETED, thì completedCount = totalCount
@@ -1355,6 +1534,40 @@ const ImplementationTasksPage: React.FC = () => {
       if (isInitialLoad) setIsInitialLoad(false);
     }
   }
+
+  // Fetch PIC (deployment users) options for filter
+  useEffect(() => {
+    const fetchPicOptions = async () => {
+      try {
+        const params = new URLSearchParams({
+          department: "IT",
+        });
+        const res = await fetch(`${API_ROOT}/api/v1/admin/users/search?${params.toString()}`, {
+          method: 'GET',
+          headers: authHeaders(),
+          credentials: 'include',
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const list = Array.isArray(data) ? data : [];
+          const options = list
+            .map((u: any) => {
+              const id = u?.id;
+              const labelRaw = u?.label ?? u?.fullname ?? u?.fullName ?? u?.username ?? u?.email ?? u?.id;
+              const label = typeof labelRaw === "string" ? labelRaw.trim() : String(labelRaw ?? "");
+              if (id == null || !label) return null;
+              return { id: String(id), label };
+            })
+            .filter((item): item is { id: string; label: string } => Boolean(item));
+          options.sort((a, b) => a.label.localeCompare(b.label, "vi", { sensitivity: "base" }));
+          setPicOptions(options);
+        }
+      } catch (err) {
+        console.debug('Failed to fetch deployment users', err);
+      }
+    };
+    fetchPicOptions();
+  }, []);
 
   // Initial: load hospital list instead of tasks
   useEffect(() => {
@@ -1546,7 +1759,7 @@ const ImplementationTasksPage: React.FC = () => {
       const hospitals = await res.json();
       
       // Parse task count from subLabel (format: "Province - X tasks" or "X tasks")
-      const baseList = (Array.isArray(hospitals) ? hospitals : []).map((hospital: { id: number; label: string; subLabel?: string; transferredToMaintenance?: boolean; acceptedByMaintenance?: boolean }) => {
+      const baseList = (Array.isArray(hospitals) ? hospitals : []).map((hospital: { id: number; label: string; subLabel?: string; transferredToMaintenance?: boolean; acceptedByMaintenance?: boolean; personInChargeId?: number | null; personInChargeName?: string | null }) => {
         let taskCount = 0;
         let province = hospital.subLabel || "";
         
@@ -1570,6 +1783,8 @@ const ImplementationTasksPage: React.FC = () => {
           // Use transfer status from backend
           allTransferred: Boolean(hospital.transferredToMaintenance),
           allAccepted: Boolean(hospital.acceptedByMaintenance),
+          personInChargeId: hospital.personInChargeId ?? null,
+          personInChargeName: hospital.personInChargeName ?? null,
         };
       });
 
@@ -1601,7 +1816,9 @@ const ImplementationTasksPage: React.FC = () => {
       const allRes = await fetch(`${API_ROOT}/api/v1/admin/implementation/tasks?${allParams.toString()}`, { method: 'GET', headers: authHeaders(), credentials: 'include' });
       const allPayload = allRes.ok ? await allRes.json() : [];
       const allItems = Array.isArray(allPayload?.content) ? allPayload.content : Array.isArray(allPayload) ? allPayload : [];
-      // Exclude Business-created pending tasks from hospital summaries (they are not yet in deployment list)
+      
+      // Separate hidden (pending Business) tasks from visible tasks
+      const hiddenItems: ImplementationTaskResponseDTO[] = [];
       const visibleItems = (allItems as ImplementationTaskResponseDTO[]).filter((it) => {
         try {
           const received = Boolean(it?.receivedById || it?.receivedByName);
@@ -1609,8 +1826,14 @@ const ImplementationTasksPage: React.FC = () => {
           const businessPlaceholder = isBusinessContractTask(
             typeof it?.name === "string" ? it.name : String(it?.name ?? "")
           );
-          if (readOnlyPlaceholder && !received) return false;
-          if (businessPlaceholder && !received) return false;
+          if (readOnlyPlaceholder && !received) {
+            hiddenItems.push(it);
+            return false;
+          }
+          if (businessPlaceholder && !received) {
+            hiddenItems.push(it);
+            return false;
+          }
           return true;
         } catch {
           return true;
@@ -1618,12 +1841,12 @@ const ImplementationTasksPage: React.FC = () => {
       });
 
       // Aggregate by hospitalName
-      const acc = new Map<string, { id: number | null; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number; transferredCount: number; acceptedByMaintenanceCount: number }>();
+      const acc = new Map<string, { id: number | null; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number; transferredCount: number; acceptedByMaintenanceCount: number; hiddenPendingCount: number; hiddenTaskCount: number }>();
       for (const it of visibleItems) {
         const name = (it.hospitalName || "").toString().trim() || "—";
         const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
         const key = hospitalId != null ? `id-${hospitalId}` : `name-${name}`;
-        const current = acc.get(key) || { id: hospitalId, label: name, subLabel: "", taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0, transferredCount: 0, acceptedByMaintenanceCount: 0 };
+        const current = acc.get(key) || { id: hospitalId, label: name, subLabel: "", taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0, transferredCount: 0, acceptedByMaintenanceCount: 0, hiddenPendingCount: 0, hiddenTaskCount: 0 };
         if (current.id == null && hospitalId != null) current.id = hospitalId;
         if (!current.label && name) current.label = name;
         current.taskCount += 1;
@@ -1653,6 +1876,59 @@ const ImplementationTasksPage: React.FC = () => {
         }
         acc.set(key, current);
       }
+
+      // Fetch pending tasks from Business (use dedicated endpoint)
+      let pendingTasksFromBusiness: ImplementationTaskResponseDTO[] = [];
+      try {
+        const pendingRes = await fetch(`${API_ROOT}/api/v1/admin/implementation/pending`, { 
+          method: 'GET', 
+          headers: authHeaders(), 
+          credentials: 'include' 
+        });
+        if (pendingRes.ok) {
+          const pendingList = await pendingRes.json();
+          pendingTasksFromBusiness = Array.isArray(pendingList) ? pendingList : [];
+        }
+      } catch (err) {
+        console.warn('Failed to fetch pending tasks:', err);
+      }
+
+      // Count hidden (pending Business) tasks per hospital from hiddenItems
+      for (const it of hiddenItems) {
+        const name = (it.hospitalName || "").toString().trim() || "—";
+        const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
+        const key = hospitalId != null ? `id-${hospitalId}` : `name-${name}`;
+        const current = acc.get(key);
+        if (current) {
+          current.hiddenPendingCount += 1;
+          current.hiddenTaskCount += 1;
+        }
+      }
+
+      // Also count from pending endpoint (in case main endpoint filters them out)
+      for (const it of pendingTasksFromBusiness) {
+        const name = (it.hospitalName || "").toString().trim() || "—";
+        const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
+        const key = hospitalId != null ? `id-${hospitalId}` : `name-${name}`;
+        // Create entry if hospital not in acc yet (hospital with only pending tasks)
+        const current = acc.get(key) || { 
+          id: hospitalId, 
+          label: name, 
+          subLabel: "", 
+          taskCount: 0, 
+          acceptedCount: 0, 
+          nearDueCount: 0, 
+          overdueCount: 0, 
+          transferredCount: 0, 
+          acceptedByMaintenanceCount: 0, 
+          hiddenPendingCount: 0, 
+          hiddenTaskCount: 0 
+        };
+        current.hiddenPendingCount += 1;
+        current.hiddenTaskCount += 1;
+        acc.set(key, current);
+      }
+
       // Merge baseList (có transfer status từ endpoint) với task counts từ aggregation
       // Chỉ hiển thị các bệnh viện có task đã được tiếp nhận (không phải pending)
       const withCompleted = baseList
@@ -1673,10 +1949,12 @@ const ImplementationTasksPage: React.FC = () => {
             acceptedCount: completedCounts[idx] ?? (aggregated?.acceptedCount ?? 0),
             nearDueCount: aggregated?.nearDueCount ?? 0,
             overdueCount: aggregated?.overdueCount ?? 0,
+            hiddenPendingCount: aggregated?.hiddenPendingCount ?? 0,
+            hiddenTaskCount: aggregated?.hiddenTaskCount ?? 0,
             // Transfer status đã có từ backend endpoint
           };
         })
-        .filter((h) => h.taskCount > 0); // Chỉ hiển thị bệnh viện có task đã được tiếp nhận
+        .filter((h) => (h.taskCount ?? 0) > 0 || (h.hiddenPendingCount ?? 0) > 0); // Hiển thị bệnh viện có task đã tiếp nhận hoặc có pending tasks
       
       // Province đã có trong subLabel từ endpoint, không cần fetch thêm
       setHospitalsWithTasks(withCompleted);
@@ -1811,9 +2089,25 @@ const ImplementationTasksPage: React.FC = () => {
     let list = hospitalsWithTasks;
     const q = hospitalSearch.trim().toLowerCase();
     if (q) list = list.filter(h => h.label.toLowerCase().includes(q) || (h.subLabel || '').toLowerCase().includes(q));
-    if (hospitalStatusFilter === 'accepted') list = list.filter(h => (h.acceptedCount || 0) > 0);
-    else if (hospitalStatusFilter === 'incomplete') list = list.filter(h => (h.acceptedCount || 0) < (h.taskCount || 0));
-    else if (hospitalStatusFilter === 'unaccepted') list = list.filter(h => (h.acceptedCount || 0) === 0);
+    
+    // Apply status filter
+    if (hospitalStatusFilter === 'hasCompleted') {
+      list = list.filter(h => (h.acceptedCount || 0) > 0);
+    } else if (hospitalStatusFilter === 'notCompleted') {
+      list = list.filter(h => (h.acceptedCount || 0) < (h.taskCount || 0));
+    } else if (hospitalStatusFilter === 'noneCompleted') {
+      list = list.filter(h => (h.acceptedCount || 0) === 0);
+    } else if (hospitalStatusFilter === 'transferred') {
+      list = list.filter(h => h.allTransferred === true);
+    }
+
+    // Apply PIC filter - filter by personInChargeId from hospital summary
+    if (hospitalPicFilter.length > 0) {
+      list = list.filter(h => {
+        if (!h.personInChargeId) return false;
+        return hospitalPicFilter.includes(String(h.personInChargeId));
+      });
+    }
 
     const dir = hospitalSortDir === 'desc' ? -1 : 1;
     list = [...list].sort((a, b) => {
@@ -1828,7 +2122,7 @@ const ImplementationTasksPage: React.FC = () => {
       return a.label.localeCompare(b.label) * dir;
     });
     return list;
-  }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalSortBy, hospitalSortDir]);
+  }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir]);
 
   useEffect(() => {
     if (!showHospitalList && selectedHospital) {
@@ -1948,7 +2242,8 @@ const ImplementationTasksPage: React.FC = () => {
     }
   };
 
-  const filterToolbarProps: React.ComponentProps<typeof FilterToolbar> = {
+  // Props for hospital list filter
+  const hospitalFilterProps: React.ComponentProps<typeof FilterToolbar> = {
     mode: "hospitals",
     searchValue: hospitalSearch,
     placeholder: "Tìm theo tên bệnh viện / tỉnh",
@@ -1964,11 +2259,70 @@ const ImplementationTasksPage: React.FC = () => {
     statusOptions: hospitalStatusOptions,
     totals: [
       {
-        label: "Tổng",
-        value: loadingHospitals ? "..." : `${filteredHospitals.length} viện`,
+        label: "Tổng bệnh viện:",
+        value: loadingHospitals ? "..." : filteredHospitals.length,
       },
     ],
     actions: toolbarActions,
+    picFilter: {
+      picFilterOpen,
+      setPicFilterOpen,
+      picFilterQuery,
+      setPicFilterQuery,
+      picOptions,
+      filteredPicOptions,
+      hospitalPicFilter,
+      togglePicFilterValue,
+      clearPicFilter,
+      picFilterDropdownRef,
+    },
+  };
+
+  // Props for task list filter
+  const taskFilterProps: React.ComponentProps<typeof FilterToolbar> = {
+    mode: "tasks",
+    searchValue: searchTerm,
+    placeholder: "Tìm theo tên (gõ để gợi ý bệnh viện)s",
+    onSearchChange: (value: string) => {
+      setSearchTerm(value);
+    },
+    onSearchSubmit: () => {
+      fetchList();
+    },
+    statusValue: statusFilter,
+    onStatusChange: (value: string) => {
+      setStatusFilter(value);
+    },
+    statusOptions: [
+      { value: "", label: "— Trạng thái —" },
+      { value: "RECEIVED", label: "Đã tiếp nhận" },
+      { value: "IN_PROCESS", label: "Đang xử lý" },
+      { value: "COMPLETED", label: "Hoàn thành" },
+      { value: "ISSUE", label: "Gặp sự cố" },
+      { value: "CANCELLED", label: "Hủy" },
+    ],
+    totals: [
+      {
+        label: "",
+        value: loading ? "..." : (
+          <div className="flex items-center gap-1  flex-nowrap">
+            <span className="font-normal text-gray-600">Tổng:</span>
+            <span className="font-bold text-gray-900">{totalCount ?? data.length}</span>
+            {typeof completedCount === "number" && (
+              <span className="text-sm font-normal text-gray-500 whitespace-nowrap">
+                - Đã hoàn thành: <span className="text-sm font-bold text-gray-900 whitespace-nowrap" >{completedCount}/{totalCount ?? data.length} Task </span>
+              </span>
+            )}
+            {hiddenPendingSummary > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-3 py-1 text-xs font-medium text-purple-700 whitespace-nowrap">
+                + {hiddenPendingSummary} task từ Phòng KD chờ tiếp nhận
+              </span>
+            )}
+          </div>
+        ),
+      },
+    ],
+    actions: addTaskButton,
   };
 
   const handleBackToHospitals = () => {
@@ -1984,7 +2338,7 @@ const ImplementationTasksPage: React.FC = () => {
   return (
     <div className="p-6 xl:p-10">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-3xl font-extrabold">{showHospitalList ? "Danh sách bệnh viện có task" : `Danh sách công việc triển khai - ${selectedHospital}`}</h1>
+        <h1 className="text-3xl font-extrabold">{showHospitalList ? "Danh sách bệnh viện có task triển khai" : `Danh sách công việc triển khai - ${selectedHospital}`}</h1>
         {!showHospitalList && (
           <button onClick={() => { setSelectedHospital(null); setShowHospitalList(true); setSearchTerm(""); setStatusFilter(""); setPage(0); setData([]); fetchHospitalsWithTasks(); }} className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-medium">← Quay lại danh sách bệnh viện</button>
         )}
@@ -1992,7 +2346,13 @@ const ImplementationTasksPage: React.FC = () => {
 
       {error && <div className="text-red-600 mb-4">{error}</div>}
 
-      <FilterToolbar {...filterToolbarProps} />
+      <div className="mb-6">
+        {showHospitalList ? (
+          <FilterToolbar {...hospitalFilterProps} />
+        ) : (
+          <FilterToolbar {...taskFilterProps} />
+        )}
+      </div>
 
       <div>
         <style>{`
@@ -2016,8 +2376,8 @@ const ImplementationTasksPage: React.FC = () => {
                   Không có bệnh viện nào có task
                 </div>
               ) : (
-                <>
-                  <div className="rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+                <div className="space-y-4">
+                  <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <thead className="bg-gray-50 border-b border-gray-200">
@@ -2025,6 +2385,7 @@ const ImplementationTasksPage: React.FC = () => {
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/Thành phố</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phụ trách chính</th>                            
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượng task</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
                           </tr>
@@ -2032,18 +2393,23 @@ const ImplementationTasksPage: React.FC = () => {
                         <tbody className="bg-white divide-y divide-gray-200">
                           {filteredHospitals
                             .slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize)
-                            .map((hospital, index) => (
+                            .map((hospital, index) => {
+                              const longName = (hospital.label || "").length > 32;
+                              return (
                             <tr key={hospital.id ?? `${hospital.label}-${index}`} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => { setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }}>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospitalPage * hospitalSize + index + 1}</td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-                                    <FaHospital className="text-blue-600 text-lg" />
+                              <td className="px-6 py-4">
+                                <div className={`flex gap-3 ${longName ? 'items-start' : 'items-center'}`}>
+                                  <div className={`w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 ${longName ? 'mt-0.5' : ''}`}>
+                                    <FiMapPin className="text-blue-600 text-lg" />
                                   </div>
-                                  <div className="text-sm font-medium text-gray-900">{hospital.label}</div>
+                                  <div className={`text-sm font-medium text-gray-900 break-words max-w-[260px] ${longName ? 'leading-snug' : ''}`}>
+                                    {hospital.label}
+                                  </div>
                                 </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.subLabel || "—"}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.personInChargeName || "—"}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm align-top">
                                 <div className="flex flex-col items-start gap-1">
                                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task</span>
@@ -2052,6 +2418,11 @@ const ImplementationTasksPage: React.FC = () => {
                                   )}
                                   {(hospital.overdueCount ?? 0) > 0 && (
                                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Quá hạn: {hospital.overdueCount}</span>
+                                  )}
+                                  {(hospital.hiddenPendingCount ?? 0) > 0 && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                                      + {hospital.hiddenPendingCount} task từ Phòng KD chờ tiếp nhận
+                                    </span>
                                   )}
                                 </div>
                               </td>
@@ -2105,10 +2476,20 @@ const ImplementationTasksPage: React.FC = () => {
                                       Chưa thể chuyển
                                     </span>
                                   )}
+                                  {canManage && (hospital.taskCount || 0) === 0 && (hospital.hiddenPendingCount ?? 0) > 0 && (
+                                    <span
+                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-sm"
+                                      title={`Còn ${hospital.hiddenPendingCount} task từ Phòng KD chưa tiếp nhận`}
+                                    >
+                                      <span className="text-orange-500">⚠</span>
+                                      Chưa thể chuyển
+                                    </span>
+                                  )}
                                 </div>
                               </td>
                             </tr>
-                          ))}
+                          );
+                        })}
                         </tbody>
                       </table>
                     </div>
@@ -2160,14 +2541,37 @@ const ImplementationTasksPage: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                </>
+                </div>
               )}
             </div>
           ) : (
             filtered.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center text-gray-600 dark:text-gray-400">
-                Không có dữ liệu
-              </div>
+              hiddenPendingSummary > 0 ? (
+                <div className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
+                  <p className="text-base font-medium text-gray-800 dark:text-gray-100">
+                    Có {hiddenPendingSummary} công việc từ Phòng KD đang chờ tiếp nhận.
+                  </p>
+                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                    Mở danh sách "Công việc chờ tiếp nhận" để tiếp nhận hoặc kiểm tra các công việc này.
+                  </p>
+                  <div className="mt-4 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPendingOpen(true);
+                        fetchPendingGroups();
+                      }}
+                      className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow hover:bg-blue-700"
+                    >
+                      Xem danh sách chờ
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center text-gray-600 dark:text-gray-400">
+                  Không có dữ liệu
+                </div>
+              )
             ) : (
               <>
                 {/* Bulk actions toolbar */}
@@ -2196,7 +2600,7 @@ const ImplementationTasksPage: React.FC = () => {
                         ) : (
                           <>
                             
-                            <span>Hoàn thành đã chọn</span>
+                            <span>Hoàn thành</span>
                           </>
                         )}
                       </button>

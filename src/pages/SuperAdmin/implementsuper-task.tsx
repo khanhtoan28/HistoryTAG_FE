@@ -1396,7 +1396,7 @@ const ImplementSuperTaskPage: React.FC = () => {
 
   const visibleTaskCountSummary = data.length;
   const totalTaskCountSummary = selectedHospitalMeta
-    ? selectedHospitalMeta.totalTaskCount
+    ? selectedHospitalMeta.visibleTaskCount
     : totalCount ?? data.length;
 
   const hiddenPendingSummary = selectedHospitalMeta?.hiddenPendingCount ?? 0;
@@ -1475,7 +1475,9 @@ const ImplementSuperTaskPage: React.FC = () => {
                             ? picOptions.find((opt) => opt.id === hospitalPicFilter[0])?.label ?? "Đã chọn 1"
                             : `Đã chọn ${hospitalPicFilter.length} người phụ trách`}
                       </span>
-                      <span className="text-xs text-gray-400">{picFilterOpen ? "▲" : "▼"}</span>
+                      <svg className={`w-4 h-4 transition-transform ${picFilterOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
                     </button>
                     {picFilterOpen && (
                       <div className="absolute z-30 mt-2 w-60 rounded-xl border border-gray-200 bg-white shadow-xl p-3 space-y-3">
@@ -1562,7 +1564,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                     fetchPendingGroups();
                   }}
                 >
-                  Viện chờ tiếp nhận
+                  📨 Công việc chờ tiếp nhận
                   {pendingGroups.reduce((s, g) => s + (g.tasks?.length || 0), 0) > 0 && (
                     <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
                       {pendingGroups.reduce((s, g) => s + (g.tasks?.length || 0), 0)}
@@ -1601,14 +1603,12 @@ const ImplementSuperTaskPage: React.FC = () => {
                         .slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize)
                         .map((hospital, index) => {
                           const longName = (hospital.label || "").length > 32;
-                          const totalTasks = hospital.taskCount ?? 0;
-                          const acceptedTasks = hospital.acceptedCount ?? 0;
                           const hiddenPending = hospital.hiddenPendingCount ?? 0;
                           const hiddenTotal = hospital.hiddenTaskCount ?? 0;
                           const hiddenAccepted = hospital.hiddenAcceptedCount ?? 0;
-                          const visibleTaskCount =
-                            hospital.visibleTaskCount ??
-                            Math.max(0, totalTasks - hiddenTotal);
+                          const visibleTaskCount = hospital.visibleTaskCount ?? 0;
+                          const totalTasks = visibleTaskCount; // Chỉ tính tasks đã tiếp nhận, không bao gồm pending
+                          const acceptedTasks = hospital.acceptedCount ?? 0;
                           const visibleAccepted = Math.max(
                             0,
                             acceptedTasks - hiddenAccepted
@@ -1649,11 +1649,11 @@ const ImplementSuperTaskPage: React.FC = () => {
                                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                     {acceptedTasks}/{totalTasks} task
                                   </span>
-                                  {hasHidden && (
+                                  {/* {hasHidden && (
                                     <span className="text-xs text-gray-500">
                                       Hiển thị: {visibleAccepted}/{visibleTaskCount} task
                                     </span>
-                                  )}
+                                  )} */}
                                   {(hospital.nearDueCount ?? 0) > 0 && (
                                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Sắp đến hạn: {hospital.nearDueCount}</span>
                                   )}
@@ -1717,7 +1717,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                                       }
                                     >
                                       <span className="text-orange-500">⚠</span>
-                                      {hiddenPending > 0 ? "Chưa thể chuyển (chờ KD)" : "Chưa thể chuyển"}
+                                      {hiddenPending > 0 ? "Chưa thể chuyển " : "Chưa thể chuyển"}
                                     </span>
                                   ) }
                                 </div>
@@ -1827,7 +1827,7 @@ const ImplementSuperTaskPage: React.FC = () => {
       <div className="mb-6 rounded-xl border bg-white p-5 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Thao tác</h3>
+            <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Lọc</h3>
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative">
                 <input

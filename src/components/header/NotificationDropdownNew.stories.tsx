@@ -17,6 +17,7 @@ export const Default = () => (
     unreadCount: 1,
     loadNotifications: async () => {},
     markAsRead: async () => {},
+    clearNotifications: () => {},
   }}>
     <div style={{ padding: 20 }}>
       <NotificationDropdown />

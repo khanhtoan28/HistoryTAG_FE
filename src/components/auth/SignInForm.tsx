@@ -8,6 +8,7 @@ import Button from "../ui/button/Button";
 import { signIn, normalizeRoles, pickErrMsg, getUserAccount } from "../../api/auth.api";
 import api from "../../api/client";
 import toast from "react-hot-toast";
+import { useNotification } from "../../context/NotificationContext";
 
 type FormErrors = {
   username?: string | null;
@@ -16,6 +17,7 @@ type FormErrors = {
 
 export default function SignInForm() {
   const navigate = useNavigate();
+  const { clearNotifications, loadNotifications } = useNotification();
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
   const [form, setForm] = useState({ username: "", password: "" });
@@ -70,40 +72,55 @@ export default function SignInForm() {
 
     setLoading(true);
     try {
+      // 🔹 Clear all old user data AND notifications first to prevent cache conflicts
+      clearNotifications();
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("token");
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("username");
+      localStorage.removeItem("roles");
+      localStorage.removeItem("user");
+      localStorage.removeItem("userId");
+      sessionStorage.removeItem("access_token");
+      sessionStorage.removeItem("token");
+      sessionStorage.removeItem("accessToken");
+      sessionStorage.removeItem("username");
+      sessionStorage.removeItem("roles");
+      sessionStorage.removeItem("user");
+      sessionStorage.removeItem("userId");
+
       const data = await signIn({
         username: form.username.trim(),
         password: form.password,
       });
 
+      // 🔹 Store new user data
+      const storage = remember ? localStorage : sessionStorage;
+      storage.setItem("access_token", data.accessToken);
+      storage.setItem("username", data.username);
+      storage.setItem("roles", JSON.stringify(normalizeRoles(data.roles)));
+      if (data.userId != null) storage.setItem("userId", String(data.userId));
 
-  const storage = remember ? localStorage : sessionStorage;
-  storage.setItem("access_token", data.accessToken);
-  storage.setItem("username", data.username);
-  storage.setItem("roles", JSON.stringify(normalizeRoles(data.roles)));
-  if (data.userId != null) storage.setItem("userId", String(data.userId));
-
-      // 🔹 Fetch and persist full user profile so other pages can read `user.team`
-      (async () => {
-        try {
-          if (data.userId != null) {
-            const profile = await getUserAccount(Number(data.userId));
-            try {
-              storage.setItem("user", JSON.stringify(profile));
-            } catch {
-              // ignore storage errors
-            }
-          }
-        } catch (err) {
-          // If fetching profile fails, don't block sign in — some pages will fetch on demand.
-          console.warn("Could not fetch user profile after sign-in:", err);
-        }
-      })();
-
+      // 🔹 Fetch and persist full user profile BEFORE redirect
       api.defaults.headers.common.Authorization = `Bearer ${data.accessToken}`;
+      
+      try {
+        if (data.userId != null) {
+          const profile = await getUserAccount(Number(data.userId));
+          storage.setItem("user", JSON.stringify(profile));
+          console.log("User profile fetched and stored:", profile.team, profile.roles);
+          
+          // 🔹 Load new user's notifications
+          await loadNotifications(20);
+        }
+      } catch (err) {
+        console.warn("Could not fetch user profile after sign-in:", err);
+        // Continue anyway - some pages will fetch on demand
+      }
+
       toast.success("Đăng nhập thành công!");
       
       // Redirect based on user role
-      // Backend enum: SUPERADMIN, ADMIN, USER
       const roles = normalizeRoles(data.roles);
       const isSuperAdmin = roles.some((role: string) => role === "SUPERADMIN" || role === "SUPER_ADMIN" || role === "Super Admin");
       

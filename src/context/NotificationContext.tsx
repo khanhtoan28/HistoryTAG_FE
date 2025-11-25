@@ -15,6 +15,7 @@ type NotificationContextValue = {
   liveNotification?: Notification | null;
   loadNotifications: (limit?: number) => Promise<void>;
   markAsRead: (id: number) => Promise<void>;
+  clearNotifications: () => void;
 };
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
@@ -28,6 +29,7 @@ export const useNotification = (): NotificationContextValue => {
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [authToken, setAuthToken] = useState<string | null>(getAuthToken());
   const MAX_NOTIFICATIONS = 200;
 
   const esRef = useRef<EventSource | null>(null);
@@ -90,6 +92,26 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     });
   };
 
+  const clearNotifications = () => {
+    console.debug("[NotificationContext] clearNotifications called");
+    setNotifications([]);
+    setUnreadCount(0);
+    setLiveNotification(null);
+  };
+
+  // Monitor token changes (login/logout)
+  useEffect(() => {
+    const checkTokenChange = setInterval(() => {
+      const currentToken = getAuthToken();
+      if (currentToken !== authToken) {
+        console.log("[NotificationContext] Token changed, updating state");
+        setAuthToken(currentToken);
+      }
+    }, 500);
+
+    return () => clearInterval(checkTokenChange);
+  }, [authToken]);
+
   // transient in-app notification state and native browser notification helper
   const [liveNotification, setLiveNotification] = useState<Notification | null>(null);
   const showTransientNotification = (n: Notification) => {
@@ -127,6 +149,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   useEffect(() => {
     console.log("[NotificationContext] useEffect started");
     
+    const currentToken = getAuthToken();
+    if (!currentToken) {
+      console.log("[NotificationContext] No token, skipping load");
+      clearNotifications();
+      return;
+    }
+    
     // initial load
     loadUnread();
     loadNotifications(20);
@@ -136,9 +165,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const stompDest = (import.meta.env.VITE_NOTIFICATION_STOMP_DEST as string | undefined) || "/user/queue/notifications";
     const sseUrl = import.meta.env.VITE_NOTIFICATION_SSE_URL as string | undefined;
     const wsUrl = import.meta.env.VITE_NOTIFICATION_WS_URL as string | undefined;
-    const token = getAuthToken();
 
-    console.log("[NotificationContext] STOMP env", { stompUrl, stompDest, hasToken: !!token });
+    console.log("[NotificationContext] STOMP env", { stompUrl, stompDest, hasToken: !!currentToken });
 
     let reconnectAttempts = 0;
     let stompClientInstance: any = null;
@@ -157,7 +185,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const trySSE = () => {
       if (!sseUrl) return false;
       try {
-        const url = token ? `${sseUrl}${sseUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : sseUrl;
+        const url = currentToken ? `${sseUrl}${sseUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(currentToken)}` : sseUrl;
         const es = new EventSource(url as string);
         esRef.current = es;
 
@@ -185,7 +213,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const tryWS = () => {
       if (!wsUrl) return false;
       try {
-        const url = token ? `${wsUrl}${wsUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : wsUrl;
+        const url = currentToken ? `${wsUrl}${wsUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(currentToken)}` : wsUrl;
         const ws = new WebSocket(url as string);
         wsRef.current = ws;
 
@@ -245,8 +273,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         console.log("[NotificationContext] Creating STOMP client...");
 
         // Add token to URL for SockJS handshake (backend reads from query param)
-        const urlWithToken = token 
-          ? `${stompUrl}${stompUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`
+        const urlWithToken = currentToken 
+          ? `${stompUrl}${stompUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(currentToken)}`
           : stompUrl;
         let client;
         try {
@@ -255,7 +283,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               console.log("[NotificationContext] Creating SockJS connection to:", urlWithToken);
               return new SockJSClass(urlWithToken);
             },
-            connectHeaders: token ? { Authorization: `Bearer ${token}` } : {},
+            connectHeaders: currentToken ? { Authorization: `Bearer ${currentToken}` } : {},
             reconnectDelay: 5000,
             debug: (str) => {
               console.debug("[NotificationContext] STOMP debug:", str);
@@ -478,7 +506,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       if (pollInterval) window.clearInterval(pollInterval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authToken]); // Re-run when authToken changes
 
   const value: NotificationContextValue = {
     notifications,
@@ -486,6 +514,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     liveNotification,
     loadNotifications,
     markAsRead,
+    clearNotifications,
   };
 
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;
