@@ -118,16 +118,14 @@ const showStyledToast = (
     () => (
       <div className="pointer-events-auto">
         <div
-          className={`flex min-w-[220px] items-center gap-3 rounded-2xl border px-4 py-3 shadow-lg bg-white ${
-            type === "success" ? "border-green-200" : "border-red-200"
-          }`}
+          className={`flex min-w-[220px] items-center gap-3 rounded-2xl border px-4 py-3 shadow-lg bg-white ${type === "success" ? "border-green-200" : "border-red-200"
+            }`}
         >
           <span
-            className={`flex h-9 w-9 items-center justify-center rounded-full ${
-              type === "success"
+            className={`flex h-9 w-9 items-center justify-center rounded-full ${type === "success"
                 ? "bg-green-100 text-green-600"
                 : "bg-red-100 text-red-600"
-            }`}
+              }`}
           >
             {type === "success" ? (
               <FiCheckCircle size={20} />
@@ -270,8 +268,8 @@ const MaintenanceSuperTaskPage: React.FC = () => {
       const items = Array.isArray(resp?.content)
         ? resp.content
         : Array.isArray(resp)
-        ? resp
-        : [];
+          ? resp
+          : [];
       setData(items);
       if (resp && typeof resp.totalElements === "number")
         setTotalCount(resp.totalElements);
@@ -456,7 +454,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
       }
     }
   };
-  
+
   // Fetch pending tasks on mount so the badge shows without requiring a click.
   // Also refresh periodically (every 60s) to keep the count up-to-date.
   // BUT: Skip polling when modal is open to avoid blinking/flashing
@@ -534,7 +532,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
       const tasksByHospitalId = new Map<number, { taskCount: number; hospitalName?: string; picIds: Set<string>; picNames: Set<string> }>();
       const tasksByHospitalName = new Map<string, { taskCount: number; hospitalId?: number; picIds: Set<string>; picNames: Set<string> }>();
       const picOptionMap = new Map<string, { id: string; label: string }>();
-      
+
       // First pass: count total tasks per hospital
       for (const it of items) {
         const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
@@ -547,7 +545,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
             picOptionMap.set(optionKey, { id: optionKey, label: picLabel });
           }
         }
-        
+
         if (hospitalId) {
           const current = tasksByHospitalId.get(hospitalId) || { taskCount: 0, hospitalName: hospitalName || undefined, picIds: new Set<string>(), picNames: new Set<string>() };
           current.taskCount += 1;
@@ -610,16 +608,16 @@ const MaintenanceSuperTaskPage: React.FC = () => {
           item.nearDueCount = 0;
           item.overdueCount = 0;
         }
-        
+
         const today = new Date();
         const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-        
+
         for (const it of items) {
           const statusUp = String(it?.status || '').trim().toUpperCase();
           const label = String(it?.hospitalName || '').trim();
           const target = list.find(x => x.label === label);
           if (!target) continue;
-          
+
           // CRITICAL: Skip ALL completed/transferred tasks when counting near due/overdue
           // Different APIs/pages may use different status values. Treat the following
           // as completed for maintenance: ACCEPTED, WAITING_FOR_DEV, or COMPLETED
@@ -630,14 +628,14 @@ const MaintenanceSuperTaskPage: React.FC = () => {
           if (isCompleted || isTransferred) {
             continue; // Skip this task - do not count towards near due/overdue
           }
-          
+
           // Only process tasks that are NOT completed and NOT transferred
           if (!it?.deadline) continue;
           const d = new Date(it.deadline);
           if (Number.isNaN(d.getTime())) continue;
-          d.setHours(0,0,0,0);
+          d.setHours(0, 0, 0, 0);
           const dayDiff = Math.round((d.getTime() - startToday) / (24 * 60 * 60 * 1000));
-          
+
           // Quá hạn: deadline đã qua (dayDiff < 0)
           if (dayDiff < 0) {
             target.overdueCount = (target.overdueCount || 0) + 1;
@@ -749,7 +747,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
         ...h,
         subLabel: h.subLabel && h.subLabel.trim() ? h.subLabel : await resolveProvinceByName(h.label),
       })));
-      
+
       // ✅ CHỈ hiển thị bệnh viện đã được tiếp nhận (acceptedByMaintenance = true) hoặc có task bảo trì
       // Bệnh viện chưa tiếp nhận (fromDeployment = true nhưng acceptedByMaintenance = false) sẽ KHÔNG hiện ở đây
       // Bệnh viện chưa tiếp nhận sẽ chỉ hiện ở "Bệnh viện chờ tiếp nhận" (pending-hospitals)
@@ -885,7 +883,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     setAcceptedCount(null);
     await fetchHospitalsWithTasks();
   }
- 
+
   const handleSubmit = async (payload: Record<string, unknown>, id?: number) => {
     const isUpdate = Boolean(id);
     const url = isUpdate ? `${apiBase}/${id}` : apiBase;
@@ -1021,8 +1019,8 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                             : `Đã chọn ${hospitalPicFilter.length} người phụ trách`}
                       </span>
                       <svg className={`w-4 h-4 transition-transform ${picFilterOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
                     </button>
                     {picFilterOpen && (
                       <div className="absolute z-30 mt-2 w-60 max-h-[360px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl p-3 space-y-3">
@@ -1120,7 +1118,9 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                     fetchPendingTasks();
                   }}
                 >
-                  Viện chờ tiếp nhận
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                  </svg> Viện chờ tiếp nhận
                   {pendingTasks.length > 0 && (
                     <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
                       {pendingTasks.length}
@@ -1159,7 +1159,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                         .map((hospital, index) => {
                           const longName = (hospital.label || "").length > 32;
                           return (
-                            <tr 
+                            <tr
                               key={`${hospital.label}-${index}`}
                               className="hover:bg-gray-50 transition-colors cursor-pointer"
                               onClick={(e) => handleHospitalClick(hospital.label, e)}
@@ -1278,162 +1278,162 @@ const MaintenanceSuperTaskPage: React.FC = () => {
       {/* Task List View */}
       {!showHospitalList && (
         <>
-      {/* Search & Filter */}
-      <div className="mb-6 rounded-xl border bg-white p-5 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Thao tác</h3>
-            <div className="flex flex-wrap items-center gap-3">
-              <input
-                type="text"
-                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px]"
-                placeholder="Tìm theo tên"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") fetchList();
-                }}
-              />
-              <div className="flex items-center gap-2 w-[260px]">
-                <select
-                  className="w-[200px] rounded-full border px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                >
-                  <option value="" disabled hidden>— Trạng thái —</option>
-                  <option value="NOT_STARTED">Đã tiếp nhận</option>
-                  <option value="IN_PROGRESS">Chưa xử lý</option>
-                  <option value="API_TESTING">Đang xử lý</option>
-                  <option value="INTEGRATING">Gặp sự cố</option>
-                  <option value="WAITING_FOR_DEV">Hoàn thành</option>
-                  {/* ACCEPTED intentionally omitted for maintenance UI */}
-                </select>
+          {/* Search & Filter */}
+          <div className="mb-6 rounded-xl border bg-white p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Thao tác</h3>
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    type="text"
+                    className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px]"
+                    placeholder="Tìm theo tên"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") fetchList();
+                    }}
+                  />
+                  <div className="flex items-center gap-2 w-[260px]">
+                    <select
+                      className="w-[200px] rounded-full border px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                    >
+                      <option value="" disabled hidden>— Trạng thái —</option>
+                      <option value="NOT_STARTED">Đã tiếp nhận</option>
+                      <option value="IN_PROGRESS">Chưa xử lý</option>
+                      <option value="API_TESTING">Đang xử lý</option>
+                      <option value="INTEGRATING">Gặp sự cố</option>
+                      <option value="WAITING_FOR_DEV">Hoàn thành</option>
+                      {/* ACCEPTED intentionally omitted for maintenance UI */}
+                    </select>
+                    <button
+                      type="button"
+                      className={`px-3 py-1.5 text-xs text-blue-600 hover:underline focus:outline-none ${statusFilter ? "visible" : "invisible pointer-events-none"}`}
+                      onClick={clearTaskStatusFilter}
+                    >
+                      Bỏ lọc
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-3 text-sm text-gray-600 flex items-center gap-4">
+                  <span>Tổng:{" "}
+                    <span className="font-semibold text-gray-800">
+                      {loading ? "..." : totalCount ?? data.length}
+                    </span>
+                  </span>
+                  {typeof acceptedCount === 'number' && (
+                    <span>Đã hoàn thành: <span className="font-semibold text-gray-800">{acceptedCount}/{totalCount ?? data.length} task</span></span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
                 <button
-                  type="button"
-                  className={`px-3 py-1.5 text-xs text-blue-600 hover:underline focus:outline-none ${statusFilter ? "visible" : "invisible pointer-events-none"}`}
-                  onClick={clearTaskStatusFilter}
+                  className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
+                  onClick={() => {
+                    setEditing(null);
+                    setViewOnly(false);
+                    setModalOpen(true);
+                  }}
                 >
-                  Bỏ lọc
+                  + Thêm task mới
                 </button>
+
               </div>
             </div>
-            <div className="mt-3 text-sm text-gray-600 flex items-center gap-4">
-              <span>Tổng:{" "}
-                <span className="font-semibold text-gray-800">
-                  {loading ? "..." : totalCount ?? data.length}
-                </span>
-              </span>
-              {typeof acceptedCount === 'number' && (
-                <span>Đã hoàn thành: <span className="font-semibold text-gray-800">{acceptedCount}/{totalCount ?? data.length} task</span></span>
-              )}
+          </div>
+
+          {/* List */}
+          <div className="space-y-3">
+            {loading && isInitialLoad ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-blue-600 text-4xl font-extrabold tracking-wider animate-pulse">
+                  TAG
+                </div>
+              </div>
+            ) : data.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center text-gray-600 dark:text-gray-400">
+                Không có dữ liệu
+              </div>
+            ) : (
+              data.map((row, idx) => (
+                <TaskCard
+                  key={row.id}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  task={row as any}
+                  idx={idx}
+                  animate={enableItemAnimation}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  onOpen={(t: any) => {
+                    // Open in view-only mode for SuperAdmin on maintenance list
+                    setEditing(t);
+                    setViewOnly(true);
+                    setModalOpen(true);
+                  }}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  onEdit={(t: any) => {
+                    setEditing(t);
+                    setViewOnly(false);
+                    setModalOpen(true);
+                  }}
+                  onDelete={(id: number) => handleDelete(id)}
+                />
+              ))
+            )}
+          </div>
+
+          {/* Pagination */}
+          {!showHospitalList && (
+            <div className="mt-4 flex items-center justify-between py-3">
+              <div className="text-sm text-gray-600">
+                {totalCount === null ? (
+                  <span>Hiển thị 0 trong tổng số 0 mục</span>
+                ) : (
+                  (() => {
+                    const total = totalCount || 0;
+                    const from = page * size + 1;
+                    const to = Math.min((page + 1) * size, total);
+                    return <span>Hiển thị {from} đến {to} trong tổng số {total} mục</span>;
+                  })()
+                )}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600">Hiển thị:</label>
+                  <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1 text-sm">
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                  </select>
+                </div>
+
+                <div className="inline-flex items-center gap-1">
+                  <button onClick={() => setPage(0)} disabled={page <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Đầu">«</button>
+                  <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Trước">‹</button>
+
+                  {(() => {
+                    const total = Math.max(1, Math.ceil((totalCount || 0) / size));
+                    const pages: number[] = [];
+                    const start = Math.max(1, page + 1 - 2);
+                    const end = Math.min(total, start + 4);
+                    for (let i = start; i <= end; i++) pages.push(i);
+                    return pages.map((p) => (
+                      <button key={p} onClick={() => setPage(p - 1)} className={`px-3 py-1 border rounded text-sm ${page + 1 === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}>
+                        {p}
+                      </button>
+                    ));
+                  })()}
+
+                  <button onClick={() => setPage((p) => Math.min(Math.max(0, Math.ceil((totalCount || 0) / size) - 1), p + 1))} disabled={(page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Tiếp">›</button>
+                  <button onClick={() => setPage(Math.max(0, Math.ceil((totalCount || 0) / size) - 1))} disabled={(page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Cuối">»</button>
+                </div>
+              </div>
             </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
-              onClick={() => {
-                setEditing(null);
-                setViewOnly(false);
-                setModalOpen(true);
-              }}
-            >
-              + Thêm task mới
-            </button>
-            
-          </div>
-        </div>
-      </div>
-
-      {/* List */}
-      <div className="space-y-3">
-        {loading && isInitialLoad ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-blue-600 text-4xl font-extrabold tracking-wider animate-pulse">
-              TAG
-            </div>
-          </div>
-        ) : data.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center text-gray-600 dark:text-gray-400">
-            Không có dữ liệu
-          </div>
-        ) : (
-          data.map((row, idx) => (
-            <TaskCard
-              key={row.id}
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              task={row as any}
-              idx={idx}
-              animate={enableItemAnimation}
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              onOpen={(t: any) => {
-                // Open in view-only mode for SuperAdmin on maintenance list
-                setEditing(t);
-                setViewOnly(true);
-                setModalOpen(true);
-              }}
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              onEdit={(t: any) => {
-                setEditing(t);
-                setViewOnly(false);
-                setModalOpen(true);
-              }}
-              onDelete={(id: number) => handleDelete(id)}
-            />
-          ))
-        )}
-      </div>
-
-      {/* Pagination */}
-      {!showHospitalList && (
-      <div className="mt-4 flex items-center justify-between py-3">
-        <div className="text-sm text-gray-600">
-          {totalCount === null ? (
-            <span>Hiển thị 0 trong tổng số 0 mục</span>
-          ) : (
-            (() => {
-              const total = totalCount || 0;
-              const from = page * size + 1;
-              const to = Math.min((page + 1) * size, total);
-              return <span>Hiển thị {from} đến {to} trong tổng số {total} mục</span>;
-            })()
           )}
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-600">Hiển thị:</label>
-            <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1 text-sm">
-              <option value="5">5</option>
-              <option value="10">10</option>
-              <option value="20">20</option>
-              <option value="50">50</option>
-            </select>
-          </div>
-
-          <div className="inline-flex items-center gap-1">
-            <button onClick={() => setPage(0)} disabled={page <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Đầu">«</button>
-            <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Trước">‹</button>
-
-            {(() => {
-              const total = Math.max(1, Math.ceil((totalCount || 0) / size));
-              const pages: number[] = [];
-              const start = Math.max(1, page + 1 - 2);
-              const end = Math.min(total, start + 4);
-              for (let i = start; i <= end; i++) pages.push(i);
-              return pages.map((p) => (
-                <button key={p} onClick={() => setPage(p - 1)} className={`px-3 py-1 border rounded text-sm ${page + 1 === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}>
-                  {p}
-                </button>
-              ));
-            })()}
-
-            <button onClick={() => setPage((p) => Math.min(Math.max(0, Math.ceil((totalCount || 0) / size) - 1), p + 1))} disabled={(page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Tiếp">›</button>
-            <button onClick={() => setPage(Math.max(0, Math.ceil((totalCount || 0) / size) - 1))} disabled={(page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Cuối">»</button>
-          </div>
-        </div>
-      </div>
-      )}
         </>
       )}
 
@@ -1444,7 +1444,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
           onClose={handleModalClose}
           item={editing}
         />
-        ) : (
+      ) : (
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         <TaskFormModal
           open={modalOpen}
@@ -1565,105 +1565,105 @@ function DetailModal({
   );
 }
 
-  // =======================
-  // Pending Tasks Modal (công việc chờ)
-  // =======================
-  function PendingTasksModal({
-    open,
-    onClose,
-    tasks,
-    loading,
-    onAccept,
-    onAcceptAll,
-  }: {
-    open: boolean;
-    onClose: () => void;
-    tasks: PendingTransferGroup[];
-    loading: boolean;
-    onAccept: (group: PendingTransferGroup) => Promise<void>;
-    onAcceptAll?: () => Promise<void>;
-  }) {
-    const [acceptingKey, setAcceptingKey] = useState<string | null>(null);
+// =======================
+// Pending Tasks Modal (công việc chờ)
+// =======================
+function PendingTasksModal({
+  open,
+  onClose,
+  tasks,
+  loading,
+  onAccept,
+  onAcceptAll,
+}: {
+  open: boolean;
+  onClose: () => void;
+  tasks: PendingTransferGroup[];
+  loading: boolean;
+  onAccept: (group: PendingTransferGroup) => Promise<void>;
+  onAcceptAll?: () => Promise<void>;
+}) {
+  const [acceptingKey, setAcceptingKey] = useState<string | null>(null);
 
-    if (!open) return null;
-    return (
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-        onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 20 }}
+        className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-3 overflow-hidden"
+        onMouseDown={(e) => e.stopPropagation()}
       >
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 20 }}
-          className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-3 overflow-hidden"
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b px-6 py-4 flex items-center justify-between">
-            <h3 className="text-lg font-bold">Danh sách bệnh viện chờ tiếp nhận</h3>
-            {/* <button onClick={onClose} className="text-gray-500">✕</button> */}
-          </div>
+        <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b px-6 py-4 flex items-center justify-between">
+          <h3 className="text-lg font-bold">Danh sách bệnh viện chờ tiếp nhận</h3>
+          {/* <button onClick={onClose} className="text-gray-500">✕</button> */}
+        </div>
 
-          <div className="p-4">
-            {loading ? (
-              <div className="text-center py-8">Đang tải...</div>
-            ) : tasks.length === 0 ? (
-              <div className="text-center py-6 text-gray-500">Không có bệnh viện chờ tiếp nhận</div>
-            ) : (
-              <>
-                {onAcceptAll && (
-                  <div className="mb-4 flex justify-end">
-                    <button
-                      onClick={onAcceptAll}
-                      disabled={tasks.length === 0}
-                      className="h-10 rounded-xl px-4 text-sm font-medium transition shadow-sm !bg-green-600 !text-white !border-green-600 hover:!bg-green-700 hover:!border-green-700 disabled:!bg-green-300 disabled:!border-green-300 disabled:!text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Tiếp nhận tất cả ({tasks.length})
-                    </button>
-                  </div>
-                )}
-                <div className="max-h-[60vh] overflow-y-auto space-y-3">
-                  {tasks.map((group) => (
-                <div
-                  key={group.key}
-                  className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-900"
-                >
-                  <div className="flex items-center justify-between px-5 py-4">
-                    <div>
-                      <div className="font-semibold text-gray-900 dark:text-gray-100">
-                        {group.hospitalName}
+        <div className="p-4">
+          {loading ? (
+            <div className="text-center py-8">Đang tải...</div>
+          ) : tasks.length === 0 ? (
+            <div className="text-center py-6 text-gray-500">Không có bệnh viện chờ tiếp nhận</div>
+          ) : (
+            <>
+              {onAcceptAll && (
+                <div className="mb-4 flex justify-end">
+                  <button
+                    onClick={onAcceptAll}
+                    disabled={tasks.length === 0}
+                    className="h-10 rounded-xl px-4 text-sm font-medium transition shadow-sm !bg-green-600 !text-white !border-green-600 hover:!bg-green-700 hover:!border-green-700 disabled:!bg-green-300 disabled:!border-green-300 disabled:!text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Tiếp nhận tất cả ({tasks.length})
+                  </button>
+                </div>
+              )}
+              <div className="max-h-[60vh] overflow-y-auto space-y-3">
+                {tasks.map((group) => (
+                  <div
+                    key={group.key}
+                    className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-900"
+                  >
+                    <div className="flex items-center justify-between px-5 py-4">
+                      <div>
+                        <div className="font-semibold text-gray-900 dark:text-gray-100">
+                          {group.hospitalName}
+                        </div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                          Bệnh viện chờ tiếp nhận
+                        </div>
                       </div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">
-                        Bệnh viện chờ tiếp nhận
-                      </div>
+                      <button
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-60"
+                        disabled={acceptingKey === group.key}
+                        onClick={async () => {
+                          setAcceptingKey(group.key);
+                          try {
+                            await onAccept(group);
+                          } finally {
+                            setAcceptingKey(null);
+                          }
+                        }}
+                      >
+                        {acceptingKey === group.key ? "Đang tiếp nhận..." : "Tiếp nhận"}
+                      </button>
                     </div>
-                    <button
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-60"
-                      disabled={acceptingKey === group.key}
-                      onClick={async () => {
-                        setAcceptingKey(group.key);
-                        try {
-                          await onAccept(group);
-                        } finally {
-                          setAcceptingKey(null);
-                        }
-                      }}
-                    >
-                      {acceptingKey === group.key ? "Đang tiếp nhận..." : "Tiếp nhận"}
-                    </button>
-                  </div>
-                  
-                </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
 
-          
-        </motion.div>
-      </div>
-    );
-  }
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+
+      </motion.div>
+    </div>
+  );
+}
 
 function Info({
   label,

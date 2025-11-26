@@ -1386,7 +1386,10 @@ const ImplementationTasksPage: React.FC = () => {
       }}
       type="button"
     >
-      📨 Công việc chờ tiếp nhận
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+      </svg>
+      Công việc chờ tiếp nhận
       {pendingCount > 0 && (
         <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
           {pendingCount}
