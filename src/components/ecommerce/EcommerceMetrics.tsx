@@ -113,7 +113,7 @@ export default function EcommerceMetrics() {
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 md:gap-6 w-full">
-      {/* Task phụ trách */}
+      {/* Công việc phụ trách */}
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6 flex flex-col h-full">
         <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300">
           <TaskIcon className="size-6" />
@@ -121,7 +121,7 @@ export default function EcommerceMetrics() {
         <div className="mt-5 space-y-2 flex-1 flex flex-col">
           <div>
             <span className="text-sm text-gray-500 dark:text-gray-400">
-              Task phụ trách
+              Công việc phụ trách
             </span>
             <h4 className="mt-2 font-bold text-gray-800 text-title-sm dark:text-white/90">
               {formatNumber(assigned)}
@@ -146,7 +146,7 @@ export default function EcommerceMetrics() {
         </div>
       </div>
 
-      {/* Task tiếp nhận */}
+      {/* Công việc tiếp nhận */}
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6 flex flex-col h-full">
         <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300">
           <UserIcon className="size-6" />
@@ -154,19 +154,19 @@ export default function EcommerceMetrics() {
         <div className="mt-5 space-y-2 flex-1 flex flex-col">
           <div>
             <span className="text-sm text-gray-500 dark:text-gray-400">
-              Task tiếp nhận
+              Công việc tiếp nhận
             </span>
             <h4 className="mt-2 font-bold text-gray-800 text-title-sm dark:text-white/90">
               {formatNumber(received)}
             </h4>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-auto">
-            Bao gồm cả task do đội khác phụ trách.
+            Bao gồm cả công việc do đội khác phụ trách.
           </p>
         </div>
       </div>
 
-      {/* Task chuyển giao */}
+      {/* Công việc chuyển giao */}
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6 flex flex-col h-full">
         <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300">
           <PaperPlaneIcon className="size-6" />
@@ -174,7 +174,7 @@ export default function EcommerceMetrics() {
         <div className="mt-5 space-y-2 flex-1 flex flex-col">
           <div>
             <span className="text-sm text-gray-500 dark:text-gray-400">
-              Task chuyển giao
+              Công việc chuyển giao
             </span>
             <h4 className="mt-2 font-bold text-gray-800 text-title-sm dark:text-white/90">
               {formatNumber(transferred)}
@@ -186,7 +186,7 @@ export default function EcommerceMetrics() {
         </div>
       </div>
 
-      {/* Task đã hoàn thành */}
+      {/* Công việc đã hoàn thành */}
       <div className="relative rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6 flex flex-col h-full">
         <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300">
           <CheckCircleIcon className="size-6" />
@@ -195,7 +195,7 @@ export default function EcommerceMetrics() {
         <div className="mt-5 space-y-2 flex-1 flex flex-col">
           <div>
             <span className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
-              Task hoàn thành
+              Công việc hoàn thành
             </span>
             <h4 className="mt-2 font-bold text-gray-800 text-title-sm dark:text-white/90">
               {formatNumber(completed)}

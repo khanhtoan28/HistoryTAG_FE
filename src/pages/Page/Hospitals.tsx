@@ -5,7 +5,8 @@ import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
 // removed unused icons import (use react-icons instead)
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
-import { FiMapPin, FiPhone, FiUser, FiClock, FiTag, FiImage, FiMap } from "react-icons/fi";
+import { FiMapPin, FiPhone, FiUser, FiClock, FiTag, FiImage, FiMap, FiDownload } from "react-icons/fi";
+import { RiHistoryLine } from "react-icons/ri";
 import { FaHospitalAlt } from "react-icons/fa";
 import toast from "react-hot-toast";
 
@@ -87,8 +88,12 @@ function toFormData(payload: Record<string, any>) {
     if (v === undefined || v === null) return;
     if (Array.isArray(v)) {
       v.forEach((item) => fd.append(k, String(item)));
+    } else if (v instanceof File) {
+      fd.append(k, v);
     } else {
-      fd.append(k, v instanceof File ? v : String(v));
+      // Đảm bảo string được append đúng cách, không bị transform
+      const strValue = typeof v === 'string' ? v : String(v);
+      fd.append(k, strValue);
     }
   });
   return fd;
@@ -382,8 +387,6 @@ export default function HospitalsPage() {
   // Pagination
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(10);
-  const [sortBy, setSortBy] = useState("id");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
@@ -391,11 +394,13 @@ export default function HospitalsPage() {
   const [qName, setQName] = useState("");
   const [qProvince, setQProvince] = useState("");
   const [qStatus, setQStatus] = useState("");
+  const [qPriority, setQPriority] = useState("");
+  const [qPersonInCharge, setQPersonInCharge] = useState("");
   
   // Reset về trang đầu khi filter thay đổi
   useEffect(() => {
     setPage(0);
-  }, [qName, qProvince, qStatus]);
+  }, [qName, qProvince, qStatus, qPriority, qPersonInCharge]);
 
   const [priorityOptions] = useState<EnumOption[]>(PRIORITY_FALLBACK);
   const [statusOptions] = useState<EnumOption[]>(STATUS_FALLBACK);
@@ -404,6 +409,17 @@ export default function HospitalsPage() {
   const [editing, setEditing] = useState<Hospital | null>(null);
   const [viewing, setViewing] = useState<Hospital | null>(null);
   const [isModalLoading, setIsModalLoading] = useState(false); // Thêm state loading cho modal
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyHospital, setHistoryHospital] = useState<Hospital | null>(null);
+  const [historyData, setHistoryData] = useState<Array<{
+    id: number;
+    eventType: string;
+    description: string;
+    eventDate: string;
+    performedBy: string;
+    details: string;
+  }>>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const priorityMap = useMemo(
     () => Object.fromEntries(priorityOptions.map(o => [o.name, o.displayName])),
@@ -715,16 +731,16 @@ export default function HospitalsPage() {
             </button>
           )}
           {openBox && (
-            <div className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-gray-200 bg-white shadow-lg">
+            <div className="absolute z-50 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg" style={{ maxHeight: '200px', overflowY: 'auto' }}>
               {loadingBox && <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>}
               {!loadingBox && options.length === 0 && (
                 <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>
               )}
               {!loadingBox &&
-                options.map((opt, idx) => (
+                options.slice(0, 7).map((opt, idx) => (
                   <div
                     key={opt.id}
-                    className={`px-3 py-2 text-sm cursor-pointer ${idx === highlight ? "bg-gray-100" : ""}`}
+                    className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 ${idx === highlight ? "bg-gray-100" : ""}`}
                     onMouseEnter={() => setHighlight(idx)}
                     onMouseDown={(e) => {
                       e.preventDefault();
@@ -733,13 +749,18 @@ export default function HospitalsPage() {
                     }}
                   >
                     <div className="font-medium text-gray-800">{opt.name}</div>
-                    {(opt.username || opt.email || opt.phone) && (
+                    {opt.phone && (
                       <div className="text-xs text-gray-500">
-                        {[opt.username, opt.email, opt.phone].filter(Boolean).join(" · ")}
+                        {opt.phone}
                       </div>
                     )}
                   </div>
                 ))}
+              {!loadingBox && options.length > 7 && (
+                <div className="px-3 py-2 text-xs text-gray-400 border-t border-gray-100">
+                  Và {options.length - 7} kết quả khác... (cuộn để xem)
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -751,6 +772,7 @@ export default function HospitalsPage() {
   const [personInChargeOpt, setPersonInChargeOpt] = useState<ITUserOption | null>(null);
 
   const [hisOptions, setHisOptions] = useState<Array<{ id: number; name: string }>>([]);
+  const [itUserOptions, setItUserOptions] = useState<ITUserOption[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -807,6 +829,39 @@ export default function HospitalsPage() {
     }
   }, [open, form.personInChargeId, form.personInChargeName, viewing, editing]);
 
+  // Load danh sách IT users cho dropdown filter
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const params = new URLSearchParams({
+          department: "IT",
+          status: "true",
+        });
+        const res = await fetch(`${API_BASE}/api/v1/superadmin/users/filter?${params.toString()}`, {
+          headers: { ...authHeader() },
+          credentials: "include",
+        } as any);
+        if (!res.ok) return;
+        const list = await res.json();
+        const array = Array.isArray(list) ? list : [];
+        const mapped = array
+          .map((u: any) => ({
+            id: Number(u.id),
+            name: String(u.fullname ?? u.username ?? u.email ?? u.id),
+            username: u.username ?? undefined,
+            email: u.email ?? null,
+            phone: u.phone ? String(u.phone) : null,
+          }))
+          .filter((u: ITUserOption) => Number.isFinite(u.id) && u.name);
+        if (alive) setItUserOptions(mapped);
+      } catch (e) {
+        // ignore
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
   // ✅ HÀM GỌI API GET CHI TIẾT
   async function fetchHospitalDetails(id: number): Promise<Hospital | null> {
     setIsModalLoading(true);
@@ -835,13 +890,22 @@ export default function HospitalsPage() {
       const url = new URL(BASE);
       url.searchParams.set("page", String(page));
       url.searchParams.set("size", String(size));
-      url.searchParams.set("sortBy", sortBy);
-      url.searchParams.set("sortDir", sortDir);
       
       // Thêm filter params
       if (qName.trim()) url.searchParams.set("name", qName.trim());
       if (qProvince.trim()) url.searchParams.set("province", qProvince.trim());
       if (qStatus.trim()) url.searchParams.set("status", qStatus.trim());
+      if (qPriority.trim()) url.searchParams.set("priority", qPriority.trim());
+      if (qPersonInCharge.trim()) url.searchParams.set("personInChargeId", qPersonInCharge.trim());
+      
+      console.log("🔍 Fetching hospitals with filters:", {
+        name: qName,
+        province: qProvince,
+        status: qStatus,
+        priority: qPriority,
+        personInCharge: qPersonInCharge,
+        url: url.toString()
+      });
       
       const res = await fetch(url.toString(), { headers: { ...authHeader() } });
       if (!res.ok) throw new Error(`GET failed ${res.status}`);
@@ -875,7 +939,7 @@ export default function HospitalsPage() {
 
   useEffect(() => {
     fetchList();
-  }, [page, size, sortBy, sortDir, qName, qProvince, qStatus]);
+  }, [page, size, qName, qProvince, qStatus, qPriority, qPersonInCharge]);
 
   // Server đã filter rồi, dùng trực tiếp items
   const filtered = items;
@@ -963,6 +1027,47 @@ export default function HospitalsPage() {
     }
   }
 
+  async function onViewHistory(h: Hospital) {
+    setHistoryHospital(h);
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    setHistoryData([]);
+    try {
+      const res = await fetch(`${BASE}/${h.id}/history`, {
+        headers: { ...authHeader() },
+      });
+      if (!res.ok) throw new Error(`GET history failed ${res.status}`);
+      const data = await res.json();
+      setHistoryData(Array.isArray(data) ? data : []);
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi tải lịch sử");
+      setHistoryData([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function onExportHistory(hospitalId: number) {
+    try {
+      const res = await fetch(`${BASE}/${hospitalId}/history/export`, {
+        headers: { ...authHeader() },
+      });
+      if (!res.ok) throw new Error(`Export failed ${res.status}`);
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `lich_su_benh_vien_${hospitalId}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success("Xuất Excel thành công");
+    } catch (e: any) {
+      toast.error(e?.message || "Xuất Excel thất bại");
+    }
+  }
+
   // ✅ onSubmit() - Dùng PUT khi isEditing là true
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -980,9 +1085,11 @@ export default function HospitalsPage() {
     setError(null);
 
     try {
+      const nameValue = form.name.trim();
+      
   const payload: any = {
     hospitalCode: form.hospitalCode?.trim() || undefined,
-    name: form.name.trim(),
+    name: nameValue,
     address: form.address?.trim() || undefined,
     contactEmail: form.contactEmail?.trim() || undefined,
     contactNumber: form.contactNumber?.trim() || undefined,
@@ -1001,10 +1108,12 @@ export default function HospitalsPage() {
       const method = isEditing ? "PUT" : "POST";
       const url = isEditing ? `${SUPERADMIN_BASE}/${editing!.id}` : SUPERADMIN_BASE;
 
+      const formData = toFormData(payload);
+
       const res = await fetch(url, {
         method,
         headers: { ...authHeader() },
-        body: toFormData(payload),
+        body: formData,
       });
 
       if (!res.ok) {
@@ -1025,6 +1134,188 @@ export default function HospitalsPage() {
   }
 
   // ✅ Pagination logic
+
+  // Component Filter Person In Charge với search và scroll
+  function FilterPersonInChargeSelect({
+    value,
+    onChange,
+    options,
+  }: {
+    value: string;
+    onChange: (v: string) => void;
+    options: ITUserOption[];
+  }) {
+    const [openBox, setOpenBox] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [highlight, setHighlight] = useState(-1);
+    const inputRef = useRef<HTMLDivElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    const filteredOptions = useMemo(() => {
+      if (!searchQuery.trim()) return options;
+      const q = searchQuery.toLowerCase().trim();
+      return options.filter(
+        (u) =>
+          u.name.toLowerCase().includes(q) ||
+          u.email?.toLowerCase().includes(q) ||
+          u.username?.toLowerCase().includes(q) ||
+          u.phone?.includes(q)
+      );
+    }, [options, searchQuery]);
+
+    const displayOptions = filteredOptions.slice(0, 7);
+    const hasMore = filteredOptions.length > 7;
+    const selectedUser = options.find((u) => String(u.id) === value);
+
+    useEffect(() => {
+      const handleClickOutside = (e: MouseEvent) => {
+        if (
+          dropdownRef.current &&
+          !dropdownRef.current.contains(e.target as Node) &&
+          inputRef.current &&
+          !inputRef.current.contains(e.target as Node)
+        ) {
+          setOpenBox(false);
+          setSearchQuery("");
+        }
+      };
+      if (openBox) {
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+      }
+    }, [openBox]);
+
+    return (
+      <div className="relative min-w-[200px]">
+        <div
+          ref={inputRef}
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm cursor-pointer focus-within:ring-1 focus-within:ring-[#4693FF] focus-within:border-[#4693FF]"
+          onClick={() => {
+            setOpenBox(!openBox);
+          }}
+        >
+          {openBox ? (
+            <input
+              type="text"
+              className="w-full outline-none bg-transparent"
+              placeholder="Tìm kiếm người phụ trách..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setHighlight(-1);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setHighlight((h) => Math.min(h + 1, displayOptions.length - 1));
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setHighlight((h) => Math.max(h - 1, 0));
+                } else if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (highlight >= 0 && displayOptions[highlight]) {
+                    onChange(String(displayOptions[highlight].id));
+                    setOpenBox(false);
+                    setSearchQuery("");
+                  }
+                } else if (e.key === "Escape") {
+                  setOpenBox(false);
+                  setSearchQuery("");
+                }
+              }}
+              onClick={(e) => e.stopPropagation()}
+              autoFocus
+            />
+          ) : (
+            <div className="flex items-center justify-between">
+              <span className={value ? "text-gray-900" : "text-gray-500"}>
+                {selectedUser ? selectedUser.name : "Tất cả người phụ trách"}
+              </span>
+              <span className="text-gray-400">▼</span>
+            </div>
+          )}
+        </div>
+        {openBox && (
+          <div
+            ref={dropdownRef}
+            className="absolute z-50 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg"
+            style={{ maxHeight: "200px", overflowY: "auto" }}
+          >
+            {filteredOptions.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>
+            ) : (
+              <>
+                {/* Option "Tất cả" */}
+                <div
+                  className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 border-b border-gray-100 ${
+                    !value ? "bg-blue-50" : ""
+                  }`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onChange("");
+                    setOpenBox(false);
+                    setSearchQuery("");
+                  }}
+                >
+                  <div className="font-medium text-gray-800">Tất cả người phụ trách</div>
+                </div>
+                {displayOptions.map((opt, idx) => (
+                  <div
+                    key={opt.id}
+                    className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 ${
+                      idx === highlight ? "bg-gray-100" : ""
+                    } ${String(opt.id) === value ? "bg-blue-50" : ""}`}
+                    onMouseEnter={() => setHighlight(idx)}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      onChange(String(opt.id));
+                      setOpenBox(false);
+                      setSearchQuery("");
+                    }}
+                  >
+                    <div className="font-medium text-gray-800">{opt.name}</div>
+                    {opt.phone && (
+                      <div className="text-xs text-gray-500">
+                        {opt.phone}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {hasMore && (
+                  <div className="px-3 py-2 text-xs text-gray-400 border-t border-gray-100">
+                    Và {filteredOptions.length - 7} kết quả khác... (cuộn để xem)
+                  </div>
+                )}
+                {filteredOptions.length > 7 &&
+                  filteredOptions.slice(7).map((opt, idx) => (
+                    <div
+                      key={opt.id}
+                      className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 ${
+                        idx + 7 === highlight ? "bg-gray-100" : ""
+                      } ${String(opt.id) === value ? "bg-blue-50" : ""}`}
+                      onMouseEnter={() => setHighlight(idx + 7)}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        onChange(String(opt.id));
+                        setOpenBox(false);
+                        setSearchQuery("");
+                      }}
+                    >
+                      <div className="font-medium text-gray-800">{opt.name}</div>
+                      {opt.phone && (
+                        <div className="text-xs text-gray-500">
+                          {opt.phone}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -1051,22 +1342,44 @@ export default function HospitalsPage() {
               value={qProvince}
               onChange={(e) => setQProvince(e.target.value)}
             />
-            <input
-              type="text"
-              className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[160px] border-gray-300 bg-white"
-              placeholder="Trạng thái"
-              value={qStatus}
+            <select 
+              className="rounded-lg border px-3 py-2 text-sm border-gray-300 bg-white min-w-[180px]" 
+              value={qStatus} 
               onChange={(e) => setQStatus(e.target.value)}
-            />
-            <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 bg-white" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-              {["id", "name", "priority"].map((k) => (
-                <option key={k} value={k}>Sắp xếp theo: {k}</option>
+            >
+              <option value="">Tất cả trạng thái</option>
+              {statusOptions.map((s) => (
+                <option key={s.name} value={s.name}>{s.displayName}</option>
               ))}
             </select>
-            <select className="rounded-lg border px-3 py-2 text-sm border-gray-300 bg-white" value={sortDir} onChange={(e) => setSortDir(e.target.value as any)}>
-              <option value="asc">Tăng dần</option>
-              <option value="desc">Giảm dần</option>
+            <select 
+              className="rounded-lg border px-3 py-2 text-sm border-gray-300 bg-white min-w-[180px]" 
+              value={qPriority} 
+              onChange={(e) => setQPriority(e.target.value)}
+            >
+              <option value="">Tất cả độ ưu tiên</option>
+              {priorityOptions.map((p) => (
+                <option key={p.name} value={p.name}>{p.displayName}</option>
+              ))}
             </select>
+            <FilterPersonInChargeSelect
+              value={qPersonInCharge}
+              onChange={setQPersonInCharge}
+              options={itUserOptions}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setQName("");
+                setQProvince("");
+                setQStatus("");
+                setQPriority("");
+                setQPersonInCharge("");
+              }}
+              className="rounded-full border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition shadow-sm"
+            >
+              Bỏ lọc
+            </button>
           </div>
           <div className="mt-6 flex items-center justify-between">
             <p className="text-sm text-gray-600">Tổng: <span className="font-semibold text-gray-900">{totalElements}</span></p>
@@ -1108,8 +1421,19 @@ export default function HospitalsPage() {
                         onView(h);
                       }
                     }}
-                    className="group w-full bg-white rounded-2xl border border-gray-100 p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-1 group-hover:bg-blue-50 hover:ring-1 hover:ring-blue-200 hover:border-blue-100 cursor-pointer"
+                    className="group w-full bg-white rounded-2xl border border-gray-100 p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-1 group-hover:bg-blue-50 hover:ring-1 hover:ring-blue-200 hover:border-blue-100 cursor-pointer relative"
                   >
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onViewHistory(h);
+                      }}
+                      title="Lịch sử"
+                      aria-label={`Lịch sử ${h.name}`}
+                    className="absolute top-4 right-4 text-gray-600 hover:text-black transition"
+                    >
+                      <RiHistoryLine className="w-5 h-5" />
+                    </button>
                     <div className="flex items-start gap-4 w-full md:w-2/3">
                       {/* moved: badge + small icon box inside the card */}
                       <div className="flex-shrink-0 mt-0 flex items-center gap-2">
@@ -1324,9 +1648,22 @@ export default function HospitalsPage() {
                     <label className="mb-2 block text-sm font-semibold text-gray-700">Tên bệnh viện*</label>
                     <input
                       required
+                      type="text"
+                      autoComplete="off"
+                      spellCheck="false"
                       className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 disabled:cursor-not-allowed"
                       value={form.name}
-                      onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setForm((s) => ({ ...s, name: value }));
+                      }}
+                      onBlur={(e) => {
+                        // Đảm bảo giá trị không bị thay đổi sau khi blur
+                        const value = e.target.value;
+                        if (form.name !== value) {
+                          setForm((s) => ({ ...s, name: value }));
+                        }
+                      }}
                       disabled={isViewing || !canEdit}
                     />
                   </div>
@@ -1523,6 +1860,191 @@ export default function HospitalsPage() {
                 </div>
               </form>
             )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* History Modal */}
+      {historyOpen && historyHospital && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setHistoryOpen(false)} />
+          <div className="relative z-10 w-full max-w-4xl rounded-3xl bg-white shadow-2xl max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="sticky top-0 z-20 bg-white rounded-t-3xl px-8 pt-8 pb-4 border-b border-gray-200">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-gray-900 flex items-start gap-3">
+                  <FiClock className="w-6 h-6 text-gray-600 mt-1" />
+                  <span className="flex flex-col leading-tight">
+                    <span>Lịch sử hoạt động</span>
+                    <span className="text-base font-semibold text-blue-600 mt-1 break-words">{historyHospital.name}</span>
+                  </span>
+                </h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => onExportHistory(historyHospital.id)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 transition text-sm font-medium"
+                  >
+                    <FiDownload className="w-4 h-4" />
+                    Xuất Excel
+                  </button>
+                  <button
+                    className="rounded-xl p-2 transition-all hover:bg-gray-100 hover:scale-105"
+                    onClick={() => setHistoryOpen(false)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="overflow-y-auto px-8 pb-8 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              {historyLoading ? (
+                <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+                  <svg className="mb-4 h-12 w-12 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span>Đang tải lịch sử...</span>
+                </div>
+              ) : historyData.length === 0 ? (
+                <div className="py-12 text-center text-gray-400">
+                  <FiClock className="mx-auto h-12 w-12 mb-3 text-gray-300" />
+                  <span className="text-sm">Chưa có lịch sử</span>
+                </div>
+              ) : (
+                <div className="space-y-4 mt-6">
+                  {historyData.map((item, idx) => {
+                    const getEventTypeLabel = (type: string) => {
+                      const map: Record<string, string> = {
+                        "HOSPITAL_CREATED": "Tạo bệnh viện",
+                        "HOSPITAL_UPDATED": "Cập nhật bệnh viện",
+                        "HOSPITAL_DELETED": "Xóa bệnh viện",
+                        "BUSINESS_CREATED": "Tạo hồ sơ kinh doanh",
+                        "BUSINESS_STATUS_CHANGED": "Thay đổi trạng thái kinh doanh",
+                        "IMPLEMENTATION_CREATED": "Tạo công việc triển khai",
+                        "IMPLEMENTATION_TASK_ACCEPTED": "Triển khai tiếp nhận công việc",
+                        "IMPLEMENTATION_STATUS_CHANGED": "Thay đổi trạng thái triển khai",
+                        "IMPLEMENTATION_TRANSFERRED_TO_MAINTENANCE": "Triển khai chuyển sang bảo trì",
+                        "MAINTENANCE_ACCEPTED_HOSPITAL": "Bảo trì tiếp nhận bệnh viện",
+                        "MAINTENANCE_TASK_CREATED": "Bảo trì tạo công việc",
+                        "MAINTENANCE_TASK_STATUS_CHANGED": "Thay đổi trạng thái bảo trì",
+                      };
+                      return map[type] || type;
+                    };
+
+                    const getEventTypeColor = (type: string) => {
+                      if (type.includes("CREATED")) return "bg-blue-100 text-blue-800";
+                      if (type.includes("UPDATED") || type.includes("STATUS_CHANGED")) return "bg-yellow-100 text-yellow-800";
+                      if (type.includes("ACCEPTED") || type.includes("ACCEPT")) return "bg-green-100 text-green-800";
+                      if (type.includes("TRANSFERRED") || type.includes("TRANSFER")) return "bg-purple-100 text-purple-800";
+                      if (type.includes("DELETED")) return "bg-red-100 text-red-800";
+                      return "bg-gray-100 text-gray-800";
+                    };
+
+                    return (
+                      <div key={idx} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <span className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${getEventTypeColor(item.eventType)}`}>
+                                {getEventTypeLabel(item.eventType)}
+                              </span>
+                              <span className="text-sm text-gray-500">
+                                {item.eventDate ? new Date(item.eventDate).toLocaleString("vi-VN") : "—"}
+                              </span>
+                            </div>
+                            <h4 className="font-semibold text-gray-900 mb-1">{item.description.replace(/task/gi, 'công việc')}</h4>
+                            {item.performedBy && (
+                              <p className="text-sm text-gray-600 mb-2">
+                                Người thực hiện: <span className="font-medium">{item.performedBy}</span>
+                              </p>
+                            )}
+                            {item.details && (() => {
+                              // Tạo helper function để format details
+                              const formatDetails = (detailsText: string) => {
+                                // Nếu có xuống dòng (\n), tách theo xuống dòng trước
+                                const lines = detailsText.split('\n').filter(line => line.trim());
+                                
+                                const result: React.ReactNode[] = [];
+                                
+                                lines.forEach((line, lineIdx) => {
+                                  const trimmed = line.trim();
+                                  if (!trimmed) return;
+                                  
+                                  // Tách theo dấu | hoặc dấu phẩy (ưu tiên dấu |)
+                                  let parts: string[] = [];
+                                  if (trimmed.includes('|')) {
+                                    parts = trimmed.split('|');
+                                  } else if (trimmed.includes(',')) {
+                                    parts = trimmed.split(',');
+                                  } else {
+                                    parts = [trimmed];
+                                  }
+                                  
+                                  parts.forEach((part, partIdx) => {
+                                    const partTrimmed = part.trim();
+                                    if (!partTrimmed) return;
+                                    
+                                    // Bỏ qua nếu là "Công việc ID" hoặc "Công việc ID: xxx"
+                                    if (partTrimmed.toLowerCase().startsWith('công việc id') || partTrimmed.toLowerCase().startsWith('task id')) {
+                                      return;
+                                    }
+                                    
+                                    // Nếu có dấu ":" thì format thành label: value
+                                    if (partTrimmed.includes(':')) {
+                                      const [label, ...valueParts] = partTrimmed.split(':');
+                                      const labelTrimmed = label.trim();
+                                      
+                                      // Bỏ qua nếu label là "Công việc ID" hoặc "Task ID"
+                                      if (labelTrimmed.toLowerCase() === 'công việc id' || labelTrimmed.toLowerCase() === 'task id') {
+                                        return;
+                                      }
+                                      
+                                      const value = valueParts.join(':').trim();
+                                      result.push(
+                                        <div key={`${lineIdx}-${partIdx}`} className="mb-1 last:mb-0">
+                                          <span className="font-medium text-gray-800">{labelTrimmed}:</span>
+                                          <span className="ml-2 text-gray-600">{value || "—"}</span>
+                                        </div>
+                                      );
+                                    } else {
+                                      result.push(
+                                        <div key={`${lineIdx}-${partIdx}`} className="mb-1 last:mb-0 text-gray-600">
+                                          {partTrimmed}
+                                        </div>
+                                      );
+                                    }
+                                  });
+                                });
+                                
+                                return result;
+                              };
+                              
+                              return (
+                                <div className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3 mt-2">
+                                  {formatDetails(item.details)}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="sticky bottom-0 flex justify-end px-8 py-4 border-t border-gray-200 bg-gray-10">
+              <button
+                onClick={() => setHistoryOpen(false)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-800 bg-white border border-gray-300 hover:bg-gray-100 transition"
+              >
+                Đóng
+              </button>
             </div>
           </div>
         </div>

@@ -75,7 +75,7 @@ export default function StatisticsChart() {
         }
       } catch (err) {
         if (controller.signal.aborted) return;
-        console.error("Error fetching task stats", err);
+        console.error("Error fetching công việc stats", err);
         setStats(null);
         setError(
           err instanceof Error ? err.message : "Không thể tải dữ liệu thống kê."
@@ -99,15 +99,15 @@ export default function StatisticsChart() {
     if (!stats || stats.data.length === 0) return [];
     return [
       {
-        name: "Task phụ trách",
+        name: "Công việc phụ trách",
         data: stats.data.map((item) => item.assignedCount),
       },
       {
-        name: "Task tiếp nhận",
+        name: "Công việc tiếp nhận",
         data: stats.data.map((item) => item.receivedCount),
       },
       {
-        name: "Task chuyển giao",
+        name: "Công việc chuyển giao",
         data: stats.data.map((item) => item.transferredCount),
       },
     ];
@@ -207,7 +207,7 @@ export default function StatisticsChart() {
             Thống kê công việc
           </h3>
           <p className="mt-1 text-gray-500 text-theme-sm dark:text-gray-400">
-            {`Số task của bạn ${periodLabels[period]} ${
+            {`Số công việc của bạn ${periodLabels[period]} ${
               period === "yearly"
                 ? rangeLabel ?? ""
                 : `năm ${activeYear ?? currentYear}`

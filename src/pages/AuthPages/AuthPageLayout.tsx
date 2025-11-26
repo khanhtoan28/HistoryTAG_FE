@@ -14,15 +14,15 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       const i = innerRef.current;
       if (!c || !i) return;
 
-      // tăng padding top/bottom để không chạm sát viền trên
-      const padTop = 32;
-      const padBottom = 28;
+      // Căn giữa với padding nhỏ
+      const padTop = 40;
+      const padBottom = 40;
       const available = c.clientHeight - padTop - padBottom;
       const real = i.scrollHeight;
 
-      // Thu nhỏ thêm một chút và không phóng quá to
-      const desired = available / real;          // =1 là vừa khít
-      const s = Math.max(0.60, Math.min(0.92, desired)); // min 92%, max 103%
+      // Scale để vừa với màn hình nhưng không quá nhỏ
+      const desired = available / real;
+      const s = Math.max(0.75, Math.min(1.0, desired));
       setScale(s);
     };
 
@@ -43,16 +43,15 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         {/* LEFT */}
         <div
           ref={containerRef}
-          className="relative flex flex-1 h-full bg-brand-950 text-white items-start justify-center"
+          className="relative flex flex-1 h-full bg-brand-950 text-white items-center justify-center"
         >
-          {/* đẩy xuống nhẹ bằng padding top, KHÔNG translate âm nữa */}
-          <div className="w-full flex justify-center pt-[4vh]">
+          <div className="w-full flex justify-center -mt-12">
             <div
-              className="origin-top transition-transform duration-300 ease-out"
+              className="origin-center transition-transform duration-300 ease-out"
               style={{
                 transform: `scale(${scale})`,
                 width: "100%",
-                maxWidth: "650px",   // ↓ nhỏ hơn
+                maxWidth: "450px",
                 padding: "0 2rem",
               }}
             >

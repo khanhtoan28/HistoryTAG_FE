@@ -1210,7 +1210,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                                     handleHospitalClick(hospital.label, e);
                                   }}
                                   className="p-6 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition"
-                                  title="Xem task"
+                                  title="Xem công việc"
                                 >
                                   <AiOutlineEye className="text-lg" />
                                 </button>

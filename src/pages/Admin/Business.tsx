@@ -65,7 +65,7 @@ const BusinessPage: React.FC = () => {
   const [unitPrice, setUnitPrice] = useState<number | ''>('');
   const [selectedHospitalId, setSelectedHospitalId] = useState<number | null>(null);
   const [selectedHospitalPhone, setSelectedHospitalPhone] = useState<string | null>(null);
-  const [businessPicOptionsState, setBusinessPicOptionsState] = useState<Array<{ id: number; label: string; subLabel?: string }>>([]);
+  const [businessPicOptionsState, setBusinessPicOptionsState] = useState<Array<{ id: number; label: string; subLabel?: string; phone?: string | null }>>([]);
   const [selectedPicId, setSelectedPicId] = useState<number | null>(null);
   const [picDropdownOpen, setPicDropdownOpen] = useState<boolean>(false);
   const [picSearchInput, setPicSearchInput] = useState<string>('');
@@ -425,6 +425,7 @@ const BusinessPage: React.FC = () => {
             id: Number(item?.id ?? 0),
             label: String(item?.label ?? ''),
             subLabel: item?.subLabel ? String(item.subLabel) : undefined,
+            phone: item?.phone ? String(item.phone) : null,
           }))
         : [];
 
@@ -452,13 +453,14 @@ const BusinessPage: React.FC = () => {
             id: Number(user?.id ?? 0),
             label: String(user?.fullname ?? user?.fullName ?? user?.username ?? user?.email ?? `User #${user?.id ?? ''}`),
             subLabel: user?.email ? String(user.email) : undefined,
+            phone: user?.phone ? String(user.phone).trim() : null,
           }));
       } catch (err) {
         // ignore if superadmin endpoint not accessible
         console.warn('Failed to fetch superadmin users for PIC options', err);
       }
 
-      const mergedMap = new Map<number, { id: number; label: string; subLabel?: string }>();
+      const mergedMap = new Map<number, { id: number; label: string; subLabel?: string; phone?: string | null }>();
       [...baseOptions, ...superAdminOptions].forEach((opt) => {
         if (!opt || !opt.id) return;
         if (!opt.label || !opt.label.trim()) return;
@@ -949,6 +951,186 @@ const BusinessPage: React.FC = () => {
   function openView(item: BusinessItem) { setViewItem(item); }
   function closeView() { setViewItem(null); }
 
+  // Component Filter Person In Charge với search và scroll
+  function FilterPersonInChargeSelect({
+    value,
+    onChange,
+    options,
+  }: {
+    value: string;
+    onChange: (v: string) => void;
+    options: ITUserOption[];
+  }) {
+    const [openBox, setOpenBox] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [highlight, setHighlight] = useState(-1);
+    const inputRef = React.useRef<HTMLDivElement>(null);
+    const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+    const filteredOptions = React.useMemo(() => {
+      if (!searchQuery.trim()) return options;
+      const q = searchQuery.toLowerCase().trim();
+      return options.filter(
+        (u) =>
+          u.name.toLowerCase().includes(q) ||
+          u.phone?.includes(q)
+      );
+    }, [options, searchQuery]);
+
+    const displayOptions = filteredOptions.slice(0, 7);
+    const hasMore = filteredOptions.length > 7;
+    const selectedUser = options.find((u) => String(u.id) === value);
+
+    React.useEffect(() => {
+      const handleClickOutside = (e: MouseEvent) => {
+        if (
+          dropdownRef.current &&
+          !dropdownRef.current.contains(e.target as Node) &&
+          inputRef.current &&
+          !inputRef.current.contains(e.target as Node)
+        ) {
+          setOpenBox(false);
+          setSearchQuery("");
+        }
+      };
+      if (openBox) {
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+      }
+    }, [openBox]);
+
+    return (
+      <div className="relative min-w-[200px]">
+        <div
+          ref={inputRef}
+          className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm cursor-pointer focus-within:ring-1 focus-within:ring-[#4693FF] focus-within:border-[#4693FF]"
+          onClick={() => {
+            setOpenBox(!openBox);
+          }}
+        >
+          {openBox ? (
+            <input
+              type="text"
+              className="w-full outline-none bg-transparent"
+              placeholder="Tìm kiếm người phụ trách..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setHighlight(-1);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setHighlight((h) => Math.min(h + 1, displayOptions.length - 1));
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setHighlight((h) => Math.max(h - 1, 0));
+                } else if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (highlight >= 0 && displayOptions[highlight]) {
+                    onChange(String(displayOptions[highlight].id));
+                    setOpenBox(false);
+                    setSearchQuery("");
+                  }
+                } else if (e.key === "Escape") {
+                  setOpenBox(false);
+                  setSearchQuery("");
+                }
+              }}
+              onClick={(e) => e.stopPropagation()}
+              autoFocus
+            />
+          ) : (
+            <div className="flex items-center justify-between">
+              <span className={value ? "text-gray-900" : "text-gray-500"}>
+                {selectedUser ? selectedUser.name : "Tất cả người phụ trách"}
+              </span>
+              <span className="text-gray-400">▼</span>
+            </div>
+          )}
+        </div>
+        {openBox && (
+          <div
+            ref={dropdownRef}
+            className="absolute z-50 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg"
+            style={{ maxHeight: "200px", overflowY: "auto" }}
+          >
+            {filteredOptions.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>
+            ) : (
+              <>
+                {/* Option "Tất cả" */}
+                <div
+                  className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 border-b border-gray-100 ${
+                    !value ? "bg-blue-50" : ""
+                  }`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onChange("");
+                    setOpenBox(false);
+                    setSearchQuery("");
+                  }}
+                >
+                  <div className="font-medium text-gray-800">Tất cả người phụ trách</div>
+                </div>
+                {displayOptions.map((opt, idx) => (
+                  <div
+                    key={opt.id}
+                    className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 ${
+                      idx === highlight ? "bg-gray-100" : ""
+                    } ${String(opt.id) === value ? "bg-blue-50" : ""}`}
+                    onMouseEnter={() => setHighlight(idx)}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      onChange(String(opt.id));
+                      setOpenBox(false);
+                      setSearchQuery("");
+                    }}
+                  >
+                    <div className="font-medium text-gray-800">{opt.name}</div>
+                    {opt.phone && (
+                      <div className="text-xs text-gray-500">
+                        {opt.phone}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {hasMore && (
+                  <div className="px-3 py-2 text-xs text-gray-400 border-t border-gray-100">
+                    Và {filteredOptions.length - 7} kết quả khác... (cuộn để xem)
+                  </div>
+                )}
+                {filteredOptions.length > 7 &&
+                  filteredOptions.slice(7).map((opt, idx) => (
+                    <div
+                      key={opt.id}
+                      className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 ${
+                        idx + 7 === highlight ? "bg-gray-100" : ""
+                      } ${String(opt.id) === value ? "bg-blue-50" : ""}`}
+                      onMouseEnter={() => setHighlight(idx + 7)}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        onChange(String(opt.id));
+                        setOpenBox(false);
+                        setSearchQuery("");
+                      }}
+                    >
+                      <div className="font-medium text-gray-800">{opt.name}</div>
+                      {opt.phone && (
+                        <div className="text-xs text-gray-500">
+                          {opt.phone}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 relative bg-white">
       {/* Toasts */}
@@ -1158,18 +1340,15 @@ const BusinessPage: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-600">Người phụ trách</span>
-            <select
-              value={filterPicId ?? ''}
-              onChange={(e) => setFilterPicId(e.target.value ? Number(e.target.value) : null)}
-              className="rounded-lg border border-gray-200 px-3 py-2 text-sm min-w-[180px] focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
-            >
-              <option value="">— Tất cả —</option>
-              {businessPicOptionsState.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+            <FilterPersonInChargeSelect
+              value={filterPicId ? String(filterPicId) : ''}
+              onChange={(v) => setFilterPicId(v ? Number(v) : null)}
+              options={businessPicOptionsState.map(opt => ({
+                id: opt.id,
+                name: opt.label,
+                phone: (opt as any).phone || null,
+              }))}
+            />
           </div>
           <div className="ml-auto flex items-center gap-2">
             <button
@@ -1383,7 +1562,11 @@ const BusinessPage: React.FC = () => {
                                     }}
                                   >
                                     <div className="font-medium text-gray-800">{opt.label}</div>
-                                    {opt.subLabel && <div className="text-xs text-gray-500">{opt.subLabel}</div>}
+                                    {(opt as any).phone && (
+                                      <div className="text-xs text-gray-500">
+                                        {(opt as any).phone}
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })

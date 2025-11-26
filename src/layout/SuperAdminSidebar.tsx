@@ -54,12 +54,12 @@ const navItems: NavItem[] = [
     path: "/superadmin/business",
   },
   {
-    name: "Tasks",
+    name: "Công việc",
     icon: <TaskIcon />,
     subItems: [
-      { name: "Task Triển khai ", path: "/superadmin/implementation-tasks", pro: false },
-      { name: "Dev Tasks", path: "/superadmin/dev-tasks", pro: false },
-      { name: "Tasks Bảo Trì", path: "/superadmin/maintenance-tasks", pro: false },
+      { name: "Công việc Triển khai ", path: "/superadmin/implementation-tasks", pro: false },
+      { name: "Công việc Dev", path: "/superadmin/dev-tasks", pro: false },
+      { name: "Công việc Bảo Trì", path: "/superadmin/maintenance-tasks", pro: false },
     ],
   },
 ];

@@ -7,8 +7,8 @@ export default {
 };
 
 const sampleNotifications = [
-  { id: 1, title: 'Bạn được giao task', message: 'Task ABC', createdAt: new Date().toISOString(), read: false, actorName: 'Minh' },
-  { id: 2, title: 'Task cập nhật', message: 'Task XYZ đã cập nhật', createdAt: new Date().toISOString(), read: true, actorName: 'Lan' },
+  { id: 1, title: 'Bạn được giao công việc', message: 'Công việc ABC', createdAt: new Date().toISOString(), read: false, actorName: 'Minh' },
+  { id: 2, title: 'Công việc cập nhật', message: 'Công việc XYZ đã cập nhật', createdAt: new Date().toISOString(), read: true, actorName: 'Lan' },
 ];
 
 export const Default = () => (
