@@ -1655,7 +1655,7 @@ const BusinessPage: React.FC = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">Hoa hồng của viện</label>
-                      {isSuperAdmin ? (
+                      {canManage ? (
                         <input 
                           type="text" 
                           value={commissionDisplay || formatNumber(commission)} 
