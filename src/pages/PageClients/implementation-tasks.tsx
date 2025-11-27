@@ -1909,7 +1909,15 @@ const ImplementationTasksPage: React.FC = () => {
       }
 
       // Also count from pending endpoint (in case main endpoint filters them out)
+      // Build set of IDs already counted from hiddenItems to avoid double-counting
+      const countedHiddenIds = new Set<number>();
+      for (const h of hiddenItems) {
+        if (typeof h.id === 'number') countedHiddenIds.add(h.id);
+      }
+
       for (const it of pendingTasksFromBusiness) {
+        // Skip tasks already present in hiddenItems (dedupe)
+        if (typeof it.id === 'number' && countedHiddenIds.has(it.id)) continue;
         const name = (it.hospitalName || "").toString().trim() || "—";
         const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
         const key = hospitalId != null ? `id-${hospitalId}` : `name-${name}`;
