@@ -14,6 +14,7 @@ type NotificationContextValue = {
   // the latest realtime notification (transient) for UI to show an in-app toast
   liveNotification?: Notification | null;
   loadNotifications: (limit?: number) => Promise<void>;
+  loadUnread: () => Promise<void>;
   markAsRead: (id: number) => Promise<void>;
   clearNotifications: () => void;
 };
@@ -513,6 +514,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     unreadCount,
     liveNotification,
     loadNotifications,
+    loadUnread,
     markAsRead,
     clearNotifications,
   };

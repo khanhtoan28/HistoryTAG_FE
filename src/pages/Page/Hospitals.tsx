@@ -1320,7 +1320,7 @@ export default function HospitalsPage() {
   return (
     <>
       <PageMeta
-        title="Quản lý bệnh viện – CRUD"
+        title="Quản lý công việc | TAGTECH"
         description="Quản lý bệnh viện: danh sách, tìm kiếm, tạo, sửa, xóa"
       />
 
@@ -1888,12 +1888,7 @@ export default function HospitalsPage() {
                     <FiDownload className="w-4 h-4" />
                     Xuất Excel
                   </button>
-                  <button
-                    className="rounded-xl p-2 transition-all hover:bg-gray-100 hover:scale-105"
-                    onClick={() => setHistoryOpen(false)}
-                  >
-                    ✕
-                  </button>
+                  
                 </div>
               </div>
             </div>
@@ -1964,59 +1959,51 @@ export default function HospitalsPage() {
                             {item.details && (() => {
                               // Tạo helper function để format details
                               const formatDetails = (detailsText: string) => {
-                                // Nếu có xuống dòng (\n), tách theo xuống dòng trước
-                                const lines = detailsText.split('\n').filter(line => line.trim());
+                                // Debug: In ra để xem format gốc
+                                console.log('Details gốc:', detailsText);
                                 
                                 const result: React.ReactNode[] = [];
                                 
-                                lines.forEach((line, lineIdx) => {
-                                  const trimmed = line.trim();
+                                // Thay thế \n thành khoảng trắng trước
+                                const cleanedText = detailsText.replace(/\n/g, ' ');
+                                
+                                // Tách theo dấu phẩy NHƯNG chỉ khi sau dấu phẩy là chữ cái + dấu hai chấm (bắt đầu field mới)
+                                // Ví dụ: "abc, Def:" -> tách, nhưng "1,200" -> KHÔNG tách
+                                const parts = cleanedText.split(/,\s*(?=[A-Za-zÀ-ỹ][^:]*:)/);
+                                
+                                parts.forEach((part, idx) => {
+                                  const trimmed = part.trim();
                                   if (!trimmed) return;
                                   
-                                  // Tách theo dấu | hoặc dấu phẩy (ưu tiên dấu |)
-                                  let parts: string[] = [];
-                                  if (trimmed.includes('|')) {
-                                    parts = trimmed.split('|');
-                                  } else if (trimmed.includes(',')) {
-                                    parts = trimmed.split(',');
-                                  } else {
-                                    parts = [trimmed];
+                                  // Bỏ qua nếu là "Công việc ID" hoặc "Task ID"
+                                  if (trimmed.toLowerCase().startsWith('công việc id') || trimmed.toLowerCase().startsWith('task id')) {
+                                    return;
                                   }
                                   
-                                  parts.forEach((part, partIdx) => {
-                                    const partTrimmed = part.trim();
-                                    if (!partTrimmed) return;
+                                  // Nếu có dấu ":" thì format thành label: value
+                                  if (trimmed.includes(':')) {
+                                    const colonIndex = trimmed.indexOf(':');
+                                    const label = trimmed.substring(0, colonIndex).trim();
+                                    const value = trimmed.substring(colonIndex + 1).trim();
                                     
-                                    // Bỏ qua nếu là "Công việc ID" hoặc "Công việc ID: xxx"
-                                    if (partTrimmed.toLowerCase().startsWith('công việc id') || partTrimmed.toLowerCase().startsWith('task id')) {
+                                    // Bỏ qua nếu label là "Công việc ID" hoặc "Task ID"
+                                    if (label.toLowerCase() === 'công việc id' || label.toLowerCase() === 'task id') {
                                       return;
                                     }
                                     
-                                    // Nếu có dấu ":" thì format thành label: value
-                                    if (partTrimmed.includes(':')) {
-                                      const [label, ...valueParts] = partTrimmed.split(':');
-                                      const labelTrimmed = label.trim();
-                                      
-                                      // Bỏ qua nếu label là "Công việc ID" hoặc "Task ID"
-                                      if (labelTrimmed.toLowerCase() === 'công việc id' || labelTrimmed.toLowerCase() === 'task id') {
-                                        return;
-                                      }
-                                      
-                                      const value = valueParts.join(':').trim();
-                                      result.push(
-                                        <div key={`${lineIdx}-${partIdx}`} className="mb-1 last:mb-0">
-                                          <span className="font-medium text-gray-800">{labelTrimmed}:</span>
-                                          <span className="ml-2 text-gray-600">{value || "—"}</span>
-                                        </div>
-                                      );
-                                    } else {
-                                      result.push(
-                                        <div key={`${lineIdx}-${partIdx}`} className="mb-1 last:mb-0 text-gray-600">
-                                          {partTrimmed}
-                                        </div>
-                                      );
-                                    }
-                                  });
+                                    result.push(
+                                      <div key={idx} className="mb-1 last:mb-0">
+                                        <span className="font-bold text-gray-900">{label}:</span>
+                                        <span className="ml-2 text-gray-600">{value || "—"}</span>
+                                      </div>
+                                    );
+                                  } else {
+                                    result.push(
+                                      <div key={idx} className="mb-1 last:mb-0 text-gray-600">
+                                        {trimmed}
+                                      </div>
+                                    );
+                                  }
                                 });
                                 
                                 return result;

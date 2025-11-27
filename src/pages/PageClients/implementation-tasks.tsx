@@ -1552,7 +1552,10 @@ const ImplementationTasksPage: React.FC = () => {
       }}
       type="button"
     >
-      📨 Công việc chờ tiếp nhận
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+      </svg>
+      Công việc chờ tiếp nhận
       {pendingCount > 0 && (
         <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
           {pendingCount}
@@ -2072,7 +2075,15 @@ const ImplementationTasksPage: React.FC = () => {
       }
 
       // Also count from pending endpoint (in case main endpoint filters them out)
+      // Build set of IDs already counted from hiddenItems to avoid double-counting
+      const countedHiddenIds = new Set<number>();
+      for (const h of hiddenItems) {
+        if (typeof h.id === 'number') countedHiddenIds.add(h.id);
+      }
+
       for (const it of pendingTasksFromBusiness) {
+        // Skip tasks already present in hiddenItems (dedupe)
+        if (typeof it.id === 'number' && countedHiddenIds.has(it.id)) continue;
         const name = (it.hospitalName || "").toString().trim() || "—";
         const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
         const key = hospitalId != null ? `id-${hospitalId}` : `name-${name}`;

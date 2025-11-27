@@ -84,23 +84,23 @@ function authHeaders() {
     const m = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
     return m ? decodeURIComponent(m[2]) : null;
   };
-  
-  const token = getCookie("access_token") 
-    || localStorage.getItem("access_token") 
+
+  const token = getCookie("access_token")
+    || localStorage.getItem("access_token")
     || sessionStorage.getItem("access_token")
     || localStorage.getItem("token");
-  
+
   const headers: Record<string, string> = {
     Accept: "application/json",
     "Content-Type": "application/json",
   };
-  
+
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   } else {
     console.error("❌ No authentication token found! Check localStorage/sessionStorage/cookies");
   }
-  
+
   return headers;
 }
 
@@ -116,16 +116,14 @@ const showStyledToast = (
     () => (
       <div className="pointer-events-auto">
         <div
-          className={`flex min-w-[220px] items-center gap-3 rounded-2xl border px-4 py-3 shadow-lg bg-white ${
-            type === "success" ? "border-green-200" : "border-red-200"
-          }`}
+          className={`flex min-w-[220px] items-center gap-3 rounded-2xl border px-4 py-3 shadow-lg bg-white ${type === "success" ? "border-green-200" : "border-red-200"
+            }`}
         >
           <span
-            className={`flex h-9 w-9 items-center justify-center rounded-full ${
-              type === "success"
+            className={`flex h-9 w-9 items-center justify-center rounded-full ${type === "success"
                 ? "bg-green-100 text-green-600"
                 : "bg-red-100 text-red-600"
-            }`}
+              }`}
           >
             {type === "success" ? (
               <FiCheckCircle size={20} />
@@ -211,7 +209,7 @@ const ImplementSuperTaskPage: React.FC = () => {
   const [enableItemAnimation, setEnableItemAnimation] = useState<boolean>(true);
   const [picOptions, setPicOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [acceptedCount, setAcceptedCount] = useState<number | null>(null);
-  
+
   // New state for hospital list view
   const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
   const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number; label: string; subLabel?: string; taskCount?: number; visibleTaskCount?: number; hiddenTaskCount?: number; hiddenPendingCount?: number; hiddenAcceptedCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean; picDeploymentIds?: string[]; picDeploymentNames?: string[]; acceptedFromBusiness?: boolean; hasBusinessPlaceholder?: boolean; personInChargeName?: string | null; personInChargeId?: number | null }>>([]);
@@ -355,11 +353,11 @@ const ImplementSuperTaskPage: React.FC = () => {
       const url = `${API_ROOT}/api/v1/admin/implementation/accept/${taskId}`;
       // Set startDate to current date/time and status to RECEIVED when accepting
       const startDate = toLocalISOString(new Date());
-      const res = await fetch(url, { 
-        method: 'PUT', 
-        headers: authHeaders(), 
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: authHeaders(),
         credentials: 'include',
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           startDate,
           status: 'RECEIVED'
         })
@@ -373,9 +371,9 @@ const ImplementSuperTaskPage: React.FC = () => {
         const txt = await res.text().catch(() => '');
         throw new Error(txt || `HTTP ${res.status}`);
       }
-  await res.json().catch(() => null);
+      await res.json().catch(() => null);
       // remove from pending groups
-  setPendingGroups((prev) => prev.map((g: PendingGroup) => ({ ...g, tasks: g.tasks.filter((t: PendingTask) => t.id !== taskId) })).filter((g: PendingGroup) => g.tasks.length > 0));
+      setPendingGroups((prev) => prev.map((g: PendingGroup) => ({ ...g, tasks: g.tasks.filter((t: PendingTask) => t.id !== taskId) })).filter((g: PendingGroup) => g.tasks.length > 0));
       toastSuccess('Đã tiếp nhận công việc');
       // refresh hospital/task lists so the accepted task and its hospital appear in the main views
       if (!suppressRefresh) {
@@ -497,9 +495,9 @@ const ImplementSuperTaskPage: React.FC = () => {
       } else {
         setTotalCount(filteredItems.length);
       }
-  // disable entrance animation after all staggered animations have started
+      // disable entrance animation after all staggered animations have started
       if (enableItemAnimation) {
-  const itemCount = filteredItems.length;
+        const itemCount = filteredItems.length;
         // base delay 2000ms for first visible row, +80ms per subsequent row (as in TaskCardNew)
         const maxDelay = itemCount > 1 ? 2000 + ((itemCount - 2) * 80) : 0;
         const animationDuration = 220; // matches TaskCardNew animation duration
@@ -560,7 +558,7 @@ const ImplementSuperTaskPage: React.FC = () => {
         throw new Error(`Failed to fetch hospitals: ${res.status}`);
       }
       const hospitals = await res.json();
-      
+
       // Parse task count from subLabel (format: "Province - X tasks" or "X tasks")
       const baseList = (Array.isArray(hospitals) ? hospitals : []).map((hospital: { id: number; label: string; subLabel?: string; taskCount?: number; transferredToMaintenance?: boolean; acceptedByMaintenance?: boolean; personInChargeName?: string | null; personInChargeId?: number | null }) => {
         let taskCount = Number(hospital.taskCount ?? 0);
@@ -682,7 +680,7 @@ const ImplementSuperTaskPage: React.FC = () => {
         if (taskStatus !== 'COMPLETED' && deadline) {
           const d = new Date(deadline);
           if (!Number.isNaN(d.getTime())) {
-            d.setHours(0,0,0,0);
+            d.setHours(0, 0, 0, 0);
             const dayDiff = Math.round((d.getTime() - startToday) / (24 * 60 * 60 * 1000));
             // Quá hạn: deadline đã qua (dayDiff < 0)
             if (dayDiff < 0) current.overdueCount += 1;
@@ -862,8 +860,8 @@ const ImplementSuperTaskPage: React.FC = () => {
       const list = Array.isArray(data?.content)
         ? data.content
         : Array.isArray(data)
-        ? data
-        : [];
+          ? data
+          : [];
       const outstanding = (list as PendingTask[]).filter((item) => {
         if (!item) return false;
         const status = String(item.status ?? "").trim().toUpperCase();
@@ -885,18 +883,17 @@ const ImplementSuperTaskPage: React.FC = () => {
   // Convert all ACCEPTED implementation tasks for a hospital to maintenance
   async function handleConvertHospital(hospital: { id: number; label: string; taskCount?: number; acceptedCount?: number; hiddenPendingCount?: number; hiddenTaskCount?: number }) {
     if (!hospital || !hospital.label) return;
-    
+
     const taskCount = hospital.taskCount ?? 0;
     const acceptedCount = hospital.acceptedCount ?? 0;
     const remainingCount = taskCount - acceptedCount;
     const hiddenPendingCount = hospital.hiddenPendingCount ?? 0;
-    
-    // Validate: chỉ cho phép chuyển khi tất cả công việc đã hoàn thành
+
     if (taskCount === 0) {
       toastError(`Bệnh viện ${hospital.label} chưa có công việc nào.`);
       return;
     }
-    
+
     if (hiddenPendingCount > 0) {
       toastError(
         `Không thể chuyển! Vẫn còn ${hiddenPendingCount} công việc do Phòng KD chuyển sang nhưng chưa được tiếp nhận.`,
@@ -904,24 +901,26 @@ const ImplementSuperTaskPage: React.FC = () => {
       );
       return;
     }
-    
+
     if (acceptedCount < taskCount) {
       const visibleRemaining = Math.max(0, remainingCount - hiddenPendingCount);
       const detail =
         hiddenPendingCount > 0
           ? `${hiddenPendingCount} công việc từ Phòng KD`
           : visibleRemaining > 0
+
           ? `${visibleRemaining} công việc triển khai`
           : `${remainingCount} công việc`;
+
       toastError(
         `Không thể chuyển! Bạn vẫn còn ${detail} chưa hoàn thành (${acceptedCount}/${taskCount} công việc đã hoàn thành).`,
         { duration: 5000 }
       );
       return;
     }
-    
+
     if (!confirm(`Chuyển bệnh viện ${hospital.label} sang bảo trì?`)) return;
-    
+
     try {
       // ✅ API mới: Chuyển bệnh viện (không phải task)
       const res = await fetch(
@@ -954,7 +953,7 @@ const ImplementSuperTaskPage: React.FC = () => {
           try {
             const key = hospital.id ?? hospital.label;
             if (key != null) pendingTransfersRef.current.add(key);
-          } catch {}
+          } catch { }
           toastError(message || `Viện đã có trong danh sách bảo trì`);
           return;
         }
@@ -985,7 +984,7 @@ const ImplementSuperTaskPage: React.FC = () => {
         toastError(message || `Chuyển sang bảo trì thất bại`);
         return;
       }
-      
+
       toastSuccess(`Đã chuyển bệnh viện ${hospital.label} sang bảo trì`);
 
       // ✅ Update state ngay lập tức để UI cập nhật
@@ -1004,7 +1003,7 @@ const ImplementSuperTaskPage: React.FC = () => {
       try {
         const key = hospital.id ?? hospital.label;
         if (key != null) pendingTransfersRef.current.add(key);
-      } catch {}
+      } catch { }
 
       // ✅ Refresh để lấy data mới nhất từ backend (sau delay nhỏ)
       await new Promise(resolve => setTimeout(resolve, 300));
@@ -1032,7 +1031,7 @@ const ImplementSuperTaskPage: React.FC = () => {
     try {
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
         // request in background; user may decline
-        Notification.requestPermission().catch(() => {});
+        Notification.requestPermission().catch(() => { });
       }
     } catch (err) {
       console.debug('Notification permission request failed', err);
@@ -1272,16 +1271,16 @@ const ImplementSuperTaskPage: React.FC = () => {
     const isUpdate = Boolean(id);
     const url = isUpdate ? `${apiBase}/${id}` : apiBase;
     const method = isUpdate ? "PUT" : "POST";
-    
+
     const headers = authHeaders();
-    
+
     const res = await fetch(url, {
       method,
       headers,
       body: JSON.stringify(payload),
       credentials: "include",
     });
-    
+
     if (!res.ok) {
       let errorMsg = `Status ${res.status}`;
       try {
@@ -1297,7 +1296,7 @@ const ImplementSuperTaskPage: React.FC = () => {
       } catch {
         // Ignore parse errors
       }
-      
+
       if (res.status === 401) {
         toastError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
         setTimeout(() => {
@@ -1305,7 +1304,7 @@ const ImplementSuperTaskPage: React.FC = () => {
         }, 2000);
         return;
       }
-      
+
       // Show user-friendly error message
       toastError(errorMsg || `${method} thất bại: ${res.status}`);
       return;
@@ -1313,7 +1312,7 @@ const ImplementSuperTaskPage: React.FC = () => {
 
     // Refresh hospital list to update task counts (especially acceptedCount)
     await fetchHospitalsWithTasks();
-    
+
     // If creating new task, reset to first page and ensure sort by id desc (newest first)
     if (!isUpdate) {
       // Set sort to id desc so new task appears at top
@@ -1334,7 +1333,7 @@ const ImplementSuperTaskPage: React.FC = () => {
         await fetchList();
       }
     }
-    
+
     toastSuccess(isUpdate ? "Cập nhật thành công" : "Tạo mới thành công");
   };
 
@@ -1494,8 +1493,8 @@ const ImplementSuperTaskPage: React.FC = () => {
                             : `Đã chọn ${hospitalPicFilter.length} người phụ trách`}
                       </span>
                       <svg className={`w-4 h-4 transition-transform ${picFilterOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
                     </button>
                     {picFilterOpen && (
                       <div className="absolute z-30 mt-2 w-60 rounded-xl border border-gray-200 bg-white shadow-xl p-3 space-y-3">
@@ -1582,7 +1581,9 @@ const ImplementSuperTaskPage: React.FC = () => {
                     fetchPendingGroups();
                   }}
                 >
-                  📨 Công việc chờ tiếp nhận
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                  </svg> Công việc chờ tiếp nhận
                   {pendingGroups.reduce((s, g) => s + (g.tasks?.length || 0), 0) > 0 && (
                     <span className="absolute -top-1 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
                       {pendingGroups.reduce((s, g) => s + (g.tasks?.length || 0), 0)}
@@ -1633,7 +1634,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                           );
                           const hasHidden = hiddenTotal > 0;
                           return (
-                            <tr 
+                            <tr
                               key={hospital.id}
                               className="hover:bg-gray-50 transition-colors cursor-pointer"
                               onClick={() => handleHospitalClick(hospital.label)}
@@ -1659,9 +1660,9 @@ const ImplementSuperTaskPage: React.FC = () => {
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                 {hospital.subLabel || "—"}
                               </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                              {hospital.personInChargeName || "—"}
-                            </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                {hospital.personInChargeName || "—"}
+                              </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm align-top">
                                 <div className="flex flex-col items-start gap-1">
                                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -1677,7 +1678,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                                   )}
                                   {(hospital.overdueCount ?? 0) > 0 && (
                                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Quá hạn: {hospital.overdueCount}</span>
-                                  )}  
+                                  )}
                                   {hiddenPending > 0 && (
                                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
                                       + {hiddenPending} task từ Phòng KD chờ tiếp nhận
@@ -1702,23 +1703,23 @@ const ImplementSuperTaskPage: React.FC = () => {
                                   >
                                     <AiOutlineEye className="text-lg" />
                                   </button>
-                                  { (hospital.taskCount || 0) > 0 && hospital.allTransferred && !hospital.allAccepted ? (
+                                  {(hospital.taskCount || 0) > 0 && hospital.allTransferred && !hospital.allAccepted ? (
                                     <span
                                       className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-yellow-100 text-yellow-700 text-sm font-medium"
                                     >
                                       ⏳ Chờ tiếp nhận
                                     </span>
                                   ) : (hospital.taskCount || 0) > 0 && hospital.allTransferred && hospital.allAccepted ? (
-                                    <span 
+                                    <span
                                       className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-sm"
                                     >
                                       ✓ Đã chuyển sang bảo trì
                                     </span>
                                   ) : (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) === (hospital.taskCount || 0) && !hospital.allTransferred ? (
                                     <button
-                                      onClick={(e) => { 
-                                        e.stopPropagation(); 
-                                        handleConvertHospital(hospital); 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleConvertHospital(hospital);
                                       }}
                                       className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-medium hover:bg-indigo-100 transition-colors"
                                       title="Chuyển tất cả tác vụ đã nghiệm thu sang bảo trì"
@@ -1726,7 +1727,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                                       ➜ Chuyển sang bảo trì
                                     </button>
                                   ) : (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) < (hospital.taskCount || 0) && (
-                                    <span 
+                                    <span
                                       className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-sm"
                                       title={
                                         hiddenPending > 0
@@ -1737,7 +1738,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                                       <span className="text-orange-500">⚠</span>
                                       {hiddenPending > 0 ? "Chưa thể chuyển " : "Chưa thể chuyển"}
                                     </span>
-                                  ) }
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -1842,212 +1843,212 @@ const ImplementSuperTaskPage: React.FC = () => {
       {/* Task List View */}
       {!showHospitalList && (
         <>
-      <div className="mb-6 rounded-xl border bg-white p-5 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Lọc</h3>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative">
-                <input
-                  list="hospital-list"
-                  type="text"
-                  className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px]"
-                  placeholder="Tìm theo tên (gõ để gợi ý bệnh viện)"
-                  value={searchTerm}
-                  onChange={(e) => { setSearchTerm(e.target.value); setHospitalQuery(e.target.value); setSelectedHospital(null); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { fetchList(); } }}
-                  onBlur={(e) => {
-                    const val = e.currentTarget.value?.trim() || '';
-                    if (val.length > 0 && hospitalOptions.some((h) => h.label === val)) {
-                      setSelectedHospital(val);
-                    } else {
-                      setSelectedHospital(null);
-                    }
-                  }}
-                />
-                <datalist id="hospital-list">
-                  {hospitalOptions.map((h) => (
-                    <option key={h.id} value={h.label} />
-                  ))}
-                </datalist>
-              </div>
+          <div className="mb-6 rounded-xl border bg-white p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Lọc</h3>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="relative">
+                    <input
+                      list="hospital-list"
+                      type="text"
+                      className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px]"
+                      placeholder="Tìm theo tên (gõ để gợi ý bệnh viện)"
+                      value={searchTerm}
+                      onChange={(e) => { setSearchTerm(e.target.value); setHospitalQuery(e.target.value); setSelectedHospital(null); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { fetchList(); } }}
+                      onBlur={(e) => {
+                        const val = e.currentTarget.value?.trim() || '';
+                        if (val.length > 0 && hospitalOptions.some((h) => h.label === val)) {
+                          setSelectedHospital(val);
+                        } else {
+                          setSelectedHospital(null);
+                        }
+                      }}
+                    />
+                    <datalist id="hospital-list">
+                      {hospitalOptions.map((h) => (
+                        <option key={h.id} value={h.label} />
+                      ))}
+                    </datalist>
+                  </div>
 
-              <div className="flex items-center gap-2 w-[260px]">
-                <select
-                  className="w-[200px] rounded-full border px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                >
-                  <option value="" disabled hidden>— Trạng thái —</option>
-                  <option value="RECEIVED">Đã tiếp nhận</option>
-                  <option value="IN_PROCESS">Đang xử lý</option>
-                  <option value="COMPLETED">Hoàn thành</option>
-                  <option value="ISSUE">Gặp sự cố</option>
-                  <option value="CANCELLED">Hủy</option>
-                </select>
-                <button
-                  type="button"
-                  className={`px-3 py-1.5 text-xs text-blue-600 hover:underline focus:outline-none ${statusFilter ? "visible" : "invisible pointer-events-none"}`}
-                  onClick={clearTaskStatusFilter}
-                >
-                  Bỏ lọc
-                </button>
-              </div>
-            </div>
-            <div className="mt-3 text-sm text-gray-600 flex flex-wrap items-center gap-4">
-              <span>
-                Tổng:{" "}
-                <span className="font-semibold text-gray-800">
-                  {loading ? "..." : totalTaskCountSummary}
-                </span>
-                {showVisibleCountHint && (
-                  <span className="ml-2 text-xs text-gray-500">
-                    (Hiển thị {visibleTaskCountSummary})
-                  </span>
-                )}
-              </span>
-              {typeof acceptedCount === "number" && (
-                <span>
-                  Đã hoàn thành:{" "}
-                  <span className="font-semibold text-gray-800">
-                    {acceptedCount}/{totalTaskCountSummary} task
-                  </span>
-                </span>
-              )}
-              {hiddenPendingSummary > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-3 py-1 text-xs font-medium text-purple-700">
-                  + {hiddenPendingSummary} task từ Phòng KD chờ tiếp nhận
-                </span>
-              )}
-            </div>
-          </div>
- 
-          <div className="flex items-center gap-3">
-            <button 
-              className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700" 
-              onClick={() => { 
-                // Pre-fill hospital if we're viewing tasks for a specific hospital
-                const hospitalId = selectedHospital ? hospitalsWithTasks.find(h => h.label === selectedHospital)?.id : undefined;
-                setViewOnly(false);
-                setEditing(hospitalId ? ({ hospitalId, hospitalName: selectedHospital } as unknown as ImplTask) : null); 
-                setModalOpen(true); 
-              }}
-            >
-              + Thêm mới
-            </button>
-            <button className="rounded-full border px-4 py-2 text-sm shadow-sm" onClick={async () => {
-              setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc'); setPage(0);
-              // show loading indicator for at least a short duration for UX
-              setLoading(true);
-              const start = Date.now();
-              await fetchList();
-              const minMs = 800;
-              const elapsed = Date.now() - start;
-              if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
-              setLoading(false);
-            }}>Làm mới</button>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <style>{`
-          @keyframes fadeInUp { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
-        `}</style>
-
-        <div className="space-y-3">
-          {loading && isInitialLoad ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-blue-600 text-4xl font-extrabold tracking-wider animate-pulse" aria-hidden="true">TAG</div>
-            </div>
-          ) : (
-            data.length === 0 ? (
-              hiddenPendingSummary > 0 && visibleTaskCountSummary === 0 ? (
-                <div className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
-                  <p className="text-base font-medium text-gray-800 dark:text-gray-100">
-                    Có {hiddenPendingSummary} công việc từ Phòng KD đang chờ tiếp nhận.
-                  </p>
-                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                    Mở danh sách “Viện chờ tiếp nhận” để tiếp nhận hoặc kiểm tra các công việc này.
-                  </p>
-                  <div className="mt-4 flex justify-center">
+                  <div className="flex items-center gap-2 w-[260px]">
+                    <select
+                      className="w-[200px] rounded-full border px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                    >
+                      <option value="" disabled hidden>— Trạng thái —</option>
+                      <option value="RECEIVED">Đã tiếp nhận</option>
+                      <option value="IN_PROCESS">Đang xử lý</option>
+                      <option value="COMPLETED">Hoàn thành</option>
+                      <option value="ISSUE">Gặp sự cố</option>
+                      <option value="CANCELLED">Hủy</option>
+                    </select>
                     <button
                       type="button"
-                      onClick={() => {
-                        setPendingOpen(true);
-                        fetchPendingGroups();
-                      }}
-                      className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow hover:bg-blue-700"
+                      className={`px-3 py-1.5 text-xs text-blue-600 hover:underline focus:outline-none ${statusFilter ? "visible" : "invisible pointer-events-none"}`}
+                      onClick={clearTaskStatusFilter}
                     >
-                      Xem danh sách chờ
+                      Bỏ lọc
                     </button>
                   </div>
                 </div>
-              ) : (
-                <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center text-gray-600 dark:text-gray-400">
-                  Không có dữ liệu
+                <div className="mt-3 text-sm text-gray-600 flex flex-wrap items-center gap-4">
+                  <span>
+                    Tổng:{" "}
+                    <span className="font-semibold text-gray-800">
+                      {loading ? "..." : totalTaskCountSummary}
+                    </span>
+                    {showVisibleCountHint && (
+                      <span className="ml-2 text-xs text-gray-500">
+                        (Hiển thị {visibleTaskCountSummary})
+                      </span>
+                    )}
+                  </span>
+                  {typeof acceptedCount === "number" && (
+                    <span>
+                      Đã hoàn thành:{" "}
+                      <span className="font-semibold text-gray-800">
+                        {acceptedCount}/{totalTaskCountSummary} task
+                      </span>
+                    </span>
+                  )}
+                  {hiddenPendingSummary > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-3 py-1 text-xs font-medium text-purple-700">
+                      + {hiddenPendingSummary} task từ Phòng KD chờ tiếp nhận
+                    </span>
+                  )}
                 </div>
-              )
-            ) : (
-              // Do not show tasks created from Business that are pending acceptance by Deployment/SuperAdmin.
-              // A task is pending when readOnlyForDeployment === true AND it has not been received (no receivedById).
-              (() => {
-                const visible = data.filter((r) => {
-                  const rr = r as Record<string, unknown>;
-                  const rod = (rr['readOnlyForDeployment'] as unknown as boolean) === true;
-                  const received = Boolean(rr['receivedById'] || rr['receivedByName']);
-                  const nameRaw =
-                    typeof rr['name'] === 'string'
-                      ? (rr['name'] as string)
-                      : String(rr['name'] ?? '');
-                  const businessPlaceholder = isBusinessContractTask(nameRaw);
-                  if (rod && !received) return false;
-                  if (businessPlaceholder && !received) return false;
-                  return true;
-                });
-                return visible.map((row, idx) => {
-                  // For SuperAdmin we still allow editing/deleting of regular tasks.
-                  const displayed = row as ImplTask;
-                  return (
-                    <TaskCard
-                      key={row.id}
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      task={displayed as any}
-                      idx={idx}
-                      animate={enableItemAnimation}
-                      // open detail as view-only
-                      onOpen={(t) => { setEditing(t); setViewOnly(true); setModalOpen(true); }}
-                      onEdit={(t) => { setEditing(t); setViewOnly(false); setModalOpen(true); }}
-                      onDelete={(id) => handleDelete(id)}
-                      canEdit={true}
-                      canDelete={true}
-                      allowEditCompleted={true} // ✅ SuperAdmin có thể sửa/xóa task đã hoàn thành
-                    />
-                  );
-                });
-              })()
-            )
-          )}
-        </div>
-      </div>
+              </div>
 
-        {/* Pagination controls */}
-        <div className="mt-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <button className="px-3 py-1 border rounded" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0}>Prev</button>
-            <span>Trang {page + 1}{totalCount ? ` / ${Math.max(1, Math.ceil(totalCount / size))}` : ""}</span>
-            <button className="px-3 py-1 border rounded" onClick={() => setPage((p) => p + 1)} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)}>Next</button>
+              <div className="flex items-center gap-3">
+                <button
+                  className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
+                  onClick={() => {
+                    // Pre-fill hospital if we're viewing tasks for a specific hospital
+                    const hospitalId = selectedHospital ? hospitalsWithTasks.find(h => h.label === selectedHospital)?.id : undefined;
+                    setViewOnly(false);
+                    setEditing(hospitalId ? ({ hospitalId, hospitalName: selectedHospital } as unknown as ImplTask) : null);
+                    setModalOpen(true);
+                  }}
+                >
+                  + Thêm mới
+                </button>
+                <button className="rounded-full border px-4 py-2 text-sm shadow-sm" onClick={async () => {
+                  setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc'); setPage(0);
+                  // show loading indicator for at least a short duration for UX
+                  setLoading(true);
+                  const start = Date.now();
+                  await fetchList();
+                  const minMs = 800;
+                  const elapsed = Date.now() - start;
+                  if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
+                  setLoading(false);
+                }}>Làm mới</button>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <label className="text-sm">Số hàng:</label>
-            <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1">
-              <option value="5">5</option>
-              <option value="10">10</option>
-              <option value="20">20</option>
-              <option value="50">50</option>
-            </select>
+
+          <div>
+            <style>{`
+          @keyframes fadeInUp { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
+        `}</style>
+
+            <div className="space-y-3">
+              {loading && isInitialLoad ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-blue-600 text-4xl font-extrabold tracking-wider animate-pulse" aria-hidden="true">TAG</div>
+                </div>
+              ) : (
+                data.length === 0 ? (
+                  hiddenPendingSummary > 0 && visibleTaskCountSummary === 0 ? (
+                    <div className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
+                      <p className="text-base font-medium text-gray-800 dark:text-gray-100">
+                        Có {hiddenPendingSummary} công việc từ Phòng KD đang chờ tiếp nhận.
+                      </p>
+                      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                        Mở danh sách “Viện chờ tiếp nhận” để tiếp nhận hoặc kiểm tra các công việc này.
+                      </p>
+                      <div className="mt-4 flex justify-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPendingOpen(true);
+                            fetchPendingGroups();
+                          }}
+                          className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow hover:bg-blue-700"
+                        >
+                          Xem danh sách chờ
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 text-center text-gray-600 dark:text-gray-400">
+                      Không có dữ liệu
+                    </div>
+                  )
+                ) : (
+                  // Do not show tasks created from Business that are pending acceptance by Deployment/SuperAdmin.
+                  // A task is pending when readOnlyForDeployment === true AND it has not been received (no receivedById).
+                  (() => {
+                    const visible = data.filter((r) => {
+                      const rr = r as Record<string, unknown>;
+                      const rod = (rr['readOnlyForDeployment'] as unknown as boolean) === true;
+                      const received = Boolean(rr['receivedById'] || rr['receivedByName']);
+                      const nameRaw =
+                        typeof rr['name'] === 'string'
+                          ? (rr['name'] as string)
+                          : String(rr['name'] ?? '');
+                      const businessPlaceholder = isBusinessContractTask(nameRaw);
+                      if (rod && !received) return false;
+                      if (businessPlaceholder && !received) return false;
+                      return true;
+                    });
+                    return visible.map((row, idx) => {
+                      // For SuperAdmin we still allow editing/deleting of regular tasks.
+                      const displayed = row as ImplTask;
+                      return (
+                        <TaskCard
+                          key={row.id}
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          task={displayed as any}
+                          idx={idx}
+                          animate={enableItemAnimation}
+                          // open detail as view-only
+                          onOpen={(t) => { setEditing(t); setViewOnly(true); setModalOpen(true); }}
+                          onEdit={(t) => { setEditing(t); setViewOnly(false); setModalOpen(true); }}
+                          onDelete={(id) => handleDelete(id)}
+                          canEdit={true}
+                          canDelete={true}
+                          allowEditCompleted={true} // ✅ SuperAdmin có thể sửa/xóa task đã hoàn thành
+                        />
+                      );
+                    });
+                  })()
+                )
+              )}
+            </div>
           </div>
-        </div>
+
+          {/* Pagination controls */}
+          <div className="mt-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button className="px-3 py-1 border rounded" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0}>Prev</button>
+              <span>Trang {page + 1}{totalCount ? ` / ${Math.max(1, Math.ceil(totalCount / size))}` : ""}</span>
+              <button className="px-3 py-1 border rounded" onClick={() => setPage((p) => p + 1)} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)}>Next</button>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm">Số hàng:</label>
+              <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1">
+                <option value="5">5</option>
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+              </select>
+            </div>
+          </div>
         </>
       )}
 
@@ -2256,7 +2257,7 @@ function DetailModal({
                 </span>
               )}
             />
-      
+
             {/* Pending tasks modal moved to top-level so it has access to state/functions */}
             <Info icon={<FiLink />} label="API URL" value={item.apiUrl} />
             <Info icon={<FiActivity />} label="API Test" value={item.apiTestStatus} />

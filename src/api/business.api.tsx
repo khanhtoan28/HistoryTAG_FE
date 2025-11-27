@@ -132,3 +132,10 @@ export async function getBusinessPicOptions() {
   const res = await api.get(`${base}/business/pic-options`);
   return res.data;
 }
+
+export async function getMonthlySalesStats(year?: number) {
+  const base = getBase();
+  const query = year ? `?year=${year}` : '';
+  const res = await api.get(`${base}/business/monthly-stats${query}`);
+  return res.data;
+}
