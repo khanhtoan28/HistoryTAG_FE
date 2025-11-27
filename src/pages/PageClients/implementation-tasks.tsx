@@ -7,6 +7,21 @@ import { toast } from "react-hot-toast";
 import { FiUser, FiMapPin, FiLink, FiClock, FiTag, FiPhone } from "react-icons/fi";
 import { isBusinessContractTaskName as isBusinessContractTask } from "../../utils/businessContract";
 
+// Helper function để parse PIC IDs từ additionalRequest
+function parsePicIdsFromAdditionalRequest(additionalRequest?: string | null, picDeploymentId?: number | null): number[] {
+  const ids: number[] = [];
+  if (picDeploymentId) {
+    ids.push(picDeploymentId);
+  }
+  if (additionalRequest) {
+    const match = additionalRequest.match(/\[PIC_IDS:\s*([^\]]+)\]/);
+    if (match) {
+      const parsedIds = match[1].split(',').map(id => Number(id.trim())).filter(id => !isNaN(id) && id > 0);
+      ids.push(...parsedIds);
+    }
+  }
+  return [...new Set(ids)]; // Loại bỏ duplicate
+}
 
 export type ImplementationTaskResponseDTO = {
   id: number;
@@ -866,6 +881,133 @@ function DetailModal({
   onClose: () => void;
   item: ImplementationTaskResponseDTO | null;
 }) {
+  const [picNames, setPicNames] = React.useState<Array<{ id: number; name: string }>>([]);
+  const [loadingPics, setLoadingPics] = React.useState(false);
+
+  // Fetch tên các PIC khi modal mở
+  React.useEffect(() => {
+    if (!open || !item) {
+      setPicNames([]);
+      return;
+    }
+
+    const picIds = parsePicIdsFromAdditionalRequest(item.additionalRequest, item.picDeploymentId);
+    console.log('Parsed PIC IDs:', picIds, 'from additionalRequest:', item.additionalRequest, 'picDeploymentId:', item.picDeploymentId);
+    
+    if (picIds.length <= 1) {
+      // Chỉ có 1 PIC, dùng tên từ item
+      if (item.picDeploymentId && item.picDeploymentName) {
+        setPicNames([{ id: item.picDeploymentId, name: item.picDeploymentName }]);
+      } else {
+        setPicNames([]);
+      }
+      return;
+    }
+    
+    // Nếu có nhiều PIC nhưng không có tên cho PIC đầu tiên, vẫn fetch tất cả
+    console.log('Fetching names for', picIds.length, 'PICs');
+
+    // Fetch tên các PIC từ API - thử cả admin và superadmin endpoints
+    setLoadingPics(true);
+    Promise.all(
+      picIds.map(async (id) => {
+        // Nếu là PIC đầu tiên và đã có tên, dùng luôn
+        if (id === item.picDeploymentId && item.picDeploymentName) {
+          return { id, name: item.picDeploymentName };
+        }
+        
+        // Thử fetch từ admin endpoint trước
+        try {
+          const url = `${API_ROOT}/api/v1/admin/users/${id}`;
+          const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+          if (res.ok) {
+            const data = await res.json();
+            console.log(`Admin API response for user ${id}:`, data);
+            // Handle cả trường hợp response là object hoặc có content/data property (giống TaskFormModal)
+            const user = Array.isArray(data?.content) ? data.content[0] : (data?.data || data);
+            if (user) {
+              const name = user.fullName || user.fullname || user.name || user.username || user.email || user.label;
+              if (name && name.trim() !== "" && name !== String(id)) {
+                console.log(`Found name for user ${id}:`, name);
+                return { id, name: String(name).trim() };
+              } else {
+                console.warn(`No valid name found for user ${id} in response:`, user);
+              }
+            } else {
+              console.warn(`No user data found in response for user ${id}:`, data);
+            }
+          } else {
+            console.warn(`Admin API returned ${res.status} for user ${id}`);
+          }
+        } catch (err) {
+          console.debug(`Admin endpoint failed for user ${id}, trying superadmin...`, err);
+        }
+        
+        // Nếu admin endpoint fail, thử superadmin endpoint
+        try {
+          const url = `${API_ROOT}/api/v1/superadmin/users/${id}`;
+          const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+          if (res.ok) {
+            const data = await res.json();
+            console.log(`Superadmin API response for user ${id}:`, data);
+            const user = Array.isArray(data?.content) ? data.content[0] : (data?.data || data);
+            if (user) {
+              const name = user.fullName || user.fullname || user.name || user.username || user.email || user.label;
+              if (name && name.trim() !== "" && name !== String(id)) {
+                console.log(`Found name for user ${id} from superadmin:`, name);
+                return { id, name: String(name).trim() };
+              }
+            }
+          } else {
+            console.warn(`Superadmin API returned ${res.status} for user ${id}`);
+          }
+        } catch (err) {
+          console.debug(`Superadmin endpoint also failed for user ${id}:`, err);
+        }
+        
+        // Thử dùng search API như fallback
+        try {
+          const searchUrl = `${API_ROOT}/api/v1/admin/users/search?name=${encodeURIComponent(String(id))}`;
+          const searchRes = await fetch(searchUrl, { headers: authHeaders(), credentials: "include" });
+          if (searchRes.ok) {
+            const searchData = await searchRes.json();
+            const searchList = Array.isArray(searchData?.content) ? searchData.content : (Array.isArray(searchData) ? searchData : []);
+            const found = searchList.find((u: any) => Number(u?.id) === Number(id));
+            if (found) {
+              const name = found.fullName || found.fullname || found.name || found.username || found.email || found.label;
+              if (name && name.trim() !== "" && name !== String(id)) {
+                console.log(`Found name for user ${id} via search:`, name);
+                return { id, name: String(name).trim() };
+              }
+            }
+          }
+        } catch (err) {
+          console.debug(`Search API also failed for user ${id}:`, err);
+        }
+        
+        // Nếu cả 3 đều fail, fallback về ID
+        console.warn(`Could not fetch name for user ${id}, using ID as fallback`);
+        return { id, name: String(id) };
+      })
+    )
+      .then((results) => {
+        console.log('Fetched PIC names:', results);
+        setPicNames(results);
+      })
+      .catch((err) => {
+        console.error('Error fetching PIC names:', err);
+        // Nếu lỗi, dùng tên từ item cho PIC đầu tiên
+        if (item.picDeploymentId && item.picDeploymentName) {
+          setPicNames([{ id: item.picDeploymentId, name: item.picDeploymentName }]);
+        } else {
+          setPicNames([]);
+        }
+      })
+      .finally(() => {
+        setLoadingPics(false);
+      });
+  }, [open, item]);
+
   if (!open || !item) return null;
 
   console.log("DetailModal item startDate", item.startDate);
@@ -902,7 +1044,26 @@ function DetailModal({
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <Info icon={<FiMapPin />} label="Tên" value={item.name} />
             <Info icon={<FiMapPin />} label="Bệnh viện" value={item.hospitalName} />
-            <Info icon={<FiUser />} label="Người phụ trách" value={item.picDeploymentName} />
+            <Info 
+              icon={<FiUser />} 
+              label="Người phụ trách" 
+              value={
+                loadingPics ? (
+                  <span className="text-gray-500">Đang tải...</span>
+                ) : picNames.length > 0 ? (
+                  <span className="font-medium">
+                    {picNames.map((pic, idx) => (
+                      <span key={pic.id}>
+                        {idx > 0 && <span className="text-gray-400">, </span>}
+                        {pic.name}
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  item.picDeploymentName || "-"
+                )
+              } 
+            />
             <Info icon={<FiUser />} label="Tiếp nhận bởi" value={item.receivedByName || "—"} />
 
             <Info
@@ -942,7 +1103,12 @@ function DetailModal({
           <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
             <p className="text-gray-500 mb-2">Ghi chú / Yêu cầu bổ sung:</p>
             <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px]">
-              {item.additionalRequest || "—"}
+              {(() => {
+                const notes = item.additionalRequest || "";
+                // Loại bỏ phần [PIC_IDS: ...] khỏi hiển thị
+                const cleaned = notes.replace(/\[PIC_IDS:\s*[^\]]+\]\s*/g, "").trim();
+                return cleaned || "—";
+              })()}
             </div>
           </div>
         </div>

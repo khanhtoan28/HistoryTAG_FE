@@ -221,7 +221,22 @@ export default function TaskCardNew({
               <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">
                 Người phụ trách:{" "}
                 <span className="font-medium text-gray-800 dark:text-gray-200">
-                  {task.picDeploymentName ?? "-"}
+                  {(() => {
+                    // Parse PICs từ additionalRequest nếu có
+                    const additionalReq = (task as any).additionalRequest;
+                    const picId = (task as any).picDeploymentId;
+                    if (additionalReq) {
+                      const match = additionalReq.match(/\[PIC_IDS:\s*([^\]]+)\]/);
+                      if (match) {
+                        const picIds = match[1].split(',').map((id: string) => Number(id.trim())).filter((id: number) => !isNaN(id) && id > 0);
+                        const allPicIds = picId ? [...new Set([picId, ...picIds])] : picIds;
+                        // Hiển thị PIC đầu tiên + số lượng PIC khác
+                        const mainPic = task.picDeploymentName || "-";
+                        return allPicIds.length > 1 ? `${mainPic} (+${allPicIds.length - 1} người khác)` : mainPic;
+                      }
+                    }
+                    return task.picDeploymentName ?? "-";
+                  })()}
                 </span>
               </div>  
 

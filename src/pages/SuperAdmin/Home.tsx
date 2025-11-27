@@ -1748,10 +1748,9 @@ export default function SuperAdminHome() {
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 items-stretch">
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-stretch">
               <StatCard title="Tổng doanh thu dự kiến" value={totalExpected != null ? (totalExpected).toLocaleString() + ' ₫' : '--'} color="bg-indigo-500" />
               <StatCard title="Tổng doanh thu thực tế" value={totalActual != null ? (totalActual).toLocaleString() + ' ₫' : '--'} color="bg-emerald-500" />
-              <StatCard title="Tổng hoa hồng đã chốt" value={totalCommission != null ? (totalCommission).toLocaleString() + ' ₫' : '--'} color="bg-orange-500" />
               <StatCard title="Tỷ lệ chuyển đổi" value={conversionRate != null ? `${conversionRate}%` : '--'} color="bg-teal-500" />
             </div>
 
@@ -1763,11 +1762,11 @@ export default function SuperAdminHome() {
                     options={{
                       chart: { toolbar: { show: false } },
                       plotOptions: { bar: { borderRadius: 8, columnWidth: '30%' } },
-                      xaxis: { categories: ['Dự kiến', 'Thực tế', 'Hoa hồng của viện'] },
+                      xaxis: { categories: ['Dự kiến', 'Thực tế'] },
                       dataLabels: { enabled: false },
-                      colors: ['#465fff', '#10b981', '#ef4444'],
+                      colors: ['#465fff', '#10b981'],
                     }}
-                    series={[{ name: 'VND', data: [totalExpected ?? 0, totalActual ?? 0, totalCommission ?? 0] }]}
+                    series={[{ name: 'VND', data: [totalExpected ?? 0, totalActual ?? 0] }]}
                     type="bar"
                     height={260}
                     width="100%"
@@ -1781,12 +1780,11 @@ export default function SuperAdminHome() {
                       dataLabels: { enabled: false },
                       tooltip: { y: { formatter: (v: number) => `${v.toLocaleString()} ₫` } },
                       legend: { position: 'top' },
-                      colors: ['#7c3aed', '#10b981', '#ef4444'],
+                      colors: ['#7c3aed', '#10b981'],
                     }}
                     series={[
                       { name: 'Tổng doanh thu dự kiến', type: 'bar', data: aggExpected },
                       { name: 'Tổng doanh thu thực tế', type: 'bar', data: aggActual },
-                      { name: 'Tổng hoa hồng đã chốt', type: 'bar', data: aggCommission },
                     ]}
                     type="bar"
                     height={420}

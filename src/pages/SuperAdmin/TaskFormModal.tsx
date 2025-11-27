@@ -147,6 +147,20 @@ export default function TaskFormModal({
         []
     );
 
+    // Hàm fetch thông tin user từ ID
+    const fetchUserById = async (userId: number): Promise<{ id: number; name: string } | null> => {
+        try {
+            const url = `${API_ROOT}/api/v1/superadmin/users/${userId}`;
+            const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+            if (!res.ok) return null;
+            const user = await res.json();
+            const name = user.fullName || user.fullname || user.name || user.username || user.email || String(userId);
+            return { id: userId, name: String(name) };
+        } catch {
+            return null;
+        }
+    };
+
     // Removed: searchAgencies, searchHisSystems, searchHardwares as related fields are hidden
 
     const [model, setModel] = useState<Partial<ImplementationTaskRequestDTO>>(() => ({
@@ -169,11 +183,12 @@ export default function TaskFormModal({
         const nm = initial?.hospitalName || "";
         return id ? { id, name: nm || String(id) } : null;
     });
-    const [picOpt, setPicOpt] = useState<{ id: number; name: string } | null>(() => {
+    const [picOpts, setPicOpts] = useState<Array<{ id: number; name: string; _uid: string }>>(() => {
         const id = initial?.picDeploymentId || 0;
         const nm = initial?.picDeploymentName || "";
-        return id ? { id, name: nm || String(id) } : null;
+        return id ? [{ id, name: nm || String(id), _uid: `pic-${Date.now()}-${id}` }] : [];
     });
+    const [currentPicInput, setCurrentPicInput] = useState<{ id: number; name: string } | null>(null);
     // Removed: agencyOpt, hisOpt, hardwareOpt states
 
     // Helper function to normalize status (similar to admin form)
@@ -221,7 +236,57 @@ export default function TaskFormModal({
 
             const pid = initial?.picDeploymentId || 0;
             const pnm = initial?.picDeploymentName || "";
-            setPicOpt(pid ? { id: pid, name: pnm || String(pid) } : null);
+            
+            // Parse thêm các PIC khác từ additionalRequest nếu có
+            const additionalReq = initial?.additionalRequest || "";
+            let allPicIds: number[] = [];
+            if (pid) {
+                allPicIds.push(pid);
+            }
+            // Match tất cả các [PIC_IDS: ...] trong additionalRequest
+            const picIdsMatches = additionalReq.matchAll(/\[PIC_IDS:\s*([^\]]+)\]/g);
+            for (const match of picIdsMatches) {
+                if (match[1]) {
+                    const ids = match[1].split(',').map(id => Number(id.trim())).filter(id => !isNaN(id) && id > 0);
+                    allPicIds.push(...ids);
+                }
+            }
+            // Loại bỏ duplicate và đảm bảo PIC đầu tiên (pid) luôn ở đầu
+            allPicIds = pid ? [pid, ...allPicIds.filter(id => id !== pid)] : [...new Set(allPicIds)];
+            
+            // Load PICs - fetch tên từ API cho tất cả PICs
+            if (allPicIds.length > 0) {
+                // PIC đầu tiên đã có tên từ backend
+                const initialPicOpts = allPicIds.map((id, idx) => ({
+                    id,
+                    name: idx === 0 && pnm ? pnm : String(id), // Tạm thời dùng ID, sẽ fetch sau
+                    _uid: `pic-${Date.now()}-${id}-${idx}`
+                }));
+                setPicOpts(initialPicOpts);
+                
+                // Fetch tên cho các PIC khác (ngoài PIC đầu tiên)
+                if (allPicIds.length > 1) {
+                    Promise.all(
+                        allPicIds.slice(1).map(async (id) => {
+                            const userInfo = await fetchUserById(id);
+                            return userInfo ? { id, name: userInfo.name } : null;
+                        })
+                    ).then((results) => {
+                        setPicOpts((prev) => {
+                            return prev.map((pic, idx) => {
+                                if (idx === 0) return pic; // Giữ nguyên PIC đầu tiên
+                                const fetched = results[idx - 1];
+                                return fetched ? { ...pic, name: fetched.name } : pic;
+                            });
+                        });
+                    }).catch(() => {
+                        // Nếu fetch lỗi, giữ nguyên
+                    });
+                }
+            } else {
+                setPicOpts([]);
+            }
+            setCurrentPicInput(null);
 
             // removed: agency/his/hardware selections
         }
@@ -313,6 +378,10 @@ export default function TaskFormModal({
 
     const [submitting, setSubmitting] = useState(false);
 
+    const removePic = React.useCallback((uid: string) => {
+        setPicOpts((prev) => prev.filter(p => p._uid !== uid));
+    }, []);
+
     if (!open) return null;
 
     const lockHospital = !initial?.id && (Boolean(initial?.hospitalId) || Boolean(initial?.hospitalName));
@@ -334,8 +403,8 @@ export default function TaskFormModal({
             alert("Bệnh viện không được để trống");
             return;
         }
-        if (!picOpt?.id) {
-            alert("Người phụ trách không được để trống");
+        if (picOpts.length === 0) {
+            alert("Vui lòng thêm ít nhất một người phụ trách");
             return;
         }
         if (!model.status) {
@@ -352,17 +421,30 @@ export default function TaskFormModal({
         const completionIso = toISOOrNull(model.completionDate);
         const derivedCompletion = completionIso ?? (normalizedStatus === "COMPLETED" ? toLocalISOString(new Date()) : null);
 
-        const payload: ImplementationTaskRequestDTO = {
+        // Tạo payload với PIC đầu tiên làm chính
+        // Loại bỏ [PIC_IDS: ...] cũ khỏi additionalRequest trước khi thêm mới
+        let cleanedAdditionalRequest = model.additionalRequest || "";
+        if (cleanedAdditionalRequest) {
+            // Loại bỏ tất cả các [PIC_IDS: ...] cũ
+            cleanedAdditionalRequest = cleanedAdditionalRequest.replace(/\[PIC_IDS:\s*[^\]]+\]\s*/g, "").trim();
+        }
+        
+        const payload: ImplementationTaskRequestDTO & { picDeploymentIds?: number[] } = {
             name: model.name!.trim(),
             hospitalId: hospitalOpt.id,
-            picDeploymentId: picOpt.id,
+            picDeploymentId: picOpts[0].id, // Gửi PIC đầu tiên làm chính
+            // Gửi thêm danh sách tất cả PICs nếu có nhiều hơn 1
+            ...(picOpts.length > 1 ? { picDeploymentIds: picOpts.map(p => p.id) } : {}),
             agencyId: null,
             hisSystemId: null,
             hardwareId: null,
             quantity: null,
             apiTestStatus: model.apiTestStatus ?? null,
             bhytPortCheckInfo: null,
-            additionalRequest: model.additionalRequest ?? null,
+            // Lưu thêm thông tin các PIC khác vào additionalRequest nếu có (format: [PIC_IDS: 1,2,3])
+            additionalRequest: picOpts.length > 1 
+                ? `${cleanedAdditionalRequest}\n\n[PIC_IDS: ${picOpts.map(p => p.id).join(',')}]`.trim()
+                : (cleanedAdditionalRequest || null),
             apiUrl: null,
             deadline: toISOOrNull(model.deadline) ?? null,
             completionDate: derivedCompletion,
@@ -372,7 +454,10 @@ export default function TaskFormModal({
 
         try {
             setSubmitting(true);
+            console.log('Submitting with PICs:', picOpts.map(p => ({ id: p.id, name: p.name })));
+            console.log('Payload additionalRequest:', payload.additionalRequest);
             await onSubmit(payload, initial?.id);
+            // Không hiển thị toast ở đây vì handleSubmit trong implementsuper-task.tsx đã có toast rồi
             onClose();
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
@@ -383,7 +468,7 @@ export default function TaskFormModal({
     };
 
     // Minimal RemoteSelect UI (inline simple dropdown)
-    function RemoteSelect({ label, placeholder, fetchOptions, value, onChange, required, disabled }: {
+    function RemoteSelect({ label, placeholder, fetchOptions, value, onChange, required, disabled, hideLabel, excludeIds }: {
         label: string;
         placeholder?: string;
         fetchOptions: (q: string) => Promise<Array<{ id: number; name: string }>>;
@@ -391,12 +476,27 @@ export default function TaskFormModal({
         onChange: (v: { id: number; name: string } | null) => void;
         required?: boolean;
         disabled?: boolean;
+        hideLabel?: boolean;
+        excludeIds?: number[]; // IDs to exclude from options
     }) {
         const [open, setOpen] = useState(false);
         const [q, setQ] = useState("");
         const [loading, setLoading] = useState(false);
         const [options, setOptions] = useState<Array<{ id: number; name: string }>>([]);
         const [highlight, setHighlight] = useState<number>(-1);
+        
+        // Filter out excluded IDs from options
+        const filteredOptions = React.useMemo(() => {
+            if (!excludeIds || excludeIds.length === 0) return options;
+            return options.filter(opt => !excludeIds.includes(opt.id));
+        }, [options, excludeIds]);
+        
+        // Reset highlight when filtered options change
+        React.useEffect(() => {
+            if (highlight >= filteredOptions.length) {
+                setHighlight(-1);
+            }
+        }, [filteredOptions.length, highlight]);
 
         useEffect(() => {
             let alive = true;
@@ -431,6 +531,67 @@ export default function TaskFormModal({
             }
         }, [open, options.length, q, fetchOptions]);
 
+        const content = (
+            <>
+                <div className="relative">
+                    <input
+                        className={clsx(
+                            "h-10 w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 outline-none",
+                            "focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
+                        )}
+                        placeholder={placeholder || "Gõ để tìm..."}
+                        value={open ? q : value?.name || ""}
+                        onChange={(e) => {
+                            setQ(e.target.value);
+                            if (!open) setOpen(true);
+                        }}
+                        onFocus={() => setOpen(true)}
+                        onKeyDown={(e) => {
+                            if (!open) return;
+                            if (e.key === "ArrowDown") {
+                                e.preventDefault();
+                                setHighlight((h) => Math.min(h + 1, filteredOptions.length - 1));
+                            } else if (e.key === "ArrowUp") {
+                                e.preventDefault();
+                                setHighlight((h) => Math.max(h - 1, 0));
+                            } else if (e.key === "Enter") {
+                                e.preventDefault();
+                                if (highlight >= 0 && filteredOptions[highlight]) {
+                                    onChange(filteredOptions[highlight]);
+                                    setOpen(false);
+                                    setQ("");
+                                }
+                            } else if (e.key === "Escape") {
+                                setOpen(false);
+                            }
+                        }}
+                    />
+                    {value && !open && (
+                        <button
+                            type="button"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            onClick={() => onChange(null)}
+                            aria-label="Clear"
+                        >
+                            ✕
+                        </button>
+                    )}
+
+                    {open && (
+                        <div className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg" onMouseLeave={() => setHighlight(-1)} style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
+                            {loading && <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>}
+                            {!loading && filteredOptions.length === 0 && <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>}
+                            {!loading && filteredOptions.map((opt, idx) => (
+                                <div key={opt.id} className={clsx("px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800", idx === highlight ? "bg-gray-100 dark:bg-gray-800" : "")} onMouseEnter={() => setHighlight(idx)} onMouseDown={(e) => { e.preventDefault(); onChange(opt); setOpen(false); setQ(""); }}>
+                                    {opt.name}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </>
+        );
+
         if (disabled) {
             return (
                 <Field label={label} required={required}>
@@ -439,6 +600,10 @@ export default function TaskFormModal({
                     </div>
                 </Field>
             );
+        }
+
+        if (hideLabel) {
+            return content;
         }
 
         return (
@@ -460,15 +625,16 @@ export default function TaskFormModal({
                             if (!open) return;
                             if (e.key === "ArrowDown") {
                                 e.preventDefault();
-                                setHighlight((h) => Math.min(h + 1, options.length - 1));
+                                setHighlight((h) => Math.min(h + 1, filteredOptions.length - 1));
                             } else if (e.key === "ArrowUp") {
                                 e.preventDefault();
                                 setHighlight((h) => Math.max(h - 1, 0));
                             } else if (e.key === "Enter") {
                                 e.preventDefault();
-                                if (highlight >= 0 && options[highlight]) {
-                                    onChange(options[highlight]);
+                                if (highlight >= 0 && filteredOptions[highlight]) {
+                                    onChange(filteredOptions[highlight]);
                                     setOpen(false);
+                                    setQ("");
                                 }
                             } else if (e.key === "Escape") {
                                 setOpen(false);
@@ -487,11 +653,11 @@ export default function TaskFormModal({
                     )}
 
                     {open && (
-                        <div className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg" onMouseLeave={() => setHighlight(-1)}>
+                        <div className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg" onMouseLeave={() => setHighlight(-1)} style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
                             {loading && <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>}
-                            {!loading && options.length === 0 && <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>}
-                            {!loading && options.map((opt, idx) => (
-                                <div key={opt.id} className={clsx("px-3 py-2 text-sm cursor-pointer", idx === highlight ? "bg-gray-100 dark:bg-gray-800" : "")} onMouseEnter={() => setHighlight(idx)} onMouseDown={(e) => { e.preventDefault(); onChange(opt); setOpen(false); }}>
+                            {!loading && filteredOptions.length === 0 && <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>}
+                            {!loading && filteredOptions.map((opt, idx) => (
+                                <div key={opt.id} className={clsx("px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800", idx === highlight ? "bg-gray-100 dark:bg-gray-800" : "")} onMouseEnter={() => setHighlight(idx)} onMouseDown={(e) => { e.preventDefault(); onChange(opt); setOpen(false); setQ(""); }}>
                                     {opt.name}
                                 </div>
                             ))}
@@ -520,7 +686,58 @@ export default function TaskFormModal({
 
                                 <RemoteSelect label="Bệnh viện" required placeholder="Nhập tên bệnh viện để tìm…" fetchOptions={searchHospitals} value={hospitalOpt} onChange={setHospitalOpt} disabled={readOnly || lockHospital} />
 
-                                <RemoteSelect label="Người phụ trách (PIC)" required placeholder="Nhập tên người phụ trách để tìm…" fetchOptions={searchPICs} value={picOpt} onChange={setPicOpt} disabled={readOnly} />
+                                <div className="col-span-2">
+                                    <Field label="Người phụ trách (PIC)" required>
+                                        <div className="space-y-1.5">
+                                            {picOpts.map((pic) => (
+                                                <div key={pic._uid} className="flex items-center gap-2 px-2 py-1 bg-gray-50 dark:bg-gray-800 rounded text-xs">
+                                                    <span className="flex-1 text-xs">{pic.name}</span>
+                                                    {!readOnly && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                removePic(pic._uid);
+                                                            }}
+                                                            className="text-red-500 hover:text-red-700 text-xs px-1"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                            {!readOnly && (
+                                                <RemoteSelect 
+                                                    label=""
+                                                    hideLabel={true}
+                                                    placeholder="Nhập tên người phụ trách để tìm…" 
+                                                    fetchOptions={searchPICs} 
+                                                    value={currentPicInput} 
+                                                    onChange={(selected) => {
+                                                        if (selected) {
+                                                            // Kiểm tra xem PIC đã được chọn chưa
+                                                            const alreadySelected = picOpts.some(p => p.id === selected.id);
+                                                            if (!alreadySelected) {
+                                                                const newPic = { ...selected, _uid: `pic-${Date.now()}-${selected.id}-${Math.random().toString(36).substring(2, 9)}` };
+                                                                setPicOpts((prev) => {
+                                                                    const updated = [...prev, newPic];
+                                                                    console.log('Added PIC:', selected.name, 'Total PICs:', updated.length);
+                                                                    return updated;
+                                                                });
+                                                                setCurrentPicInput(null);
+                                                            } else {
+                                                                console.log('PIC already selected:', selected.name);
+                                                            }
+                                                        }
+                                                    }} 
+                                                    disabled={readOnly}
+                                                    excludeIds={picOpts.map(p => p.id)} // Loại bỏ các PIC đã được chọn
+                                                />
+                                            )}
+                                        </div>
+                                    </Field>
+                                </div>
 
                                 {/* Removed fields: Số lượng, Agency, HIS, Hardware, API URL, BHYT */}
 

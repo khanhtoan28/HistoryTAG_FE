@@ -6,7 +6,21 @@ import toast from "react-hot-toast";
 import { FaHospital } from "react-icons/fa";
 import { FiUser, FiLink, FiClock, FiTag, FiCheckCircle } from "react-icons/fi";
 
-
+// Helper function để parse PIC IDs từ additionalRequest
+function parsePicIdsFromAdditionalRequest(additionalRequest?: string | null, picDeploymentId?: number | null): number[] {
+  const ids: number[] = [];
+  if (picDeploymentId) {
+    ids.push(picDeploymentId);
+  }
+  if (additionalRequest) {
+    const match = additionalRequest.match(/\[PIC_IDS:\s*([^\]]+)\]/);
+    if (match) {
+      const parsedIds = match[1].split(',').map(id => Number(id.trim())).filter(id => !isNaN(id) && id > 0);
+      ids.push(...parsedIds);
+    }
+  }
+  return [...new Set(ids)]; // Loại bỏ duplicate
+}
 
 function PendingTasksModal({
     open,
@@ -1141,6 +1155,57 @@ function DetailModal({
     onClose: () => void;
     item: ImplementationTaskResponseDTO | null;
 }) {
+    const [picNames, setPicNames] = React.useState<Array<{ id: number; name: string }>>([]);
+    const [loadingPics, setLoadingPics] = React.useState(false);
+
+    // Fetch tên các PIC khi modal mở
+    React.useEffect(() => {
+        if (!open || !item) {
+            setPicNames([]);
+            return;
+        }
+
+        const picIds = parsePicIdsFromAdditionalRequest(item.additionalRequest, item.picDeploymentId);
+        if (picIds.length <= 1) {
+            // Chỉ có 1 PIC, dùng tên từ item
+            if (item.picDeploymentId && item.picDeploymentName) {
+                setPicNames([{ id: item.picDeploymentId, name: item.picDeploymentName }]);
+            } else {
+                setPicNames([]);
+            }
+            return;
+        }
+
+        // Fetch tên các PIC từ API
+        setLoadingPics(true);
+        Promise.all(
+            picIds.map(async (id) => {
+                try {
+                    const url = `${API_ROOT}/api/v1/admin/users/${id}`;
+                    const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+                    if (!res.ok) return { id, name: String(id) };
+                    const user = await res.json();
+                    const name = user.fullName || user.fullname || user.name || user.username || user.email || String(id);
+                    return { id, name: String(name) };
+                } catch {
+                    return { id, name: String(id) };
+                }
+            })
+        )
+            .then((results) => {
+                setPicNames(results);
+            })
+            .catch(() => {
+                // Nếu lỗi, dùng tên từ item cho PIC đầu tiên
+                if (item.picDeploymentId && item.picDeploymentName) {
+                    setPicNames([{ id: item.picDeploymentId, name: item.picDeploymentName }]);
+                }
+            })
+            .finally(() => {
+                setLoadingPics(false);
+            });
+    }, [open, item]);
+
     if (!open || !item) return null;
 
     const fmt = (d?: string | null) =>
@@ -1198,7 +1263,26 @@ function DetailModal({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3">
                         <Info icon={<FiTag />} label="Tên" value={item.name} />
                         <Info icon={<FaHospital />} label="Bệnh viện" value={item.hospitalName} />
-                        <Info icon={<FiUser />} label="Người làm" value={item.picDeploymentName} />
+                        <Info 
+                            icon={<FiUser />} 
+                            label="Người làm" 
+                            value={
+                                loadingPics ? (
+                                    <span className="text-gray-500">Đang tải...</span>
+                                ) : picNames.length > 0 ? (
+                                    <span className="font-medium">
+                                        {picNames.map((pic, idx) => (
+                                            <span key={pic.id}>
+                                                {idx > 0 && <span className="text-gray-400">, </span>}
+                                                {pic.name}
+                                            </span>
+                                        ))}
+                                    </span>
+                                ) : (
+                                    item.picDeploymentName || "-"
+                                )
+                            } 
+                        />
                         <Info icon={<FiUser />} label="Tiếp nhận bởi" value={item.receivedByName || "—"} />
 
                         <Info
@@ -1239,7 +1323,12 @@ function DetailModal({
                     <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
                         <p className="text-gray-500 mb-2">Yêu cầu bổ sung:</p>
                         <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px]">
-                            {item.additionalRequest || "—"}
+                            {(() => {
+                                const notes = item.additionalRequest || "";
+                                // Loại bỏ phần [PIC_IDS: ...] khỏi hiển thị
+                                const cleaned = notes.replace(/\[PIC_IDS:\s*[^\]]+\]\s*/g, "").trim();
+                                return cleaned || "—";
+                            })()}
                         </div>
                     </div>
                 </div>
