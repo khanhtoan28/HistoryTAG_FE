@@ -174,12 +174,7 @@ export default function AllNotificationsPage() {
           />
         </div>
         <div className="flex items-center gap-3">
-          <button 
-            onClick={() => { setPreset("all"); setStartDate(""); setEndDate(""); }} 
-            className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 transition-colors"
-          >
-            Làm mới
-          </button>
+          
           <button 
             onClick={() => navigate(-1)} 
             className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 transition-colors"
@@ -261,13 +256,13 @@ export default function AllNotificationsPage() {
                           onClick={() => handleOpen(n)} 
                           className="text-xs px-3 py-1.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors font-medium"
                         >
-                          View
+                          Xem
                         </button>
                         <button 
                           onClick={() => handleDelete(n.id)} 
                           className="text-xs px-3 py-1.5 rounded-md bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors font-medium"
                         >
-                          Delete
+                          Xóa
                         </button>
                       </div>
                     </div>

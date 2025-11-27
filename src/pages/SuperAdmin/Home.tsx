@@ -1577,7 +1577,7 @@ export default function SuperAdminHome() {
 
   return (
     <>
-      <PageMeta title="Super Admin Dashboard | TAGTECH" description="" />
+      <PageMeta title="Quản lý công việc | TAGTECH" description="" />
 
       <div className="space-y-6">
         <header className="relative overflow-hidden rounded-2xl p-6 text-white shadow-md">
