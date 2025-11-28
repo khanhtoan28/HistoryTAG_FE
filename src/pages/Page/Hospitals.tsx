@@ -115,6 +115,21 @@ const STATUS_FALLBACK: EnumOption[] = [
   { name: "ISSUE", displayName: "Gặp sự cố" },
 ];
 
+// Danh sách 64 tỉnh thành Việt Nam
+const VIETNAM_PROVINCES = [
+  "An Giang", "Bà Rịa - Vũng Tàu", "Bạc Liêu", "Bắc Giang", "Bắc Kạn", "Bắc Ninh",
+  "Bến Tre", "Bình Định", "Bình Dương", "Bình Phước", "Bình Thuận", "Cà Mau",
+  "Cao Bằng", "Cần Thơ", "Đà Nẵng", "Đắk Lắk", "Đắk Nông", "Điện Biên",
+  "Đồng Nai", "Đồng Tháp", "Gia Lai", "Hà Giang", "Hà Nam", "Hà Nội",
+  "Hà Tĩnh", "Hải Dương", "Hải Phòng", "Hậu Giang", "Hòa Bình", "Hưng Yên",
+  "Khánh Hòa", "Kiên Giang", "Kon Tum", "Lai Châu", "Lâm Đồng", "Lạng Sơn",
+  "Lào Cai", "Long An", "Nam Định", "Nghệ An", "Ninh Bình", "Ninh Thuận",
+  "Phú Thọ", "Phú Yên", "Quảng Bình", "Quảng Nam", "Quảng Ngãi", "Quảng Ninh",
+  "Quảng Trị", "Sóc Trăng", "Sơn La", "Tây Ninh", "Thái Bình", "Thái Nguyên",
+  "Thanh Hóa", "Thừa Thiên Huế", "Tiền Giang", "TP Hồ Chí Minh", "Trà Vinh",
+  "Tuyên Quang", "Vĩnh Long", "Vĩnh Phúc", "Yên Bái"
+];
+
 function disp(map: Record<string, string>, key?: string | null) {
   if (!key) return "—";
   return map[key] ?? key;
@@ -1135,6 +1150,194 @@ export default function HospitalsPage() {
 
   // ✅ Pagination logic
 
+  // Component Filter Province với search và scroll
+  function FilterProvinceSelect({
+    value,
+    onChange,
+    placeholder,
+    disabled,
+  }: {
+    value: string;
+    onChange: (v: string) => void;
+    placeholder?: string;
+    disabled?: boolean;
+  }) {
+    const [openBox, setOpenBox] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [highlight, setHighlight] = useState(-1);
+    const inputRef = useRef<HTMLDivElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    const filteredOptions = useMemo(() => {
+      if (!searchQuery.trim()) return VIETNAM_PROVINCES;
+      const q = searchQuery.toLowerCase().trim();
+      return VIETNAM_PROVINCES.filter((province) =>
+        province.toLowerCase().includes(q) ||
+        province.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(q)
+      );
+    }, [searchQuery]);
+
+    const displayOptions = filteredOptions.slice(0, 10);
+    const hasMore = filteredOptions.length > 10;
+
+    useEffect(() => {
+      const handleClickOutside = (e: MouseEvent) => {
+        if (
+          dropdownRef.current &&
+          !dropdownRef.current.contains(e.target as Node) &&
+          inputRef.current &&
+          !inputRef.current.contains(e.target as Node)
+        ) {
+          setOpenBox(false);
+          setSearchQuery("");
+        }
+      };
+      if (openBox) {
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+      }
+    }, [openBox]);
+
+    return (
+      <div className="relative min-w-[200px]">
+        <div
+          ref={inputRef}
+          className={`rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm cursor-pointer focus-within:ring-1 focus-within:ring-[#4693FF] focus-within:border-[#4693FF] ${disabled ? "opacity-50 cursor-not-allowed bg-gray-50" : ""}`}
+          onClick={() => {
+            if (!disabled) setOpenBox(!openBox);
+          }}
+        >
+          {openBox ? (
+            <input
+              type="text"
+              className="w-full outline-none bg-transparent"
+              placeholder={placeholder || "Tìm kiếm tỉnh/thành..."}
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setHighlight(-1);
+              }}
+              onKeyDown={(e) => {
+                const totalOptions = displayOptions.length + 1; // +1 for "Tất cả"
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setHighlight((h) => Math.min(h + 1, totalOptions - 1));
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setHighlight((h) => Math.max(h - 1, 0));
+                } else if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (highlight === 0) {
+                    onChange("");
+                    setOpenBox(false);
+                    setSearchQuery("");
+                  } else if (highlight > 0 && highlight <= displayOptions.length) {
+                    onChange(displayOptions[highlight - 1]);
+                    setOpenBox(false);
+                    setSearchQuery("");
+                  } else if (highlight > displayOptions.length) {
+                    const remainingOptions = filteredOptions.slice(10);
+                    const selectedOption = remainingOptions[highlight - displayOptions.length - 1];
+                    if (selectedOption) {
+                      onChange(selectedOption);
+                      setOpenBox(false);
+                      setSearchQuery("");
+                    }
+                  }
+                } else if (e.key === "Escape") {
+                  setOpenBox(false);
+                  setSearchQuery("");
+                }
+              }}
+              onClick={(e) => e.stopPropagation()}
+              autoFocus
+              disabled={disabled}
+            />
+          ) : (
+            <div className="flex items-center justify-between">
+              <span className={value ? "text-gray-900" : "text-gray-500"}>
+                {value || placeholder || "Tất cả tỉnh/thành"}
+              </span>
+              <span className="text-gray-400">▼</span>
+            </div>
+          )}
+        </div>
+        {openBox && !disabled && (
+          <div
+            ref={dropdownRef}
+            className="absolute z-50 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg"
+            style={{ maxHeight: "300px", overflowY: "auto" }}
+          >
+            {filteredOptions.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>
+            ) : (
+              <>
+                {/* Option "Tất cả" */}
+                <div
+                  className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 border-b border-gray-100 ${
+                    !value ? "bg-blue-50" : ""
+                  } ${highlight === 0 ? "bg-gray-100" : ""}`}
+                  onMouseEnter={() => setHighlight(0)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onChange("");
+                    setOpenBox(false);
+                    setSearchQuery("");
+                  }}
+                >
+                  <div className="font-medium text-gray-800">Tất cả tỉnh/thành</div>
+                </div>
+                {displayOptions.map((province, idx) => (
+                  <div
+                    key={province}
+                    className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 ${
+                      idx + 1 === highlight ? "bg-gray-100" : ""
+                    } ${province === value ? "bg-blue-50" : ""}`}
+                    onMouseEnter={() => setHighlight(idx + 1)}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      onChange(province);
+                      setOpenBox(false);
+                      setSearchQuery("");
+                    }}
+                  >
+                    <div className="font-medium text-gray-800">{province}</div>
+                  </div>
+                ))}
+                {hasMore && (
+                  <div className="px-3 py-2 text-xs text-gray-400 border-t border-gray-100">
+                    Và {filteredOptions.length - 10} kết quả khác... (cuộn để xem)
+                  </div>
+                )}
+                {filteredOptions.length > 10 &&
+                  filteredOptions.slice(10).map((province, idx) => {
+                    const actualIndex = idx + 11; // 0 = "Tất cả", 1-10 = displayOptions, 11+ = remaining
+                    return (
+                      <div
+                        key={province}
+                        className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 ${
+                          actualIndex === highlight ? "bg-gray-100" : ""
+                        } ${province === value ? "bg-blue-50" : ""}`}
+                        onMouseEnter={() => setHighlight(actualIndex)}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          onChange(province);
+                          setOpenBox(false);
+                          setSearchQuery("");
+                        }}
+                      >
+                        <div className="font-medium text-gray-800">{province}</div>
+                      </div>
+                    );
+                  })}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // Component Filter Person In Charge với search và scroll
   function FilterPersonInChargeSelect({
     value,
@@ -1335,12 +1538,10 @@ export default function HospitalsPage() {
               value={qName}
               onChange={(e) => setQName(e.target.value)}
             />
-            <input
-              type="text"
-              className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[180px] border-gray-300 bg-white"
-              placeholder="Tỉnh/Thành"
+            <FilterProvinceSelect
               value={qProvince}
-              onChange={(e) => setQProvince(e.target.value)}
+              onChange={setQProvince}
+              placeholder="Tất cả tỉnh/thành"
             />
             <select 
               className="rounded-lg border px-3 py-2 text-sm border-gray-300 bg-white min-w-[180px]" 
@@ -1678,11 +1879,11 @@ export default function HospitalsPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="mb-1 block text-sm">Tỉnh/Thành</label>
-                      <input
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
+                      <label className="mb-1 block text-sm font-medium">Tỉnh/Thành</label>
+                      <FilterProvinceSelect
                         value={form.province || ""}
-                        onChange={(e) => setForm((s) => ({ ...s, province: e.target.value }))}
+                        onChange={(v) => setForm((s) => ({ ...s, province: v }))}
+                        placeholder="(không bắt buộc)"
                         disabled={isViewing || !canEdit}
                       />
                     </div>

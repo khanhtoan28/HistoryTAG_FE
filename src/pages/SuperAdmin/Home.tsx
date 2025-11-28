@@ -122,9 +122,15 @@ export default function SuperAdminHome() {
   // Profile status filter (for "Báo cáo chi tiết theo từng viện")
   const [profileStatusFilter, setProfileStatusFilter] = useState<string>('all');
   const [profilePicFilter, setProfilePicFilter] = useState<string>('all');
-  const teamSelectRef = useRef<HTMLSelectElement | null>(null);
   const normalizedSelectedTeam = selectedTeam.trim().toUpperCase();
   const isSalesSelected = normalizedSelectedTeam === 'SALES' || normalizedSelectedTeam === 'KINH DOANH';
+  
+  // Team select pagination states
+  const [teamSearchQuery, setTeamSearchQuery] = useState<string>('');
+  const [teamPage, setTeamPage] = useState<number>(0);
+  const [teamDropdownOpen, setTeamDropdownOpen] = useState<boolean>(false);
+  const teamsPerPage = 5;
+  const teamDropdownRef = useRef<HTMLDivElement | null>(null);
 
   // Validate profilePicFilter when profileUsers changes
   // Temporarily disabled to debug infinite loop
@@ -139,9 +145,14 @@ export default function SuperAdminHome() {
   // }, [profileUsers]);
   // Pagination for detail view
   const [detailCurrentPage, setDetailCurrentPage] = useState<number>(0);
-  const [detailItemsPerPage, setDetailItemsPerPage] = useState<number>(50);
+  const [detailItemsPerPage, setDetailItemsPerPage] = useState<number>(5);
   const [detailTotalItems, setDetailTotalItems] = useState<number>(0);
   const [detailTotalPages, setDetailTotalPages] = useState<number>(1);
+  // Pagination for implementation and maintenance tables
+  const [implCurrentPage, setImplCurrentPage] = useState<number>(0);
+  const [implItemsPerPage, setImplItemsPerPage] = useState<number>(5);
+  const [maintCurrentPage, setMaintCurrentPage] = useState<number>(0);
+  const [maintItemsPerPage, setMaintItemsPerPage] = useState<number>(5);
   // Collapsible groups (hospital names)
   const [collapsedHospitals, setCollapsedHospitals] = useState<Set<string>>(new Set());
   const resetTeamFilters = useCallback(() => {
@@ -535,9 +546,58 @@ export default function SuperAdminHome() {
     setDetailCurrentPage(0);
   }, [selectedTeam]);
 
+  // Close team dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        teamDropdownRef.current &&
+        !teamDropdownRef.current.contains(event.target as Node)
+      ) {
+        setTeamDropdownOpen(false);
+      }
+    }
+    if (teamDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    } else {
+      document.removeEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [teamDropdownOpen]);
+
+  useEffect(() => {
+    if (!teamDropdownOpen) {
+      setTeamSearchQuery("");
+      setTeamPage(0);
+    }
+  }, [teamDropdownOpen]);
+
+  useEffect(() => {
+    setTeamPage(0);
+  }, [teamSearchQuery]);
+
+  // Filter and paginate teams
+  const filteredTeams = useMemo(() => {
+    const q = teamSearchQuery.trim().toLowerCase();
+    if (!q) return availableTeams;
+    return availableTeams.filter(team => {
+      const teamName = translateTeamName(team).toLowerCase();
+      return teamName.includes(q) || team.toLowerCase().includes(q);
+    });
+  }, [availableTeams, teamSearchQuery]);
+
+  const paginatedTeams = useMemo(() => {
+    const itemsToShow = (teamPage + 1) * teamsPerPage;
+    return filteredTeams.slice(0, itemsToShow);
+  }, [filteredTeams, teamPage]);
+
+  const hasMoreTeams = useMemo(() => {
+    const itemsToShow = (teamPage + 1) * teamsPerPage;
+    return itemsToShow < filteredTeams.length;
+  }, [filteredTeams.length, teamPage]);
+
   // Load team profile (load all tasks for selected team, grouped by hospital)
   const loadTeamProfile = async (teamName?: string) => {
-    const teamValue = (teamName ?? teamSelectRef.current?.value ?? selectedTeam ?? '').trim();
+    const teamValue = (teamName ?? selectedTeam ?? '').trim();
     if (!teamValue) {
       toast.error('Vui lòng chọn team');
       return;
@@ -766,6 +826,16 @@ export default function SuperAdminHome() {
     }
   };
 
+  // Helper function to translate team names
+  const translateTeamName = (team: string): string => {
+    const teamUpper = team.toUpperCase();
+    if (teamUpper === 'DEPLOYMENT' || teamUpper.includes('TRIỂN KHAI') || teamUpper.includes('TRIENKHAI')) return 'Triển khai';
+    if (teamUpper === 'DEV' || teamUpper === 'DEVELOPMENT' || teamUpper.includes('PHÁT TRIỂN') || teamUpper.includes('PHATTRIEN')) return 'Phát triển';
+    if (teamUpper === 'MAINTENANCE' || teamUpper.includes('BẢO TRÌ') || teamUpper.includes('BAOTRI')) return 'Bảo trì';
+    if (teamUpper === 'SALES' || teamUpper.includes('KINH DOANH') || teamUpper.includes('KINHDOANH')) return 'Kinh doanh';
+    return team; // Return original if no match
+  };
+
     const translateStatus = (s?: string | null): string => {
       if (!s) return '—';
       const m: Record<string, string> = {
@@ -906,6 +976,32 @@ export default function SuperAdminHome() {
     profileMaintTasks.filter((t) =>
       inSelectedQuarter((t as any).startDate ?? (t as any).endDate ?? (t as any).createdDate ?? null)
     ), [profileMaintTasks, profileQuarter, profileYear]);
+  // Helper to check if a date falls within the selected date range
+  const matchesDateRange = (dateStr?: string | null): boolean => {
+    // If date range is set, use it (priority over quarter/year)
+    if (profileDateFrom || profileDateTo) {
+      if (!dateStr) return false;
+      const d = new Date(dateStr);
+      if (Number.isNaN(d.getTime())) return false;
+      const dateOnly = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      
+      if (profileDateFrom) {
+        const fromDate = new Date(profileDateFrom);
+        fromDate.setHours(0, 0, 0, 0);
+        if (dateOnly < fromDate) return false;
+      }
+      if (profileDateTo) {
+        const toDate = new Date(profileDateTo);
+        toDate.setHours(23, 59, 59, 999);
+        if (dateOnly > toDate) return false;
+      }
+      return true;
+    }
+    
+    // Fallback to quarter/year filter if date range not set
+    return inSelectedQuarter(dateStr);
+  };
+
   const displayedBusinesses = useMemo(() => 
     profileBusinesses.filter((b) => {
       const dateCandidate =
@@ -914,8 +1010,8 @@ export default function SuperAdminHome() {
         (b as any).createdAt ??
         (b as any).created_at ??
         null;
-      return inSelectedQuarter(dateCandidate);
-    }), [profileBusinesses, profileQuarter, profileYear]);
+      return matchesDateRange(dateCandidate);
+    }), [profileBusinesses, profileQuarter, profileYear, profileDateFrom, profileDateTo]);
   const salesFilteredBusinesses = useMemo(() => {
     if (!isSalesSelected) return [];
     let list = displayedBusinesses.slice();
@@ -946,6 +1042,94 @@ export default function SuperAdminHome() {
     ? displayedMaintTasks
     : displayedMaintTasks.filter(t => String((t as any).status ?? '').toUpperCase() === maintStatusFilter)
   ).filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+
+  // Paginated tasks for implementation and maintenance tables
+  const paginatedImplTasks = useMemo(() => {
+    const startIndex = implCurrentPage * implItemsPerPage;
+    const endIndex = startIndex + implItemsPerPage;
+    return filteredImplTasks.slice(startIndex, endIndex);
+  }, [filteredImplTasks, implCurrentPage, implItemsPerPage]);
+
+  // Group maintenance tasks by hospital and paginate by groups (no splitting)
+  const paginatedMaintTasks = useMemo(() => {
+    // Group tasks by hospital
+    const grouped = new Map<string, typeof filteredMaintTasks>();
+    filteredMaintTasks.forEach(task => {
+      const hospitalName = (task as any).hospitalName || 'Không xác định';
+      if (!grouped.has(hospitalName)) {
+        grouped.set(hospitalName, []);
+      }
+      grouped.get(hospitalName)!.push(task);
+    });
+
+    const sortedGroups = Array.from(grouped.entries()).map(([hospitalName, tasks]) => ({
+      hospitalName,
+      tasks: tasks.sort((a, b) => {
+        const dateA = (a as any).startDate ? new Date((a as any).startDate).getTime() : 0;
+        const dateB = (b as any).startDate ? new Date((b as any).startDate).getTime() : 0;
+        return dateB - dateA;
+      })
+    }));
+
+    // Apply pagination by hospital groups - ensure no group is split across pages
+    let currentTaskIndex = 0;
+    const startIndex = maintCurrentPage * maintItemsPerPage;
+    const endIndex = startIndex + maintItemsPerPage;
+
+    const paginatedTasks: typeof filteredMaintTasks = [];
+
+    for (const group of sortedGroups) {
+      const groupStartIndex = currentTaskIndex;
+      const groupEndIndex = currentTaskIndex + group.tasks.length;
+
+      // Skip groups that are completely before the current page
+      if (groupEndIndex <= startIndex) {
+        currentTaskIndex = groupEndIndex;
+        continue;
+      }
+
+      // Skip groups that are completely after the current page
+      if (groupStartIndex >= endIndex) {
+        break;
+      }
+
+      // If group starts before current page but extends into it, skip it
+      // (it should have been displayed on previous page)
+      if (groupStartIndex < startIndex && groupEndIndex > startIndex) {
+        currentTaskIndex = groupEndIndex;
+        continue;
+      }
+
+      // Group starts within current page - include it fully (even if it extends beyond endIndex)
+      // This ensures no group is split across pages
+      if (groupStartIndex >= startIndex) {
+        paginatedTasks.push(...group.tasks);
+
+        // If this group extends beyond the page, stop here
+        // The next page will start with the next group
+        if (groupEndIndex > endIndex) {
+          break;
+        }
+      }
+
+      currentTaskIndex = groupEndIndex;
+
+      // Stop if we've passed the end of current page
+      if (currentTaskIndex >= endIndex) {
+        break;
+      }
+    }
+
+    return paginatedTasks;
+  }, [filteredMaintTasks, maintCurrentPage, maintItemsPerPage]);
+
+  const implTotalPages = useMemo(() => {
+    return Math.max(1, Math.ceil(filteredImplTasks.length / implItemsPerPage));
+  }, [filteredImplTasks.length, implItemsPerPage]);
+
+  const maintTotalPages = useMemo(() => {
+    return Math.max(1, Math.ceil(filteredMaintTasks.length / maintItemsPerPage));
+  }, [filteredMaintTasks.length, maintItemsPerPage]);
 
   // Prepare data for comparison charts
   const prepareComparisonData = useCallback(() => {
@@ -1181,8 +1365,9 @@ export default function SuperAdminHome() {
       })
     }));
     
-    // Apply pagination - show only current page items
-    let currentItemIndex = 0;
+    // Apply pagination by hospital groups - ensure no group is split across pages
+    // Count tasks across all groups to determine pagination
+    let currentTaskIndex = 0;
     const startIndex = detailCurrentPage * detailItemsPerPage;
     const endIndex = startIndex + detailItemsPerPage;
     
@@ -1191,36 +1376,169 @@ export default function SuperAdminHome() {
       tasks: TaskWithType[];
     };
     const paginatedGroups: GroupedTask[] = [];
+    
     for (const group of sortedGroups) {
-      if (currentItemIndex >= endIndex) break;
+      const groupStartIndex = currentTaskIndex;
+      const groupEndIndex = currentTaskIndex + group.tasks.length;
       
-      const groupStartIndex = currentItemIndex;
-      const groupEndIndex = currentItemIndex + group.tasks.length;
-      
-      // If group is partially visible
-      if (groupStartIndex < endIndex && groupEndIndex > startIndex) {
-        const visibleStart = Math.max(0, startIndex - groupStartIndex);
-        const visibleEnd = Math.min(group.tasks.length, endIndex - groupStartIndex);
-        paginatedGroups.push({
-          hospitalName: group.hospitalName,
-          tasks: group.tasks.slice(visibleStart, visibleEnd)
-        });
+      // Skip groups that are completely before the current page
+      if (groupEndIndex <= startIndex) {
+        currentTaskIndex = groupEndIndex;
+        continue;
       }
       
-      currentItemIndex = groupEndIndex;
+      // Skip groups that are completely after the current page
+      if (groupStartIndex >= endIndex) {
+        break;
+      }
+      
+      // If group starts before current page but extends into it, skip it
+      // (it should have been displayed on previous page)
+      if (groupStartIndex < startIndex && groupEndIndex > startIndex) {
+        currentTaskIndex = groupEndIndex;
+        continue;
+      }
+      
+      // Group starts within current page - include it fully (even if it extends beyond endIndex)
+      // This ensures no group is split across pages
+      if (groupStartIndex >= startIndex) {
+        paginatedGroups.push({
+          hospitalName: group.hospitalName,
+          tasks: group.tasks
+        });
+        
+        // If this group extends beyond the page, stop here
+        // The next page will start with the next group
+        if (groupEndIndex > endIndex) {
+          break;
+        }
+      }
+      
+      currentTaskIndex = groupEndIndex;
+      
+      // Stop if we've passed the end of current page
+      if (currentTaskIndex >= endIndex) {
+        break;
+      }
     }
     
     return paginatedGroups;
   }, [profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, profileDateFrom, profileDateTo, implStatusFilter, devStatusFilter, maintStatusFilter, profileStatusFilter, detailCurrentPage, detailItemsPerPage, profilePicFilter, profileUsers, isSalesSelected, displayedBusinesses, salesFilteredBusinesses, normalizedSelectedTeam]);
 
-  // Calculate total items for pagination
+  // Calculate total items BEFORE pagination (same logic as tasksByHospital but without pagination)
   const detailTotalItemsComputed = useMemo(() => {
     if (isSalesSelected) {
       return salesFilteredBusinesses.length;
     } else {
-      return tasksByHospital.reduce((sum, group) => sum + (group.tasks?.length ?? 0), 0);
+      // Use the same filtering logic as tasksByHospital but calculate total without pagination
+      const matchesDateRangeFilter = (startDate?: string | null) => {
+        if (profileDateFrom || profileDateTo) {
+          if (!startDate) return false;
+          const d = new Date(startDate);
+          if (Number.isNaN(d.getTime())) return false;
+          const taskDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+          if (profileDateFrom) {
+            const fromDate = new Date(profileDateFrom);
+            fromDate.setHours(0, 0, 0, 0);
+            if (taskDate < fromDate) return false;
+          }
+          if (profileDateTo) {
+            const toDate = new Date(profileDateTo);
+            toDate.setHours(23, 59, 59, 999);
+            if (taskDate > toDate) return false;
+          }
+          return true;
+        }
+        if (profileQuarter === 'all' && (!profileYear || profileYear === '')) return true;
+        if (!startDate) {
+          return profileQuarter === 'all' && (!profileYear || profileYear === '');
+        }
+        const d = new Date(startDate);
+        if (Number.isNaN(d.getTime())) {
+          return profileQuarter === 'all' && (!profileYear || profileYear === '');
+        }
+        if (profileYear && profileYear !== '' && String(d.getFullYear()) !== profileYear) return false;
+        if (profileQuarter === 'all') return true;
+        const month = d.getMonth();
+        const q = Math.floor(month / 3) + 1;
+        return `Q${q}` === profileQuarter;
+      };
+
+      const allImplTasks = profileImplTasks.filter(t => {
+        const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
+        return matchesDateRangeFilter(startDate);
+      });
+      const allDevTasks = profileDevTasks.filter(t => {
+        const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
+        return matchesDateRangeFilter(startDate);
+      });
+      const allMaintTasks = profileMaintTasks.filter(t => {
+        const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
+        return matchesDateRangeFilter(startDate);
+      });
+
+      const normalizeStatusToCanonical = (status?: string | null): string | null => {
+        if (!status) return null;
+        const s = String(status).trim().toUpperCase();
+        if (s === 'RECEIVED' || s === 'NOT_STARTED' || s === 'PENDING') return 'RECEIVED';
+        if (s === 'IN_PROCESS' || s === 'IN_PROGRESS' || s === 'API_TESTING' || s === 'INTEGRATING' || s === 'WAITING_FOR_DEV' || s === 'WAITING_FOR_DEPLOY') return 'IN_PROCESS';
+        if (s === 'COMPLETED' || s === 'DONE' || s === 'FINISHED' || s === 'ACCEPTED' || s === 'TRANSFERRED' || s === 'PENDING_TRANSFER' || s === 'TRANSFERRED_TO_CUSTOMER') return 'COMPLETED';
+        if (s === 'ISSUE' || s === 'FAILED' || s === 'ERROR') return 'ISSUE';
+        if (s === 'RECEIVED' || s === 'IN_PROCESS' || s === 'COMPLETED' || s === 'ISSUE') return s;
+        return s;
+      };
+      
+      const statusFilter = profileStatusFilter !== 'all' ? profileStatusFilter : null;
+      const implTasksFiltered = statusFilter 
+        ? allImplTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
+        : (implStatusFilter === 'all' ? allImplTasks : allImplTasks.filter(t => String((t as any).status ?? '').toUpperCase() === implStatusFilter));
+      const devTasksFiltered = statusFilter
+        ? allDevTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
+        : (devStatusFilter === 'all' ? allDevTasks : allDevTasks.filter(t => String((t as any).status ?? '').toUpperCase() === devStatusFilter));
+      const maintTasksFiltered = statusFilter
+        ? allMaintTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
+        : (maintStatusFilter === 'all' ? allMaintTasks : allMaintTasks.filter(t => String((t as any).status ?? '').toUpperCase() === maintStatusFilter));
+
+      const implTasksPicFiltered = implTasksFiltered.filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+      const devTasksPicFiltered = devTasksFiltered.filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+      const maintTasksPicFiltered = maintTasksFiltered.filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+
+      const normalizedTeam = normalizedSelectedTeam;
+      const isDeploymentTeam = normalizedTeam.includes('DEPLOY') || normalizedTeam.includes('TRIỂN KHAI') || normalizedTeam.includes('TRIENKHAI');
+      const isMaintenanceTeam = normalizedTeam.includes('MAINT') || normalizedTeam.includes('BẢO TRÌ') || normalizedTeam.includes('BAOTRI');
+      const isDevTeam = normalizedTeam.includes('DEV') || normalizedTeam.includes('PHÁT TRIỂN') || normalizedTeam.includes('PHATTRIEN');
+
+      type TaskWithType = {
+        type: 'Triển khai' | 'Bảo trì' | 'Phát triển';
+        hospitalName: string | null | undefined;
+        startDate: string | null | undefined;
+        completionDate: string | null | undefined;
+        status: string | null | undefined;
+        name: string;
+        picName: string;
+        [key: string]: unknown;
+      };
+      const allTasks: TaskWithType[] = [];
+      if (isDeploymentTeam) {
+        allTasks.push(...implTasksPicFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
+      }
+      if (isMaintenanceTeam) {
+        allTasks.push(...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
+      }
+      if (isDevTeam) {
+        allTasks.push(...devTasksPicFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
+      }
+      if (!isDeploymentTeam && !isMaintenanceTeam && !isDevTeam) {
+        allTasks.push(
+          ...implTasksPicFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
+          ...devTasksPicFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
+          ...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' }))
+        );
+      }
+      
+      return allTasks.length;
     }
-  }, [isSalesSelected, salesFilteredBusinesses, tasksByHospital]);
+  }, [isSalesSelected, salesFilteredBusinesses, profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, profileDateFrom, profileDateTo, implStatusFilter, devStatusFilter, maintStatusFilter, profileStatusFilter, profilePicFilter, profileUsers, normalizedSelectedTeam]);
 
   // Update pagination totals when computed value changes
   useEffect(() => {
@@ -1264,9 +1582,22 @@ export default function SuperAdminHome() {
     }
   };
 
+  // Helper function to convert Vietnamese team name to safe filename
+  const teamNameToFilename = (team: string): string => {
+    const translated = translateTeamName(team);
+    // Convert Vietnamese to ASCII-safe format
+    const mapping: Record<string, string> = {
+      'Triển khai': 'Trien_khai',
+      'Phát triển': 'Phat_trien',
+      'Bảo trì': 'Bao_tri',
+      'Kinh doanh': 'Kinh_doanh',
+    };
+    return mapping[translated] || translated.replace(/[^a-z0-9\-_]/gi, '_').replace(/\s+/g, '_');
+  };
+
   const makeFilename = (base: string) => {
     const team = selectedTeam || '';
-    const safeTeam = team ? team.replace(/[^a-z0-9\-_]/gi, '_') : 'all_teams';
+    const safeTeam = team ? teamNameToFilename(team) : 'all_teams';
     const q = profileQuarter ?? 'all';
     const y = profileYear ?? '';
     const parts = [base, safeTeam || null, q !== 'all' ? q : null, y || null].filter(Boolean);
@@ -1353,46 +1684,183 @@ export default function SuperAdminHome() {
   // Export detail report to Excel with grouping by hospital (similar to web UI)
   const exportDetailExcel = async () => {
     try {
-      if (!hasLoadedProfile || tasksByHospital.length === 0) {
+      if (!hasLoadedProfile) {
         toast.error('Vui lòng tải hồ sơ trước');
         return;
+      }
+      
+      // Check if there's data to export
+      if (isSalesSelected) {
+        if (salesFilteredBusinesses.length === 0) {
+          toast.error('Không có dữ liệu để xuất');
+          return;
+        }
+      } else {
+        if (tasksByHospital.length === 0) {
+          toast.error('Không có dữ liệu để xuất');
+          return;
+        }
       }
 
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Báo cáo chi tiết');
 
-      // Set column headers
-      const headers = ['Tên bệnh viện', 'Nội dung công việc', 'Ngày bắt đầu', 'Người phụ trách', 'Trạng thái', 'Ngày hoàn thành', 'Số ngày thực hiện'];
+      // Determine report title based on selected team
+      const reportTitle = selectedTeam 
+        ? `Báo cáo công việc ${translateTeamName(selectedTeam).toLowerCase()}`
+        : 'Báo cáo công việc';
+
+      // Add title row
+      const titleRow = worksheet.addRow([reportTitle]);
+      titleRow.height = 30;
+      titleRow.font = { bold: true, size: 14 };
+      titleRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      // Merge title across columns - 8 columns for SALES (with Doanh thu), 7 for others
+      worksheet.mergeCells(1, 1, 1, isSalesSelected ? 8 : 7);
+
+      // Set column headers - use "Mã hợp đồng" for SALES team, otherwise "Nội dung công việc"
+      // SALES team has 8 columns (including Doanh thu), others have 7
+      const headers = isSalesSelected
+        ? ['Tên bệnh viện', 'Mã hợp đồng', 'Ngày bắt đầu', 'Người phụ trách', 'Trạng thái', 'Ngày hoàn thành', 'Số ngày thực hiện', 'Doanh thu']
+        : ['Tên bệnh viện', 'Nội dung công việc', 'Ngày bắt đầu', 'Người phụ trách', 'Trạng thái', 'Ngày hoàn thành', 'Số ngày thực hiện'];
       const headerRow = worksheet.addRow(headers);
       
-      // Style header row
+      // Style header row with yellow background
       headerRow.font = { bold: true, size: 11 };
-      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
       headerRow.height = 25;
-      headerRow.fill = {
+      
+      // Style header cells - 8 columns for SALES, 7 for others
+      const headerColCount = isSalesSelected ? 8 : 7;
+      for (let col = 1; col <= headerColCount; col++) {
+        const cell = headerRow.getCell(col);
+        cell.font = { bold: true, size: 11 };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFE5E7EB' } // Light gray background
+          fgColor: { argb: 'FFFFFF00' } // Yellow background
       };
-      headerRow.border = {
+        cell.border = {
         top: { style: 'thin' },
         left: { style: 'thin' },
         bottom: { style: 'thin' },
         right: { style: 'thin' }
       };
+      }
+      
+      // Clear any style from cells beyond used columns
+      const headerClearFromCol = isSalesSelected ? 9 : 8;
+      for (let col = headerClearFromCol; col <= 20; col++) {
+        const cell = headerRow.getCell(col);
+        cell.value = null;
+        cell.style = {};
+      }
 
       // Set column widths
       worksheet.getColumn(1).width = 25; // Tên bệnh viện
-      worksheet.getColumn(2).width = 40; // Nội dung công việc
+      worksheet.getColumn(2).width = 40; // Nội dung công việc / Mã hợp đồng
       worksheet.getColumn(3).width = 15; // Ngày bắt đầu
       worksheet.getColumn(4).width = 20; // Người phụ trách
       worksheet.getColumn(5).width = 18; // Trạng thái
       worksheet.getColumn(6).width = 18; // Ngày hoàn thành
       worksheet.getColumn(7).width = 18; // Số ngày thực hiện
+      if (isSalesSelected) {
+        worksheet.getColumn(8).width = 20; // Doanh thu
+      }
+      
+      // Remove column definitions beyond used columns to prevent extra columns
+      const removeFromCol = isSalesSelected ? 9 : 8;
+      for (let colNum = removeFromCol; colNum <= 20; colNum++) {
+        const col = worksheet.getColumn(colNum);
+        if (col) {
+          col.width = undefined;
+        }
+      }
 
       // Add data rows with grouping
-      let currentRow = 2; // Start after header row
+      let currentRow = 3; // Start after title and header rows
       
+      // Handle SALES team differently - export businesses
+      if (isSalesSelected) {
+        // Get all businesses (not paginated)
+        const allBusinesses = salesFilteredBusinesses;
+        
+        // Group businesses by hospital
+        const businessGroups = new Map<string, typeof allBusinesses>();
+        allBusinesses.forEach((biz) => {
+          const hospitalName = (biz as any)?.hospital?.label ?? (biz as any)?.hospitalName ?? (biz as any)?.hospital ?? 'Không xác định';
+          if (!businessGroups.has(hospitalName)) {
+            businessGroups.set(hospitalName, []);
+          }
+          businessGroups.get(hospitalName)!.push(biz);
+        });
+        
+        // Add business rows grouped by hospital
+        for (const [hospitalName, businesses] of businessGroups.entries()) {
+          let isFirstBusiness = true;
+          
+          for (const biz of businesses) {
+            const bizRow = worksheet.addRow([
+              isFirstBusiness ? hospitalName : '', // Hospital name only in first row
+              (biz as any)?.name ?? (biz as any)?.projectName ?? '—',
+              (biz as any)?.startDate ? new Date((biz as any).startDate).toLocaleDateString('vi-VN') : '—',
+              (biz as any)?.picUser?.label ?? (biz as any)?.picName ?? '—',
+              translateStatus(String((biz as any)?.status ?? '')),
+              (biz as any)?.completionDate ? new Date((biz as any).completionDate).toLocaleDateString('vi-VN') : '—',
+              (() => {
+                const startDate = (biz as any)?.startDate;
+                if (!startDate) return '—';
+                const start = new Date(startDate);
+                const endDate = (biz as any)?.completionDate ? new Date((biz as any).completionDate) : new Date();
+                if (Number.isNaN(start.getTime()) || Number.isNaN(endDate.getTime())) return '—';
+                const startDateOnly = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+                const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+                const diffTime = endDateOnly.getTime() - startDateOnly.getTime();
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                return diffDays >= 0 ? `${diffDays} ngày` : '—';
+              })(),
+              // Doanh thu column (only for SALES)
+              new Intl.NumberFormat('vi-VN').format(Number((biz as any)?.totalPrice ?? (biz as any)?.unitPrice ?? 0)) + ' ₫'
+            ]);
+            
+            // Style columns with borders - 8 columns for SALES, 7 for others
+            const dataColCount = 8; // SALES always has 8 columns
+            for (let col = 1; col <= dataColCount; col++) {
+              const cell = bizRow.getCell(col);
+              cell.border = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'thin' },
+                right: { style: 'thin' }
+              };
+            }
+            
+            // Clear any style from cells beyond column H (for SALES) or G (for others)
+            const bizClearFromCol = 9; // Start clearing from column I
+            for (let col = bizClearFromCol; col <= 20; col++) {
+              const cell = bizRow.getCell(col);
+              if (cell) {
+                cell.value = null;
+                cell.style = {};
+              }
+            }
+            
+            // Alignment for columns
+            bizRow.height = 25;
+            bizRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
+            bizRow.getCell(2).alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+            bizRow.getCell(3).alignment = { vertical: 'middle', horizontal: 'center' };
+            bizRow.getCell(4).alignment = { vertical: 'middle', horizontal: 'left' };
+            bizRow.getCell(5).alignment = { vertical: 'middle', horizontal: 'center' };
+            bizRow.getCell(6).alignment = { vertical: 'middle', horizontal: 'center' };
+            bizRow.getCell(7).alignment = { vertical: 'middle', horizontal: 'center' };
+            bizRow.getCell(8).alignment = { vertical: 'middle', horizontal: 'right' }; // Doanh thu - right aligned
+            
+            isFirstBusiness = false;
+            currentRow++;
+          }
+        }
+      } else {
       // Get all groups (not paginated) - reuse logic from tasksByHospital
       const allGroups = (() => {
         // Same logic as tasksByHospital but without pagination
@@ -1490,34 +1958,14 @@ export default function SuperAdminHome() {
         }));
       })();
 
-      // Add hospital groups - hospital name on its own row, then tasks below
+      // Add hospital groups - hospital name in first column, tasks below with empty first column
       for (const group of allGroups) {
-        // Add hospital name row (bold header)
-        const hospitalRow = worksheet.addRow([
-          group.hospitalName, // Hospital name in first column
-          '', // Empty for other columns
-          '',
-          '',
-          '',
-          '',
-          ''
-        ]);
-        
-        hospitalRow.font = { bold: true, size: 11 };
-        hospitalRow.alignment = { vertical: 'middle', horizontal: 'left' };
-        hospitalRow.height = 22;
-        hospitalRow.border = {
-          top: { style: 'thin' },
-          left: { style: 'thin' },
-          bottom: { style: 'thin' },
-          right: { style: 'thin' }
-        };
-        currentRow++;
+        let isFirstTask = true;
 
-        // Add task rows below hospital name
+        // Add task rows
         for (const task of group.tasks) {
           const taskRow = worksheet.addRow([
-            '', // Empty for hospital name column (hospital name is on row above)
+            isFirstTask ? group.hospitalName : '', // Hospital name only in first row of group
             `${task.name || '—'}\n${task.type}`, // Task name with type
             task.startDate ? new Date(task.startDate).toLocaleDateString('vi-VN') : '—',
             task.picName ?? '—',
@@ -1537,24 +1985,61 @@ export default function SuperAdminHome() {
             })()
           ]);
 
-          taskRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-          taskRow.height = 30;
-          taskRow.border = {
+          // Style only columns A-G (1-7) with borders
+          for (let col = 1; col <= 7; col++) {
+            const cell = taskRow.getCell(col);
+            cell.border = {
             top: { style: 'thin' },
             left: { style: 'thin' },
             bottom: { style: 'thin' },
             right: { style: 'thin' }
           };
+          }
           
-          // Left align task name
+          // Clear any style from cells beyond column G
+          for (let col = 8; col <= 20; col++) {
+            const cell = taskRow.getCell(col);
+            cell.value = null;
+            cell.style = {};
+          }
+
+          // Alignment for columns A-G only
+          taskRow.height = 25;
+          
+          // Left align hospital name and task name
+          taskRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
           taskRow.getCell(2).alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+          taskRow.getCell(3).alignment = { vertical: 'middle', horizontal: 'center' };
+          taskRow.getCell(4).alignment = { vertical: 'middle', horizontal: 'left' };
+          taskRow.getCell(5).alignment = { vertical: 'middle', horizontal: 'center' };
+          taskRow.getCell(6).alignment = { vertical: 'middle', horizontal: 'center' };
+          taskRow.getCell(7).alignment = { vertical: 'middle', horizontal: 'center' };
           
+          isFirstTask = false;
           currentRow++;
         }
       }
+      }
 
-      // Freeze header row
-      worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+      // Freeze header row (row 2, after title)
+      worksheet.views = [{ state: 'frozen', ySplit: 2 }];
+      
+      // Remove any cells beyond used columns in all rows to prevent extra columns with styles
+      const lastRow = worksheet.rowCount;
+      const clearFromCol = isSalesSelected ? 9 : 8; // Clear from column I for SALES, H for others
+      if (lastRow > 0) {
+        for (let rowNum = 1; rowNum <= lastRow; rowNum++) {
+          const row = worksheet.getRow(rowNum);
+          // Clear cells from unused columns onwards
+          for (let colNum = clearFromCol; colNum <= 20; colNum++) {
+            const cell = row.getCell(colNum);
+            if (cell) {
+              cell.value = null;
+              cell.style = {};
+            }
+          }
+        }
+      }
 
       // Generate buffer and download
       const buffer = await workbook.xlsx.writeBuffer();
@@ -1597,7 +2082,7 @@ export default function SuperAdminHome() {
 
           <div className="relative z-10 flex items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold">Super Admin Dashboard</h1>
+              <h1 className="text-2xl font-bold">Bảng điều khiển Super Admin</h1>
               <p className="mt-1 text-sm opacity-90">Tổng quan hệ thống & truy cập nhanh các phần quản trị</p>
             </div>
             {/* Filtered users by Team / Department */}
@@ -1632,7 +2117,7 @@ export default function SuperAdminHome() {
                 <Link to="/superadmin/his-systems" className="flex items-center gap-4 rounded-lg border p-4 hover:shadow-md">
                   <div className="h-12 w-12 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center text-lg">💼</div>
                   <div>
-                    <div className="text-sm font-medium text-gray-900">HIS Systems</div>
+                    <div className="text-sm font-medium text-gray-900">Hệ thống HIS</div>
                     <div className="text-xs text-gray-500">Quản lý hệ thống HIS</div>
                   </div>
                 </Link>
@@ -1684,7 +2169,7 @@ export default function SuperAdminHome() {
 
           <aside className="col-span-12 xl:col-span-4 space-y-6">
             <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
-              <h3 className="text-sm font-medium text-gray-700">Quick stats</h3>
+              <h3 className="text-sm font-medium text-gray-700">Thống kê nhanh</h3>
               <div className="mt-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-gray-500">Tổng đại lý</div>
@@ -1766,7 +2251,7 @@ export default function SuperAdminHome() {
                       dataLabels: { enabled: false },
                       colors: ['#465fff', '#10b981'],
                     }}
-                    series={[{ name: 'VND', data: [totalExpected ?? 0, totalActual ?? 0] }]}
+                    series={[{ name: 'VNĐ', data: [totalExpected ?? 0, totalActual ?? 0] }]}
                     type="bar"
                     height={260}
                     width="100%"
@@ -1829,13 +2314,13 @@ export default function SuperAdminHome() {
                 </div>
 
                 <div className="flex flex-col">
-                  <label className="block text-xs text-gray-500">Team</label>
+                  <label className="block text-xs text-gray-500">Đội nhóm</label>
                   <select value={reportTeam} onChange={(e) => setReportTeam(e.target.value)} className="mt-1 rounded-md border px-3 py-2 text-sm bg-white w-44">
                     <option value="ALL">Tất cả</option>
-                    <option value="DEPLOYMENT">DEPLOYMENT</option>
-                    <option value="DEV">DEV</option>
-                    <option value="MAINTENANCE">MAINTENANCE</option>
-                    <option value="SALES">SALES</option>
+                    <option value="DEPLOYMENT">Triển khai</option>
+                    <option value="DEV">Phát triển</option>
+                    <option value="MAINTENANCE">Bảo trì</option>
+                    <option value="SALES">Kinh doanh</option>
                   </select>
                 </div>
 
@@ -1940,27 +2425,81 @@ export default function SuperAdminHome() {
               </button>
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-3 items-center">
-              <div className="w-full sm:w-auto">
-                <label className="text-sm text-gray-500">Chọn team</label>
-                <div className="relative mt-1 flex items-center gap-3">
-                  <select
-                    ref={teamSelectRef}
-                    value={selectedTeam}
-                    onChange={(e) => setSelectedTeam(e.target.value)}
-                    className="rounded-md border px-3 text-sm w-40 h-10 bg-white"
-                  >
-                    <option value="">— Chọn team —</option>
-                    {availableTeams.map((team) => (
-                      <option key={team} value={team}>
-                        {team}
-                      </option>
-                    ))}
-                  </select>
+            <div className="mt-4 space-y-4">
+              {/* Team Selection Row */}
+              <div className="flex flex-wrap items-end gap-4">
+                <div className="flex-shrink-0">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Chọn team</label>
+                  <div ref={teamDropdownRef} className="relative w-48">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTeamPage(0);
+                        setTeamDropdownOpen((prev) => !prev);
+                      }}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white text-left flex items-center justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <span className="truncate">
+                        {selectedTeam ? translateTeamName(selectedTeam) : "— Chọn team —"}
+                      </span>
+                      <svg className={`w-4 h-4 transition-transform ${teamDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {teamDropdownOpen && (
+                      <div className="absolute z-30 mt-2 w-full rounded-xl border border-gray-200 bg-white shadow-xl p-3 space-y-3">
+                        <input
+                          type="text"
+                          value={teamSearchQuery}
+                          onChange={(e) => setTeamSearchQuery(e.target.value)}
+                          placeholder="Tìm team..."
+                          className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
+                        />
+                        <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                          {filteredTeams.length === 0 ? (
+                            <div className="text-sm text-gray-500 text-center py-6">
+                              Không tìm thấy team
+                            </div>
+                          ) : (
+                            <>
+                              {paginatedTeams.map((team) => (
+                                <button
+                                  key={team}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedTeam(team);
+                                    setTeamDropdownOpen(false);
+                                  }}
+                                  className={`w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-gray-100 transition-colors ${
+                                    selectedTeam === team ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-700'
+                                  }`}
+                                >
+                                  {translateTeamName(team)}
+                                </button>
+                              ))}
+                              {hasMoreTeams && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setTeamPage((prev) => prev + 1);
+                                  }}
+                                  className="w-full text-sm text-indigo-600 hover:text-indigo-700 hover:underline py-2 text-center focus:outline-none border-t border-gray-200 pt-2 mt-1"
+                                >
+                                  Xem thêm ({filteredTeams.length - paginatedTeams.length} còn lại)
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
                   <button 
                     onClick={() => void loadTeamProfile()} 
                     disabled={profileLoading || !selectedTeam} 
-                    className="h-10 inline-flex items-center rounded-md bg-indigo-600 px-4 text-sm font-semibold text-white hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                    className="h-10 inline-flex items-center rounded-md bg-indigo-600 px-4 text-sm font-semibold text-white hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                   >
                     Tải hồ sơ
                   </button>
@@ -1968,54 +2507,97 @@ export default function SuperAdminHome() {
                     type="button"
                     onClick={resetTeamFilters}
                     disabled={!hasCustomTeamFilter}
-                    className="h-10 inline-flex items-center rounded-md border border-gray-300 px-4 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="h-10 inline-flex items-center rounded-md border border-gray-300 px-4 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
                   >
                     Xóa lọc
                   </button>
-                  <div className="flex items-center gap-2 ml-2 flex-wrap">
-                    <label className="text-sm text-gray-500">Quý</label>
-                    <select value={profileQuarter} onChange={(e) => { setProfileQuarter(e.target.value as any); setDetailCurrentPage(0); }} className="rounded-md border px-2 py-1 text-sm bg-white">
+                </div>
+              </div>
+
+              {/* Filter Row */}
+              <div className="flex flex-wrap items-end gap-4">
+                <div className="flex-shrink-0">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Quý</label>
+                  <select 
+                    value={profileQuarter} 
+                    onChange={(e) => { setProfileQuarter(e.target.value as any); setDetailCurrentPage(0); }} 
+                    className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white w-32 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
                       <option value="all">Tất cả</option>
                       <option value="Q1">Q1</option>
                       <option value="Q2">Q2</option>
                       <option value="Q3">Q3</option>
                       <option value="Q4">Q4</option>
                     </select>
-                    <label className="text-sm text-gray-500">Năm</label>
-                    <select value={profileYear} onChange={(e) => { setProfileYear(e.target.value); setDetailCurrentPage(0); }} className="rounded-md border px-2 py-1 text-sm bg-white w-20">
+                </div>
+                <div className="flex-shrink-0">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Năm</label>
+                  <select 
+                    value={profileYear} 
+                    onChange={(e) => { setProfileYear(e.target.value); setDetailCurrentPage(0); }} 
+                    className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white w-28 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
                       <option value="">Tất cả</option>
                       {Array.from({ length: new Date().getFullYear() - 2019 }).map((_, i) => {
                         const y = String(2020 + i);
                         return <option key={y} value={y}>{y}</option>;
                       })}
                     </select>
-                    <label className="text-sm text-gray-500 ml-2">Từ ngày</label>
+                </div>
+                <div className="flex-shrink-0">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Từ ngày</label>
                     <input 
                       type="date" 
                       value={profileDateFrom} 
                       onChange={(e) => { setProfileDateFrom(e.target.value); setDetailCurrentPage(0); }} 
-                      className="rounded-md border px-2 py-1 text-sm bg-white"
+                    onClick={(e) => {
+                      if (typeof (e.currentTarget as HTMLInputElement).showPicker === 'function') {
+                        (e.currentTarget as HTMLInputElement).showPicker();
+                      }
+                    }}
+                    onFocus={(e) => {
+                      if (typeof (e.currentTarget as HTMLInputElement).showPicker === 'function') {
+                        (e.currentTarget as HTMLInputElement).showPicker();
+                      }
+                    }}
+                    className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white w-40 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                     />
-                    <label className="text-sm text-gray-500">Đến ngày</label>
+                </div>
+                <div className="flex-shrink-0">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Đến ngày</label>
                     <input 
                       type="date" 
                       value={profileDateTo} 
                       onChange={(e) => { setProfileDateTo(e.target.value); setDetailCurrentPage(0); }} 
-                      className="rounded-md border px-2 py-1 text-sm bg-white"
+                    onClick={(e) => {
+                      if (typeof (e.currentTarget as HTMLInputElement).showPicker === 'function') {
+                        (e.currentTarget as HTMLInputElement).showPicker();
+                      }
+                    }}
+                    onFocus={(e) => {
+                      if (typeof (e.currentTarget as HTMLInputElement).showPicker === 'function') {
+                        (e.currentTarget as HTMLInputElement).showPicker();
+                      }
+                    }}
+                    className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white w-40 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                     />
+                </div>
                     {(profileDateFrom || profileDateTo) && (
+                  <div className="flex items-end">
                       <button 
                         onClick={() => { setProfileDateFrom(''); setProfileDateTo(''); setDetailCurrentPage(0); }} 
-                        className="text-xs text-gray-500 hover:text-gray-700 underline"
+                      className="text-xs text-gray-500 hover:text-gray-700 underline h-10 flex items-center"
                       >
                         Xóa lọc ngày
                       </button>
+                  </div>
                     )}
-                    <label className="text-sm text-gray-500 ml-2">Trạng thái</label>
+                <div className="flex-shrink-0">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Trạng thái</label>
                     <select 
                       value={profileStatusFilter} 
                       onChange={(e) => { setProfileStatusFilter(e.target.value); setDetailCurrentPage(0); }} 
-                      className="rounded-md border px-2 py-1 text-sm bg-white"
+                    className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white w-40 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       <option value="all">Tất cả</option>
                       <option value="RECEIVED">Đã tiếp nhận</option>
@@ -2023,22 +2605,23 @@ export default function SuperAdminHome() {
                       <option value="COMPLETED">Hoàn thành</option>
                       <option value="ISSUE">Gặp sự cố</option>
                     </select>
-                    <label className="text-sm text-gray-500">Người phụ trách</label>
+                </div>
+                <div className="flex-shrink-0">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Người phụ trách</label>
                     <select
                       value={profilePicFilter}
                       onChange={(e) => { setProfilePicFilter(e.target.value); setDetailCurrentPage(0); }}
-                      className="rounded-md border px-2 py-1 text-sm bg-white"
+                    className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white w-48 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       <option value="all">Tất cả</option>
                       {profileUsers
                         .filter((u) => u.id != null)
                         .map((u) => (
                           <option key={u.id} value={String(u.id)}>
-                            {u.fullname ?? u.username ?? `User #${u.id}`}
+                          {u.fullname ?? u.username ?? `Người dùng #${u.id}`}
                           </option>
                         ))}
                     </select>
-                  </div>
                 </div>
               </div>
             </div>
@@ -2046,18 +2629,26 @@ export default function SuperAdminHome() {
             {/* Comparison View */}
             {viewMode === 'comparison' && (
               <div className="space-y-6">
-                <div className="flex items-center gap-4 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-500">Khoảng thời gian:</label>
-                    <select value={timeRange} onChange={(e) => setTimeRange(e.target.value as any)} className="rounded-md border px-3 py-1 text-sm bg-white">
+                <div className="flex flex-wrap items-end gap-4">
+                  <div className="flex-shrink-0">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Khoảng thời gian</label>
+                    <select 
+                      value={timeRange} 
+                      onChange={(e) => setTimeRange(e.target.value as any)} 
+                      className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white w-40 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
                       <option value="monthly">Theo tháng</option>
                       <option value="quarterly">Theo quý</option>
                       <option value="yearly">Theo năm</option>
                     </select>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-500">So sánh với năm:</label>
-                    <select value={compareYear} onChange={(e) => setCompareYear(e.target.value)} className="rounded-md border px-3 py-1 text-sm bg-white w-32">
+                  <div className="flex-shrink-0">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">So sánh với năm</label>
+                    <select 
+                      value={compareYear} 
+                      onChange={(e) => setCompareYear(e.target.value)} 
+                      className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white w-40 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
                       <option value="">Không so sánh</option>
                       {Array.from({ length: new Date().getFullYear() - 2019 }).map((_, i) => {
                         const y = String(2020 + i);
@@ -2075,7 +2666,7 @@ export default function SuperAdminHome() {
                       options={{
                         chart: { type: 'line', toolbar: { show: false }, zoom: { enabled: false } },
                         xaxis: { categories: comparisonData.labels },
-                        yaxis: { title: { text: 'Số lượng' } },
+                        yaxis: { title: { text: 'Số lượng', style: { fontWeight: 'normal' } } },
                         legend: { position: 'top' },
                         colors: ['#465fff', '#10b981'],
                         stroke: { width: 2, curve: 'smooth' },
@@ -2097,7 +2688,7 @@ export default function SuperAdminHome() {
                       options={{
                         chart: { type: 'line', toolbar: { show: false }, zoom: { enabled: false } },
                         xaxis: { categories: comparisonData.labels },
-                        yaxis: { title: { text: 'Số lượng' } },
+                        yaxis: { title: { text: 'Số lượng', style: { fontWeight: 'normal' } } },
                         legend: { position: 'top' },
                         colors: ['#465fff', '#10b981'],
                         stroke: { width: 2, curve: 'smooth' },
@@ -2224,13 +2815,12 @@ export default function SuperAdminHome() {
                           itemsPerPage={detailItemsPerPage}
                           onPageChange={(page) => {
                             setDetailCurrentPage(page);
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
                           }}
                           onItemsPerPageChange={(size) => {
                             setDetailItemsPerPage(size);
                             setDetailCurrentPage(0);
                           }}
-                          itemsPerPageOptions={[20, 50, 100, 200]}
+                          itemsPerPageOptions={[5, 10, 20, 50]}
                           showItemsPerPage={true}
                         />
                       )}
@@ -2298,7 +2888,7 @@ export default function SuperAdminHome() {
                                         <span className="text-sm font-semibold text-gray-900">
                                           {isCollapsed ? '▶' : '▼'} {group.hospitalName}
                                         </span>
-                                        <span className="text-xs text-gray-500">Tổng: {group.tasks.length} task</span>
+                                        <span className="text-xs text-gray-500">Tổng: {group.tasks.length} công việc</span>
                                       </div>
                                     </div>
                                   </td>
@@ -2342,7 +2932,8 @@ export default function SuperAdminHome() {
                         </tbody>
                       </table>
                     </div>
-                    {detailTotalItems > detailItemsPerPage && (
+                    {detailTotalPages > 1 && (
+                      <div className="mt-4">
                       <Pagination
                         currentPage={detailCurrentPage}
                         totalPages={detailTotalPages}
@@ -2350,15 +2941,15 @@ export default function SuperAdminHome() {
                         itemsPerPage={detailItemsPerPage}
                         onPageChange={(page) => {
                           setDetailCurrentPage(page);
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
                         }}
                         onItemsPerPageChange={(size) => {
                           setDetailItemsPerPage(size);
                           setDetailCurrentPage(0);
                         }}
-                        itemsPerPageOptions={[20, 50, 100, 200]}
+                          itemsPerPageOptions={[5, 10, 20, 50]}
                         showItemsPerPage={true}
                       />
+                      </div>
                     )}
                   </div>
                 ) : (
@@ -2377,7 +2968,7 @@ export default function SuperAdminHome() {
                           <h3 className="text-sm font-medium text-gray-700">Triển khai ({profileImplTasks.length})</h3>
                           <div className="flex items-center gap-2">
                             <label className="text-xs text-gray-500">Lọc trạng thái</label>
-                            <select value={implStatusFilter} onChange={(e) => setImplStatusFilter(e.target.value)} className="rounded-md border px-2 py-1 text-sm bg-white">
+                            <select value={implStatusFilter} onChange={(e) => { setImplStatusFilter(e.target.value); setImplCurrentPage(0); }} className="rounded-md border px-2 py-1 text-sm bg-white">
                               <option value="all">Tất cả</option>
                               {implStatusOptions.map(s => <option key={s} value={s}>{translateStatus(s)}</option>)}
                             </select>
@@ -2403,7 +2994,7 @@ export default function SuperAdminHome() {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {filteredImplTasks.map((t) => (
+                                  {paginatedImplTasks.map((t) => (
                                     <tr key={t.id} className="border-t odd:bg-white even:bg-gray-50 hover:bg-gray-100">
                                       <td className="px-2 py-2 align-middle text-center">{t.id}</td>
                                       <td className="px-2 py-2 align-middle text-center">{t.name ?? '—'}</td>
@@ -2421,6 +3012,25 @@ export default function SuperAdminHome() {
                             </div>
                           )}
                         </div>
+                        {implTotalPages > 1 && (
+                          <div className="mt-4">
+                            <Pagination
+                              currentPage={implCurrentPage}
+                              totalPages={implTotalPages}
+                              totalItems={filteredImplTasks.length}
+                              itemsPerPage={implItemsPerPage}
+                              onPageChange={(page) => {
+                                setImplCurrentPage(page);
+                              }}
+                              onItemsPerPageChange={(size) => {
+                                setImplItemsPerPage(size);
+                                setImplCurrentPage(0);
+                              }}
+                              itemsPerPageOptions={[5, 10, 20, 50]}
+                              showItemsPerPage={true}
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -2484,7 +3094,7 @@ export default function SuperAdminHome() {
                           <h3 className="text-sm font-medium text-gray-700">Bảo trì ({profileMaintTasks.length})</h3>
                           <div className="flex items-center gap-2">
                             <label className="text-xs text-gray-500">Lọc trạng thái</label>
-                            <select value={maintStatusFilter} onChange={(e) => setMaintStatusFilter(e.target.value)} className="rounded-md border px-2 py-1 text-sm bg-white">
+                            <select value={maintStatusFilter} onChange={(e) => { setMaintStatusFilter(e.target.value); setMaintCurrentPage(0); }} className="rounded-md border px-2 py-1 text-sm bg-white">
                               <option value="all">Tất cả</option>
                               {maintStatusOptions.map(s => <option key={s} value={s}>{translateStatus(s)}</option>)}
                             </select>
@@ -2510,7 +3120,7 @@ export default function SuperAdminHome() {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {filteredMaintTasks.map((t) => (
+                                  {paginatedMaintTasks.map((t) => (
                                     <tr key={t.id} className="border-t odd:bg-white even:bg-gray-50 hover:bg-gray-100">
                                       <td className="px-2 py-2 align-middle text-center">{t.id}</td>
                                       <td className="px-2 py-2 align-middle text-center">{t.name ?? '—'}</td>
@@ -2528,45 +3138,28 @@ export default function SuperAdminHome() {
                             </div>
                           )}
                         </div>
+                        {maintTotalPages > 1 && (
+                          <div className="mt-4">
+                            <Pagination
+                              currentPage={maintCurrentPage}
+                              totalPages={maintTotalPages}
+                              totalItems={filteredMaintTasks.length}
+                              itemsPerPage={maintItemsPerPage}
+                              onPageChange={(page) => {
+                                setMaintCurrentPage(page);
+                              }}
+                              onItemsPerPageChange={(size) => {
+                                setMaintItemsPerPage(size);
+                                setMaintCurrentPage(0);
+                              }}
+                              itemsPerPageOptions={[5, 10, 20, 50]}
+                              showItemsPerPage={true}
+                            />
                       </div>
                     )}
-
-                    {/* Lịch sử hợp đồng - chỉ hiển thị nếu team chứa "Kinh doanh" hoặc "Business" */}
-                    {(isSalesSelected || selectedTeam?.toLowerCase().includes('kinh doanh') || selectedTeam?.toLowerCase().includes('kinhdoanh') || selectedTeam?.toLowerCase().includes('business')) && (
-                      <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
-                        <h3 className="text-sm font-medium text-gray-700">Lịch sử hợp đồng</h3>
-                        {profileBusinesses.length === 0 ? (
-                          <div className="text-sm text-gray-500 mt-2">Không có hợp đồng</div>
-                        ) : (
-                          <div className="overflow-x-auto mt-2">
-                            <table className="min-w-full text-sm table-auto">
-                              <thead>
-                                <tr className="text-xs text-gray-600 bg-gray-50">
-                                  <th className="px-2 py-1 text-center">ID</th>
-                                  <th className="px-2 py-1 text-center">Tên dự án</th>
-                                  <th className="px-2 py-1 text-center">Doanh thu</th>
-                                  <th className="px-2 py-1 text-center">Hoa hồng của viện</th>
-                                  <th className="px-2 py-1 text-center">Trạng thái</th>
-                                  <th className="px-2 py-1 text-center">Ngày</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {displayedBusinesses.map((b) => (
-                                  <tr key={String(b['id'] ?? Math.random())} className="border-t odd:bg-white even:bg-gray-50 hover:bg-gray-100">
-                                    <td className="px-2 py-2 align-middle text-center">{String(b['id'] ?? '—')}</td>
-                                    <td className="px-2 py-2 align-middle text-left">{String(b['name'] ?? b['projectName'] ?? '—')}</td>
-                                    <td className="px-2 py-2 align-middle text-center">{new Intl.NumberFormat('vi-VN').format(Number(b['totalPrice'] ?? b['unitPrice'] ?? 0))} ₫</td>
-                                    <td className="px-2 py-2 align-middle text-center">{new Intl.NumberFormat('vi-VN').format(Number(b['commission'] ?? 0))} ₫</td>
-                                    <td className="px-2 py-2 align-middle text-center">{translateStatus(String(b['status'] ?? ''))}</td>
-                                    <td className="px-2 py-2 align-middle text-center">{String(b['startDate'] ?? b['completionDate'] ?? '—')}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
                           </div>
                         )}
-                      </div>
-                    )}
+
                   </div>
                 )}
               </div>
@@ -2589,7 +3182,7 @@ export default function SuperAdminHome() {
                   <option value="type">Loại</option>
                   <option value="supplier">Nhà cung cấp</option>
                 </select>
-                <label className="text-sm text-gray-500">Top</label>
+                <label className="text-sm text-gray-500">Hàng đầu</label>
                 <select value={String(hwTopN)} onChange={(e) => setHwTopN(Number(e.target.value))} className="rounded-md border px-3 py-2 text-sm bg-white">
                   {[5,8,10,20].map(n => <option key={n} value={n}>{n}</option>)}
                 </select>
@@ -2599,7 +3192,7 @@ export default function SuperAdminHome() {
 
             <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
-                <h3 className="text-sm font-medium text-gray-700">Top theo doanh thu</h3>
+                <h3 className="text-sm font-medium text-gray-700">Hàng đầu theo doanh thu</h3>
                 <div className="mt-3">
                   <Chart
                     options={{
@@ -2607,7 +3200,7 @@ export default function SuperAdminHome() {
                       plotOptions: { bar: { borderRadius: 6, columnWidth: '60%' } },
                       xaxis: { categories: hwRows.map(r => r.label) },
                       dataLabels: { enabled: false },
-                      tooltip: { y: { formatter: (v: number) => `${v.toLocaleString()} VND` } },
+                      tooltip: { y: { formatter: (v: number) => `${v.toLocaleString()} VNĐ` } },
                       colors: ['#465fff'],
                     }}
                     
@@ -2621,7 +3214,7 @@ export default function SuperAdminHome() {
 
               <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium text-gray-700">Chi tiết top</h3>
+                  <h3 className="text-sm font-medium text-gray-700">Chi tiết hàng đầu</h3>
                 </div>
 
                 <div className="mt-3 overflow-x-auto">
@@ -2660,7 +3253,7 @@ export default function SuperAdminHome() {
                           <td className="px-3 py-3 text-right align-top">
                             {/* revenue-based status badge */}
                             <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ${r.revenue > 1000000 ? 'bg-emerald-100 text-emerald-700' : r.revenue > 500000 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
-                              {r.revenue > 1000000 ? 'Best' : r.revenue > 500000 ? 'Good' : 'Low'}
+                              {r.revenue > 1000000 ? 'Tốt nhất' : r.revenue > 500000 ? 'Tốt' : 'Thấp'}
                             </span>
                           </td>
                         </tr>
