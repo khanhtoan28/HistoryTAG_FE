@@ -36,6 +36,7 @@ export type Hospital = {
   personInChargeName?: string | null;
   personInChargeEmail?: string | null;
   personInChargePhone?: string | null;
+  contractCount?: number; // Tổng số hợp đồng (business + warranty)
 };
 
 export type HospitalForm = {
@@ -931,13 +932,19 @@ export default function HospitalsPage() {
       const res = await fetch(url.toString(), { headers: { ...authHeader() } });
       if (!res.ok) throw new Error(`GET failed ${res.status}`);
       const data = await res.json();
-      setItems(data.content ?? data);
-      setTotalElements(data.totalElements ?? data.length ?? 0);
-      setTotalPages(data.totalPages ?? Math.ceil((data.totalElements ?? data.length ?? 0) / size));
+      const hospitals = Array.isArray(data.content) ? data.content : (Array.isArray(data) ? data : []);
+      // Ensure contractCount is set (from backend or default to 0)
+      const hospitalsWithCount = hospitals.map((h: any) => ({
+        ...h,
+        contractCount: h.contractCount ?? 0,
+      }));
+      setItems(hospitalsWithCount);
+      setTotalElements(data.totalElements ?? hospitals.length ?? 0);
+      setTotalPages(data.totalPages ?? Math.ceil((data.totalElements ?? hospitals.length ?? 0) / size));
 
       // schedule disabling item animation after stagger finishes
       if (enableItemAnimation) {
-        const itemCount = (data.content ?? data)?.length ?? (Array.isArray(data) ? data.length : 0);
+        const itemCount = hospitals.length;
         const maxDelay = itemCount > 1 ? 2000 + ((itemCount - 2) * 80) : 0;
         const animationDuration = 220;
         const buffer = 120;
@@ -1670,17 +1677,23 @@ export default function HospitalsPage() {
                     }}
                     className="group w-full bg-white rounded-2xl border border-gray-100 p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-1 group-hover:bg-blue-50 hover:ring-1 hover:ring-blue-200 hover:border-blue-100 cursor-pointer relative"
                   >
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onViewHistory(h);
-                      }}
-                      title="Lịch sử"
-                      aria-label={`Lịch sử ${h.name}`}
-                    className="absolute top-4 right-4 text-gray-600 hover:text-black transition"
-                    >
-                      <RiHistoryLine className="w-5 h-5" />
-                    </button>
+                    <div className="absolute top-4 right-4 flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-700">
+                        <span>{h.contractCount ?? 0}</span>
+                        <span>hợp đồng</span>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onViewHistory(h);
+                        }}
+                        title="Lịch sử"
+                        aria-label={`Lịch sử ${h.name}`}
+                        className="text-gray-600 hover:text-black transition"
+                      >
+                        <RiHistoryLine className="w-5 h-5" />
+                      </button>
+                    </div>
                     <div className="flex items-start gap-4 w-full md:w-2/3">
                       {/* moved: badge + small icon box inside the card */}
                       <div className="flex-shrink-0 mt-0 flex items-center gap-2">

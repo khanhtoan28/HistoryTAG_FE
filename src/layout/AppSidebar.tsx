@@ -62,7 +62,10 @@ const navItems: NavItem[] = [
   {
     name: "Phòng kinh doanh",
     icon: <BoxIconLine />,
-    path: "/admin/business",
+    subItems: [
+      { name: "Hợp đồng kinh doanh", path: "/admin/business", pro: false },
+      { name: "Hợp đồng bảo hành", path: "/admin/warranty-contracts", pro: false },
+    ],
   },
 ];
 

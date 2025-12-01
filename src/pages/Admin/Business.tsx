@@ -19,6 +19,7 @@ import {
   TaskIcon,
 } from '../../icons';
 import { FiCheckCircle, FiXCircle } from 'react-icons/fi';
+import { motion, AnimatePresence } from 'framer-motion';
 import Pagination from '../../components/common/Pagination';
 import ComponentCard from '../../components/common/ComponentCard';
 import { normalizeBusinessContractName } from '../../utils/businessContract';
@@ -82,6 +83,9 @@ const BusinessPage: React.FC = () => {
   const [originalStatus, setOriginalStatus] = useState<string>('CARING');
   const [statusConfirmOpen, setStatusConfirmOpen] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState<{ payload: Record<string, unknown>; isUpdate: boolean; successMessage?: string } | null>(null);
+  const [confirmCreateOpen, setConfirmCreateOpen] = useState(false);
+  const [pendingCreateSubmit, setPendingCreateSubmit] = useState<{ payload: Record<string, unknown>; isUpdate: boolean; successMessage?: string } | null>(null);
+  const [hospitalNameForConfirm, setHospitalNameForConfirm] = useState<string>("");
   const [bankName, setBankName] = useState<string>('');
   const [bankContactPerson, setBankContactPerson] = useState<string>('');
   type BusinessItem = {
@@ -717,6 +721,48 @@ const BusinessPage: React.FC = () => {
     }
 
     const isUpdate = Boolean(editingId);
+    
+    // Check nếu đang tạo mới (không phải edit) và bệnh viện đã có hợp đồng
+    if (!isUpdate && selectedHospitalId) {
+      try {
+        const existingBusinesses = await getBusinesses({ page: 0, size: 10000 });
+        const allItems = Array.isArray(existingBusinesses?.content) ? existingBusinesses.content : (Array.isArray(existingBusinesses) ? existingBusinesses : []);
+        const hasExisting = allItems.some((item: BusinessItem) => {
+          return item.hospital?.id === selectedHospitalId;
+        });
+        
+        if (hasExisting) {
+          // Tìm tên bệnh viện từ các nguồn
+          let hospitalName = "bệnh viện này";
+          if (selectedHospitalId) {
+            // Tìm trong hospitalOptions trước (nhanh nhất)
+            const hospitalOpt = hospitalOptions.find(h => h.id === selectedHospitalId);
+            if (hospitalOpt?.label) {
+              hospitalName = hospitalOpt.label;
+            } else {
+              // Tìm trong items
+              const existingItem = items.find(h => h.hospital?.id === selectedHospitalId);
+              if (existingItem?.hospital?.label) {
+                hospitalName = existingItem.hospital.label;
+              } else {
+                // Tìm trong existingBusinesses
+                const existingBusiness = allItems.find((item: BusinessItem) => item.hospital?.id === selectedHospitalId);
+                if (existingBusiness?.hospital?.label) {
+                  hospitalName = existingBusiness.hospital.label;
+                }
+              }
+            }
+          }
+          setHospitalNameForConfirm(hospitalName);
+          setPendingCreateSubmit({ payload, isUpdate: false, successMessage: undefined });
+          setConfirmCreateOpen(true);
+          return;
+        }
+      } catch (e) {
+        console.warn("Failed to check existing business contracts, proceeding anyway", e);
+      }
+    }
+    
     const requireConfirm = statusValue === 'CONTRACTED' && originalStatus !== 'CONTRACTED';
     if (requireConfirm && !statusConfirmOpen) {
       setPendingSubmit({ payload, isUpdate, successMessage: 'Chuyển trạng thái thành công' });
@@ -831,6 +877,34 @@ const BusinessPage: React.FC = () => {
   function cancelStatusTransition() {
     setPendingSubmit(null);
     setStatusConfirmOpen(false);
+  }
+
+  async function confirmCreate() {
+    const submission = pendingCreateSubmit;
+    setConfirmCreateOpen(false);
+    if (!submission) {
+      setPendingCreateSubmit(null);
+      setHospitalNameForConfirm("");
+      return;
+    }
+    setPendingCreateSubmit(null);
+    const hospitalName = hospitalNameForConfirm;
+    setHospitalNameForConfirm("");
+    
+    const requireConfirm = statusValue === 'CONTRACTED' && originalStatus !== 'CONTRACTED';
+    if (requireConfirm && !statusConfirmOpen) {
+      setPendingSubmit({ ...submission });
+      setStatusConfirmOpen(true);
+      return;
+    }
+    
+    await submitBusiness(submission.payload, submission.isUpdate, submission.successMessage);
+  }
+
+  function cancelCreate() {
+    setConfirmCreateOpen(false);
+    setPendingCreateSubmit(null);
+    setHospitalNameForConfirm("");
   }
 
   function statusLabel(status?: string | null) {
@@ -1185,6 +1259,58 @@ const BusinessPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Confirm Create Modal */}
+      <AnimatePresence>
+        {confirmCreateOpen && pendingCreateSubmit && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="absolute inset-0 bg-black/50" onClick={cancelCreate} />
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.95 }}
+              className="relative z-[111] w-full max-w-md rounded-2xl bg-white shadow-2xl border border-gray-200"
+            >
+              <div className="p-6">
+                <div className="flex items-start gap-4 mb-4">
+                  <div className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center bg-orange-100">
+                    <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-gray-900 mb-1">
+                      Xác nhận tạo hợp đồng mới
+                    </h3>
+                    <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                      <p className="text-sm text-orange-700">
+                        Bệnh viện <span className="font-bold">"{hospitalNameForConfirm}"</span> đã có hợp đồng kinh doanh. Bạn có muốn tạo thêm hợp đồng mới không?
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={cancelCreate}
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 transition"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmCreate}
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-orange-600 hover:bg-orange-700 transition"
+                  >
+                    Tạo mới
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
       {/* Page background simplified to white (no animated gradient) */}
 
       <div className="flex items-center justify-between mb-6">
