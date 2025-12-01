@@ -10,7 +10,7 @@ import { getBusinesses } from "../../api/business.api";
 import { getAuthToken } from "../../api/client";
 import toast from "react-hot-toast";
 import Pagination from "../../components/common/Pagination";
-import ExcelJS from 'exceljs';
+// ExcelJS is heavy; import dynamically inside export functions to reduce initial bundle size
 
 function StatCard({ title, value, icon, color }: { title: string; value: string | number; icon?: React.ReactNode; color?: string }) {
   let display: React.ReactNode = value;
@@ -1702,6 +1702,7 @@ export default function SuperAdminHome() {
         }
       }
 
+      const ExcelJS = await import('exceljs');
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Báo cáo chi tiết');
 
@@ -2886,7 +2887,10 @@ export default function SuperAdminHome() {
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-2">
                                         <span className="text-sm font-semibold text-gray-900">
-                                          {isCollapsed ? '▶' : '▼'} {group.hospitalName}
+                                          <svg className={`w-4 h-4 inline-block mr-2 transition-transform ${isCollapsed ? 'rotate-270' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                          </svg>
+                                          {group.hospitalName}
                                         </span>
                                         <span className="text-xs text-gray-500">Tổng: {group.tasks.length} công việc</span>
                                       </div>

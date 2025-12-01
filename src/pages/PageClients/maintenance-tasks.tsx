@@ -1295,7 +1295,7 @@ function DetailModal({
                             )}
                         />
 
-                        <Info
+                        {/* <Info
                             icon={<FiLink />}
                             label="API URL"
                             stacked
@@ -1308,9 +1308,9 @@ function DetailModal({
                                     "—"
                                 )
                             }
-                        />
-                        <Info icon={<FiTag />} label="API Test" value={item.apiTestStatus || "—"} />
-                        <Info icon={<FiTag />} label="Số lượng" value={item.quantity ?? "—"} />
+                        /> */}
+                        {/* <Info icon={<FiTag />} label="API Test" value={item.apiTestStatus || "—"} /> */}
+                        {/* <Info icon={<FiTag />} label="Số lượng" value={item.quantity ?? "—"} /> */}
                         <Info icon={<FiClock />} label="Deadline" value={fmt(item.deadline)} />
                         <Info icon={<FiClock />} label="Ngày bắt đầu" value={fmt(item.startDate)} />
                         <Info icon={<FiClock />} label="Ngày nghiệm thu" value={fmt(item.acceptanceDate)} />
@@ -2318,7 +2318,7 @@ const ImplementationTasksPage: React.FC = () => {
                                             <table className="w-full">
                                                 <thead className="bg-gray-50 border-b border-gray-200">
                                                     <tr>
-                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
+                                                        <th className="px-6 w-10 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
                                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
                                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/Thành phố</th>
                                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượng task</th>
@@ -2333,9 +2333,7 @@ const ImplementationTasksPage: React.FC = () => {
                                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospitalPage * hospitalSize + index + 1}</td>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="flex items-center gap-3">
-                                                                        <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-                                                                            <FaHospital className="text-blue-600 text-lg" />
-                                                                        </div>
+                                                                        
                                                                         <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
                                                                             <span>{hospital.label}</span>
                                                                             {hospital.fromDeployment && !hospital.acceptedByMaintenance && (

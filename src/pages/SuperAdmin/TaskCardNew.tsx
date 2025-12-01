@@ -222,7 +222,19 @@ export default function TaskCardNew({
                 Người phụ trách:{" "}
                 <span className="font-medium text-gray-800 dark:text-gray-200">
                   {(() => {
-                    // Parse PICs từ additionalRequest nếu có
+                    // Ưu tiên lấy từ picDeploymentIds/picDeploymentNames trong response (backend mới)
+                    if ((task as any).picDeploymentIds && Array.isArray((task as any).picDeploymentIds)) {
+                      const picIds = (task as any).picDeploymentIds as number[];
+                      const mainPicId = (task as any).picDeploymentId;
+                      const allPicIds = mainPicId ? [...new Set([mainPicId, ...picIds])] : picIds;
+                      const mainPic = task.picDeploymentName || "-";
+                      if (allPicIds.length > 1) {
+                        return `${mainPic} (+${allPicIds.length - 1} người khác)`;
+                      }
+                      return mainPic;
+                    }
+                    
+                    // Fallback: Parse PICs từ additionalRequest (backward compatible với dữ liệu cũ)
                     const additionalReq = (task as any).additionalRequest;
                     const picId = (task as any).picDeploymentId;
                     if (additionalReq) {

@@ -883,6 +883,7 @@ function DetailModal({
 }) {
   const [picNames, setPicNames] = React.useState<Array<{ id: number; name: string }>>([]);
   const [loadingPics, setLoadingPics] = React.useState(false);
+  const [needRelogin, setNeedRelogin] = React.useState(false);
 
   // Fetch tên các PIC khi modal mở
   React.useEffect(() => {
@@ -892,7 +893,7 @@ function DetailModal({
     }
 
     const picIds = parsePicIdsFromAdditionalRequest(item.additionalRequest, item.picDeploymentId);
-    console.log('Parsed PIC IDs:', picIds, 'from additionalRequest:', item.additionalRequest, 'picDeploymentId:', item.picDeploymentId);
+    // console.log('Parsed PIC IDs:', picIds, 'from additionalRequest:', item.additionalRequest, 'picDeploymentId:', item.picDeploymentId);
     
     if (picIds.length <= 1) {
       // Chỉ có 1 PIC, dùng tên từ item
@@ -905,112 +906,68 @@ function DetailModal({
     }
     
     // Nếu có nhiều PIC nhưng không có tên cho PIC đầu tiên, vẫn fetch tất cả
-    console.log('Fetching names for', picIds.length, 'PICs');
+    // console.log('Fetching names for', picIds.length, 'PICs');
 
-    // Fetch tên các PIC từ API - thử cả admin và superadmin endpoints
+    // Thực hiện batch lookup bằng một request duy nhất tới endpoint admin batch
     setLoadingPics(true);
-    Promise.all(
-      picIds.map(async (id) => {
-        // Nếu là PIC đầu tiên và đã có tên, dùng luôn
-        if (id === item.picDeploymentId && item.picDeploymentName) {
-          return { id, name: item.picDeploymentName };
-        }
-        
-        // Thử fetch từ admin endpoint trước
-        try {
-          const url = `${API_ROOT}/api/v1/admin/users/${id}`;
-          const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
-          if (res.ok) {
-            const data = await res.json();
-            console.log(`Admin API response for user ${id}:`, data);
-            // Handle cả trường hợp response là object hoặc có content/data property (giống TaskFormModal)
-            const user = Array.isArray(data?.content) ? data.content[0] : (data?.data || data);
-            if (user) {
-              const name = user.fullName || user.fullname || user.name || user.username || user.email || user.label;
-              if (name && name.trim() !== "" && name !== String(id)) {
-                console.log(`Found name for user ${id}:`, name);
-                return { id, name: String(name).trim() };
-              } else {
-                console.warn(`No valid name found for user ${id} in response:`, user);
-              }
-            } else {
-              console.warn(`No user data found in response for user ${id}:`, data);
-            }
-          } else {
-            console.warn(`Admin API returned ${res.status} for user ${id}`);
-          }
-        } catch (err) {
-          console.debug(`Admin endpoint failed for user ${id}, trying superadmin...`, err);
-        }
-        
-        // Nếu admin endpoint fail, thử superadmin endpoint
-        try {
-          const url = `${API_ROOT}/api/v1/superadmin/users/${id}`;
-          const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
-          if (res.ok) {
-            const data = await res.json();
-            console.log(`Superadmin API response for user ${id}:`, data);
-            const user = Array.isArray(data?.content) ? data.content[0] : (data?.data || data);
-            if (user) {
-              const name = user.fullName || user.fullname || user.name || user.username || user.email || user.label;
-              if (name && name.trim() !== "" && name !== String(id)) {
-                console.log(`Found name for user ${id} from superadmin:`, name);
-                return { id, name: String(name).trim() };
-              }
-            }
-          } else {
-            console.warn(`Superadmin API returned ${res.status} for user ${id}`);
-          }
-        } catch (err) {
-          console.debug(`Superadmin endpoint also failed for user ${id}:`, err);
-        }
-        
-        // Thử dùng search API như fallback
-        try {
-          const searchUrl = `${API_ROOT}/api/v1/admin/users/search?name=${encodeURIComponent(String(id))}`;
-          const searchRes = await fetch(searchUrl, { headers: authHeaders(), credentials: "include" });
-          if (searchRes.ok) {
-            const searchData = await searchRes.json();
-            const searchList = Array.isArray(searchData?.content) ? searchData.content : (Array.isArray(searchData) ? searchData : []);
-            const found = searchList.find((u: any) => Number(u?.id) === Number(id));
-            if (found) {
-              const name = found.fullName || found.fullname || found.name || found.username || found.email || found.label;
-              if (name && name.trim() !== "" && name !== String(id)) {
-                console.log(`Found name for user ${id} via search:`, name);
-                return { id, name: String(name).trim() };
-              }
-            }
-          }
-        } catch (err) {
-          console.debug(`Search API also failed for user ${id}:`, err);
-        }
-        
-        // Nếu cả 3 đều fail, fallback về ID
-        console.warn(`Could not fetch name for user ${id}, using ID as fallback`);
-        return { id, name: String(id) };
-      })
-    )
-      .then((results) => {
-        console.log('Fetched PIC names:', results);
-        setPicNames(results);
-      })
-      .catch((err) => {
-        console.error('Error fetching PIC names:', err);
-        // Nếu lỗi, dùng tên từ item cho PIC đầu tiên
-        if (item.picDeploymentId && item.picDeploymentName) {
-          setPicNames([{ id: item.picDeploymentId, name: item.picDeploymentName }]);
-        } else {
+    (async () => {
+      try {
+        if (picIds.length === 0) {
           setPicNames([]);
+          return;
         }
-      })
-      .finally(() => {
+
+        const idsCsv = picIds.join(",");
+        const url = `${API_ROOT}/api/v1/admin/users/batch?ids=${encodeURIComponent(idsCsv)}`;
+        const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+
+        if (res.status === 401) {
+          console.warn('Admin batch API returned 401');
+          setNeedRelogin(true);
+          // fallback to User-<id>
+          setPicNames(picIds.map((id) => ({ id, name: id === item.picDeploymentId && item.picDeploymentName ? item.picDeploymentName : `User-${id}` })));
+          return;
+        }
+
+        if (!res.ok) {
+          console.warn(`Admin batch API returned ${res.status}`);
+          // fallback per-id
+          setPicNames(picIds.map((id) => ({ id, name: id === item.picDeploymentId && item.picDeploymentName ? item.picDeploymentName : `User-${id}` })));
+          return;
+        }
+
+        const payload = await res.json();
+        // payload might be Array or wrapped { content: [...] }
+        const list = Array.isArray(payload) ? payload : Array.isArray(payload?.content) ? payload.content : [];
+        const byId = new Map<number, string>();
+        for (const u of list) {
+          const uid = Number(u?.id);
+          if (!Number.isFinite(uid)) continue;
+          const name = u?.fullName ?? u?.fullname ?? u?.name ?? u?.username ?? u?.label ?? u?.email;
+          if (name) byId.set(uid, String(name).trim());
+        }
+
+        const results = picIds.map((id) => {
+          if (id === item.picDeploymentId && item.picDeploymentName) return { id, name: item.picDeploymentName };
+          const found = byId.get(id);
+          if (found && found !== String(id)) return { id, name: found };
+          return { id, name: `User-${id}` };
+        });
+
+        // console.log('Batch fetched PIC names:', results);
+        setPicNames(results);
+      } catch (err) {
+        console.error('Error fetching PIC names (batch):', err);
+        setPicNames(picIds.map((id) => ({ id, name: id === item.picDeploymentId && item.picDeploymentName ? item.picDeploymentName : `User-${id}` })));
+      } finally {
         setLoadingPics(false);
-      });
+      }
+    })();
   }, [open, item]);
 
   if (!open || !item) return null;
 
-  console.log("DetailModal item startDate", item.startDate);
+  // console.log("DetailModal item startDate", item.startDate);
 
   return (
     <div
@@ -1030,23 +987,18 @@ function DetailModal({
           <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
             📋 Chi tiết tác vụ triển khai
           </h2>
-          {/* <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition"
-          >
-            ✕
-          </button> */}
+         
         </div>
 
         {/* Content */}
         <div className="p-6 space-y-6 text-sm text-gray-800 dark:text-gray-200">
           {/* Grid Info */}
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <Info icon={<FiMapPin />} label="Tên" value={item.name} />
-            <Info icon={<FiMapPin />} label="Bệnh viện" value={item.hospitalName} />
+            <Info icon={<FiMapPin />} label="Tên: " value={item.name} />
+            <Info icon={<FiMapPin />} label="Bệnh viện: " value={item.hospitalName} />
             <Info 
               icon={<FiUser />} 
-              label="Người phụ trách" 
+              label="Người phụ trách: " 
               value={
                 loadingPics ? (
                   <span className="text-gray-500">Đang tải...</span>
@@ -1064,11 +1016,11 @@ function DetailModal({
                 )
               } 
             />
-            <Info icon={<FiUser />} label="Tiếp nhận bởi" value={item.receivedByName || "—"} />
+            <Info icon={<FiUser />} label="Tiếp nhận bởi: " value={item.receivedByName || "—"} />
 
             <Info
               icon={<FiTag />}
-              label="Trạng thái"
+              label="Trạng thái: "
               value={
                 <span className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${statusBadgeClasses(item.status)}`}>
                   {statusLabel(item.status)}
@@ -1076,27 +1028,12 @@ function DetailModal({
               }
             />
 
-            <Info
-              icon={<FiLink />}
-              label="API URL"
-              value={
-                item.apiUrl ? (
-                  <a href={item.apiUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline break-words">
-                    {item.apiUrl}
-                  </a>
-                ) : (
-                  "—"
-                )
-              }
-            />
-
-            <Info icon={<FiTag />} label="API Test" value={item.apiTestStatus || "—"} />
-            <Info icon={<FiPhone />} label="Số lượng" value={item.quantity ?? "—"} />
-            <Info icon={<FiClock />} label="Deadline" value={fmt(item.deadline)} />
-            <Info icon={<FiClock />} label="Ngày bắt đầu" value={fmt(item.startDate)} />
-            <Info icon={<FiClock />} label="Ngày hoàn thành" value={fmt(item.completionDate)} />
-            <Info icon={<FiClock />} label="Tạo lúc" value={fmt(item.createdAt)} />
-            <Info icon={<FiClock />} label="Cập nhật lúc" value={fmt(item.updatedAt)} />
+            
+            <Info icon={<FiClock />} label="Deadline: " value={fmt(item.deadline)} />
+            <Info icon={<FiClock />} label="Ngày bắt đầu: " value={fmt(item.startDate)} />
+            <Info icon={<FiClock />} label="Ngày hoàn thành: " value={fmt(item.completionDate)} />
+            <Info icon={<FiClock />} label="Tạo lúc: " value={fmt(item.createdAt)} />
+            <Info icon={<FiClock />} label="Cập nhật lúc: " value={fmt(item.updatedAt)} />
           </div>
 
           {/* Additional request */}
@@ -1390,7 +1327,7 @@ const ImplementationTasksPage: React.FC = () => {
   const [detailItem, setDetailItem] = useState<ImplementationTaskResponseDTO | null>(null);
   // hospital list view state (like SuperAdmin page)
   const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
-  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number | null; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean; personInChargeId?: number | null; personInChargeName?: string | null; hiddenPendingCount?: number; hiddenTaskCount?: number }>>([]);
+  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number | null; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean; personInChargeId?: number | null; personInChargeName?: string | null; hiddenPendingCount?: number; hiddenTaskCount?: number; acceptedFromBusiness?: boolean; hasBusinessPlaceholder?: boolean }>>([]);
   const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
   const [hospitalPage, setHospitalPage] = useState<number>(0);
   const [hospitalSize, setHospitalSize] = useState<number>(20);
@@ -1986,6 +1923,39 @@ const ImplementationTasksPage: React.FC = () => {
       const allPayload = allRes.ok ? await allRes.json() : [];
       const allItems = Array.isArray(allPayload?.content) ? allPayload.content : Array.isArray(allPayload) ? allPayload : [];
       
+      // Track business transfer status (similar to SuperAdmin)
+      const businessTransferStatus = new Map<string, { hasGeneratedTask: boolean; hasTransfer: boolean; pending: number; accepted: boolean }>();
+      const makeHospitalKey = (hospitalId: number | null | undefined, hospitalName: string) => {
+        if (hospitalId != null && !Number.isNaN(Number(hospitalId))) return `id-${Number(hospitalId)}`;
+        return `name-${hospitalName}`;
+      };
+
+      // Track business tasks (both pending and accepted)
+      for (const raw of allItems as ImplementationTaskResponseDTO[]) {
+        const hospitalName = (raw.hospitalName || "").toString().trim();
+        const hospitalId = typeof raw.hospitalId === "number" ? raw.hospitalId : raw.hospitalId != null ? Number(raw.hospitalId) : null;
+        if (!hospitalName) continue;
+        const key = makeHospitalKey(hospitalId, hospitalName);
+        const received = Boolean(raw.receivedById || raw.receivedByName);
+        const businessName = isBusinessContractTask(
+          typeof raw?.name === "string" ? raw.name : String(raw?.name ?? "")
+        );
+        const placeholder = raw.readOnlyForDeployment === true || businessName;
+        const pending = (!received && raw.readOnlyForDeployment === true) || (!received && businessName);
+        if (!placeholder && !pending) continue;
+        const entry = businessTransferStatus.get(key) || {
+          hasGeneratedTask: false,
+          hasTransfer: false,
+          pending: 0,
+          accepted: false,
+        };
+        if (placeholder) entry.hasGeneratedTask = true;
+        if (raw.readOnlyForDeployment === true) entry.hasTransfer = true;
+        if (pending) entry.pending += 1;
+        if (received && placeholder) entry.accepted = true;
+        businessTransferStatus.set(key, entry);
+      }
+
       // Separate hidden (pending Business) tasks from visible tasks
       const hiddenItems: ImplementationTaskResponseDTO[] = [];
       const visibleItems = (allItems as ImplementationTaskResponseDTO[]).filter((it) => {
@@ -2107,18 +2077,33 @@ const ImplementationTasksPage: React.FC = () => {
       }
 
       // Merge baseList (có transfer status từ endpoint) với task counts từ aggregation
-      // Chỉ hiển thị các bệnh viện có task đã được tiếp nhận (không phải pending)
+      // Hiển thị các bệnh viện có task đã được tiếp nhận hoặc có pending tasks
+      const baseListMap = new Map<string, typeof baseList[0]>();
+      baseList.forEach((h, idx) => {
+        const hospitalId = h.id;
+        const hospitalName = h.label;
+        const key = hospitalId != null ? `id-${hospitalId}` : `name-${hospitalName}`;
+        baseListMap.set(key, { ...h, _index: idx } as typeof h & { _index: number });
+      });
+      
       const withCompleted = baseList
         .map((h, idx) => {
           // Tìm matching hospital từ acc (aggregated from tasks - đã loại pending)
           const hospitalId = h.id;
           const hospitalName = h.label;
-          const key = hospitalId != null ? `id-${hospitalId}` : `name-${hospitalName}`;
-          const aggregated = acc.get(key);
+          const keyById = hospitalId != null ? `id-${hospitalId}` : null;
+          const keyByName = `name-${hospitalName}`;
+          const aggregated = (keyById && acc.get(keyById)) || acc.get(keyByName);
+          const businessInfo = (keyById && businessTransferStatus.get(keyById)) || businessTransferStatus.get(keyByName);
           
           // Chỉ sử dụng taskCount từ aggregated (đã filter pending tasks)
           // Không fallback về h.taskCount vì nó có thể bao gồm pending tasks
           const finalTaskCount = aggregated?.taskCount ?? 0;
+          const hiddenPendingCount = aggregated?.hiddenPendingCount ?? 0;
+          const hiddenTaskCount = hiddenPendingCount;
+          
+          // Check if hospital has accepted tasks from Business (even if all tasks are completed now)
+          const acceptedFromBusiness = finalTaskCount === 0 && Boolean(businessInfo?.accepted);
           
           return {
             ...h,
@@ -2126,15 +2111,49 @@ const ImplementationTasksPage: React.FC = () => {
             acceptedCount: completedCounts[idx] ?? (aggregated?.acceptedCount ?? 0),
             nearDueCount: aggregated?.nearDueCount ?? 0,
             overdueCount: aggregated?.overdueCount ?? 0,
-            hiddenPendingCount: aggregated?.hiddenPendingCount ?? 0,
-            hiddenTaskCount: aggregated?.hiddenTaskCount ?? 0,
+            hiddenPendingCount: hiddenPendingCount,
+            hiddenTaskCount: hiddenTaskCount,
+            acceptedFromBusiness: acceptedFromBusiness,
+            hasBusinessPlaceholder: Boolean(businessInfo?.hasGeneratedTask) || hiddenTaskCount > 0,
             // Transfer status đã có từ backend endpoint
           };
         })
-        .filter((h) => (h.taskCount ?? 0) > 0 || (h.hiddenPendingCount ?? 0) > 0); // Hiển thị bệnh viện có task đã tiếp nhận hoặc có pending tasks
+        .filter((h) => (h.taskCount ?? 0) > 0 || (h.hiddenPendingCount ?? 0) > 0 || h.acceptedFromBusiness); // Hiển thị bệnh viện có task đã tiếp nhận, có pending tasks, hoặc đã tiếp nhận từ phòng KD
+      
+      // Thêm các bệnh viện chỉ có pending tasks (không có trong baseList)
+      const hospitalsWithOnlyPending: Array<{ id: number | null; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean; personInChargeId?: number | null; personInChargeName?: string | null; hiddenPendingCount?: number; hiddenTaskCount?: number; acceptedFromBusiness?: boolean; hasBusinessPlaceholder?: boolean }> = [];
+      for (const [key, aggregated] of acc.entries()) {
+        if (!baseListMap.has(key) && ((aggregated.hiddenPendingCount ?? 0) > 0)) {
+          // Bệnh viện chỉ có pending tasks, tạo entry mới
+          const businessInfo = businessTransferStatus.get(key);
+          const acceptedFromBusiness = (aggregated.taskCount ?? 0) === 0 && Boolean(businessInfo?.accepted);
+          hospitalsWithOnlyPending.push({
+            id: aggregated.id ?? null,
+            label: aggregated.label,
+            subLabel: aggregated.subLabel || "",
+            taskCount: aggregated.taskCount ?? 0,
+            acceptedCount: aggregated.acceptedCount ?? 0,
+            nearDueCount: aggregated.nearDueCount ?? 0,
+            overdueCount: aggregated.overdueCount ?? 0,
+            hiddenPendingCount: aggregated.hiddenPendingCount ?? 0,
+            hiddenTaskCount: aggregated.hiddenTaskCount ?? 0,
+            allTransferred: false,
+            allAccepted: false,
+            personInChargeId: null,
+            personInChargeName: null,
+            acceptedFromBusiness: acceptedFromBusiness,
+            hasBusinessPlaceholder: Boolean(businessInfo?.hasGeneratedTask) || (aggregated.hiddenTaskCount ?? 0) > 0,
+          });
+        }
+      }
+      
+      // Merge và sắp xếp theo tên bệnh viện
+      const finalList = [...withCompleted, ...hospitalsWithOnlyPending].sort((a, b) => 
+        (a.label || "").localeCompare(b.label || "")
+      );
       
       // Province đã có trong subLabel từ endpoint, không cần fetch thêm
-      setHospitalsWithTasks(withCompleted);
+      setHospitalsWithTasks(finalList);
     } catch (e: any) {
       setError(e.message || "Lỗi tải danh sách bệnh viện");
     } finally {
@@ -2577,11 +2596,14 @@ const ImplementationTasksPage: React.FC = () => {
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospitalPage * hospitalSize + index + 1}</td>
                               <td className="px-6 py-4">
                                 <div className={`flex gap-3 ${longName ? 'items-start' : 'items-center'}`}>
-                                  <div className={`w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 ${longName ? 'mt-0.5' : ''}`}>
-                                    <FiMapPin className="text-blue-600 text-lg" />
-                                  </div>
-                                  <div className={`text-sm font-medium text-gray-900 break-words max-w-[260px] ${longName ? 'leading-snug' : ''}`}>
-                                    {hospital.label}
+                                  
+                                  <div className={`text-sm font-medium text-gray-900 break-words max-w-[260px] flex flex-wrap gap-2 ${longName ? 'leading-snug' : ''}`}>
+                                    <span>{hospital.label}</span>
+                                    {hospital.acceptedFromBusiness && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-700">
+                                        Tiếp nhận từ phòng KD
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </td>
@@ -2638,10 +2660,10 @@ const ImplementationTasksPage: React.FC = () => {
                                   )}
                                   {canManage && (hospital.taskCount || 0) > 0 && hospital.allTransferred && hospital.allAccepted && (
                                     <span
-                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-100 text-green-700 text-sm font-medium"
+                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-sm"
                                       title="Đã chuyển sang bảo trì và bảo trì đã tiếp nhận"
                                     >
-                                      ✓ Đã chuyển sang bảo trì
+                                     ✓ Đã chuyển sang bảo trì
                                     </span>
                                   )}
                                   {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) < (hospital.taskCount || 0) && !hospital.allTransferred && (

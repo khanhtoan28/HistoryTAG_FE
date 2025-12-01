@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
-import { ImplementationTaskRequestDTO } from "../PageClients/maintenance-tasks";
+import { ImplementationTaskRequestDTO } from "../../api/superadmin.api";
 
 const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
 
@@ -99,6 +99,177 @@ const STATUS_OPTIONS: Array<{ value: keyof typeof STATUS_LABELS; label: string }
 // canonical map is defined elsewhere; avoid duplicate constants in this module
 
 // Note: normalizeStatus is defined in other shared modules; avoid duplicate definition here to prevent unused symbol
+
+// Extracted RemoteSelect component to top-level to avoid remounting on parent renders.
+function RemoteSelect({ label, placeholder, fetchOptions, value, onChange, required, disabled, hideLabel, excludeIds }: {
+    label: string;
+    placeholder?: string;
+    fetchOptions: (q: string) => Promise<Array<{ id: number; name: string }>>;
+    value: { id: number; name: string } | null;
+    onChange: (v: { id: number; name: string } | null) => void;
+    required?: boolean;
+    disabled?: boolean;
+    hideLabel?: boolean;
+    excludeIds?: number[];
+}) {
+    const [open, setOpen] = useState(false);
+    const [focused, setFocused] = useState(false);
+    const [q, setQ] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [options, setOptions] = useState<Array<{ id: number; name: string }>>([]);
+    const [highlight, setHighlight] = useState<number>(-1);
+    const prevOpenRef = React.useRef(false);
+    const containerRef = useRef<HTMLDivElement | null>(null);
+
+    // Filter out excluded IDs from options
+    const filteredOptions = React.useMemo(() => {
+        if (!excludeIds || excludeIds.length === 0) return options;
+        return options.filter(opt => !excludeIds.includes(opt.id));
+    }, [options, excludeIds]);
+
+    // Reset highlight when filtered options change
+    React.useEffect(() => {
+        if (highlight >= filteredOptions.length) {
+            setHighlight(-1);
+        }
+    }, [filteredOptions.length, highlight]);
+
+    // Debounced search (skip empty queries)
+    useEffect(() => {
+        let alive = true;
+        const t = setTimeout(async () => {
+            if (!q.trim()) {
+                if (alive) {
+                    setOptions([]);
+                    setLoading(false);
+                }
+                return;
+            }
+            setLoading(true);
+            try {
+                const res = await fetchOptions(q.trim());
+                if (alive) setOptions(res);
+            } finally {
+                if (alive) setLoading(false);
+            }
+        }, 500);
+        return () => {
+            alive = false;
+            clearTimeout(t);
+        };
+    }, [q, fetchOptions]);
+
+    // Load initial options once when opening
+    useEffect(() => {
+        if (open && !prevOpenRef.current) {
+            if (!options.length && !q.trim()) {
+                (async () => {
+                    setLoading(true);
+                    try {
+                        const res = await fetchOptions("");
+                        setOptions(res);
+                    } finally {
+                        setLoading(false);
+                    }
+                })();
+            }
+        }
+        prevOpenRef.current = open;
+    }, [open, options.length, q, fetchOptions]);
+
+    // Close on click outside
+    useEffect(() => {
+        function handleClickOutside(ev: MouseEvent) {
+            if (containerRef.current && !containerRef.current.contains(ev.target as Node)) {
+                setOpen(false);
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const content = (
+        <>
+            <div className="relative" ref={containerRef}>
+                <input
+                    className={clsx(
+                        "h-10 w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 outline-none",
+                        "focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
+                    )}
+                    placeholder={placeholder || "Gõ để tìm..."}
+                    value={(open || focused) ? q : value?.name || ""}
+                    onChange={(e) => {
+                        setQ(e.target.value);
+                        if (!open) setOpen(true);
+                    }}
+                    onFocus={() => { setOpen(true); setFocused(true); }}
+                    onBlur={() => { setFocused(false); }}
+                    onKeyDown={(e) => {
+                        if (!open) return;
+                        if (e.key === "ArrowDown") {
+                            e.preventDefault();
+                            setHighlight((h) => Math.min(h + 1, filteredOptions.length - 1));
+                        } else if (e.key === "ArrowUp") {
+                            e.preventDefault();
+                            setHighlight((h) => Math.max(h - 1, 0));
+                        } else if (e.key === "Enter") {
+                            e.preventDefault();
+                            if (highlight >= 0 && filteredOptions[highlight]) {
+                                onChange(filteredOptions[highlight]);
+                                setOpen(false);
+                                setQ("");
+                            }
+                        } else if (e.key === "Escape") {
+                            setOpen(false);
+                        }
+                    }}
+                />
+                {value && !open && (
+                    <button
+                        type="button"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        onClick={() => onChange(null)}
+                        aria-label="Clear"
+                    >
+                        ✕
+                    </button>
+                )}
+
+                {open && (
+                    <div className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg" onMouseLeave={() => setHighlight(-1)} style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
+                        {loading && <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>}
+                        {!loading && filteredOptions.length === 0 && <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>}
+                        {!loading && filteredOptions.map((opt, idx) => (
+                            <div key={opt.id} className={clsx("px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800", idx === highlight ? "bg-gray-100 dark:bg-gray-800" : "")} onMouseEnter={() => setHighlight(idx)} onMouseDown={(e) => { e.preventDefault(); onChange(opt); setOpen(false); setQ(""); }}>
+                                {opt.name}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </>
+    );
+
+    if (disabled) {
+        return (
+            <Field label={label} required={required}>
+                <div className="h-10 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 flex items-center">
+                    {value?.name || "-"}
+                </div>
+            </Field>
+        );
+    }
+
+    if (hideLabel) {
+        return content;
+    }
+
+    return (
+        <Field label={label} required={required}>
+            {content}
+        </Field>
+    );
+}
 
 export default function TaskFormModal({
     open,
@@ -203,47 +374,56 @@ export default function TaskFormModal({
         return undefined;
     }
 
+    // Init form only when modal first opens or when the task ID actually changes.
+    const prevOpenRef = React.useRef<boolean>(false);
+    const prevInitialIdRef = React.useRef<number | undefined>(initial?.id);
     useEffect(() => {
-        if (open) {
-            const isNew = !(initial?.id);
-            const normalizedStatus = normalizeStatus(initial?.status) ?? "RECEIVED";
-            // Auto-set completionDate if status is COMPLETED
-            const completionDefault =
-                normalizedStatus === "COMPLETED"
-                    ? (initial?.completionDate ? toLocalInputValue(initial.completionDate) : localInputFromDate(new Date()))
-                    : (initial?.completionDate ? toLocalInputValue(initial.completionDate) : "");
-            // Auto-set startDate for new tasks
-            const defaultStart = initial?.startDate ? toLocalInputValue(initial.startDate) : (isNew ? localInputFromDate(new Date()) : "");
+        const shouldInit = open && (!prevOpenRef.current || prevInitialIdRef.current !== initial?.id);
+        if (!shouldInit) {
+            prevOpenRef.current = open;
+            prevInitialIdRef.current = initial?.id;
+            return;
+        }
 
-            setModel({
-                name: initial?.name || "",
-                hospitalId: initial?.hospitalId || 0,
-                picDeploymentId: initial?.picDeploymentId || 0,
-                // removed optional fields from form (kept nulls on submit)
-                apiTestStatus: initial?.apiTestStatus ?? "",
-                // removed from form
-                additionalRequest: initial?.additionalRequest ?? "",
-                // removed from form
-                deadline: initial?.deadline ? toLocalInputValue(initial.deadline) : "",
-                completionDate: completionDefault,
-                status: normalizedStatus,
-                startDate: defaultStart,
-            });
+        const isNew = !(initial?.id);
+        const normalizedStatus = normalizeStatus(initial?.status) ?? "RECEIVED";
+        const completionDefault =
+            normalizedStatus === "COMPLETED"
+                ? (initial?.completionDate ? toLocalInputValue(initial.completionDate) : localInputFromDate(new Date()))
+                : (initial?.completionDate ? toLocalInputValue(initial.completionDate) : "");
+        const defaultStart = initial?.startDate ? toLocalInputValue(initial.startDate) : (isNew ? localInputFromDate(new Date()) : "");
 
-            const hid = initial?.hospitalId || 0;
-            const hnm = initial?.hospitalName || "";
-            setHospitalOpt(hid ? { id: hid, name: hnm || String(hid) } : null);
+        setModel({
+            name: initial?.name || "",
+            hospitalId: initial?.hospitalId || 0,
+            picDeploymentId: initial?.picDeploymentId || 0,
+            apiTestStatus: initial?.apiTestStatus ?? "",
+            additionalRequest: initial?.additionalRequest ?? "",
+            deadline: initial?.deadline ? toLocalInputValue(initial.deadline) : "",
+            completionDate: completionDefault,
+            status: normalizedStatus,
+            startDate: defaultStart,
+        });
 
-            const pid = initial?.picDeploymentId || 0;
-            const pnm = initial?.picDeploymentName || "";
-            
-            // Parse thêm các PIC khác từ additionalRequest nếu có
+        const hid = initial?.hospitalId || 0;
+        const hnm = initial?.hospitalName || "";
+        setHospitalOpt(hid ? { id: hid, name: hnm || String(hid) } : null);
+
+        const pid = initial?.picDeploymentId || 0;
+        const pnm = initial?.picDeploymentName || "";
+
+        // Ưu tiên lấy từ picDeploymentIds trong response (backend mới)
+        // Fallback về parse từ additionalRequest (backward compatible với dữ liệu cũ)
+        let allPicIds: number[] = [];
+        
+        // Nếu có picDeploymentIds trong response, dùng nó (backend mới)
+        if (initial && 'picDeploymentIds' in initial && Array.isArray((initial as any).picDeploymentIds)) {
+            const responsePicIds = (initial as any).picDeploymentIds as number[];
+            allPicIds = [...new Set([pid, ...responsePicIds].filter(id => id && id > 0))];
+        } else {
+            // Fallback: Parse từ additionalRequest (backward compatible)
             const additionalReq = initial?.additionalRequest || "";
-            let allPicIds: number[] = [];
-            if (pid) {
-                allPicIds.push(pid);
-            }
-            // Match tất cả các [PIC_IDS: ...] trong additionalRequest
+            if (pid) allPicIds.push(pid);
             const picIdsMatches = additionalReq.matchAll(/\[PIC_IDS:\s*([^\]]+)\]/g);
             for (const match of picIdsMatches) {
                 if (match[1]) {
@@ -251,46 +431,43 @@ export default function TaskFormModal({
                     allPicIds.push(...ids);
                 }
             }
-            // Loại bỏ duplicate và đảm bảo PIC đầu tiên (pid) luôn ở đầu
             allPicIds = pid ? [pid, ...allPicIds.filter(id => id !== pid)] : [...new Set(allPicIds)];
-            
-            // Load PICs - fetch tên từ API cho tất cả PICs
-            if (allPicIds.length > 0) {
-                // PIC đầu tiên đã có tên từ backend
-                const initialPicOpts = allPicIds.map((id, idx) => ({
-                    id,
-                    name: idx === 0 && pnm ? pnm : String(id), // Tạm thời dùng ID, sẽ fetch sau
-                    _uid: `pic-${Date.now()}-${id}-${idx}`
-                }));
-                setPicOpts(initialPicOpts);
-                
-                // Fetch tên cho các PIC khác (ngoài PIC đầu tiên)
-                if (allPicIds.length > 1) {
-                    Promise.all(
-                        allPicIds.slice(1).map(async (id) => {
-                            const userInfo = await fetchUserById(id);
-                            return userInfo ? { id, name: userInfo.name } : null;
-                        })
-                    ).then((results) => {
-                        setPicOpts((prev) => {
-                            return prev.map((pic, idx) => {
-                                if (idx === 0) return pic; // Giữ nguyên PIC đầu tiên
-                                const fetched = results[idx - 1];
-                                return fetched ? { ...pic, name: fetched.name } : pic;
-                            });
-                        });
-                    }).catch(() => {
-                        // Nếu fetch lỗi, giữ nguyên
-                    });
-                }
-            } else {
-                setPicOpts([]);
-            }
-            setCurrentPicInput(null);
-
-            // removed: agency/his/hardware selections
         }
-    }, [open, initial]);
+
+        if (allPicIds.length > 0) {
+            const initialPicOpts = allPicIds.map((id, idx) => ({
+                id,
+                name: idx === 0 && pnm ? pnm : String(id),
+                _uid: `pic-${Date.now()}-${id}-${idx}`
+            }));
+            setPicOpts(initialPicOpts);
+
+            if (allPicIds.length > 1) {
+                Promise.all(
+                    allPicIds.slice(1).map(async (id) => {
+                        const userInfo = await fetchUserById(id);
+                        return userInfo ? { id, name: userInfo.name } : null;
+                    })
+                ).then((results) => {
+                    setPicOpts((prev) => {
+                        return prev.map((pic, idx) => {
+                            if (idx === 0) return pic;
+                            const fetched = results[idx - 1];
+                            return fetched ? { ...pic, name: fetched.name } : pic;
+                        });
+                    });
+                }).catch(() => {
+                    // ignore
+                });
+            }
+        } else {
+            setPicOpts([]);
+        }
+        setCurrentPicInput(null);
+
+        prevOpenRef.current = open;
+        prevInitialIdRef.current = initial?.id;
+    }, [open, initial?.id]);
 
     // When editing: resolve names for Agency/HIS/Hardware if we only have IDs
     // Removed: resolveById logic for agency/his/hardware
@@ -422,29 +599,30 @@ export default function TaskFormModal({
         const derivedCompletion = completionIso ?? (normalizedStatus === "COMPLETED" ? toLocalISOString(new Date()) : null);
 
         // Tạo payload với PIC đầu tiên làm chính
-        // Loại bỏ [PIC_IDS: ...] cũ khỏi additionalRequest trước khi thêm mới
+        // Loại bỏ [PIC_IDS: ...] cũ khỏi additionalRequest (backward compatible với dữ liệu cũ)
         let cleanedAdditionalRequest = model.additionalRequest || "";
         if (cleanedAdditionalRequest) {
-            // Loại bỏ tất cả các [PIC_IDS: ...] cũ
+            // Loại bỏ tất cả các [PIC_IDS: ...] cũ vì giờ dùng picDeploymentIds
             cleanedAdditionalRequest = cleanedAdditionalRequest.replace(/\[PIC_IDS:\s*[^\]]+\]\s*/g, "").trim();
         }
         
-        const payload: ImplementationTaskRequestDTO & { picDeploymentIds?: number[] } = {
+        // Tạo danh sách tất cả PIC IDs (bao gồm PIC chính + các PIC bổ sung)
+        const allPicIds = picOpts.map(p => p.id);
+        
+        const payload: ImplementationTaskRequestDTO = {
             name: model.name!.trim(),
             hospitalId: hospitalOpt.id,
             picDeploymentId: picOpts[0].id, // Gửi PIC đầu tiên làm chính
-            // Gửi thêm danh sách tất cả PICs nếu có nhiều hơn 1
-            ...(picOpts.length > 1 ? { picDeploymentIds: picOpts.map(p => p.id) } : {}),
+            // Gửi danh sách tất cả PICs (bao gồm cả PIC chính) để backend xử lý
+            picDeploymentIds: allPicIds.length > 1 ? allPicIds : undefined,
             agencyId: null,
             hisSystemId: null,
             hardwareId: null,
             quantity: null,
             apiTestStatus: model.apiTestStatus ?? null,
             bhytPortCheckInfo: null,
-            // Lưu thêm thông tin các PIC khác vào additionalRequest nếu có (format: [PIC_IDS: 1,2,3])
-            additionalRequest: picOpts.length > 1 
-                ? `${cleanedAdditionalRequest}\n\n[PIC_IDS: ${picOpts.map(p => p.id).join(',')}]`.trim()
-                : (cleanedAdditionalRequest || null),
+            // Không lưu PIC IDs vào additionalRequest nữa, chỉ giữ yêu cầu bổ sung
+            additionalRequest: cleanedAdditionalRequest || null,
             apiUrl: null,
             deadline: toISOOrNull(model.deadline) ?? null,
             completionDate: derivedCompletion,
@@ -468,205 +646,7 @@ export default function TaskFormModal({
     };
 
     // Minimal RemoteSelect UI (inline simple dropdown)
-    function RemoteSelect({ label, placeholder, fetchOptions, value, onChange, required, disabled, hideLabel, excludeIds }: {
-        label: string;
-        placeholder?: string;
-        fetchOptions: (q: string) => Promise<Array<{ id: number; name: string }>>;
-        value: { id: number; name: string } | null;
-        onChange: (v: { id: number; name: string } | null) => void;
-        required?: boolean;
-        disabled?: boolean;
-        hideLabel?: boolean;
-        excludeIds?: number[]; // IDs to exclude from options
-    }) {
-        const [open, setOpen] = useState(false);
-        const [q, setQ] = useState("");
-        const [loading, setLoading] = useState(false);
-        const [options, setOptions] = useState<Array<{ id: number; name: string }>>([]);
-        const [highlight, setHighlight] = useState<number>(-1);
-        
-        // Filter out excluded IDs from options
-        const filteredOptions = React.useMemo(() => {
-            if (!excludeIds || excludeIds.length === 0) return options;
-            return options.filter(opt => !excludeIds.includes(opt.id));
-        }, [options, excludeIds]);
-        
-        // Reset highlight when filtered options change
-        React.useEffect(() => {
-            if (highlight >= filteredOptions.length) {
-                setHighlight(-1);
-            }
-        }, [filteredOptions.length, highlight]);
-
-        useEffect(() => {
-            let alive = true;
-            const t = setTimeout(async () => {
-                setLoading(true);
-                try {
-                    const res = await fetchOptions(q.trim());
-                    if (alive) setOptions(res);
-                } finally {
-                    if (alive) setLoading(false);
-                }
-            }, 250);
-            return () => {
-                alive = false;
-                clearTimeout(t);
-            };
-        }, [q, fetchOptions]);
-
-        useEffect(() => {
-            if (open) {
-                if (!options.length && !q.trim()) {
-                    (async () => {
-                        setLoading(true);
-                        try {
-                            const res = await fetchOptions("");
-                            setOptions(res);
-                        } finally {
-                            setLoading(false);
-                        }
-                    })();
-                }
-            }
-        }, [open, options.length, q, fetchOptions]);
-
-        const content = (
-            <>
-                <div className="relative">
-                    <input
-                        className={clsx(
-                            "h-10 w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 outline-none",
-                            "focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
-                        )}
-                        placeholder={placeholder || "Gõ để tìm..."}
-                        value={open ? q : value?.name || ""}
-                        onChange={(e) => {
-                            setQ(e.target.value);
-                            if (!open) setOpen(true);
-                        }}
-                        onFocus={() => setOpen(true)}
-                        onKeyDown={(e) => {
-                            if (!open) return;
-                            if (e.key === "ArrowDown") {
-                                e.preventDefault();
-                                setHighlight((h) => Math.min(h + 1, filteredOptions.length - 1));
-                            } else if (e.key === "ArrowUp") {
-                                e.preventDefault();
-                                setHighlight((h) => Math.max(h - 1, 0));
-                            } else if (e.key === "Enter") {
-                                e.preventDefault();
-                                if (highlight >= 0 && filteredOptions[highlight]) {
-                                    onChange(filteredOptions[highlight]);
-                                    setOpen(false);
-                                    setQ("");
-                                }
-                            } else if (e.key === "Escape") {
-                                setOpen(false);
-                            }
-                        }}
-                    />
-                    {value && !open && (
-                        <button
-                            type="button"
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                            onClick={() => onChange(null)}
-                            aria-label="Clear"
-                        >
-                            ✕
-                        </button>
-                    )}
-
-                    {open && (
-                        <div className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg" onMouseLeave={() => setHighlight(-1)} style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
-                            {loading && <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>}
-                            {!loading && filteredOptions.length === 0 && <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>}
-                            {!loading && filteredOptions.map((opt, idx) => (
-                                <div key={opt.id} className={clsx("px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800", idx === highlight ? "bg-gray-100 dark:bg-gray-800" : "")} onMouseEnter={() => setHighlight(idx)} onMouseDown={(e) => { e.preventDefault(); onChange(opt); setOpen(false); setQ(""); }}>
-                                    {opt.name}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </>
-        );
-
-        if (disabled) {
-            return (
-                <Field label={label} required={required}>
-                    <div className="h-10 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 flex items-center">
-                        {value?.name || "-"}
-                    </div>
-                </Field>
-            );
-        }
-
-        if (hideLabel) {
-            return content;
-        }
-
-        return (
-            <Field label={label} required={required}>
-                <div className="relative">
-                    <input
-                        className={clsx(
-                            "h-10 w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 outline-none",
-                            "focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
-                        )}
-                        placeholder={placeholder || "Gõ để tìm..."}
-                        value={open ? q : value?.name || ""}
-                        onChange={(e) => {
-                            setQ(e.target.value);
-                            if (!open) setOpen(true);
-                        }}
-                        onFocus={() => setOpen(true)}
-                        onKeyDown={(e) => {
-                            if (!open) return;
-                            if (e.key === "ArrowDown") {
-                                e.preventDefault();
-                                setHighlight((h) => Math.min(h + 1, filteredOptions.length - 1));
-                            } else if (e.key === "ArrowUp") {
-                                e.preventDefault();
-                                setHighlight((h) => Math.max(h - 1, 0));
-                            } else if (e.key === "Enter") {
-                                e.preventDefault();
-                                if (highlight >= 0 && filteredOptions[highlight]) {
-                                    onChange(filteredOptions[highlight]);
-                                    setOpen(false);
-                                    setQ("");
-                                }
-                            } else if (e.key === "Escape") {
-                                setOpen(false);
-                            }
-                        }}
-                    />
-                    {value && !open && (
-                        <button
-                            type="button"
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                            onClick={() => onChange(null)}
-                            aria-label="Clear"
-                        >
-                            ✕
-                        </button>
-                    )}
-
-                    {open && (
-                        <div className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg" onMouseLeave={() => setHighlight(-1)} style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
-                            {loading && <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>}
-                            {!loading && filteredOptions.length === 0 && <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>}
-                            {!loading && filteredOptions.map((opt, idx) => (
-                                <div key={opt.id} className={clsx("px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800", idx === highlight ? "bg-gray-100 dark:bg-gray-800" : "")} onMouseEnter={() => setHighlight(idx)} onMouseDown={(e) => { e.preventDefault(); onChange(opt); setOpen(false); setQ(""); }}>
-                                    {opt.name}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </Field>
-        );
-    }
+    // Inner RemoteSelect removed - top-level RemoteSelect is used instead to avoid remounts
 
     return (
         <>
@@ -688,52 +668,54 @@ export default function TaskFormModal({
 
                                 <div className="col-span-2">
                                     <Field label="Người phụ trách (PIC)" required>
-                                        <div className="space-y-1.5">
-                                            {picOpts.map((pic) => (
-                                                <div key={pic._uid} className="flex items-center gap-2 px-2 py-1 bg-gray-50 dark:bg-gray-800 rounded text-xs">
-                                                    <span className="flex-1 text-xs">{pic.name}</span>
-                                                    {!readOnly && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                removePic(pic._uid);
-                                                            }}
-                                                            className="text-red-500 hover:text-red-700 text-xs px-1"
-                                                        >
-                                                            ✕
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            ))}
+                                        <div className="flex flex-col gap-2">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                {picOpts.map((pic) => (
+                                                    <div key={pic._uid} className="inline-flex items-center gap-2 px-3 py-1 bg-gray-50 dark:bg-gray-800 rounded-full text-xs">
+                                                        <span className="max-w-[12rem] truncate block">{pic.name}</span>
+                                                        {!readOnly && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); removePic(pic._uid); }}
+                                                                className="text-red-500 hover:text-red-700 text-xs px-1"
+                                                                aria-label={`Remove ${pic.name}`}
+                                                            >
+                                                                ✕
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+
                                             {!readOnly && (
-                                                <RemoteSelect 
-                                                    label=""
-                                                    hideLabel={true}
-                                                    placeholder="Nhập tên người phụ trách để tìm…" 
-                                                    fetchOptions={searchPICs} 
-                                                    value={currentPicInput} 
-                                                    onChange={(selected) => {
-                                                        if (selected) {
-                                                            // Kiểm tra xem PIC đã được chọn chưa
-                                                            const alreadySelected = picOpts.some(p => p.id === selected.id);
-                                                            if (!alreadySelected) {
-                                                                const newPic = { ...selected, _uid: `pic-${Date.now()}-${selected.id}-${Math.random().toString(36).substring(2, 9)}` };
-                                                                setPicOpts((prev) => {
-                                                                    const updated = [...prev, newPic];
-                                                                    console.log('Added PIC:', selected.name, 'Total PICs:', updated.length);
-                                                                    return updated;
-                                                                });
-                                                                setCurrentPicInput(null);
-                                                            } else {
-                                                                console.log('PIC already selected:', selected.name);
+                                                <div>
+                                                    <RemoteSelect 
+                                                        label=""
+                                                        hideLabel={true}
+                                                        placeholder="Nhập tên người phụ trách để tìm…" 
+                                                        fetchOptions={searchPICs} 
+                                                        value={currentPicInput} 
+                                                        onChange={(selected) => {
+                                                            if (selected) {
+                                                                // Kiểm tra xem PIC đã được chọn chưa
+                                                                const alreadySelected = picOpts.some(p => p.id === selected.id);
+                                                                if (!alreadySelected) {
+                                                                    const newPic = { ...selected, _uid: `pic-${Date.now()}-${selected.id}-${Math.random().toString(36).substring(2, 9)}` };
+                                                                    setPicOpts((prev) => {
+                                                                        const updated = [...prev, newPic];
+                                                                        console.log('Added PIC:', selected.name, 'Total PICs:', updated.length);
+                                                                        return updated;
+                                                                    });
+                                                                    setCurrentPicInput(null);
+                                                                } else {
+                                                                    console.log('PIC already selected:', selected.name);
+                                                                }
                                                             }
-                                                        }
-                                                    }} 
-                                                    disabled={readOnly}
-                                                    excludeIds={picOpts.map(p => p.id)} // Loại bỏ các PIC đã được chọn
-                                                />
+                                                        }} 
+                                                        disabled={readOnly}
+                                                        excludeIds={picOpts.map(p => p.id)} // Loại bỏ các PIC đã được chọn
+                                                    />
+                                                </div>
                                             )}
                                         </div>
                                     </Field>

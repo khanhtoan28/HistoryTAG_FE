@@ -256,6 +256,8 @@ export type ImplementationTaskResponseDTO = {
   hospitalName?: string | null;
   picDeploymentId: number | null;
   picDeploymentName?: string | null;
+  picDeploymentIds?: number[] | null;
+  picDeploymentNames?: string[] | null;
   quantity?: number | null;
   agencyId?: number | null;
   hisSystemId?: number | null;
@@ -279,6 +281,7 @@ export type ImplementationTaskRequestDTO = {
   name: string;
   hospitalId: number;
   picDeploymentId: number;
+  picDeploymentIds?: number[] | null;
   agencyId?: number | null;
   hisSystemId?: number | null;
   hardwareId?: number | null;

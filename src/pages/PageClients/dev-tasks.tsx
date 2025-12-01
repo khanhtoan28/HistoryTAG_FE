@@ -843,13 +843,13 @@ function TaskFormModal({
                                     value={hardwareOpt}
                                     onChange={(v) => { setHardwareOpt(v); setModel((s) => ({ ...s, hardwareId: v ? v.id : null })); }}
                                 />
-                                <Field label="API URL">
+                                {/* <Field label="API URL">
                                     <TextInput
                                         value={model.apiUrl ?? ""}
                                         onChange={(e) => setModel((s) => ({ ...s, apiUrl: e.target.value }))}
                                         placeholder="https://..."
                                     />
-                                </Field>
+                                </Field> */}
                                 {/* <Field label="Trạng thái API Test">
                                     <TextInput
                                         value={model.apiTestStatus ?? ""}

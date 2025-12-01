@@ -1644,7 +1644,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                   <table className="w-full">
                     <thead className="bg-gray-50 border-b border-gray-200">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
+                        <th className="px-6 w-10 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/Thành phố</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phụ trách chính</th>
@@ -1679,9 +1679,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                               </td>
                               <td className="px-6 py-4">
                                 <div className={`flex gap-3 ${longName ? 'items-start' : 'items-center'}`}>
-                                  <div className={`w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 ${longName ? 'mt-0.5' : ''}`}>
-                                    <FiMapPin className="text-blue-600 text-lg" />
-                                  </div>
+                                  
                                   <div className={`text-sm font-medium text-gray-900 break-words max-w-[260px] flex flex-wrap gap-2 ${longName ? 'leading-snug' : ''}`}>
                                     <span>{hospital.label}</span>
                                     {hospital.acceptedFromBusiness && (
@@ -2294,9 +2292,9 @@ function DetailModal({
             />
 
             {/* Pending tasks modal moved to top-level so it has access to state/functions */}
-            <Info icon={<FiLink />} label="API URL" value={item.apiUrl} />
-            <Info icon={<FiActivity />} label="API Test" value={item.apiTestStatus} />
-            <Info icon={<FiInfo />} label="Số lượng" value={item.quantity ?? "—"} />
+            {/* <Info icon={<FiLink />} label="API URL" value={item.apiUrl} /> */}
+            {/* <Info icon={<FiActivity />} label="API Test" value={item.apiTestStatus} /> */}
+            {/* <Info icon={<FiInfo />} label="Số lượng" value={item.quantity ?? "—"} /> */}
             <Info icon={<FiClock />} label="Deadline" value={fmt(item.deadline)} />
             <Info icon={<FiCalendar />} label="Ngày bắt đầu" value={fmt(item.startDate)} />
             <Info icon={<FiCalendar />} label="Ngày hoàn thành" value={fmt(item.finishDate ?? item.completionDate)} />

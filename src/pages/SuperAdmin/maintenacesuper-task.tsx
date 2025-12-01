@@ -1164,8 +1164,8 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                   <table className="w-full">
                     <thead className="bg-gray-50 border-b border-gray-200">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
+                      <th className="px-6 w-10 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/Thành phố</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượng task</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
@@ -1187,9 +1187,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                               </td>
                               <td className="px-6 py-4">
                                 <div className={`flex gap-3 ${longName ? 'items-start' : 'items-center'}`}>
-                                  <div className={`w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 ${longName ? 'mt-0.5' : ''}`}>
-                                    <FaHospital className="text-blue-600 text-lg" />
-                                  </div>
+                                  
                                   <div className={`text-sm font-medium text-gray-900 break-words max-w-[260px] flex flex-wrap gap-2 ${longName ? 'leading-snug' : ''}`}>
                                     <span>{hospital.label}</span>
                                     {hospital.fromDeployment && !hospital.acceptedByMaintenance && (
@@ -1611,7 +1609,7 @@ function DetailModal({
                 </span>
               }
             />
-            <Info
+            {/* <Info
               label="API URL"
               icon={<FiLink />}
               value={
@@ -1623,8 +1621,8 @@ function DetailModal({
                   "—"
                 )
               }
-            />
-            <Info label="API Test" value={item.apiTestStatus} icon={<FiInfo />} />
+            /> */}
+            {/* <Info label="API Test" value={item.apiTestStatus} icon={<FiInfo />} /> */}
             <Info label="Ngày bắt đầu" value={fmt(item.startDate)} icon={<FiClock />} />
             <Info label="Ngày nghiệm thu" value={fmt(item.acceptanceDate)} icon={<FiClock />} />
             <Info label="Ngày hoàn thành" value={fmt(item.finishDate ?? item.completionDate)} icon={<FiClock />} />
