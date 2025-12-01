@@ -436,6 +436,12 @@ export default function HospitalsPage() {
   }>>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  // Delete confirmation modal state
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [hospitalToDelete, setHospitalToDelete] = useState<Hospital | null>(null);
+  const [hasContracts, setHasContracts] = useState(false);
+  const [checkingContracts, setCheckingContracts] = useState(false);
+
   const priorityMap = useMemo(
     () => Object.fromEntries(priorityOptions.map(o => [o.name, o.displayName])),
     [priorityOptions]
@@ -1020,10 +1026,47 @@ export default function HospitalsPage() {
       toast.error("Bạn không có quyền xóa bệnh viện");
       return;
     }
-    if (!confirm("Xóa bệnh viện này?")) return;
+
+    // Tìm hospital object
+    const hospital = items.find(h => h.id === id);
+    if (!hospital) {
+      toast.error("Không tìm thấy bệnh viện");
+      return;
+    }
+
+    setHospitalToDelete(hospital);
+    setCheckingContracts(true);
+    setDeleteConfirmOpen(true);
+
+    // Kiểm tra xem bệnh viện có hợp đồng (BusinessProject) không
+    try {
+      const businessUrl = `${API_BASE}/api/v1/superadmin/business?search=${encodeURIComponent(hospital.name)}&page=0&size=50`;
+      const businessRes = await fetch(businessUrl, {
+        headers: { ...authHeader() },
+      });
+      
+      if (businessRes.ok) {
+        const businessData = await businessRes.json();
+        const businessList = businessData.content || [];
+        const foundContracts = businessList.some((bp: any) => 
+          bp.hospital && bp.hospital.id === id
+        );
+        setHasContracts(foundContracts);
+      }
+    } catch (e) {
+      console.warn("Không thể kiểm tra hợp đồng:", e);
+      setHasContracts(false);
+    } finally {
+      setCheckingContracts(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!hospitalToDelete) return;
+
     setLoading(true);
     try {
-      const res = await fetch(`${SUPERADMIN_BASE}/${id}`, {
+      const res = await fetch(`${SUPERADMIN_BASE}/${hospitalToDelete.id}`, {
         method: "DELETE",
         headers: { ...authHeader() },
       });
@@ -1033,7 +1076,10 @@ export default function HospitalsPage() {
       }
       await fetchList();
       // close modal if currently viewing the deleted item
-      if (isViewing) closeModal();
+      if (isViewing && viewing?.id === hospitalToDelete.id) closeModal();
+      setDeleteConfirmOpen(false);
+      setHospitalToDelete(null);
+      setHasContracts(false);
       toast.success("Xóa thành công");
     } catch (e: any) {
       toast.error(e?.message || "Xóa thất bại");
@@ -1110,7 +1156,7 @@ export default function HospitalsPage() {
     contactNumber: form.contactNumber?.trim() || undefined,
     province: form.province?.trim() || undefined,
     hisSystemId: form.hisSystemId ?? undefined,
-    hardwareId: form.hardwareId ?? undefined,
+    // hardwareId removed: Phần cứng sẽ được lấy từ hợp đồng (BusinessProject) khi tạo hợp đồng
     projectStatus: form.projectStatus,
   // project dates are handled by BusinessProject; do not send from Hospital
     notes: form.notes?.trim() || undefined,
@@ -1944,8 +1990,8 @@ export default function HospitalsPage() {
                       </select>
                     </div>
                   </div>
-                  {/* Hardware selector */}
-                  <div className="mt-2">
+                  {/* Hardware selector - Đã bỏ: Phần cứng sẽ được lấy từ hợp đồng (BusinessProject) */}
+                  {/* <div className="mt-2">
                     <RemoteSelectHardware
                       label="Phần cứng"
                       placeholder="Tìm phần cứng..."
@@ -1954,8 +2000,7 @@ export default function HospitalsPage() {
                       onChange={(v) => { setHardwareOpt(v); setForm((s) => ({ ...s, hardwareId: v ? v.id : undefined, hardwareName: v ? v.name : "" })); }}
                       disabled={isViewing || !canEdit}
                     />
-                    {/* Removed external hardware links/clear button as requested */}
-                  </div>
+                  </div> */}
                 </div>
 
                 {/* RIGHT */}
@@ -2158,61 +2203,161 @@ export default function HospitalsPage() {
                               </p>
                             )}
                             {item.details && (() => {
+                              // Mapping giá trị enum sang tiếng Việt
+                              const formatValue = (value: string): string => {
+                                if (!value || value.trim() === "—" || value.trim() === "null") return "—";
+                                const trimmed = value.trim();
+                                
+                                // Priority mapping
+                                const priorityMap: Record<string, string> = {
+                                  "P0": "Rất Khẩn cấp",
+                                  "P1": "Khẩn cấp",
+                                  "P2": "Quan trọng",
+                                  "P3": "Thường xuyên",
+                                  "P4": "Thấp",
+                                };
+                                
+                                // Status mapping
+                                const statusMap: Record<string, string> = {
+                                  "IN_PROGRESS": "Đang thực hiện",
+                                  "COMPLETED": "Hoàn thành",
+                                  "ISSUE": "Gặp sự cố",
+                                  "CARING": "Đang chăm sóc",
+                                  "CONTRACTED": "Ký hợp đồng",
+                                  "CANCELLED": "Hủy",
+                                };
+                                
+                                // Kiểm tra priority
+                                if (priorityMap[trimmed]) {
+                                  return priorityMap[trimmed];
+                                }
+                                
+                                // Kiểm tra status
+                                if (statusMap[trimmed]) {
+                                  return statusMap[trimmed];
+                                }
+                                
+                                return trimmed;
+                              };
+
+                              // Helper function để loại bỏ Task ID
+                              const removeTaskId = (text: string): string => {
+                                // Loại bỏ "Task ID: xxx" hoặc "task id: xxx" với các dấu phân cách
+                                return text
+                                  .replace(/\s*Task\s+ID\s*:\s*\d+\s*/gi, '')
+                                  .replace(/\s*Công\s+việc\s+ID\s*:\s*\d+\s*/gi, '')
+                                  .replace(/\s*\|\s*Task\s+ID\s*:\s*\d+\s*/gi, '')
+                                  .replace(/\s*Task\s+ID\s*:\s*\d+\s*\|\s*/gi, '')
+                                  .replace(/^\s*\|\s*/, '')
+                                  .replace(/\s*\|\s*$/, '')
+                                  .trim();
+                              };
+
                               // Tạo helper function để format details
                               const formatDetails = (detailsText: string) => {
-                                // Debug: In ra để xem format gốc
-                                console.log('Details gốc:', detailsText);
+                                if (!detailsText) return null;
                                 
                                 const result: React.ReactNode[] = [];
                                 
-                                // Thay thế \n thành khoảng trắng trước
-                                const cleanedText = detailsText.replace(/\n/g, ' ');
+                                // Loại bỏ Task ID trước khi xử lý
+                                let cleanedText = detailsText
+                                  .replace(/\n/g, ' ')
+                                  .replace(/\s+/g, ' ')
+                                  .trim();
                                 
-                                // Tách theo dấu phẩy NHƯNG chỉ khi sau dấu phẩy là chữ cái + dấu hai chấm (bắt đầu field mới)
-                                // Ví dụ: "abc, Def:" -> tách, nhưng "1,200" -> KHÔNG tách
-                                const parts = cleanedText.split(/,\s*(?=[A-Za-zÀ-ỹ][^:]*:)/);
+                                // Loại bỏ Task ID
+                                cleanedText = removeTaskId(cleanedText);
                                 
+                                if (!cleanedText) return null;
+                                
+                                // Tách theo dấu phẩy hoặc dấu pipe
+                                const separatorPattern = /[,\|]/;
+                                const parts = cleanedText
+                                  .split(separatorPattern)
+                                  .map(p => p.trim())
+                                  .filter(p => {
+                                    // Loại bỏ các phần chỉ chứa Task ID
+                                    const trimmed = p.trim();
+                                    if (!trimmed) return false;
+                                    if (/^Task\s+ID\s*:\s*\d+$/i.test(trimmed)) return false;
+                                    if (/^Công\s+việc\s+ID\s*:\s*\d+$/i.test(trimmed)) return false;
+                                    return true;
+                                  });
+                                
+                                // Format từng phần
                                 parts.forEach((part, idx) => {
                                   const trimmed = part.trim();
                                   if (!trimmed) return;
                                   
-                                  // Bỏ qua nếu là "Công việc ID" hoặc "Task ID"
-                                  if (trimmed.toLowerCase().startsWith('công việc id') || trimmed.toLowerCase().startsWith('task id')) {
+                                  // Bỏ qua nếu là Task ID
+                                  if (/^Task\s+ID\s*:\s*\d+$/i.test(trimmed) || 
+                                      /^Công\s+việc\s+ID\s*:\s*\d+$/i.test(trimmed)) {
                                     return;
                                   }
                                   
-                                  // Nếu có dấu ":" thì format thành label: value
-                                  if (trimmed.includes(':')) {
-                                    const colonIndex = trimmed.indexOf(':');
-                                    const label = trimmed.substring(0, colonIndex).trim();
-                                    const value = trimmed.substring(colonIndex + 1).trim();
+                                  // Kiểm tra xem có dấu mũi tên không
+                                  const arrowMatch = trimmed.match(/^([^:]+):\s*(.+?)\s*(→|->)\s*(.+)$/);
+                                  
+                                  if (arrowMatch) {
+                                    // Đây là một thay đổi: Label: old → new
+                                    const label = arrowMatch[1].trim();
+                                    const oldValue = arrowMatch[2].trim();
+                                    const newValue = arrowMatch[4].trim();
                                     
-                                    // Bỏ qua nếu label là "Công việc ID" hoặc "Task ID"
-                                    if (label.toLowerCase() === 'công việc id' || label.toLowerCase() === 'task id') {
+                                    // Bỏ qua nếu label là Task ID
+                                    if (/^Task\s+ID$/i.test(label) || /^Công\s+việc\s+ID$/i.test(label)) {
                                       return;
                                     }
                                     
                                     result.push(
-                                      <div key={idx} className="mb-1 last:mb-0">
-                                        <span className="font-bold text-gray-900">{label}:</span>
-                                        <span className="ml-2 text-gray-600">{value || "—"}</span>
+                                      <div key={idx} className="mb-2 last:mb-0">
+                                        <span className="font-semibold text-gray-900">{label}:</span>
+                                        <span className="ml-2 text-gray-600">{formatValue(oldValue)}</span>
+                                        <span className="mx-2 text-blue-600 font-medium">→</span>
+                                        <span className="text-gray-900 font-medium">{formatValue(newValue)}</span>
+                                      </div>
+                                    );
+                                  } else if (trimmed.includes(':')) {
+                                    // Đây là một field bình thường: Label: value
+                                    const colonIndex = trimmed.indexOf(':');
+                                    const label = trimmed.substring(0, colonIndex).trim();
+                                    const value = trimmed.substring(colonIndex + 1).trim();
+                                    
+                                    // Bỏ qua nếu label là Task ID hoặc ID
+                                    if (/^Task\s+ID$/i.test(label) || 
+                                        /^Công\s+việc\s+ID$/i.test(label) ||
+                                        (label.toLowerCase().includes('id') && label.length <= 15)) {
+                                      return;
+                                    }
+                                    
+                                    result.push(
+                                      <div key={idx} className="mb-2 last:mb-0">
+                                        <span className="font-semibold text-gray-900">{label}:</span>
+                                        <span className="ml-2 text-gray-700">{formatValue(value) || "—"}</span>
                                       </div>
                                     );
                                   } else {
+                                    // Text thuần
                                     result.push(
-                                      <div key={idx} className="mb-1 last:mb-0 text-gray-600">
+                                      <div key={idx} className="mb-2 last:mb-0 text-gray-700">
                                         {trimmed}
                                       </div>
                                     );
                                   }
                                 });
                                 
-                                return result;
+                                return result.length > 0 ? result : null;
                               };
                               
-                              return (
-                                <div className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3 mt-2">
-                                  {formatDetails(item.details)}
+                              const formatted = formatDetails(item.details);
+                              
+                              return formatted ? (
+                                <div className="text-sm text-gray-700 bg-gray-50 rounded-lg p-4 mt-3 border border-gray-200">
+                                  {formatted}
+                                </div>
+                              ) : (
+                                <div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 mt-2">
+                                  {item.details}
                                 </div>
                               );
                             })()}
@@ -2237,6 +2382,94 @@ export default function HospitalsPage() {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {deleteConfirmOpen && hospitalToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="absolute inset-0 bg-black/50" onClick={() => {
+              if (!loading && !checkingContracts) {
+                setDeleteConfirmOpen(false);
+                setHospitalToDelete(null);
+                setHasContracts(false);
+              }
+            }} />
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.95 }}
+              className="relative z-10 w-full max-w-md rounded-2xl bg-white shadow-2xl border border-gray-200"
+            >
+            <div className="p-6">
+              <div className="flex items-start gap-4 mb-4">
+                <div className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center ${hasContracts ? 'bg-orange-100' : 'bg-red-100'}`}>
+                  {hasContracts ? (
+                    <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-gray-900 mb-1">
+                    {hasContracts ? "Xác nhận xóa bệnh viện có hợp đồng" : "Xác nhận xóa bệnh viện"}
+                  </h3>
+                  {checkingContracts ? (
+                    <p className="text-sm text-gray-600">Đang kiểm tra hợp đồng...</p>
+                  ) : (
+                    <>
+                      {hasContracts ? (
+                        <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                          <p className="text-sm font-semibold text-orange-800 mb-1">⚠️ Cảnh báo:</p>
+                          <p className="text-sm text-orange-700">
+                            Bệnh viện <span className="font-bold">"{hospitalToDelete.name}"</span> đã có hợp đồng. 
+                            Việc xóa bệnh viện này sẽ tự động xóa tất cả các hợp đồng liên quan.
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-600 mt-2">
+                          Bạn có chắc chắn muốn xóa bệnh viện <span className="font-semibold text-gray-900">"{hospitalToDelete.name}"</span>?
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteConfirmOpen(false);
+                    setHospitalToDelete(null);
+                    setHasContracts(false);
+                  }}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 transition"
+                  disabled={loading}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDelete}
+                  disabled={loading || checkingContracts}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium text-white transition ${
+                    hasContracts 
+                      ? 'bg-orange-600 hover:bg-orange-700' 
+                      : 'bg-red-600 hover:bg-red-700'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {loading ? "Đang xóa..." : "Xóa"}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
