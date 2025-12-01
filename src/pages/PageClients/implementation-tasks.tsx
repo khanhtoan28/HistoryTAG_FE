@@ -2056,7 +2056,28 @@ const ImplementationTasksPage: React.FC = () => {
         if (typeof it.id === 'number' && countedHiddenIds.has(it.id)) continue;
         const name = (it.hospitalName || "").toString().trim() || "—";
         const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
+        if (!name) continue;
         const key = hospitalId != null ? `id-${hospitalId}` : `name-${name}`;
+        
+        // Track in businessTransferStatus (for hospitals with only pending tasks)
+        const received = Boolean(it.receivedById || it.receivedByName);
+        const businessName = isBusinessContractTask(
+          typeof it?.name === "string" ? it.name : String(it?.name ?? "")
+        );
+        const placeholder = it.readOnlyForDeployment === true || businessName;
+        if (placeholder && !received) {
+          const entry = businessTransferStatus.get(key) || {
+            hasGeneratedTask: false,
+            hasTransfer: false,
+            pending: 0,
+            accepted: false,
+          };
+          entry.hasGeneratedTask = true;
+          if (it.readOnlyForDeployment === true) entry.hasTransfer = true;
+          entry.pending += 1;
+          businessTransferStatus.set(key, entry);
+        }
+        
         // Create entry if hospital not in acc yet (hospital with only pending tasks)
         const current = acc.get(key) || { 
           id: hospitalId, 
@@ -2071,6 +2092,8 @@ const ImplementationTasksPage: React.FC = () => {
           hiddenPendingCount: 0, 
           hiddenTaskCount: 0 
         };
+        if (current.id == null && hospitalId != null) current.id = hospitalId;
+        if (!current.label && name) current.label = name;
         current.hiddenPendingCount += 1;
         current.hiddenTaskCount += 1;
         acc.set(key, current);
@@ -2098,16 +2121,19 @@ const ImplementationTasksPage: React.FC = () => {
           
           // Chỉ sử dụng taskCount từ aggregated (đã filter pending tasks)
           // Không fallback về h.taskCount vì nó có thể bao gồm pending tasks
-          const finalTaskCount = aggregated?.taskCount ?? 0;
-          const hiddenPendingCount = aggregated?.hiddenPendingCount ?? 0;
+          const visibleTaskCount = aggregated?.taskCount ?? 0;
+          // Use hiddenPendingCount from both aggregated and businessInfo for accuracy
+          const aggregatedHiddenPending = aggregated?.hiddenPendingCount ?? 0;
+          const businessHiddenPending = businessInfo?.pending ?? 0;
+          const hiddenPendingCount = Math.max(aggregatedHiddenPending, businessHiddenPending);
           const hiddenTaskCount = hiddenPendingCount;
           
           // Check if hospital has accepted tasks from Business (even if all tasks are completed now)
-          const acceptedFromBusiness = finalTaskCount === 0 && Boolean(businessInfo?.accepted);
+          const acceptedFromBusiness = visibleTaskCount === 0 && Boolean(businessInfo?.accepted);
           
           return {
             ...h,
-            taskCount: finalTaskCount,
+            taskCount: visibleTaskCount,
             acceptedCount: completedCounts[idx] ?? (aggregated?.acceptedCount ?? 0),
             nearDueCount: aggregated?.nearDueCount ?? 0,
             overdueCount: aggregated?.overdueCount ?? 0,
@@ -2121,34 +2147,134 @@ const ImplementationTasksPage: React.FC = () => {
         .filter((h) => (h.taskCount ?? 0) > 0 || (h.hiddenPendingCount ?? 0) > 0 || h.acceptedFromBusiness); // Hiển thị bệnh viện có task đã tiếp nhận, có pending tasks, hoặc đã tiếp nhận từ phòng KD
       
       // Thêm các bệnh viện chỉ có pending tasks (không có trong baseList)
+      // Đảm bảo TẤT CẢ các bệnh viện trong pendingTasksFromBusiness đều được hiển thị
       const hospitalsWithOnlyPending: Array<{ id: number | null; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean; personInChargeId?: number | null; personInChargeName?: string | null; hiddenPendingCount?: number; hiddenTaskCount?: number; acceptedFromBusiness?: boolean; hasBusinessPlaceholder?: boolean }> = [];
+      const addedHospitalKeys = new Set<string>();
+      
+      // First, add hospitals from acc that are not in baseList
       for (const [key, aggregated] of acc.entries()) {
-        if (!baseListMap.has(key) && ((aggregated.hiddenPendingCount ?? 0) > 0)) {
-          // Bệnh viện chỉ có pending tasks, tạo entry mới
+        if (!baseListMap.has(key)) {
           const businessInfo = businessTransferStatus.get(key);
-          const acceptedFromBusiness = (aggregated.taskCount ?? 0) === 0 && Boolean(businessInfo?.accepted);
-          hospitalsWithOnlyPending.push({
-            id: aggregated.id ?? null,
-            label: aggregated.label,
-            subLabel: aggregated.subLabel || "",
-            taskCount: aggregated.taskCount ?? 0,
-            acceptedCount: aggregated.acceptedCount ?? 0,
-            nearDueCount: aggregated.nearDueCount ?? 0,
-            overdueCount: aggregated.overdueCount ?? 0,
-            hiddenPendingCount: aggregated.hiddenPendingCount ?? 0,
-            hiddenTaskCount: aggregated.hiddenTaskCount ?? 0,
-            allTransferred: false,
-            allAccepted: false,
-            personInChargeId: null,
-            personInChargeName: null,
-            acceptedFromBusiness: acceptedFromBusiness,
-            hasBusinessPlaceholder: Boolean(businessInfo?.hasGeneratedTask) || (aggregated.hiddenTaskCount ?? 0) > 0,
-          });
+          const aggregatedPending = aggregated.hiddenPendingCount ?? 0;
+          const businessPending = businessInfo?.pending ?? 0;
+          const hasPending = aggregatedPending > 0 || businessPending > 0;
+          const hasAccepted = Boolean(businessInfo?.accepted);
+          
+          if (hasPending || hasAccepted) {
+            addedHospitalKeys.add(key);
+            const hiddenPendingCount = Math.max(aggregatedPending, businessPending);
+            const acceptedFromBusiness = (aggregated.taskCount ?? 0) === 0 && hasAccepted;
+            hospitalsWithOnlyPending.push({
+              id: aggregated.id ?? null,
+              label: aggregated.label,
+              subLabel: aggregated.subLabel || "",
+              taskCount: aggregated.taskCount ?? 0,
+              acceptedCount: aggregated.acceptedCount ?? 0,
+              nearDueCount: aggregated.nearDueCount ?? 0,
+              overdueCount: aggregated.overdueCount ?? 0,
+              hiddenPendingCount: hiddenPendingCount,
+              hiddenTaskCount: hiddenPendingCount,
+              allTransferred: false,
+              allAccepted: false,
+              personInChargeId: null,
+              personInChargeName: null,
+              acceptedFromBusiness: acceptedFromBusiness,
+              hasBusinessPlaceholder: Boolean(businessInfo?.hasGeneratedTask) || hiddenPendingCount > 0,
+            });
+          }
         }
       }
       
-      // Merge và sắp xếp theo tên bệnh viện
-      const finalList = [...withCompleted, ...hospitalsWithOnlyPending].sort((a, b) => 
+      // Then, ensure ALL hospitals from pendingTasksFromBusiness are added (even if not in acc)
+      // Count pending tasks per hospital from pendingTasksFromBusiness
+      const pendingCountByHospital = new Map<string, number>();
+      for (const it of pendingTasksFromBusiness) {
+        const name = (it.hospitalName || "").toString().trim();
+        const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
+        if (!name) continue;
+        const key = hospitalId != null ? `id-${hospitalId}` : `name-${name}`;
+        const current = pendingCountByHospital.get(key) || 0;
+        pendingCountByHospital.set(key, current + 1);
+      }
+      
+      // Add hospitals from pendingTasksFromBusiness that aren't in baseList or already added
+      for (const [key, pendingCount] of pendingCountByHospital.entries()) {
+        // Skip if already in baseList (already displayed)
+        if (baseListMap.has(key)) continue;
+        
+        // Skip if already added
+        if (addedHospitalKeys.has(key)) continue;
+        
+        // Find hospital info from pendingTasksFromBusiness
+        const pendingTask = pendingTasksFromBusiness.find(t => {
+          const name = (t.hospitalName || "").toString().trim();
+          const hospitalId = typeof t.hospitalId === "number" ? t.hospitalId : t.hospitalId != null ? Number(t.hospitalId) : null;
+          const taskKey = hospitalId != null ? `id-${hospitalId}` : `name-${name}`;
+          return taskKey === key && name;
+        });
+        
+        if (!pendingTask) continue;
+        
+        const name = (pendingTask.hospitalName || "").toString().trim();
+        const hospitalId = typeof pendingTask.hospitalId === "number" ? pendingTask.hospitalId : pendingTask.hospitalId != null ? Number(pendingTask.hospitalId) : null;
+        if (!name) continue;
+        
+        // Add this hospital
+        addedHospitalKeys.add(key);
+        const businessInfo = businessTransferStatus.get(key);
+        hospitalsWithOnlyPending.push({
+          id: hospitalId,
+          label: name,
+          subLabel: "",
+          taskCount: 0,
+          acceptedCount: 0,
+          nearDueCount: 0,
+          overdueCount: 0,
+          hiddenPendingCount: pendingCount,
+          hiddenTaskCount: pendingCount,
+          allTransferred: false,
+          allAccepted: false,
+          personInChargeId: null,
+          personInChargeName: null,
+          acceptedFromBusiness: Boolean(businessInfo?.accepted) && pendingCount === 0,
+          hasBusinessPlaceholder: Boolean(businessInfo?.hasGeneratedTask) || pendingCount > 0,
+        });
+      }
+      
+      // Merge và loại bỏ duplicate (theo ID hoặc tên), sau đó sắp xếp theo tên bệnh viện
+      const mergedMap = new Map<string, typeof withCompleted[0]>();
+      
+      // Add from withCompleted first
+      for (const h of withCompleted) {
+        const key = h.id != null ? `id-${h.id}` : `name-${h.label}`;
+        if (!mergedMap.has(key)) {
+          mergedMap.set(key, h);
+        }
+      }
+      
+      // Add from hospitalsWithOnlyPending, skip if already exists
+      for (const h of hospitalsWithOnlyPending) {
+        const key = h.id != null ? `id-${h.id}` : `name-${h.label}`;
+        if (!mergedMap.has(key)) {
+          mergedMap.set(key, h);
+        } else {
+          // Merge hiddenPendingCount if exists
+          const existing = mergedMap.get(key)!;
+          const maxHiddenPending = Math.max(
+            existing.hiddenPendingCount ?? 0,
+            h.hiddenPendingCount ?? 0
+          );
+          if (maxHiddenPending > (existing.hiddenPendingCount ?? 0)) {
+            mergedMap.set(key, {
+              ...existing,
+              hiddenPendingCount: maxHiddenPending,
+              hiddenTaskCount: maxHiddenPending,
+            });
+          }
+        }
+      }
+      
+      const finalList = Array.from(mergedMap.values()).sort((a, b) => 
         (a.label || "").localeCompare(b.label || "")
       );
       
