@@ -232,6 +232,8 @@ const ImplementSuperTaskPage: React.FC = () => {
   const [hospitalPicFilter, setHospitalPicFilter] = useState<string[]>([]);
   const [picFilterOpen, setPicFilterOpen] = useState<boolean>(false);
   const [picFilterQuery, setPicFilterQuery] = useState<string>("");
+  const [picFilterPage, setPicFilterPage] = useState<number>(0);
+  const picFilterItemsPerPage = 5;
   const picFilterDropdownRef = React.useRef<HTMLDivElement | null>(null);
   const [selectedHospitalMeta, setSelectedHospitalMeta] = useState<{
     hiddenPendingCount: number;
@@ -260,8 +262,17 @@ const ImplementSuperTaskPage: React.FC = () => {
   useEffect(() => {
     if (!picFilterOpen) {
       setPicFilterQuery("");
+      setPicFilterPage(0);
+    } else {
+      // Reset to page 0 when dropdown opens
+      setPicFilterPage(0);
     }
   }, [picFilterOpen]);
+
+  useEffect(() => {
+    setPicFilterPage(0);
+  }, [picFilterQuery]);
+
   const picOptionLabelMap = React.useMemo(() => {
     const map = new Map<string, string>();
     picOptions.forEach((opt) => {
@@ -275,6 +286,16 @@ const ImplementSuperTaskPage: React.FC = () => {
     if (!q) return picOptions;
     return picOptions.filter((opt) => opt.label.toLowerCase().includes(q));
   }, [picOptions, picFilterQuery]);
+
+  const paginatedPicOptions = React.useMemo(() => {
+    const itemsToShow = (picFilterPage + 1) * picFilterItemsPerPage;
+    return filteredPicOptions.slice(0, itemsToShow);
+  }, [filteredPicOptions, picFilterPage]);
+
+  const hasMorePicOptions = React.useMemo(() => {
+    const itemsToShow = (picFilterPage + 1) * picFilterItemsPerPage;
+    return itemsToShow < filteredPicOptions.length;
+  }, [filteredPicOptions.length, picFilterPage]);
 
   useEffect(() => {
     (async () => {
@@ -1483,7 +1504,10 @@ const ImplementSuperTaskPage: React.FC = () => {
                     <button
                       type="button"
                       className="w-full rounded-full border px-3 py-2 text-sm shadow-sm text-left flex items-center justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
-                      onClick={() => setPicFilterOpen((prev) => !prev)}
+                      onClick={() => {
+                        setPicFilterPage(0);
+                        setPicFilterOpen((prev) => !prev);
+                      }}
                     >
                       <span className="truncate">
                         {hospitalPicFilter.length === 0
@@ -1511,21 +1535,32 @@ const ImplementSuperTaskPage: React.FC = () => {
                               Không có dữ liệu người phụ trách
                             </div>
                           ) : (
-                            filteredPicOptions.map((option) => {
-                              const value = String(option.id);
-                              const checked = hospitalPicFilter.includes(value);
-                              return (
-                                <label key={option.id} className="flex items-center gap-2 text-sm text-gray-700">
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={(e) => togglePicFilterValue(value, e.target.checked)}
-                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                  />
-                                  <span className="truncate">{option.label}</span>
-                                </label>
-                              );
-                            })
+                            <>
+                              {paginatedPicOptions.map((option) => {
+                                const value = String(option.id);
+                                const checked = hospitalPicFilter.includes(value);
+                                return (
+                                  <label key={option.id} className="flex items-center gap-2 text-sm text-gray-700">
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={(e) => togglePicFilterValue(value, e.target.checked)}
+                                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span className="truncate">{option.label}</span>
+                                  </label>
+                                );
+                              })}
+                              {hasMorePicOptions && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPicFilterPage((prev) => prev + 1)}
+                                  className="w-full text-sm text-blue-600 hover:text-blue-700 hover:underline py-2 text-center focus:outline-none"
+                                >
+                                  Xem thêm ({filteredPicOptions.length - (picFilterPage + 1) * picFilterItemsPerPage} còn lại)
+                                </button>
+                              )}
+                            </>
                           )}
                         </div>
                         <div className="flex items-center justify-between">

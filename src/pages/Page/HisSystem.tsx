@@ -4,7 +4,9 @@ import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete, AiOutlinePlus } from "react-icons/ai";
 import { FaHospital } from "react-icons/fa";
-import { FiMail, FiPhone, FiUser, FiClock } from "react-icons/fi";
+import { FiMail, FiPhone, FiUser, FiClock, FiMapPin, FiDownload } from "react-icons/fi";
+import { motion, AnimatePresence } from "framer-motion";
+import ExcelJS from "exceljs";
 import toast from "react-hot-toast";
 
 // ===================== Types ===================== //
@@ -29,6 +31,16 @@ export interface HisRequestDTO {
   email?: string;
   phoneNumber?: string;
   apiUrl?: string;
+}
+
+// Hospital type for statistics
+export interface HospitalStat {
+  id: number;
+  name: string;
+  province?: string | null;
+  address?: string | null;
+  projectStatus?: string | null;
+  personInChargeName?: string | null;
 }
 
 // Spring Page
@@ -95,6 +107,46 @@ function errMsg(err: unknown, fallback = "Lỗi xảy ra") {
   if (err instanceof Error) return err.message || fallback;
   if (typeof err === "string") return err;
   return fallback;
+}
+
+// Helper functions for status colors
+function getStatusBg(status?: string | null): string {
+  switch (status) {
+    case "IN_PROGRESS":
+      return "bg-orange-500";
+    case "COMPLETED":
+      return "bg-green-500";
+    case "ISSUE":
+      return "bg-red-500";
+    default:
+      return "bg-gray-300";
+  }
+}
+
+function getStatusColor(status?: string | null): string {
+  switch (status) {
+    case "IN_PROGRESS":
+      return "text-orange-600";
+    case "COMPLETED":
+      return "text-green-600";
+    case "ISSUE":
+      return "text-red-600";
+    default:
+      return "text-gray-600";
+  }
+}
+
+function getStatusLabel(status?: string | null): string {
+  switch (status) {
+    case "IN_PROGRESS":
+      return "Đang thực hiện";
+    case "COMPLETED":
+      return "Hoàn thành";
+    case "ISSUE":
+      return "Gặp sự cố";
+    default:
+      return "—";
+  }
 }
 
 function formatDateShort(value?: string | null) {
@@ -172,6 +224,13 @@ const HisSystemPage: React.FC = () => {
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof HisRequestDTO, string>>>({});
   const [isModalLoading, setIsModalLoading] = useState(false);
 
+  // Hospital statistics
+  const [hospitalStats, setHospitalStats] = useState<Record<number, number>>({}); // Only store count
+  const [hospitalsModalOpen, setHospitalsModalOpen] = useState(false);
+  const [selectedHisId, setSelectedHisId] = useState<number | null>(null);
+  const [selectedHospitals, setSelectedHospitals] = useState<HospitalStat[]>([]);
+  const [hospitalsLoading, setHospitalsLoading] = useState(false);
+
   const isEditing = !!editing?.id;
   const isViewing = !!viewing?.id;
 
@@ -225,6 +284,232 @@ const HisSystemPage: React.FC = () => {
     fetchList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, size, sortBy, sortDir]);
+
+
+  // Load hospital counts for all HIS items (lightweight - only count)
+  useEffect(() => {
+    if (items.length === 0) return;
+    
+    const loadCounts = async () => {
+      try {
+        // Fetch all hospitals once
+        const url = new URL(`${API_BASE}/api/v1/auth/hospitals`);
+        url.searchParams.set("page", "0");
+        url.searchParams.set("size", "10000"); // Get all hospitals
+        
+        const res = await fetch(url.toString(), { headers: { ...authHeader() } });
+        if (!res.ok) return;
+        
+        const data = await res.json();
+        const allHospitals = Array.isArray(data) ? data : (data.content ?? []);
+        
+        // Count hospitals per HIS
+        const counts: Record<number, number> = {};
+        items.forEach((his) => {
+          counts[his.id] = allHospitals.filter((h: any) => h.hisSystemId === his.id).length;
+        });
+        
+        setHospitalStats(counts);
+      } catch (e) {
+        console.error("Error loading hospital counts:", e);
+      }
+    };
+    
+    loadCounts();
+  }, [items]);
+
+  // Fetch hospitals when modal opens
+  async function loadHospitalsForHis(hisId: number) {
+    setHospitalsLoading(true);
+    try {
+      const url = new URL(`${API_BASE}/api/v1/auth/hospitals`);
+      url.searchParams.set("page", "0");
+      url.searchParams.set("size", "10000");
+      
+      const res = await fetch(url.toString(), { headers: { ...authHeader() } });
+      if (!res.ok) {
+        setSelectedHospitals([]);
+        return;
+      }
+      
+      const data = await res.json();
+      const allHospitals = Array.isArray(data) ? data : (data.content ?? []);
+      
+      // Filter hospitals by hisSystemId
+      const hospitals = allHospitals
+        .filter((h: any) => h.hisSystemId === hisId)
+        .map((h: any) => ({
+          id: h.id,
+          name: h.name,
+          province: h.province,
+          address: h.address,
+          projectStatus: h.projectStatus,
+          personInChargeName: h.personInChargeName,
+        }));
+      
+      setSelectedHospitals(hospitals);
+    } catch (e) {
+      console.error("Error loading hospitals:", e);
+      setSelectedHospitals([]);
+    } finally {
+      setHospitalsLoading(false);
+    }
+  }
+
+  // Export hospitals to Excel
+  async function exportHospitalsExcel() {
+    if (!selectedHisId || selectedHospitals.length === 0) {
+      toast.error("Không có dữ liệu để xuất");
+      return;
+    }
+
+    try {
+      const hisName = items.find((h) => h.id === selectedHisId)?.name || "HIS";
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Danh sách bệnh viện");
+
+      // Title row: "Tên His" - only style the first 5 cells
+      const titleRow = worksheet.addRow([hisName, "", "", "", ""]); // Add empty cells for columns B, C, D, E
+      titleRow.height = 30;
+      
+      // Merge only the first 5 cells (A-E)
+      worksheet.mergeCells(1, 1, 1, 5);
+      
+      // Style only the merged cell (which is now cell A1)
+      const titleCell = titleRow.getCell(1);
+      titleCell.font = { bold: true, size: 14 };
+      titleCell.alignment = { vertical: "middle", horizontal: "center" };
+      titleCell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFADD8E6" }, // Light blue
+      };
+      titleCell.value = hisName;
+      
+      // Clear any style from cells beyond column 5 in title row
+      for (let col = 6; col <= 20; col++) {
+        try {
+          const cell = titleRow.getCell(col);
+          if (cell) {
+            cell.value = null;
+            cell.style = {};
+            cell.fill = {};
+          }
+        } catch (e) {
+          // Ignore
+        }
+      }
+
+      // Header row - only style the first 5 cells
+      const headers = ["STT", "Tên bệnh viện", "Người phụ trách", "Tỉnh/thành", "Trạng thái"];
+      const headerRow = worksheet.addRow(headers);
+      headerRow.height = 25;
+      
+      // Style only the first 5 cells (columns A-E)
+      for (let col = 1; col <= 5; col++) {
+        const cell = headerRow.getCell(col);
+        cell.font = { bold: true, size: 11 };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFFF00" }, // Yellow
+        };
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      }
+
+      // Set column widths
+      worksheet.getColumn(1).width = 10; // STT
+      worksheet.getColumn(2).width = 40; // Tên bệnh viện
+      worksheet.getColumn(3).width = 25; // Người phụ trách
+      worksheet.getColumn(4).width = 20; // Tỉnh/thành
+      worksheet.getColumn(5).width = 18; // Trạng thái
+
+      // Data rows - only style the first 5 cells
+      selectedHospitals.forEach((hospital, index) => {
+        const row = worksheet.addRow([
+          index + 1, // STT
+          hospital.name || "",
+          hospital.personInChargeName || "",
+          hospital.province || "",
+          getStatusLabel(hospital.projectStatus), // Trạng thái
+        ]);
+        row.height = 20;
+        
+        // Style only the first 5 cells (columns A-E)
+        for (let col = 1; col <= 5; col++) {
+          const cell = row.getCell(col);
+          cell.alignment = { vertical: "middle", horizontal: "left" };
+          cell.border = {
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
+          };
+        }
+      });
+
+      // Remove any cells beyond column 5 to prevent extra columns with styles
+      const lastRow = worksheet.rowCount;
+      if (lastRow > 0) {
+        for (let rowNum = 1; rowNum <= lastRow; rowNum++) {
+          const row = worksheet.getRow(rowNum);
+          // Clear cells from column 6 onwards
+          for (let colNum = 6; colNum <= 20; colNum++) {
+            try {
+              const cell = row.getCell(colNum);
+              if (cell && (cell.value !== null || cell.style || cell.numFmt)) {
+                // Clear everything from extra cells
+                cell.value = null;
+                cell.style = {};
+                cell.numFmt = undefined;
+              }
+            } catch (e) {
+              // Ignore errors for cells that don't exist
+            }
+          }
+        }
+      }
+      
+      // Clear column definitions beyond column 5
+      for (let colNum = 6; colNum <= 20; colNum++) {
+        try {
+          const column = worksheet.getColumn(colNum);
+          if (column) {
+            column.width = undefined;
+            if (column.style) {
+              column.style = {};
+            }
+          }
+        } catch (e) {
+          // Ignore errors
+        }
+      }
+
+      // Generate buffer and download
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `danh_sach_benh_vien_${hisName.replace(/[^a-zA-Z0-9]/g, "_")}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success("Xuất Excel thành công");
+    } catch (e: any) {
+      console.error("Error exporting Excel:", e);
+      toast.error(e?.message || "Xuất Excel thất bại");
+    }
+  }
 
   // ------- client-side filtering like hospitals page ------- //
   const filtered = useMemo(() => {
@@ -430,6 +715,20 @@ const HisSystemPage: React.FC = () => {
                       <div className="mt-2 text-sm text-gray-600">
                         <div className="truncate"><span className="text-xs text-gray-400">Người liên hệ: </span><span title={h.contactPerson || ""} className="font-medium text-gray-800">{h.contactPerson || "—"}</span>{h.phoneNumber && <span className="ml-2 text-xs text-gray-500">• {h.phoneNumber}</span>}</div>
                         <div className="truncate mt-1"><span className="text-xs text-gray-400">Email: </span><span title={h.email || ""} className="text-gray-700">{h.email || "—"}</span></div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedHisId(h.id);
+                              setHospitalsModalOpen(true);
+                              loadHospitalsForHis(h.id);
+                            }}
+                            className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition border border-blue-200"
+                          >
+                            <FaHospital className="w-3 h-3" />
+                            <span>{hospitalStats[h.id] ?? 0} bệnh viện</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -658,6 +957,151 @@ const HisSystemPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Hospitals Modal */}
+      <AnimatePresence mode="wait">
+        {hospitalsModalOpen && selectedHisId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => {
+                setHospitalsModalOpen(false);
+                setSelectedHisId(null);
+                setSelectedHospitals([]);
+              }}
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 250, damping: 25 }}
+              className="relative z-10 w-full max-w-4xl rounded-2xl bg-white shadow-2xl border border-gray-200 overflow-hidden max-h-[90vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-6 py-4">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <FaHospital className="w-5 h-5 text-blue-600" />
+                    <span>
+                      Danh sách bệnh viện sử dụng HIS:{" "}
+                      <span className="text-blue-600">{items.find((h) => h.id === selectedHisId)?.name}</span>
+                    </span>
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    {selectedHospitals.length > 0 && (
+                      <button
+                        onClick={exportHospitalsExcel}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 transition text-sm font-medium"
+                      >
+                        <FiDownload className="w-4 h-4" />
+                        Xuất Excel
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setHospitalsModalOpen(false);
+                        setSelectedHisId(null);
+                        setSelectedHospitals([]);
+                      }}
+                      className="text-gray-500 hover:text-gray-800 transition"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div
+                className="overflow-y-auto px-6 py-6 space-y-4 [&::-webkit-scrollbar]:hidden"
+                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+              >
+                {hospitalsLoading ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+                    <svg
+                      className="mb-4 h-12 w-12 animate-spin text-primary"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    <span>Đang tải...</span>
+                  </div>
+                ) : selectedHospitals.length === 0 ? (
+                  <div className="py-12 text-center text-gray-400">
+                    <FaHospital className="mx-auto h-12 w-12 mb-3 text-gray-300" />
+                    <span className="text-sm">Chưa có bệnh viện nào sử dụng HIS này</span>
+                  </div>
+                ) : (
+                  selectedHospitals.map((hospital) => (
+                    <div
+                      key={hospital.id}
+                      className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition bg-white"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                            <FaHospital className="w-4 h-4 text-blue-600" />
+                            {hospital.name}
+                          </h4>
+                          <div className="space-y-1 text-sm text-gray-600">
+                            {hospital.province && (
+                              <div className="flex items-center gap-2">
+                                <FiMapPin className="w-4 h-4 text-gray-400" />
+                                <span>{hospital.province}</span>
+                              </div>
+                            )}
+                            {hospital.personInChargeName && (
+                              <div className="flex items-center gap-2">
+                                <FiUser className="w-4 h-4 text-gray-400" />
+                                <span className="text-gray-700">
+                                  <span className="text-xs text-gray-500">Người phụ trách: </span>
+                                  <span className="font-medium">{hospital.personInChargeName}</span>
+                                </span>
+                              </div>
+                            )}
+                            {hospital.projectStatus && (
+                              <div className="mt-2">
+                                <span className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${getStatusBg(hospital.projectStatus)} text-white`}>
+                                  {getStatusLabel(hospital.projectStatus)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="sticky bottom-0 flex justify-between items-center px-6 py-4 border-t border-gray-200 bg-gray-50">
+                <p className="text-sm text-gray-600">
+                  Tổng: <span className="font-semibold text-gray-900">{selectedHospitals.length}</span> bệnh viện
+                </p>
+                  <button
+                    onClick={() => {
+                      setHospitalsModalOpen(false);
+                      setSelectedHisId(null);
+                      setSelectedHospitals([]);
+                    }}
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-gray-800 bg-white border border-gray-300 hover:bg-gray-100 transition"
+                  >
+                    Đóng
+                  </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </>
   );
 };
