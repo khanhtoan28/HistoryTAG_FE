@@ -998,7 +998,7 @@ function DetailModal({
             <Info icon={<FiMapPin />} label="Bệnh viện: " value={item.hospitalName} />
             <Info 
               icon={<FiUser />} 
-              label="Người phụ trách: " 
+              label="Người phụ trách chính: " 
               value={
                 loadingPics ? (
                   <span className="text-gray-500">Đang tải...</span>

@@ -2262,7 +2262,7 @@ function DetailModal({
             <Info icon={<FiMapPin />} label="Bệnh viện" value={item.hospitalName} />
             <Info 
               icon={<FiUser />} 
-              label="Người phụ trách" 
+              label="Người phụ trách chính" 
               value={
                 loadingPics ? (
                   <span className="text-gray-500">Đang tải...</span>
@@ -2279,6 +2279,37 @@ function DetailModal({
                   item.picDeploymentName || "-"
                 )
               } 
+            />
+
+            <Info
+              icon={<FiUser />}
+              label="Người hỗ trợ"
+              value={
+                loadingPics ? (
+                  <span className="text-gray-500">Đang tải...</span>
+                ) : picNames.length > 1 ? (
+                  <span className="font-medium">
+                    {picNames
+                      .filter((p) => p.id !== (item.picDeploymentId ?? -9999))
+                      .map((pic, idx) => (
+                        <span key={pic.id}>
+                          {idx > 0 && <span className="text-gray-400">, </span>}
+                          {pic.name}
+                        </span>
+                      ))}
+                  </span>
+                ) : (
+                  (() => {
+                    const picIds = parsePicIdsFromAdditionalRequest(item.additionalRequest, item.picDeploymentId);
+                    const others = picIds.length > 1 ? picIds.length - 1 : 0;
+                    return others > 0 ? (
+                      <span className="font-medium text-gray-600">+{others} người</span>
+                    ) : (
+                      "-"
+                    );
+                  })()
+                )
+              }
             />
 
             <Info
