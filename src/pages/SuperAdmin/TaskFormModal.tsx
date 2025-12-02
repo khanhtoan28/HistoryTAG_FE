@@ -415,7 +415,7 @@ export default function TaskFormModal({
         // Ưu tiên lấy từ picDeploymentIds trong response (backend mới)
         // Fallback về parse từ additionalRequest (backward compatible với dữ liệu cũ)
         let allPicIds: number[] = [];
-        
+
         // Nếu có picDeploymentIds trong response, dùng nó (backend mới)
         if (initial && 'picDeploymentIds' in initial && Array.isArray((initial as any).picDeploymentIds)) {
             const responsePicIds = (initial as any).picDeploymentIds as number[];
@@ -605,10 +605,10 @@ export default function TaskFormModal({
             // Loại bỏ tất cả các [PIC_IDS: ...] cũ vì giờ dùng picDeploymentIds
             cleanedAdditionalRequest = cleanedAdditionalRequest.replace(/\[PIC_IDS:\s*[^\]]+\]\s*/g, "").trim();
         }
-        
+
         // Tạo danh sách tất cả PIC IDs (bao gồm PIC chính + các PIC bổ sung)
         const allPicIds = picOpts.map(p => p.id);
-        
+
         const payload: ImplementationTaskRequestDTO = {
             name: model.name!.trim(),
             hospitalId: hospitalOpt.id,
@@ -655,11 +655,19 @@ export default function TaskFormModal({
                     <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} transition={{ type: "spring", stiffness: 260, damping: 22 }} className="relative w-full max-w-3xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
                         {/* Header placed outside the scrollable form so buttons don't overlap content while scrolling */}
 
-                        
+
 
                         {/* form content starts near top; header removed - only floating close button remains */}
-                        <form onSubmit={handleSubmit} className="pt-6 px-6 pb-6 grid gap-4 max-h-[72vh] overflow-y-auto">
+                        <form onSubmit={handleSubmit} className=" px-6 pb-6 grid gap-4 max-h-[72vh] overflow-y-auto">
+                            <div className="sticky top-0 z-[100] -mx-3 px-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+                                <div className="flex items-center justify-between py-3">
+                                    <h3 className="text-lg font-semibold">
+                                        {initial?.id ? (initial?.name || "") : "Tạo tác vụ"}
+                                    </h3>
+                                </div>
+                            </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
                                 <Field label="Tên công việc" required>
                                     <TextInput disabled={readOnly} value={model.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, name: e.target.value }))} placeholder="Nhập tên công việc" />
                                 </Field>
@@ -689,12 +697,12 @@ export default function TaskFormModal({
 
                                             {!readOnly && (
                                                 <div>
-                                                    <RemoteSelect 
+                                                    <RemoteSelect
                                                         label=""
                                                         hideLabel={true}
-                                                        placeholder="Nhập tên người phụ trách để tìm…" 
-                                                        fetchOptions={searchPICs} 
-                                                        value={currentPicInput} 
+                                                        placeholder="Nhập tên người phụ trách để tìm…"
+                                                        fetchOptions={searchPICs}
+                                                        value={currentPicInput}
                                                         onChange={(selected) => {
                                                             if (selected) {
                                                                 // Kiểm tra xem PIC đã được chọn chưa
@@ -711,7 +719,7 @@ export default function TaskFormModal({
                                                                     console.log('PIC already selected:', selected.name);
                                                                 }
                                                             }
-                                                        }} 
+                                                        }}
                                                         disabled={readOnly}
                                                         excludeIds={picOpts.map(p => p.id)} // Loại bỏ các PIC đã được chọn
                                                     />
@@ -724,7 +732,7 @@ export default function TaskFormModal({
                                 {/* Removed fields: Số lượng, Agency, HIS, Hardware, API URL, BHYT */}
 
                                 <Field label="Trạng thái" required>
-                                <Select
+                                    <Select
                                         disabled={readOnly || isTransferred}
                                         value={model.status ?? ""}
                                         onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -735,7 +743,7 @@ export default function TaskFormModal({
                                                 const nowLocal = localInputFromDate(new Date());
                                                 const becameCompleted = nextNormalized === "COMPLETED";
                                                 const wasCompleted = prevNormalized === "COMPLETED";
-                                                
+
                                                 // Auto-set completionDate if status becomes COMPLETED
                                                 let nextCompletion = s.completionDate ?? "";
                                                 if (becameCompleted) {
@@ -747,7 +755,7 @@ export default function TaskFormModal({
                                                     // If changing away from COMPLETED, clear completionDate
                                                     nextCompletion = "";
                                                 }
-                                                
+
                                                 return {
                                                     ...s,
                                                     status: nextStatus,

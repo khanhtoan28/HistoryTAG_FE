@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import TaskCardNew from "../SuperAdmin/TaskCardNew";
 import { AiOutlineEye } from "react-icons/ai";
 import { toast } from "react-hot-toast";
-import { FiUser, FiMapPin, FiLink, FiClock, FiTag, FiPhone } from "react-icons/fi";
+import { FiUser, FiMapPin, FiLink, FiClock, FiTag, FiPhone, FiCheckCircle } from "react-icons/fi";
 import { isBusinessContractTaskName as isBusinessContractTask } from "../../utils/businessContract";
 
 // Helper function để parse PIC IDs từ additionalRequest
@@ -29,7 +29,9 @@ export type ImplementationTaskResponseDTO = {
   hospitalId: number | null;
   hospitalName?: string | null;
   picDeploymentId: number | null;
+  picDeploymentIds?: number[] | null;
   picDeploymentName?: string | null;
+  picDeploymentNames?: string[] | null;
   receivedById?: number | null;
   receivedByName?: string | null;
   receivedDate?: string | null;
@@ -58,7 +60,7 @@ export type ImplementationTaskResponseDTO = {
 export type ImplementationTaskRequestDTO = {
   name: string;
   hospitalId: number;
-  picDeploymentId: number;
+  picDeploymentIds: number[];
   agencyId?: number | null;
   hisSystemId?: number | null;
   hardwareId?: number | null;
@@ -315,6 +317,7 @@ function RemoteSelect({
   onChange,
   required,
   disabled,
+  excludeIds,
 }: {
   label: string;
   placeholder?: string;
@@ -323,12 +326,18 @@ function RemoteSelect({
   value: { id: number; name: string } | null;
   onChange: (v: { id: number; name: string } | null) => void;
   disabled?: boolean;
+  excludeIds?: number[];
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [options, setOptions] = useState<Array<{ id: number; name: string }>>([]);
   const [highlight, setHighlight] = useState<number>(-1);
+
+  const filteredOptions = React.useMemo(() => {
+    if (!excludeIds || excludeIds.length === 0) return options;
+    return options.filter(opt => !excludeIds.includes(opt.id));
+  }, [options, excludeIds]);
 
   if (disabled) {
     return (
@@ -392,18 +401,18 @@ function RemoteSelect({
             if (!open) setOpen(true);
           }}
           onFocus={() => setOpen(true)}
-          onKeyDown={(e) => {
+            onKeyDown={(e) => {
             if (!open) return;
             if (e.key === "ArrowDown") {
               e.preventDefault();
-              setHighlight((h) => Math.min(h + 1, options.length - 1));
+              setHighlight((h) => Math.min(h + 1, filteredOptions.length - 1));
             } else if (e.key === "ArrowUp") {
               e.preventDefault();
               setHighlight((h) => Math.max(h - 1, 0));
             } else if (e.key === "Enter") {
               e.preventDefault();
-              if (highlight >= 0 && options[highlight]) {
-                onChange(options[highlight]);
+              if (highlight >= 0 && filteredOptions[highlight]) {
+                onChange(filteredOptions[highlight]);
                 setOpen(false);
               }
             } else if (e.key === "Escape") {
@@ -426,12 +435,12 @@ function RemoteSelect({
             className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
             onMouseLeave={() => setHighlight(-1)}
           >
-            {loading && <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>}
-            {!loading && options.length === 0 && (
+                {loading && <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>}
+            {!loading && filteredOptions.length === 0 && (
               <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>
             )}
             {!loading &&
-              options.map((opt, idx) => (
+              filteredOptions.map((opt, idx) => (
                 <div
                   key={opt.id}
                   className={clsx(
@@ -455,6 +464,7 @@ function RemoteSelect({
   );
 }
 
+  
 function TaskFormModal({
   open,
   onClose,
@@ -467,7 +477,10 @@ function TaskFormModal({
   initial?: Partial<ImplementationTaskRequestDTO> & {
     id?: number;
     hospitalName?: string | null;
+    picDeploymentId?: number | null;
     picDeploymentName?: string | null;
+    picDeploymentIds?: number[] | null;
+    picDeploymentNames?: string[] | null;
   };
   onSubmit: (payload: ImplementationTaskRequestDTO, id?: number) => Promise<void>;
   userTeam: string;
@@ -568,13 +581,15 @@ function TaskFormModal({
     const normalized = normalizeStatus(initial?.status)?.toString() ?? "RECEIVED";
     const isNew = !initial?.id;
     // Use explicit presence checks — don't coerce to 0 which is falsy and hides a valid id
-    const defaultPicId = initial?.picDeploymentId != null ? Number(initial.picDeploymentId) : (isNew && currentUserId ? currentUserId : undefined);
+    const defaultPicIds = initial?.picDeploymentIds && initial.picDeploymentIds.length > 0 
+      ? initial.picDeploymentIds 
+      : (initial?.picDeploymentId ? [initial.picDeploymentId] : (isNew && currentUserId ? [currentUserId] : []));
     const defaultStart = initial?.startDate || (isNew ? toLocalISOString(new Date()) : "");
     return {
       name: initial?.name || "",
       hospitalId: Number(initial?.hospitalId) || 0,
-      // model requires a number; use 0 when unknown but the select (picOpt) below controls validation
-      picDeploymentId: defaultPicId ?? 0,
+      // model requires an array; use empty array when unknown but the select (picOpts) below controls validation
+      picDeploymentIds: defaultPicIds,
       apiTestStatus: initial?.apiTestStatus ?? "",
       additionalRequest: initial?.additionalRequest ?? "",
       deadline: initial?.deadline ?? "",
@@ -590,94 +605,128 @@ function TaskFormModal({
     return id ? { id, name: nm || String(id) } : null;
   });
 
-  const [picOpt, setPicOpt] = useState<{ id: number; name: string } | null>(() => {
+  const [picOpts, setPicOpts] = useState<Array<{ id: number; name: string; _uid: string }>>(() => {
     const isNew = !initial?.id;
-    const id = initial?.picDeploymentId != null ? Number(initial?.picDeploymentId) : (isNew && currentUserId ? currentUserId : undefined);
+    const ids = initial?.picDeploymentIds && initial.picDeploymentIds.length > 0 
+      ? initial.picDeploymentIds 
+      : (initial?.picDeploymentId ? [initial.picDeploymentId] : (isNew && currentUserId ? [currentUserId] : []));
     const nm = (initial?.picDeploymentName as string) || (isNew ? currentUserName : "");
-    return id ? { id: Number(id), name: nm && nm.trim() ? nm : String(id) } : null;
+    return ids.map((id) => ({ 
+      id: Number(id), 
+      name: nm && nm.trim() ? nm : String(id), 
+      _uid: `pic-${id}` 
+    }));
   });
 
   // Removed: agencyOpt, hisOpt, hardwareOpt (fields hidden)
 
-  useEffect(() => {
-    if (!open) return;
+  const [currentPicInput, setCurrentPicInput] = useState<{ id: number; name: string } | null>(null);
 
-    const normalized = normalizeStatus(initial?.status)?.toString() ?? "RECEIVED";
+  // Refs to control one-time initialization when modal opens or task ID changes
+  const prevOpenRef = useRef<boolean>(false);
+  const prevInitialIdRef = useRef<number | undefined>(undefined);
+
+  const removePic = (uid: string) => {
+    setPicOpts((prev) => prev.filter(p => p._uid !== uid));
+  };
+
+  useEffect(() => {
+    // Guard: only initialize when modal opens or the initial id changes
+    const prevOpen = prevOpenRef.current;
+    const prevId = prevInitialIdRef.current;
+    const isJustOpened = open && !prevOpen;
+    const isIdChanged = initial?.id !== prevId;
+
+    if (!isJustOpened && !isIdChanged) {
+      prevOpenRef.current = open;
+      prevInitialIdRef.current = initial?.id;
+      return;
+    }
+
+    // --- Setup model & hospital ---
+    const normalizedStatus = normalizeStatus(initial?.status)?.toString() ?? "RECEIVED";
     const isNew = !initial?.id;
     const nowIso = toLocalISOString(new Date());
-  const defaultPicId = initial?.picDeploymentId != null ? Number(initial?.picDeploymentId) : (isNew && currentUserId ? currentUserId : undefined);
-  const defaultPicName = (initial?.picDeploymentName as string) || (isNew ? currentUserName : "");
     const defaultStart = initial?.startDate || (isNew ? nowIso : "");
+
+    const defaultPicIds = initial?.picDeploymentIds && initial.picDeploymentIds.length > 0
+      ? initial.picDeploymentIds
+      : (initial?.picDeploymentId ? [initial.picDeploymentId] : (isNew && currentUserId ? [currentUserId] : []));
 
     setModel({
       name: initial?.name || "",
       hospitalId: Number(initial?.hospitalId) || 0,
-      picDeploymentId: defaultPicId ?? 0,
+      picDeploymentIds: defaultPicIds,
       apiTestStatus: initial?.apiTestStatus ?? "",
       additionalRequest: initial?.additionalRequest ?? "",
       deadline: initial?.deadline ?? "",
       completionDate: initial?.completionDate ?? "",
-      status: normalized,
+      status: normalizedStatus,
       startDate: defaultStart,
     });
 
-    // Setup selects: nếu có tên truyền vào thì dùng, không thì null (và sẽ resolve theo ID phía dưới)
     const hid = (initial?.hospitalId as number) || 0;
     const hnm = (initial?.hospitalName as string) || "";
     setHospitalOpt(hid ? { id: hid, name: hnm || String(hid) } : null);
 
-  const pid = defaultPicId;
-  const pnm = defaultPicName;
-  setPicOpt(pid ? { id: Number(pid), name: pnm && pnm.trim() ? pnm : String(pid) } : null);
+    // --- PIC init & resolve ---
+    const primary = Number((initial as any)?.picDeploymentId) || 0;
+    const pnm = (initial?.picDeploymentName as string) || (isNew ? currentUserName : "");
 
-    // removed resolve for agency/his/hardware
-
-    // Nếu đang ở chế độ tạo mới, không cần resolve gì thêm
-    if (!initial) return;
-
-    // Nếu đã có name hiển thị -> set luôn, nếu chưa có thì fetch chi tiết
-    if (initial.hospitalName && initial.hospitalId) {
-      setHospitalOpt({ id: Number(initial.hospitalId), name: initial.hospitalName });
-    } else if (initial.hospitalId) {
-      // 🔁 Fetch lại tên bệnh viện theo ID (admin)
-      fetch(`${API_ROOT}/api/v1/admin/hospitals/${initial.hospitalId}`, {
-        headers: authHeaders(),
-        credentials: "include",
-      })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          const h = Array.isArray(data?.content) ? data.content[0] : data;
-          if (h && h.id) {
-            setHospitalOpt({
-              id: Number(h.id),
-              name: h.name ?? h.hospitalName ?? h.code ?? `BV-${h.id}`,
-            });
-          }
-        })
-        .catch(() => { });
+    // gather ids
+    let rawIds: number[] = [];
+    if (initial?.picDeploymentIds && Array.isArray(initial.picDeploymentIds)) {
+      rawIds = initial.picDeploymentIds.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n) && n > 0);
+    } else {
+      rawIds = defaultPicIds.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n) && n > 0);
     }
 
-    if (initial.picDeploymentName && initial.picDeploymentId) {
-      setPicOpt({ id: Number(initial.picDeploymentId), name: initial.picDeploymentName });
-    } else if (initial.picDeploymentId) {
-      // 🔁 Fetch lại tên người phụ trách theo ID (admin)
-      fetch(`${API_ROOT}/api/v1/admin/users/${initial.picDeploymentId}`, {
-        headers: authHeaders(),
-        credentials: "include",
-      })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          const u = Array.isArray(data?.content) ? data.content[0] : data;
-          if (u && u.id) {
-            setPicOpt({
-              id: Number(u.id),
-              name: u.fullname ?? u.fullName ?? u.username ?? `User-${u.id}`,
-            });
-          }
-        })
-        .catch(() => { });
+    const finalIds = (primary && !rawIds.includes(primary)) ? [primary, ...rawIds] : rawIds;
+
+    if (finalIds.length > 0) {
+      if (initial?.picDeploymentNames && Array.isArray(initial.picDeploymentNames) && initial.picDeploymentNames.length === (initial?.picDeploymentIds?.length ?? 0)) {
+        const results = finalIds.map((id) => {
+          if (id === primary && pnm) return { id, name: pnm, _uid: `pic-${id}` };
+          const idx = (initial.picDeploymentIds || []).map((x: any) => Number(x)).indexOf(id);
+          const name = (idx >= 0 && initial.picDeploymentNames) ? initial.picDeploymentNames[idx] : String(id);
+          return { id, name: name || String(id), _uid: `pic-${id}` };
+        });
+        setPicOpts(results);
+      } else {
+        // temporary placeholders, then batch fetch
+        const tempOpts = finalIds.map(id => ({ id, name: (id === primary && pnm) ? pnm : String(id), _uid: `pic-${id}` }));
+        setPicOpts(tempOpts);
+
+        if (finalIds.length > 0) {
+          const idsCsv = finalIds.join(",");
+          fetch(`${API_ROOT}/api/v1/admin/users/batch?ids=${encodeURIComponent(idsCsv)}`, { headers: authHeaders(), credentials: "include" })
+            .then(r => r.ok ? r.json() : [])
+            .then((users) => {
+              const userMap = new Map<number, string>();
+              if (Array.isArray(users)) {
+                users.forEach((u: any) => {
+                  const uid = Number(u.id);
+                  const uname = u.fullName ?? u.fullname ?? u.username ?? u.name ?? u.label ?? u.email;
+                  if (uid && uname) userMap.set(uid, String(uname));
+                });
+              }
+              setPicOpts(prev => prev.map(p => userMap.has(p.id) ? { ...p, name: userMap.get(p.id)! } : p));
+            })
+            .catch(err => console.error("Err fetching pics", err));
+        }
+      }
+    } else {
+      setPicOpts([]);
     }
-  }, [open, initial, currentUserId, currentUserName]);
+
+    prevOpenRef.current = open;
+    prevInitialIdRef.current = initial?.id;
+  }, [open, initial]);
+
+  // Keep model.picDeploymentIds in sync with UI picOpts so payload always reflects displayed tags
+  React.useEffect(() => {
+    setModel((prev) => ({ ...prev, picDeploymentIds: picOpts.map((p) => Number(p.id)) }));
+  }, [picOpts]);
 
   // Removed resolve effect for agency/his/hardware
 
@@ -696,7 +745,7 @@ function TaskFormModal({
       toast.error("Bệnh viện không được để trống");
       return;
     }
-    if (!picOpt?.id) {
+    if (picOpts.length === 0) {
       toast.error("Người phụ trách không được để trống");
       return;
     }
@@ -710,7 +759,9 @@ function TaskFormModal({
     const payload: ImplementationTaskRequestDTO = {
       ...model,
       hospitalId: hospitalOpt.id,
-      picDeploymentId: picOpt.id,
+      picDeploymentIds: picOpts.map(p => p.id),
+      // Ensure backend receives the chosen primary PIC (first in the list)
+      picDeploymentId: picOpts.length > 0 ? picOpts[0].id : undefined,
       agencyId: null,
       hisSystemId: null,
       hardwareId: null,
@@ -781,14 +832,54 @@ function TaskFormModal({
                 disabled={lockHospital}
               />
 
-              <RemoteSelect
-                label="Người làm"
-                required
-                placeholder="Nhập tên người phụ trách để tìm…"
-                fetchOptions={searchPICs}
-                value={picOpt}
-                onChange={setPicOpt}
-              />
+              <div className="col-span-2">
+                <Field label="Người phụ trách (PIC)" required>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {picOpts.map((pic) => (
+                        <div key={pic._uid} className="inline-flex items-center gap-2 px-3 py-1 bg-gray-50 dark:bg-gray-800 rounded-full text-xs">
+                          <span className="max-w-[12rem] truncate block">{pic.name}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); removePic(pic._uid); }}
+                            className="text-red-500 hover:text-red-700 text-xs px-1"
+                            aria-label={`Remove ${pic.name}`}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div>
+                      <RemoteSelect
+                        label=""
+                        placeholder="Nhập tên người phụ trách để tìm…"
+                        fetchOptions={searchPICs}
+                        value={currentPicInput}
+                        excludeIds={picOpts.map(p => p.id)}
+                        onChange={(selected) => {
+                          if (selected) {
+                            // Kiểm tra xem PIC đã được chọn chưa
+                            const alreadySelected = picOpts.some(p => p.id === selected.id);
+                            if (!alreadySelected) {
+                              const newPic = { ...selected, _uid: `pic-${Date.now()}-${selected.id}-${Math.random().toString(36).substring(2, 9)}` };
+                              setPicOpts((prev) => {
+                                const updated = [...prev, newPic];
+                                console.log('Added PIC:', selected.name, 'Total PICs:', updated.length);
+                                return updated;
+                              });
+                              setCurrentPicInput(null);
+                            } else {
+                              console.log('PIC already selected:', selected.name);
+                            }
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                </Field>
+              </div>
 
               {/* Removed fields: quantity, agency, HIS, hardware, API URL, BHYT */}
 
@@ -892,6 +983,16 @@ function DetailModal({
       return;
     }
 
+    // Use backend data if available
+    if (item.picDeploymentNames && item.picDeploymentNames.length > 0 && item.picDeploymentIds && item.picDeploymentIds.length > 0) {
+      setPicNames(item.picDeploymentIds.map((id, idx) => ({
+        id: Number(id),
+        name: item.picDeploymentNames![idx] || String(id)
+      })));
+      return;
+    }
+
+    // Fallback to parsing from additionalRequest for backward compatibility
     const picIds = parsePicIdsFromAdditionalRequest(item.additionalRequest, item.picDeploymentId);
     // console.log('Parsed PIC IDs:', picIds, 'from additionalRequest:', item.additionalRequest, 'picDeploymentId:', item.picDeploymentId);
     
@@ -998,25 +1099,24 @@ function DetailModal({
             <Info icon={<FiMapPin />} label="Bệnh viện: " value={item.hospitalName} />
             <Info 
               icon={<FiUser />} 
-              label="Người phụ trách chính: " 
-              value={
-                loadingPics ? (
-                  <span className="text-gray-500">Đang tải...</span>
-                ) : picNames.length > 0 ? (
-                  <span className="font-medium">
-                    {picNames.map((pic, idx) => (
-                      <span key={pic.id}>
-                        {idx > 0 && <span className="text-gray-400">, </span>}
-                        {pic.name}
-                      </span>
-                    ))}
-                  </span>
-                ) : (
-                  item.picDeploymentName || "-"
-                )
-              } 
+              label="Phụ trách chính: " 
+              value={item.picDeploymentName || "-"}
             />
-            <Info icon={<FiUser />} label="Tiếp nhận bởi: " value={item.receivedByName || "—"} />
+            <Info 
+              icon={<FiUser />} 
+              label="Người hỗ trợ: " 
+              value={
+                item.picDeploymentNames && item.picDeploymentNames.length > 0
+                  ? item.picDeploymentNames.join(", ")
+                  : "-"
+              }
+            />
+            <Info 
+              icon={<FiCheckCircle />} 
+              label="Người tiếp nhận: " 
+              value={(item as any).receivedByName || "-"}
+            />
+            {/* <Info icon={<FiUser />} label="Tiếp nhận bởi: " value={item.receivedByName || "—"} /> */}
 
             <Info
               icon={<FiTag />}
@@ -1033,7 +1133,7 @@ function DetailModal({
             <Info icon={<FiClock />} label="Ngày bắt đầu: " value={fmt(item.startDate)} />
             <Info icon={<FiClock />} label="Ngày hoàn thành: " value={fmt(item.completionDate)} />
             <Info icon={<FiClock />} label="Tạo lúc: " value={fmt(item.createdAt)} />
-            <Info icon={<FiClock />} label="Cập nhật lúc: " value={fmt(item.updatedAt)} />
+            {/* <Info icon={<FiClock />} label="Cập nhật lúc: " value={fmt(item.updatedAt)} /> */}
           </div>
 
           {/* Additional request */}
@@ -1093,7 +1193,7 @@ function Info({
       {icon && <div className="min-w-[36px] flex items-center justify-center text-gray-500">{icon}</div>}
       <div className="flex-1 flex items-start">
         <div className="min-w-[140px] font-semibold text-gray-900 dark:text-gray-100">{label}</div>
-        <div className="text-gray-700 dark:text-gray-300 flex-1 text-right break-words">{value ?? "—"}</div>
+        <div className="text-gray-700 dark:text-gray-300 flex-1 text-left break-words">{value ?? "—"}</div>
       </div>
     </div>
   );
@@ -2248,7 +2348,7 @@ const ImplementationTasksPage: React.FC = () => {
       for (const h of withCompleted) {
         const key = h.id != null ? `id-${h.id}` : `name-${h.label}`;
         if (!mergedMap.has(key)) {
-          mergedMap.set(key, h);
+          mergedMap.set(key, h as any);
         }
       }
       
@@ -2256,7 +2356,7 @@ const ImplementationTasksPage: React.FC = () => {
       for (const h of hospitalsWithOnlyPending) {
         const key = h.id != null ? `id-${h.id}` : `name-${h.label}`;
         if (!mergedMap.has(key)) {
-          mergedMap.set(key, h);
+          mergedMap.set(key, h as any);
         } else {
           // Merge hiddenPendingCount if exists
           const existing = mergedMap.get(key)!;
@@ -3039,13 +3139,15 @@ const ImplementationTasksPage: React.FC = () => {
               hospitalName: (editing as ImplementationTaskResponseDTO).hospitalName ?? null,
               picDeploymentId: (editing as ImplementationTaskResponseDTO).picDeploymentId ?? undefined,
               picDeploymentName: (editing as ImplementationTaskResponseDTO).picDeploymentName ?? null,
+              picDeploymentIds: (editing as ImplementationTaskResponseDTO).picDeploymentIds ?? undefined,
+              picDeploymentNames: (editing as ImplementationTaskResponseDTO).picDeploymentNames ?? undefined,
               apiTestStatus: (editing as ImplementationTaskResponseDTO).apiTestStatus ?? undefined,
               additionalRequest: (editing as ImplementationTaskResponseDTO).additionalRequest ?? undefined,
               deadline: (editing as ImplementationTaskResponseDTO).deadline ?? undefined,
               completionDate: (editing as ImplementationTaskResponseDTO).completionDate ?? undefined,
               status: (editing as ImplementationTaskResponseDTO).status ?? undefined,
               startDate: (editing as ImplementationTaskResponseDTO).startDate ?? undefined,
-            } as Partial<ImplementationTaskRequestDTO> & { id?: number; hospitalName?: string | null; picDeploymentName?: string | null })
+            } as Partial<ImplementationTaskRequestDTO> & { id?: number; hospitalName?: string | null; picDeploymentName?: string | null; picDeploymentIds?: number[] | null; picDeploymentNames?: string[] | null })
           : undefined;
 
         return (

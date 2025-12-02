@@ -16,6 +16,7 @@ export const Default = () => (
     notifications: sampleNotifications,
     unreadCount: 1,
     loadNotifications: async () => {},
+    loadUnread: async () => {},
     markAsRead: async () => {},
     clearNotifications: () => {},
   }}>

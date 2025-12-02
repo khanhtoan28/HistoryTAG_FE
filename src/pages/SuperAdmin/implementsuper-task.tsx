@@ -45,23 +45,11 @@ type ImplTask = {
   completionDate?: string | null;
   finishDate?: string | null;
   notes?: string | null;
+  picDeploymentIds?: number[] | null;
+  picDeploymentNames?: string[] | null;
+  receivedById?: number | null;
+  receivedByName?: string | null;
 };
-
-// Helper function để parse PIC IDs từ additionalRequest
-function parsePicIdsFromAdditionalRequest(additionalRequest?: string | null, picDeploymentId?: number | null): number[] {
-  const ids: number[] = [];
-  if (picDeploymentId) {
-    ids.push(picDeploymentId);
-  }
-  if (additionalRequest) {
-    const match = additionalRequest.match(/\[PIC_IDS:\s*([^\]]+)\]/);
-    if (match) {
-      const parsedIds = match[1].split(',').map(id => Number(id.trim())).filter(id => !isNaN(id) && id > 0);
-      ids.push(...parsedIds);
-    }
-  }
-  return [...new Set(ids)]; // Loại bỏ duplicate
-}
 
 type PendingTask = ImplTask & {
   receivedById?: number | null;
@@ -2179,56 +2167,6 @@ function DetailModal({
   onClose: () => void;
   item: ImplTask | null;
 }) {
-  const [picNames, setPicNames] = React.useState<Array<{ id: number; name: string }>>([]);
-  const [loadingPics, setLoadingPics] = React.useState(false);
-
-  // Fetch tên các PIC khi modal mở
-  React.useEffect(() => {
-    if (!open || !item) {
-      setPicNames([]);
-      return;
-    }
-
-    const picIds = parsePicIdsFromAdditionalRequest(item.additionalRequest, item.picDeploymentId);
-    if (picIds.length <= 1) {
-      // Chỉ có 1 PIC, dùng tên từ item
-      if (item.picDeploymentId && item.picDeploymentName) {
-        setPicNames([{ id: item.picDeploymentId, name: item.picDeploymentName }]);
-      } else {
-        setPicNames([]);
-      }
-      return;
-    }
-
-    // Fetch tên các PIC từ API
-    setLoadingPics(true);
-    Promise.all(
-      picIds.map(async (id) => {
-        try {
-          const url = `${API_ROOT}/api/v1/superadmin/users/${id}`;
-          const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
-          if (!res.ok) return { id, name: String(id) };
-          const user = await res.json();
-          const name = user.fullName || user.fullname || user.name || user.username || user.email || String(id);
-          return { id, name: String(name) };
-        } catch {
-          return { id, name: String(id) };
-        }
-      })
-    )
-      .then((results) => {
-        setPicNames(results);
-      })
-      .catch(() => {
-        // Nếu lỗi, dùng tên từ item cho PIC đầu tiên
-        if (item.picDeploymentId && item.picDeploymentName) {
-          setPicNames([{ id: item.picDeploymentId, name: item.picDeploymentName }]);
-        }
-      })
-      .finally(() => {
-        setLoadingPics(false);
-      });
-  }, [open, item]);
 
   if (!open || !item) return null;
 
@@ -2262,54 +2200,24 @@ function DetailModal({
             <Info icon={<FiMapPin />} label="Bệnh viện" value={item.hospitalName} />
             <Info 
               icon={<FiUser />} 
-              label="Người phụ trách chính" 
-              value={
-                loadingPics ? (
-                  <span className="text-gray-500">Đang tải...</span>
-                ) : picNames.length > 0 ? (
-                  <span className="font-medium">
-                    {picNames.map((pic, idx) => (
-                      <span key={pic.id}>
-                        {idx > 0 && <span className="text-gray-400">, </span>}
-                        {pic.name}
-                      </span>
-                    ))}
-                  </span>
-                ) : (
-                  item.picDeploymentName || "-"
-                )
-              } 
+              label="Phụ trách chính" 
+              value={item.picDeploymentName || "-"}
             />
 
             <Info
               icon={<FiUser />}
               label="Người hỗ trợ"
               value={
-                loadingPics ? (
-                  <span className="text-gray-500">Đang tải...</span>
-                ) : picNames.length > 1 ? (
-                  <span className="font-medium">
-                    {picNames
-                      .filter((p) => p.id !== (item.picDeploymentId ?? -9999))
-                      .map((pic, idx) => (
-                        <span key={pic.id}>
-                          {idx > 0 && <span className="text-gray-400">, </span>}
-                          {pic.name}
-                        </span>
-                      ))}
-                  </span>
-                ) : (
-                  (() => {
-                    const picIds = parsePicIdsFromAdditionalRequest(item.additionalRequest, item.picDeploymentId);
-                    const others = picIds.length > 1 ? picIds.length - 1 : 0;
-                    return others > 0 ? (
-                      <span className="font-medium text-gray-600">+{others} người</span>
-                    ) : (
-                      "-"
-                    );
-                  })()
-                )
+                item.picDeploymentNames && item.picDeploymentNames.length > 0
+                  ? item.picDeploymentNames.join(", ")
+                  : "-"
               }
+            />
+
+            <Info
+              icon={<FiCheckCircle />}
+              label="Người tiếp nhận"
+              value={(item as any).receivedByName || "-"}
             />
 
             <Info

@@ -24,6 +24,8 @@ import Pagination from '../../components/common/Pagination';
 import ComponentCard from '../../components/common/ComponentCard';
 import { normalizeBusinessContractName } from '../../utils/businessContract';
 
+type ITUserOption = { id: number; name: string; phone?: string | null };
+
 const BusinessPage: React.FC = () => {
   // read roles from either localStorage or sessionStorage (some flows store roles in sessionStorage)
   const rolesRaw = localStorage.getItem('roles') || sessionStorage.getItem('roles') || '[]';

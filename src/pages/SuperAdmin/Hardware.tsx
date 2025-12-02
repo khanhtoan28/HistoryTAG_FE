@@ -312,7 +312,7 @@ export default function HardwarePage() {
           if (cell) {
             cell.value = null;
             cell.style = {};
-            cell.fill = {};
+            try { delete (cell as any).fill; } catch {}
           }
         } catch (e) {
           // Ignore
@@ -386,7 +386,7 @@ export default function HardwarePage() {
                 // Clear everything from extra cells
                 cell.value = null;
                 cell.style = {};
-                cell.numFmt = undefined;
+                try { delete (cell as any).numFmt; } catch {}
               }
             } catch (e) {
               // Ignore errors for cells that don't exist
