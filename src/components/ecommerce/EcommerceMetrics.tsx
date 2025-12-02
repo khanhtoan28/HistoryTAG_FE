@@ -4,6 +4,7 @@ import {
   CheckCircleIcon,
   TaskIcon,
   UserIcon,
+  BoxIcon,
 } from "../../icons";
 
 const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
@@ -166,22 +167,22 @@ export default function EcommerceMetrics() {
         </div>
       </div>
 
-      {/* Công việc chuyển giao */}
+      {/* Số lượng viện phụ trách */}
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6 flex flex-col h-full">
         <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300">
-          <PaperPlaneIcon className="size-6" />
+          <BoxIcon className="size-6" />
         </div>
         <div className="mt-5 space-y-2 flex-1 flex flex-col">
           <div>
             <span className="text-sm text-gray-500 dark:text-gray-400">
-              Công việc chuyển giao
+              Số lượng viện phụ trách
             </span>
             <h4 className="mt-2 font-bold text-gray-800 text-title-sm dark:text-white/90">
               {formatNumber(transferred)}
             </h4>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-auto">
-            Các công việc bạn đã chuyển giao lại cho người khác.
+            Tổng số bệnh viện bạn đang phụ trách.
           </p>
         </div>
       </div>
