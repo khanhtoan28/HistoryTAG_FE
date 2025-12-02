@@ -94,16 +94,19 @@ function statusBadgeClasses(status?: string | null) {
   const s = status.toUpperCase();
   switch (s) {
     case "NOT_STARTED":
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
-    case "IN_PROGRESS":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
-    case "API_TESTING":
+    case "RECEIVED":
       return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+    case "IN_PROGRESS":
+    case "IN_PROCESS":
+    case "API_TESTING":
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
     case "INTEGRATING":
-      return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
+    case "ISSUE":
+      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
     case "WAITING_FOR_DEV":
-      return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
+      return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
     case "ACCEPTED":
+    case "COMPLETED":
       return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
     default:
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
@@ -112,15 +115,25 @@ function statusBadgeClasses(status?: string | null) {
 
 function statusLabel(status?: string | null) {
   if (!status) return "-";
-  const map: Record<string, string> = {
-    NOT_STARTED: "Đã tiếp nhận",
-    IN_PROGRESS: "Chưa xử lý",
-    API_TESTING: "Đang xử lý",
-    INTEGRATING: "Gặp sự cố",
-    WAITING_FOR_DEV: "Hoàn thành",
-    ACCEPTED: "Nghiệm thu",
-  };
   const normalized = status.toUpperCase();
+  const map: Record<string, string> = {
+    // Canonical statuses
+    RECEIVED: "Đã tiếp nhận",
+    IN_PROCESS: "Đang xử lý",
+    COMPLETED: "Hoàn thành",
+    ISSUE: "Gặp sự cố",
+    CANCELLED: "Hủy",
+
+    // Legacy / alternative values
+    NOT_STARTED: "Chưa bắt đầu",
+    IN_PROGRESS: "Đang xử lý",
+    API_TESTING: "Đang kiểm thử API",
+    INTEGRATING: "Đang tích hợp",
+    WAITING_FOR_DEV: "Đang chờ phát triển",
+    ACCEPTED: "Nghiệm thu",
+    TRANSFERRED: "Đã chuyển",
+  };
+
   return map[normalized] || status;
 }
 
@@ -1505,9 +1518,22 @@ function DetailModal({
       return;
     }
 
+    // 1. Ưu tiên: Dùng dữ liệu có sẵn từ backend (nếu API trả về đủ)
+    const backendPicNames = (item as any)?.picDeploymentNames as Array<string> | undefined;
+    const backendPicIds = (item as any)?.picDeploymentIds as Array<number | string> | undefined;
+    if (Array.isArray(backendPicNames) && backendPicNames.length > 0 && Array.isArray(backendPicIds) && backendPicIds.length > 0) {
+      setPicNames(backendPicIds.map((id, idx) => ({
+        id: Number(id),
+        name: backendPicNames[idx] || String(id),
+      })));
+      return;
+    }
+
+    // 2. Fallback: Parse từ text (additionalRequest/notes) cho các task cũ
     const picIds = parsePicIdsFromAdditionalRequest(item.additionalRequest, item.notes, item.picDeploymentId);
+
     if (picIds.length <= 1) {
-      // Chỉ có 1 PIC, dùng tên từ item
+      // Chỉ có 1 PIC (chính), dùng tên có sẵn từ item
       if (item.picDeploymentId && item.picDeploymentName) {
         setPicNames([{ id: item.picDeploymentId, name: item.picDeploymentName }]);
       } else {
@@ -1516,10 +1542,16 @@ function DetailModal({
       return;
     }
 
-    // Fetch tên các PIC từ API
+    // 3. Fetch tên các PIC từ API (Batch hoặc Single loop)
     setLoadingPics(true);
+
     Promise.all(
       picIds.map(async (id) => {
+        // Nếu ID trùng với PIC chính -> dùng tên có sẵn luôn, đỡ gọi API
+        if (id === item.picDeploymentId && item.picDeploymentName) {
+          return { id, name: item.picDeploymentName };
+        }
+
         try {
           const url = `${API_ROOT}/api/v1/superadmin/users/${id}`;
           const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
@@ -1527,7 +1559,7 @@ function DetailModal({
           const user = await res.json();
           const name = user.fullName || user.fullname || user.name || user.username || user.email || String(id);
           return { id, name: String(name) };
-        } catch {
+        } catch (err) {
           return { id, name: String(id) };
         }
       })
@@ -1535,8 +1567,9 @@ function DetailModal({
       .then((results) => {
         setPicNames(results);
       })
-      .catch(() => {
-        // Nếu lỗi, dùng tên từ item cho PIC đầu tiên
+      .catch((err) => {
+        console.error("Err loading pics:", err);
+        // Fallback cuối cùng
         if (item.picDeploymentId && item.picDeploymentName) {
           setPicNames([{ id: item.picDeploymentId, name: item.picDeploymentName }]);
         }
@@ -1580,25 +1613,36 @@ function DetailModal({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
             <Info label="Tên" value={item.name} icon={<FiInfo />} />
             <Info label="Bệnh viện" value={item.hospitalName} icon={<FiUser />} />
+            {/* 1. Người phụ trách (Chỉ lấy người chính từ item, KHÔNG dùng picNames) */}
             <Info 
               label="Người phụ trách" 
+              value={item.picDeploymentName || "—"} 
+              icon={<FiUser />} 
+            />
+
+            {/* 2. Người hỗ trợ (Dùng picNames nhưng LỌC BỎ người chính ra) */}
+            <Info 
+              label="Người hỗ trợ" 
+              icon={<FiUser />} 
               value={
                 loadingPics ? (
                   <span className="text-gray-500">Đang tải...</span>
-                ) : picNames.length > 0 ? (
-                  <span className="font-medium">
-                    {picNames.map((pic, idx) => (
-                      <span key={pic.id}>
-                        {idx > 0 && <span className="text-gray-400">, </span>}
-                        {pic.name}
-                      </span>
-                    ))}
-                  </span>
                 ) : (
-                  item.picDeploymentName || "-"
+                  <span className="font-medium">
+                    {picNames
+                      // QUAN TRỌNG: Lọc bỏ ID của người phụ trách chính ra khỏi danh sách này
+                      .filter((p) => Number(p.id) !== Number(item.picDeploymentId))
+                      .map((p) => p.name)
+                      .join(", ") || <span className="text-gray-400 font-normal">Chưa có</span>
+                    }
+                  </span>
                 )
               } 
-              icon={<FiUser />} 
+            />
+            <Info
+              label="Người tiếp nhận"
+              icon={<FiCheckCircle />}
+              value={(item as any).receivedByName || "-"}
             />
             <Info
               label="Trạng thái"

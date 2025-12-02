@@ -137,6 +137,8 @@ export type ImplementationTaskResponseDTO = {
     hospitalName?: string | null;
     picDeploymentId: number | null;
     picDeploymentName?: string | null;
+    picDeploymentIds?: number[] | null;
+    picDeploymentNames?: string[] | null;
     receivedById?: number | null;
     receivedByName?: string | null;
     receivedDate?: string | null;
@@ -159,6 +161,7 @@ export type ImplementationTaskResponseDTO = {
     updatedAt?: string | null;
     transferredToMaintenance?: boolean | null;
     readOnlyForDeployment?: boolean | null;
+    myRole?: "owner" | "supporter" | "viewer" | string | null;
 };
 
 type PendingTransferGroup = {
@@ -186,6 +189,7 @@ export type ImplementationTaskRequestDTO = {
     name: string;
     hospitalId: number;
     picDeploymentId: number;
+    picDeploymentIds?: number[];
     agencyId?: number | null;
     hisSystemId?: number | null;
     hardwareId?: number | null;
@@ -779,6 +783,17 @@ function TaskFormModal({
         const nm = (initial?.picDeploymentName as string) || (isNew ? currentUserName : "");
         return id ? { id, name: nm && nm.trim() ? nm : String(id) } : null;
     });
+    const [supporterOpts, setSupporterOpts] = useState<Array<{ id: number; name: string; _uid: string }>>(() => {
+        if (!initial?.picDeploymentIds || initial.picDeploymentIds.length === 0) return [];
+        const ids = initial.picDeploymentIds.map((x: any) => Number(x)).filter((n) => Number.isFinite(n) && n > 0);
+        const names = Array.isArray((initial as any).picDeploymentNames) ? (initial as any).picDeploymentNames : [];
+        return ids.map((id, idx) => ({
+            id,
+            name: names[idx] && String(names[idx]).trim() ? String(names[idx]) : `User-${id}`,
+            _uid: `supporter-${id}-${idx}-${Math.random().toString(36).slice(2, 9)}`,
+        }));
+    });
+    const [currentSupporterInput, setCurrentSupporterInput] = useState<{ id: number; name: string } | null>(null);
 
     const [agencyOpt, setAgencyOpt] = useState<{ id: number; name: string } | null>(() => {
         const id = (initial?.agencyId as number) || 0;
@@ -948,6 +963,56 @@ function TaskFormModal({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, initial, currentUserId]);
 
+    useEffect(() => {
+        if (!open) return;
+        if (!initial?.picDeploymentIds || initial.picDeploymentIds.length === 0) {
+            setSupporterOpts([]);
+            return;
+        }
+        const ids = initial.picDeploymentIds
+            .map((x: any) => Number(x))
+            .filter((n: number) => Number.isFinite(n) && n > 0);
+        const names = Array.isArray((initial as any).picDeploymentNames) ? (initial as any).picDeploymentNames : [];
+        const opts = ids.map((id, idx) => ({
+            id,
+            name: names[idx] && String(names[idx]).trim() ? String(names[idx]) : `User-${id}`,
+            _uid: `supporter-${id}-${idx}-${Math.random().toString(36).slice(2, 9)}`,
+        }));
+        setSupporterOpts(opts);
+    }, [open, initial]);
+
+    useEffect(() => {
+        if (!picOpt?.id) return;
+        setSupporterOpts((prev) => prev.filter((s) => s.id !== picOpt.id));
+    }, [picOpt?.id]);
+
+    const removeSupporter = (uid: string) => {
+        setSupporterOpts((prev) => prev.filter((s) => s._uid !== uid));
+    };
+
+    const addSupporter = (supporter: { id: number; name: string }) => {
+        if (!supporter?.id) return;
+        if (picOpt?.id && supporter.id === picOpt.id) {
+            toast.error("Đang là người phụ trách chính");
+            setCurrentSupporterInput(null);
+            return;
+        }
+        if (supporterOpts.some((s) => s.id === supporter.id)) {
+            toast.error("Người này đã có trong danh sách hỗ trợ");
+            setCurrentSupporterInput(null);
+            return;
+        }
+        setSupporterOpts((prev) => [
+            ...prev,
+            {
+                id: supporter.id,
+                name: supporter.name || `User-${supporter.id}`,
+                _uid: `supporter-${supporter.id}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            },
+        ]);
+        setCurrentSupporterInput(null);
+    };
+
     // Đóng bằng phím ESC
     useEffect(() => {
         if (!open) return;
@@ -976,10 +1041,14 @@ function TaskFormModal({
             ? (model.completionDate && String(model.completionDate).trim() ? model.completionDate : toLocalISOString(new Date()))
             : "";
 
+        const supporterIds = supporterOpts.map((s) => s.id);
+        const combinedPicIds = Array.from(new Set([picOpt.id, ...supporterIds].filter((id): id is number => Number.isFinite(id))));
+
         const payload: ImplementationTaskRequestDTO = {
             ...model,
             hospitalId: hospitalOpt.id,
             picDeploymentId: picOpt.id,
+            picDeploymentIds: combinedPicIds,
             status: normalizedStatus,
             deadline: toISOOrNull(model.deadline) || undefined,
             completionDate: completionRaw ? toISOOrNull(completionRaw) || undefined : undefined,
@@ -1065,6 +1134,45 @@ function TaskFormModal({
                                     value={picOpt}
                                     onChange={setPicOpt}
                                 />
+
+                                <Field label="Người hỗ trợ (tùy chọn)">
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex flex-wrap items-center gap-2 min-h-[36px]">
+                                            {supporterOpts.length === 0 ? (
+                                                <span className="text-xs text-gray-400">Chưa có người hỗ trợ</span>
+                                            ) : (
+                                                supporterOpts.map((sup) => (
+                                                    <div key={sup._uid} className="inline-flex items-center gap-2 px-3 py-1 bg-gray-50 dark:bg-gray-800 rounded-full text-xs">
+                                                        <span className="max-w-[12rem] truncate block">{sup.name}</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                removeSupporter(sup._uid);
+                                                            }}
+                                                            className="text-red-500 hover:text-red-700 text-xs px-1"
+                                                            aria-label={`Remove ${sup.name}`}
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                        <RemoteSelect
+                                            label=""
+                                            placeholder="Thêm người hỗ trợ..."
+                                            fetchOptions={searchPICs}
+                                            value={currentSupporterInput}
+                                            onChange={(selected) => {
+                                                if (selected) {
+                                                    addSupporter(selected);
+                                                }
+                                            }}
+                                        />
+                                    </div>
+                                </Field>
 
                                 {/* Ẩn các trường nâng cao để đồng bộ với form triển khai */}
                                 <Field label="Trạng thái" required>
@@ -1165,6 +1273,17 @@ function DetailModal({
             return;
         }
 
+        // Nếu backend đã trả danh sách supporter, ưu tiên dùng trực tiếp
+        if (item.picDeploymentNames && item.picDeploymentNames.length > 0 && item.picDeploymentIds && item.picDeploymentIds.length > 0) {
+            setPicNames(
+                item.picDeploymentIds.map((id, idx) => ({
+                    id: Number(id),
+                    name: item.picDeploymentNames![idx] || String(id),
+                }))
+            );
+            return;
+        }
+
         const picIds = parsePicIdsFromAdditionalRequest(item.additionalRequest, item.picDeploymentId);
         if (picIds.length <= 1) {
             // Chỉ có 1 PIC, dùng tên từ item
@@ -1176,34 +1295,42 @@ function DetailModal({
             return;
         }
 
-        // Fetch tên các PIC từ API
+        // Fetch tên các PIC từ API batch một lần
         setLoadingPics(true);
-        Promise.all(
-            picIds.map(async (id) => {
-                try {
-                    const url = `${API_ROOT}/api/v1/admin/users/${id}`;
-                    const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
-                    if (!res.ok) return { id, name: String(id) };
-                    const user = await res.json();
-                    const name = user.fullName || user.fullname || user.name || user.username || user.email || String(id);
-                    return { id, name: String(name) };
-                } catch {
-                    return { id, name: String(id) };
-                }
-            })
-        )
-            .then((results) => {
-                setPicNames(results);
-            })
-            .catch(() => {
-                // Nếu lỗi, dùng tên từ item cho PIC đầu tiên
+        (async () => {
+            try {
+                const idsCsv = picIds.join(",");
+                const url = `${API_ROOT}/api/v1/admin/users/batch?ids=${encodeURIComponent(idsCsv)}`;
+                const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+                if (!res.ok) throw new Error(`Batch fetch failed: ${res.status}`);
+                const payload = await res.json();
+                const list = Array.isArray(payload) ? payload : Array.isArray(payload?.content) ? payload.content : [];
+                const byId = new Map<number, string>();
+                list.forEach((user: any) => {
+                    const uid = Number(user?.id);
+                    if (!Number.isFinite(uid)) return;
+                    const name = user?.fullName ?? user?.fullname ?? user?.name ?? user?.username ?? user?.label ?? user?.email;
+                    if (name) byId.set(uid, String(name).trim());
+                });
+
+                setPicNames(
+                    picIds.map((id) => {
+                        if (id === item.picDeploymentId && item.picDeploymentName) return { id, name: item.picDeploymentName };
+                        const found = byId.get(id);
+                        return { id, name: found || `User-${id}` };
+                    })
+                );
+            } catch (err) {
+                console.error("Error fetching PIC names (maintenance)", err);
                 if (item.picDeploymentId && item.picDeploymentName) {
                     setPicNames([{ id: item.picDeploymentId, name: item.picDeploymentName }]);
+                } else {
+                    setPicNames(picIds.map((id) => ({ id, name: `User-${id}` })));
                 }
-            })
-            .finally(() => {
+            } finally {
                 setLoadingPics(false);
-            });
+            }
+        })();
     }, [open, item]);
 
     if (!open || !item) return null;
@@ -1872,6 +1999,22 @@ const ImplementationTasksPage: React.FC = () => {
                         picOptionMap.set(picIdValue, { id: picIdValue, label: picLabel });
                     }
                     current.picNames.add(picLabel);
+                }
+                if (Array.isArray(task.picDeploymentIds) && task.picDeploymentIds.length > 0) {
+                    const supporterNames = Array.isArray(task.picDeploymentNames) ? task.picDeploymentNames : [];
+                    task.picDeploymentIds.forEach((sid, idx) => {
+                        const supporterId = Number(sid);
+                        if (!Number.isFinite(supporterId)) return;
+                        const supporterIdStr = String(supporterId);
+                        current.picIds.add(supporterIdStr);
+                        const supporterName = supporterNames[idx] && String(supporterNames[idx]).trim()
+                            ? String(supporterNames[idx]).trim()
+                            : "";
+                        if (supporterName) {
+                            current.picNames.add(supporterName);
+                            picOptionMap.set(supporterIdStr, { id: supporterIdStr, label: supporterName });
+                        }
+                    });
                 }
 
                 const taskStatus = normalizeStatus(task.status);
@@ -2582,6 +2725,8 @@ const ImplementationTasksPage: React.FC = () => {
                         hospitalName: (editing as ImplementationTaskResponseDTO).hospitalName ?? null,
                         picDeploymentId: (editing as ImplementationTaskResponseDTO).picDeploymentId ?? undefined,
                         picDeploymentName: (editing as ImplementationTaskResponseDTO).picDeploymentName ?? null,
+                        picDeploymentIds: (editing as ImplementationTaskResponseDTO).picDeploymentIds ?? undefined,
+                        picDeploymentNames: (editing as ImplementationTaskResponseDTO).picDeploymentNames ?? undefined,
                         apiTestStatus: (editing as ImplementationTaskResponseDTO).apiTestStatus ?? undefined,
                         additionalRequest: (editing as ImplementationTaskResponseDTO).additionalRequest ?? undefined,
                         deadline: (editing as ImplementationTaskResponseDTO).deadline ?? undefined,

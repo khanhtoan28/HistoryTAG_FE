@@ -286,9 +286,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             },
             connectHeaders: currentToken ? { Authorization: `Bearer ${currentToken}` } : {},
             reconnectDelay: 5000,
-            debug: (str) => {
-                // console.debug("[NotificationContext] STOMP debug:", str);
-            },
+            debug: (_str) => {
+                  // console.debug("[NotificationContext] STOMP debug:", _str);
+              },
           });
         } catch (clientErr) {
             // console.error("[NotificationContext] Failed to create STOMP client:", clientErr);
@@ -321,7 +321,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           }
         };
 
-        client.onStompError = (frame: any) => {
+        client.onStompError = (_frame: any) => {
           //  console.error("[NotificationContext] STOMP error:", frame);
           stompClientInstance = null;
           attemptReconnect();

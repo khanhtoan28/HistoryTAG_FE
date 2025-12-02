@@ -390,10 +390,10 @@ const HisSystemPage: React.FC = () => {
       for (let col = 6; col <= 20; col++) {
         try {
           const cell = titleRow.getCell(col);
-          if (cell) {
+            if (cell) {
             cell.value = null;
             cell.style = {};
-            cell.fill = {};
+            try { delete (cell as any).fill; } catch {};
           }
         } catch (e) {
           // Ignore
@@ -467,7 +467,7 @@ const HisSystemPage: React.FC = () => {
                 // Clear everything from extra cells
                 cell.value = null;
                 cell.style = {};
-                cell.numFmt = undefined;
+                try { delete (cell as any).numFmt; } catch {}
               }
             } catch (e) {
               // Ignore errors for cells that don't exist

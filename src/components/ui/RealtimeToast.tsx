@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { useNotification } from "../../context/NotificationContext";
 
 export default function RealtimeToast() {
