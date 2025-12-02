@@ -51,7 +51,10 @@ const navItems: NavItem[] = [
   {
     name: "Phòng Kinh doanh",
     icon: <BoxIconLine />,
-    path: "/superadmin/business",
+    subItems: [
+      { name: "Hợp đồng kinh doanh", path: "/superadmin/business", pro: false },
+      { name: "Hợp đồng bảo hành", path: "/superadmin/warranty-contracts", pro: false },
+    ],
   },
   {
     name: "Công việc",
