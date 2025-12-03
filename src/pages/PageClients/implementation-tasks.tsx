@@ -55,6 +55,7 @@ export type ImplementationTaskResponseDTO = {
   updatedAt?: string | null;
   transferredToMaintenance?: boolean | null;
   readOnlyForDeployment?: boolean | null;
+  myRole?: "owner" | "supporter" | "viewer" | string | null;
 };
 
 export type ImplementationTaskRequestDTO = {
@@ -975,7 +976,28 @@ function DetailModal({
   const [picNames, setPicNames] = React.useState<Array<{ id: number; name: string }>>([]);
   const [loadingPics, setLoadingPics] = React.useState(false);
   const [needRelogin, setNeedRelogin] = React.useState(false);
-
+  const [myNotes, setMyNotes] = React.useState<Array<{
+    id: number;
+    taskId: number;
+    authorId: number;
+    authorName?: string | null;
+    content: string;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+  }>>([]);
+  const [myNoteText, setMyNoteText] = React.useState("");
+  const [loadingMyNotes, setLoadingMyNotes] = React.useState(false);
+  const [savingMyNote, setSavingMyNote] = React.useState(false);
+  const [allNotes, setAllNotes] = React.useState<Array<{
+    id: number;
+    taskId: number;
+    authorId: number;
+    authorName?: string | null;
+    content: string;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+  }>>([]);
+  const [loadingAllNotes, setLoadingAllNotes] = React.useState(false);
   // Fetch tên các PIC khi modal mở
   React.useEffect(() => {
     if (!open || !item) {
@@ -1066,6 +1088,128 @@ function DetailModal({
     })();
   }, [open, item]);
 
+  // Fetch "ghi chú của tôi" khi mở modal (chỉ nếu backend có myRole phù hợp)
+  React.useEffect(() => {
+    if (!open || !item) {
+      setMyNotes([]);
+      setMyNoteText("");
+      return;
+    }
+    if (item.myRole !== "owner" && item.myRole !== "supporter") {
+      // Không load ghi chú nếu chỉ là viewer
+      setMyNotes([]);
+      setMyNoteText("");
+      return;
+    }
+
+    const controller = new AbortController();
+    const run = async () => {
+      try {
+        setLoadingMyNotes(true);
+        const url = `${apiBase}/${item.id}/notes/my`;
+        const res = await fetch(url, {
+          method: "GET",
+          headers: authHeaders(),
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          console.warn("GET my notes failed", res.status);
+          return;
+        }
+        const payload = await res.json();
+        const list = Array.isArray(payload) ? payload : [];
+        setMyNotes(list);
+        if (list.length > 0) {
+          // Dùng nội dung ghi chú mới nhất để hiển thị trong textarea
+          const latest = list[list.length - 1];
+          setMyNoteText(latest?.content ?? "");
+        } else {
+          setMyNoteText("");
+        }
+      } catch (err) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) {
+          console.error("Error fetching my notes", err);
+        }
+      } finally {
+        setLoadingMyNotes(false);
+      }
+    };
+
+    void run();
+    return () => controller.abort();
+  }, [open, item]);
+
+  // Fetch "ghi chú của tất cả" khi modal mở (chỉ nếu backend có myRole phù hợp)
+  React.useEffect(() => {
+    if (!open || !item) {
+      setAllNotes([]);
+      setLoadingAllNotes(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const run = async () => {
+      try {
+        setLoadingAllNotes(true);
+        const url = `${apiBase}/${item.id}/notes`;
+        const res = await fetch(url, {
+          method: "GET",
+          headers: authHeaders(),
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          console.warn("GET all notes failed", res.status);
+          return;
+        }
+        const payload = await res.json();
+        const list = Array.isArray(payload) ? payload : [];
+        setAllNotes(list);
+      } catch (err) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) {
+          console.error("Error fetching all notes", err);
+        }
+      } finally {
+        setLoadingAllNotes(false);
+      }
+    };
+
+    void run();
+    return () => controller.abort();
+  }, [open, item]);
+
+  const handleSaveMyNote = async () => {
+    if (!item || !item.id) return;
+    const content = myNoteText.trim();
+    if (!content) {
+      toast.error("Nội dung ghi chú không được để trống");
+      return;
+    }
+    try {
+      setSavingMyNote(true);
+      const url = `${apiBase}/${item.id}/notes/my`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: authHeaders(),
+        credentials: "include",
+        body: JSON.stringify({ content }),
+      });
+      if (!res.ok) {
+        throw new Error(`POST ${url} failed: ${res.status}`);
+      }
+      const created = await res.json();
+      setMyNotes((prev) => [...prev, created]);
+      setMyNoteText(created?.content ?? content);
+      toast.success("Đã lưu ghi chú của bạn");
+    } catch (err) {
+      console.error("Error saving my note", err);
+      toast.error("Lưu ghi chú thất bại, vui lòng thử lại");
+    } finally {
+      setSavingMyNote(false);
+    }
+  };
+
   if (!open || !item) return null;
 
   // console.log("DetailModal item startDate", item.startDate);
@@ -1081,7 +1225,8 @@ function DetailModal({
         exit={{ opacity: 0, y: 20, scale: 0.95 }}
         transition={{ type: "spring", stiffness: 250, damping: 25 }}
         onMouseDown={(e) => e.stopPropagation()}
-        className="w-full max-w-4xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden"
+        className="w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden"
+
       >
         {/* Header */}
         <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 dark:border-gray-800">
@@ -1092,7 +1237,7 @@ function DetailModal({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6 text-sm text-gray-800 dark:text-gray-200">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 text-sm text-gray-800 dark:text-gray-200">
           {/* Grid Info */}
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <Info icon={<FiMapPin />} label="Tên: " value={item.name} />
@@ -1137,17 +1282,86 @@ function DetailModal({
           </div>
 
           {/* Additional request */}
-          <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
-            <p className="text-gray-500 mb-2">Ghi chú / Yêu cầu bổ sung:</p>
-            <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px]">
-              {(() => {
-                const notes = item.additionalRequest || "";
-                // Loại bỏ phần [PIC_IDS: ...] khỏi hiển thị
-                const cleaned = notes.replace(/\[PIC_IDS:\s*[^\]]+\]\s*/g, "").trim();
-                return cleaned || "—";
-              })()}
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-800 space-y-4">
+            <div>
+              <p className="text-gray-500 mb-2">Ghi chú / Yêu cầu bổ sung:</p>
+              <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px]">
+                {(() => {
+                  const notes = item.additionalRequest || "";
+                  // Loại bỏ phần [PIC_IDS: ...] khỏi hiển thị
+                  const cleaned = notes.replace(/\[PIC_IDS:\s*[^\]]+\]\s*/g, "").trim();
+                  return cleaned || "—";
+                })()}
+              </div>
             </div>
-          </div>
+
+            {/* Ghi chú khác (read-only) */}
+            <div className="pt-2 border-t border-dashed border-gray-200 dark:border-gray-800">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-gray-500 font-medium">Ghi chú khác</p>
+                {loadingAllNotes && (
+                  <span className="text-xs text-gray-400">Đang tải...</span>
+                )}
+              </div>
+              {allNotes.length === 0 ? (
+                <p className="text-sm text-gray-400 italic">Chưa có ghi chú nào.</p>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {allNotes.map((n) => (
+                    <div
+                      key={n.id}
+                      className="rounded-lg bg-gray-50 dark:bg-gray-800/60 px-3 py-2 text-xs text-gray-800 dark:text-gray-200"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-semibold">
+                          {n.authorName || `User-${n.authorId}`}
+                        </span>
+                        <span className="text-[11px] text-gray-400">
+                          {n.updatedAt
+                            ? fmt(n.updatedAt)
+                            : n.createdAt
+                            ? fmt(n.createdAt)
+                            : ""}
+                        </span>
+                      </div>
+                      <div className="whitespace-pre-wrap break-words">
+                        {n.content}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Ghi chú của tôi (chỉ Owner + Supporter) */}
+            {item.myRole === "owner" || item.myRole === "supporter" ? (
+              <div className="pt-2 border-t border-dashed border-gray-200 dark:border-gray-800">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-gray-500 font-medium">Ghi chú của tôi</p>
+                  {loadingMyNotes && (
+                    <span className="text-xs text-gray-400">Đang tải ghi chú...</span>
+                  )}
+                </div>
+                <textarea
+                  className="w-full min-h-[80px] rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-100 outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 resize-y"
+                  placeholder="Nhập ghi chú riêng của bạn cho công việc này..."
+                  value={myNoteText}
+                  onChange={(e) => setMyNoteText(e.target.value)}
+                  disabled={savingMyNote}
+                />
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => { void handleSaveMyNote(); }}
+                    disabled={savingMyNote || loadingMyNotes}
+                    className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {savingMyNote ? "Đang lưu..." : "Lưu ghi chú"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+        </div>
         </div>
 
         {/* Footer */}
@@ -3057,8 +3271,8 @@ const ImplementationTasksPage: React.FC = () => {
                         onOpen={() => { setDetailItem(row); setDetailOpen(true); }}
                         onEdit={() => { setEditing(row); setModalOpen(true); }}
                         onDelete={(id: number) => { handleDelete(id); }}
-                        canEdit={canManage && (() => { try { const uidRaw = localStorage.getItem("userId") || sessionStorage.getItem("userId"); const uid = uidRaw ? Number(uidRaw) : 0; return uid > 0 && Number(row.picDeploymentId) === uid; } catch { return false; } })()}
-                        canDelete={canManage && (() => { try { const uidRaw = localStorage.getItem("userId") || sessionStorage.getItem("userId"); const uid = uidRaw ? Number(uidRaw) : 0; return uid > 0 && Number(row.picDeploymentId) === uid; } catch { return false; } })()}
+                        canEdit={canManage && row.myRole === "owner"}
+                        canDelete={canManage && row.myRole === "owner"}
                         leadingTopLeft={canComplete ? (
                           <input
                             type="checkbox"
