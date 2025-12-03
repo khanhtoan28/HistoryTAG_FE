@@ -2102,7 +2102,7 @@ export default function HospitalsPage() {
                       <div className="mb-3 relative">
                         <div className="relative group">
                           <img
-                            src={form.imageFile ? URL.createObjectURL(form.imageFile) : form.imageUrl}
+                            src={form.imageFile ? URL.createObjectURL(form.imageFile) : (form.imageUrl ?? undefined)}
                             alt="Ảnh bệnh viện"
                             className="w-full h-48 object-cover rounded-lg border-2 border-gray-200 shadow-sm"
                             onError={(e) => {
