@@ -427,6 +427,15 @@ export default function HospitalsPage() {
   const [isModalLoading, setIsModalLoading] = useState(false); // Thêm state loading cho modal
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyHospital, setHistoryHospital] = useState<Hospital | null>(null);
+  const [contractsOpen, setContractsOpen] = useState(false);
+  const [contractsHospital, setContractsHospital] = useState<Hospital | null>(null);
+  const [contractsData, setContractsData] = useState<{
+    businessContracts: any[];
+    warrantyContracts: any[];
+    totalCount: number;
+  } | null>(null);
+  const [contractsLoading, setContractsLoading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [historyData, setHistoryData] = useState<Array<{
     id: number;
     eventType: string;
@@ -1115,6 +1124,34 @@ export default function HospitalsPage() {
     }
   }
 
+  async function onViewContracts(h: Hospital) {
+    setContractsHospital(h);
+    setContractsOpen(true);
+    setContractsLoading(true);
+    setContractsData(null);
+    try {
+      const res = await fetch(`${BASE}/${h.id}/contracts`, {
+        headers: { ...authHeader() },
+      });
+      if (!res.ok) throw new Error(`GET contracts failed ${res.status}`);
+      const data = await res.json();
+      setContractsData({
+        businessContracts: data.businessContracts || [],
+        warrantyContracts: data.warrantyContracts || [],
+        totalCount: data.totalCount || 0,
+      });
+    } catch (e: any) {
+      toast.error(e?.message || "Lỗi tải danh sách hợp đồng");
+      setContractsData({
+        businessContracts: [],
+        warrantyContracts: [],
+        totalCount: 0,
+      });
+    } finally {
+      setContractsLoading(false);
+    }
+  }
+
   async function onExportHistory(hospitalId: number) {
     try {
       const res = await fetch(`${BASE}/${hospitalId}/history/export`, {
@@ -1122,10 +1159,42 @@ export default function HospitalsPage() {
       });
       if (!res.ok) throw new Error(`Export failed ${res.status}`);
       const blob = await res.blob();
+      
+      // Get filename from Content-Disposition header
+      const contentDisposition = res.headers.get("Content-Disposition");
+      let filename = `lịch sử bệnh viện.xlsx`;
+      if (contentDisposition) {
+        // Try to get filename* first (RFC 5987, supports Unicode)
+        const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+        if (filenameStarMatch && filenameStarMatch[1]) {
+          try {
+            filename = decodeURIComponent(filenameStarMatch[1]);
+          } catch (e) {
+            // If decode fails, try regular filename
+            const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+            if (filenameMatch && filenameMatch[1]) {
+              filename = filenameMatch[1].replace(/['"]/g, '');
+            }
+          }
+        } else {
+          // Fallback to regular filename
+          const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+          if (filenameMatch && filenameMatch[1]) {
+            filename = filenameMatch[1].replace(/['"]/g, '');
+            // Try to decode if it looks encoded
+            try {
+              filename = decodeURIComponent(filename);
+            } catch (e) {
+              // Keep original if decode fails
+            }
+          }
+        }
+      }
+      
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `lich_su_benh_vien_${hospitalId}.xlsx`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -1678,10 +1747,17 @@ export default function HospitalsPage() {
                     className="group w-full bg-white rounded-2xl border border-gray-100 p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-1 group-hover:bg-blue-50 hover:ring-1 hover:ring-blue-200 hover:border-blue-100 cursor-pointer relative"
                   >
                     <div className="absolute top-4 right-4 flex items-center gap-2">
-                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-700">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onViewContracts(h);
+                        }}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition cursor-pointer"
+                        title="Xem danh sách hợp đồng"
+                      >
                         <span>{h.contractCount ?? 0}</span>
                         <span>hợp đồng</span>
-                      </div>
+                      </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -2020,30 +2096,136 @@ export default function HospitalsPage() {
                 <div className="space-y-3">
                   <div>
                     <label className="mb-1 block text-sm font-medium">Ảnh bệnh viện</label>
-                    {form.imageUrl && (
-                      <div className="mb-3">
-                        <img
-                          // ✅ SỬA: Dùng imageUrl trực tiếp (URL Cloudinary)
-                          src={form.imageUrl}
-                          alt="Ảnh hiện tại"
-                          className="max-w-full h-32 object-cover rounded-lg border"
-                          onError={(e) => {
-                            console.error("Image load error:", form.imageUrl);
-                            (e.target as HTMLImageElement).style.display = 'none';
-                          }}
-                        />
-                        <p className="text-xs text-gray-500 mt-1">Ảnh hiện tại</p>
+                    
+                    {/* Preview ảnh hiện tại hoặc ảnh mới chọn */}
+                    {(form.imageUrl || form.imageFile) && (
+                      <div className="mb-3 relative">
+                        <div className="relative group">
+                          <img
+                            src={form.imageFile ? URL.createObjectURL(form.imageFile) : form.imageUrl}
+                            alt="Ảnh bệnh viện"
+                            className="w-full h-48 object-cover rounded-lg border-2 border-gray-200 shadow-sm"
+                            onError={(e) => {
+                              console.error("Image load error:", form.imageUrl);
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                            onLoad={(e) => {
+                              // Cleanup object URL when image loads (for new files)
+                              if (form.imageFile) {
+                                const img = e.target as HTMLImageElement;
+                                const oldSrc = img.src;
+                                // URL will be cleaned up when component unmounts or file changes
+                              }
+                            }}
+                          />
+                          {form.imageFile && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // Cleanup object URL before removing file
+                                const img = document.querySelector('img[alt="Ảnh bệnh viện"]') as HTMLImageElement;
+                                if (img && img.src.startsWith('blob:')) {
+                                  URL.revokeObjectURL(img.src);
+                                }
+                                setForm((s) => ({ ...s, imageFile: null }));
+                              }}
+                              className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 shadow-lg"
+                              title="Xóa ảnh đã chọn"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {form.imageFile ? "Ảnh mới đã chọn" : "Ảnh hiện tại"}
+                        </p>
                       </div>
                     )}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
-                      onChange={(e) => setForm((s) => ({ ...s, imageFile: e.target.files?.[0] ?? null }))}
-                      disabled={isViewing || !canEdit}
-                    />
+
+                    {/* File input với giao diện đẹp và drag & drop */}
+                    <div className="relative">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="hospital-image-input"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 10 * 1024 * 1024) {
+                              toast.error("File ảnh không được vượt quá 10MB");
+                              return;
+                            }
+                            setForm((s) => ({ ...s, imageFile: file }));
+                          }
+                        }}
+                        disabled={isViewing || !canEdit}
+                      />
+                      <label
+                        htmlFor="hospital-image-input"
+                        onDragEnter={(e) => {
+                          if (!isViewing && canEdit) {
+                            e.preventDefault();
+                            setIsDragging(true);
+                          }
+                        }}
+                        onDragLeave={(e) => {
+                          e.preventDefault();
+                          setIsDragging(false);
+                        }}
+                        onDragOver={(e) => {
+                          if (!isViewing && canEdit) {
+                            e.preventDefault();
+                          }
+                        }}
+                        onDrop={(e) => {
+                          if (!isViewing && canEdit) {
+                            e.preventDefault();
+                            setIsDragging(false);
+                            const file = e.dataTransfer.files[0];
+                            if (file && file.type.startsWith('image/')) {
+                              if (file.size > 10 * 1024 * 1024) {
+                                toast.error("File ảnh không được vượt quá 10MB");
+                                return;
+                              }
+                              setForm((s) => ({ ...s, imageFile: file }));
+                            } else {
+                              toast.error("Vui lòng chọn file ảnh");
+                            }
+                          }
+                        }}
+                        className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
+                          isViewing || !canEdit
+                            ? 'border-gray-200 bg-gray-50 cursor-not-allowed'
+                            : isDragging
+                            ? 'border-blue-500 bg-blue-50 scale-105'
+                            : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-blue-400'
+                        }`}
+                      >
+                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                          <FiImage className={`w-10 h-10 mb-3 ${isDragging ? 'text-blue-500' : 'text-gray-400'}`} />
+                          <p className="mb-2 text-sm text-gray-500">
+                            <span className="font-semibold">Click để chọn ảnh</span> hoặc kéo thả vào đây
+                          </p>
+                          <p className="text-xs text-gray-500">PNG, JPG, GIF (MAX. 10MB)</p>
+                        </div>
+                      </label>
+                    </div>
+                    
                     {form.imageFile && (
-                      <p className="text-xs text-green-600 mt-1">Đã chọn: {form.imageFile.name}</p>
+                      <div className="mt-2 flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-green-800 truncate">{form.imageFile.name}</p>
+                          <p className="text-xs text-green-600">
+                            {(form.imageFile.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                      </div>
                     )}
                   </div>
 
@@ -2184,6 +2366,9 @@ export default function HospitalsPage() {
                         "MAINTENANCE_ACCEPTED_HOSPITAL": "Bảo trì tiếp nhận bệnh viện",
                         "MAINTENANCE_TASK_CREATED": "Bảo trì tạo công việc",
                         "MAINTENANCE_TASK_STATUS_CHANGED": "Thay đổi trạng thái bảo trì",
+                        "WARRANTY_CONTRACT_CREATED": "Tạo hợp đồng bảo hành",
+                        "WARRANTY_CONTRACT_UPDATED": "Cập nhật hợp đồng bảo hành",
+                        "WARRANTY_CONTRACT_DELETED": "Xóa hợp đồng bảo hành",
                       };
                       return map[type] || type;
                     };
@@ -2387,6 +2572,183 @@ export default function HospitalsPage() {
             <div className="sticky bottom-0 flex justify-end px-8 py-4 border-t border-gray-200 bg-gray-10">
               <button
                 onClick={() => setHistoryOpen(false)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-800 bg-white border border-gray-300 hover:bg-gray-100 transition"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Contracts Modal */}
+      {contractsOpen && contractsHospital && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setContractsOpen(false)} />
+          <div className="relative z-10 w-full max-w-4xl rounded-3xl bg-white shadow-2xl max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="sticky top-0 z-20 bg-white rounded-t-3xl px-8 pt-8 pb-4 border-b border-gray-200">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-gray-900 flex items-start gap-3">
+                  <FiTag className="w-6 h-6 text-gray-600 mt-1" />
+                  <span className="flex flex-col leading-tight">
+                    <span>Danh sách hợp đồng</span>
+                    <span className="text-base font-semibold text-blue-600 mt-1 break-words">{contractsHospital.name}</span>
+                  </span>
+                </h3>
+                <button
+                  onClick={() => setContractsOpen(false)}
+                  className="text-gray-400 hover:text-gray-600 transition"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="overflow-y-auto px-8 pb-8 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              {contractsLoading ? (
+                <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+                  <svg className="mb-4 h-12 w-12 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span>Đang tải danh sách hợp đồng...</span>
+                </div>
+              ) : contractsData && contractsData.totalCount === 0 ? (
+                <div className="py-12 text-center text-gray-400">
+                  <FiTag className="mx-auto h-12 w-12 mb-3 text-gray-300" />
+                  <span className="text-sm">Chưa có hợp đồng nào</span>
+                </div>
+              ) : contractsData ? (
+                <div className="space-y-6 mt-6">
+                  {/* Business Contracts */}
+                  {contractsData.businessContracts.length > 0 && (
+                    <div>
+                      <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                        Hợp đồng kinh doanh ({contractsData.businessContracts.length})
+                      </h4>
+                      <div className="space-y-3">
+                        {contractsData.businessContracts.map((contract: any) => (
+                          <div key={contract.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <h5 className="font-semibold text-gray-900 mb-2">{contract.name || "—"}</h5>
+                                <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
+                                  <div>
+                                    <span className="font-medium">Trạng thái:</span>{" "}
+                                    <span className={`px-2 py-1 rounded-full text-xs ${
+                                      contract.status === 'CONTRACTED' ? 'bg-green-100 text-green-800' :
+                                      contract.status === 'CARING' ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {contract.status === 'CONTRACTED' ? 'Đã ký' :
+                                       contract.status === 'CARING' ? 'Đang chăm sóc' :
+                                       contract.status || '—'}
+                                    </span>
+                                  </div>
+                                  {contract.quantity && (
+                                    <div>
+                                      <span className="font-medium">Số lượng:</span> {contract.quantity}
+                                    </div>
+                                  )}
+                                  {contract.unitPrice && (
+                                    <div>
+                                      <span className="font-medium">Đơn giá:</span> {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.unitPrice)}
+                                    </div>
+                                  )}
+                                  {contract.totalPrice && (
+                                    <div>
+                                      <span className="font-medium">Tổng giá:</span> {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.totalPrice)}
+                                    </div>
+                                  )}
+                                  {contract.picUser && (
+                                    <div>
+                                      <span className="font-medium">Người phụ trách:</span> {contract.picUser.label || "—"}
+                                    </div>
+                                  )}
+                                  {contract.startDate && (
+                                    <div>
+                                      <span className="font-medium">Ngày bắt đầu:</span> {new Date(contract.startDate).toLocaleDateString('vi-VN')}
+                                    </div>
+                                  )}
+                                  {contract.deadline && (
+                                    <div>
+                                      <span className="font-medium">Hạn:</span> {new Date(contract.deadline).toLocaleDateString('vi-VN')}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Warranty Contracts */}
+                  {contractsData.warrantyContracts.length > 0 && (
+                    <div>
+                      <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                        Hợp đồng bảo hành ({contractsData.warrantyContracts.length})
+                      </h4>
+                      <div className="space-y-3">
+                        {contractsData.warrantyContracts.map((contract: any) => (
+                          <div key={contract.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <h5 className="font-semibold text-gray-900 mb-2">{contract.contractCode || "—"}</h5>
+                                <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
+                                  {contract.durationYears && (
+                                    <div>
+                                      <span className="font-medium">Thời hạn:</span> {contract.durationYears} năm
+                                    </div>
+                                  )}
+                                  {contract.yearlyPrice && (
+                                    <div>
+                                      <span className="font-medium">Giá hàng năm:</span> {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.yearlyPrice)}
+                                    </div>
+                                  )}
+                                  {contract.totalPrice && (
+                                    <div>
+                                      <span className="font-medium">Tổng giá:</span> {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.totalPrice)}
+                                    </div>
+                                  )}
+                                  {contract.picUser && (
+                                    <div>
+                                      <span className="font-medium">Người phụ trách:</span> {contract.picUser.label || "—"}
+                                    </div>
+                                  )}
+                                  {contract.startDate && (
+                                    <div>
+                                      <span className="font-medium">Ngày bắt đầu:</span> {new Date(contract.startDate).toLocaleDateString('vi-VN')}
+                                    </div>
+                                  )}
+                                  {contract.endDate && (
+                                    <div>
+                                      <span className="font-medium">Ngày kết thúc:</span> {new Date(contract.endDate).toLocaleDateString('vi-VN')}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+
+            {/* Footer */}
+            <div className="sticky bottom-0 flex justify-end px-8 py-4 border-t border-gray-200 bg-white">
+              <button
+                onClick={() => setContractsOpen(false)}
                 className="px-4 py-2 rounded-lg text-sm font-medium text-gray-800 bg-white border border-gray-300 hover:bg-gray-100 transition"
               >
                 Đóng
