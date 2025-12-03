@@ -127,7 +127,7 @@ export default function TaskNotes({
         const list = await res.json();
         if (alive && Array.isArray(list)) {
           setMyNotes(list);
-          if (list.length > 0) setMyNoteText(list[list.length - 1].content ?? "");
+          if (list.length > 0) setMyNoteText("");
         }
       } catch (err) {
         console.error("Failed to load my notes", err);

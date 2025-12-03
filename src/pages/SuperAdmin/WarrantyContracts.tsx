@@ -1516,7 +1516,7 @@ export default function WarrantyContractsPage() {
                     <div className="flex items-start gap-4">
                       <div className="min-w-[150px] flex items-center gap-3">
                         <FiCalendar className="text-gray-500 text-lg" />
-                        <span className="font-semibold text-gray-900">Ngày bắt đầu:</span>
+                        <span className="font-semibold text-gray-900">Bắt đầu:</span>
                       </div>
                       <div className="flex-1 text-gray-700">{fmt(viewing.startDate)}</div>
                     </div>

@@ -1351,8 +1351,8 @@ function DetailModal({
 
 
             <Info icon={<FiClock />} label="Deadline: " value={fmt(item.deadline)} />
-            <Info icon={<FiClock />} label="Ngày bắt đầu: " value={fmt(item.startDate)} />
-            <Info icon={<FiClock />} label="Ngày hoàn thành: " value={fmt(item.completionDate)} />
+            <Info icon={<FiClock />} label="Bắt đầu: " value={fmt(item.startDate)} />
+            <Info icon={<FiClock />} label="Hoàn thành: " value={fmt(item.completionDate)} />
             <Info icon={<FiClock />} label="Tạo lúc: " value={fmt(item.createdAt)} />
             {/* <Info icon={<FiClock />} label="Cập nhật lúc: " value={fmt(item.updatedAt)} /> */}
           </div>
@@ -1403,7 +1403,7 @@ function Info({
     <div className="flex items-start gap-3">
       {icon && <div className="min-w-[36px] flex items-center justify-center text-gray-500">{icon}</div>}
       <div className="flex-1 flex items-start">
-        <div className="min-w-[140px] font-semibold text-gray-900 dark:text-gray-100">{label}</div>
+        <div className="min-w-[125px] font-semibold text-gray-900 dark:text-gray-100">{label}</div>
         <div className="text-gray-700 dark:text-gray-300 flex-1 text-left break-words">{value ?? "—"}</div>
       </div>
     </div>

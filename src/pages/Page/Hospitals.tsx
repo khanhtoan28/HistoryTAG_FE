@@ -2672,7 +2672,7 @@ export default function HospitalsPage() {
                                   )}
                                   {contract.startDate && (
                                     <div>
-                                      <span className="font-medium">Ngày bắt đầu:</span> {new Date(contract.startDate).toLocaleDateString('vi-VN')}
+                                      <span className="font-medium">Bắt đầu:</span> {new Date(contract.startDate).toLocaleDateString('vi-VN')}
                                     </div>
                                   )}
                                   {contract.deadline && (
@@ -2725,7 +2725,7 @@ export default function HospitalsPage() {
                                   )}
                                   {contract.startDate && (
                                     <div>
-                                      <span className="font-medium">Ngày bắt đầu:</span> {new Date(contract.startDate).toLocaleDateString('vi-VN')}
+                                      <span className="font-medium">Bắt đầu:</span> {new Date(contract.startDate).toLocaleDateString('vi-VN')}
                                     </div>
                                   )}
                                   {contract.endDate && (
