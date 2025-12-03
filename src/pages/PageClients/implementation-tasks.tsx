@@ -402,7 +402,7 @@ function RemoteSelect({
             if (!open) setOpen(true);
           }}
           onFocus={() => setOpen(true)}
-            onKeyDown={(e) => {
+          onKeyDown={(e) => {
             if (!open) return;
             if (e.key === "ArrowDown") {
               e.preventDefault();
@@ -436,7 +436,7 @@ function RemoteSelect({
             className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
             onMouseLeave={() => setHighlight(-1)}
           >
-                {loading && <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>}
+            {loading && <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>}
             {!loading && filteredOptions.length === 0 && (
               <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>
             )}
@@ -465,7 +465,7 @@ function RemoteSelect({
   );
 }
 
-  
+
 function TaskFormModal({
   open,
   onClose,
@@ -582,8 +582,8 @@ function TaskFormModal({
     const normalized = normalizeStatus(initial?.status)?.toString() ?? "RECEIVED";
     const isNew = !initial?.id;
     // Use explicit presence checks — don't coerce to 0 which is falsy and hides a valid id
-    const defaultPicIds = initial?.picDeploymentIds && initial.picDeploymentIds.length > 0 
-      ? initial.picDeploymentIds 
+    const defaultPicIds = initial?.picDeploymentIds && initial.picDeploymentIds.length > 0
+      ? initial.picDeploymentIds
       : (initial?.picDeploymentId ? [initial.picDeploymentId] : (isNew && currentUserId ? [currentUserId] : []));
     const defaultStart = initial?.startDate || (isNew ? toLocalISOString(new Date()) : "");
     return {
@@ -608,14 +608,14 @@ function TaskFormModal({
 
   const [picOpts, setPicOpts] = useState<Array<{ id: number; name: string; _uid: string }>>(() => {
     const isNew = !initial?.id;
-    const ids = initial?.picDeploymentIds && initial.picDeploymentIds.length > 0 
-      ? initial.picDeploymentIds 
+    const ids = initial?.picDeploymentIds && initial.picDeploymentIds.length > 0
+      ? initial.picDeploymentIds
       : (initial?.picDeploymentId ? [initial.picDeploymentId] : (isNew && currentUserId ? [currentUserId] : []));
     const nm = (initial?.picDeploymentName as string) || (isNew ? currentUserName : "");
-    return ids.map((id) => ({ 
-      id: Number(id), 
-      name: nm && nm.trim() ? nm : String(id), 
-      _uid: `pic-${id}` 
+    return ids.map((id) => ({
+      id: Number(id),
+      name: nm && nm.trim() ? nm : String(id),
+      _uid: `pic-${id}`
     }));
   });
 
@@ -998,6 +998,21 @@ function DetailModal({
     updatedAt?: string | null;
   }>>([]);
   const [loadingAllNotes, setLoadingAllNotes] = React.useState(false);
+  // determine current user id (try stored user object first, then raw userId key)
+  const currentUserId: number | null = React.useMemo(() => {
+    try {
+      const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const id = Number(parsed?.id ?? parsed?.userId);
+        if (Number.isFinite(id) && id > 0) return id;
+      }
+    } catch {
+      // ignore
+    }
+    const fallback = Number(localStorage.getItem("userId") || sessionStorage.getItem("userId") || 0);
+    return Number.isFinite(fallback) && fallback > 0 ? fallback : null;
+  }, []);
   // Fetch tên các PIC khi modal mở
   React.useEffect(() => {
     if (!open || !item) {
@@ -1017,7 +1032,7 @@ function DetailModal({
     // Fallback to parsing from additionalRequest for backward compatibility
     const picIds = parsePicIdsFromAdditionalRequest(item.additionalRequest, item.picDeploymentId);
     // console.log('Parsed PIC IDs:', picIds, 'from additionalRequest:', item.additionalRequest, 'picDeploymentId:', item.picDeploymentId);
-    
+
     if (picIds.length <= 1) {
       // Chỉ có 1 PIC, dùng tên từ item
       if (item.picDeploymentId && item.picDeploymentName) {
@@ -1027,7 +1042,7 @@ function DetailModal({
       }
       return;
     }
-    
+
     // Nếu có nhiều PIC nhưng không có tên cho PIC đầu tiên, vẫn fetch tất cả
     // console.log('Fetching names for', picIds.length, 'PICs');
 
@@ -1199,7 +1214,27 @@ function DetailModal({
         throw new Error(`POST ${url} failed: ${res.status}`);
       }
       const created = await res.json();
-      setMyNotes((prev) => [...prev, created]);
+      setMyNotes((prev) => {
+        try {
+          if (!created || typeof created !== 'object') return prev;
+          const cid = Number((created as any).id);
+          if (Number.isFinite(cid) && prev.some((p) => Number(p.id) === cid)) return prev;
+        } catch {
+          // ignore and append
+        }
+        return [...prev, created];
+      });
+      // Also insert into the "all notes" list so it appears immediately in "Ghi chú khác"
+      setAllNotes((prev) => {
+        try {
+          if (!created || typeof created !== 'object') return prev;
+          const cid = Number((created as any).id);
+          if (Number.isFinite(cid) && prev.some((p) => Number(p.id) === cid)) return prev;
+        } catch {
+          // ignore and append
+        }
+        return [...prev, created];
+      });
       setMyNoteText(created?.content ?? content);
       toast.success("Đã lưu ghi chú của bạn");
     } catch (err) {
@@ -1207,6 +1242,43 @@ function DetailModal({
       toast.error("Lưu ghi chú thất bại, vui lòng thử lại");
     } finally {
       setSavingMyNote(false);
+    }
+  };
+
+  const handleDeleteMyNote = async (noteId: number) => {
+    if (!noteId) return;
+    const ok = window.confirm("Bạn chắc chắn muốn xóa ghi chú này?");
+    if (!ok) return;
+
+    if (!item || !item.id) {
+      toast.error("Không xác định được task");
+      return;
+    }
+
+    try {
+      // Call the new admin implementation task-note delete endpoint
+      const url = `${apiBase}/${item.id}/notes/${noteId}`;
+      console.log("Calling DELETE:", url);
+
+      const res = await fetch(url, {
+        method: "DELETE",
+        headers: authHeaders(),
+        credentials: "include",
+      });
+
+      if (res.status === 204 || res.ok) {
+        setMyNotes((prev) => prev.filter((n) => n.id !== noteId));
+        toast.success("Đã xóa ghi chú");
+        // refresh allNotes as well
+        setAllNotes((prev) => prev.filter((n) => n.id !== noteId));
+        return;
+      }
+
+      const txt = await res.text().catch(() => "");
+      throw new Error(txt || `Lỗi ${res.status}`);
+    } catch (err: any) {
+      console.error("Lỗi xóa ghi chú:", err);
+      toast.error("Xóa thất bại: " + (err.message || "Lỗi không xác định"));
     }
   };
 
@@ -1233,7 +1305,7 @@ function DetailModal({
           <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
             📋 Chi tiết tác vụ triển khai
           </h2>
-         
+
         </div>
 
         {/* Content */}
@@ -1242,23 +1314,23 @@ function DetailModal({
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <Info icon={<FiMapPin />} label="Tên: " value={item.name} />
             <Info icon={<FiMapPin />} label="Bệnh viện: " value={item.hospitalName} />
-            <Info 
-              icon={<FiUser />} 
-              label="Phụ trách chính: " 
+            <Info
+              icon={<FiUser />}
+              label="Phụ trách chính: "
               value={item.picDeploymentName || "-"}
             />
-            <Info 
-              icon={<FiUser />} 
-              label="Người hỗ trợ: " 
+            <Info
+              icon={<FiUser />}
+              label="Người hỗ trợ: "
               value={
                 item.picDeploymentNames && item.picDeploymentNames.length > 0
                   ? item.picDeploymentNames.join(", ")
                   : "-"
               }
             />
-            <Info 
-              icon={<FiCheckCircle />} 
-              label="Người tiếp nhận: " 
+            <Info
+              icon={<FiCheckCircle />}
+              label="Người tiếp nhận: "
               value={(item as any).receivedByName || "-"}
             />
             {/* <Info icon={<FiUser />} label="Tiếp nhận bởi: " value={item.receivedByName || "—"} /> */}
@@ -1273,7 +1345,7 @@ function DetailModal({
               }
             />
 
-            
+
             <Info icon={<FiClock />} label="Deadline: " value={fmt(item.deadline)} />
             <Info icon={<FiClock />} label="Ngày bắt đầu: " value={fmt(item.startDate)} />
             <Info icon={<FiClock />} label="Ngày hoàn thành: " value={fmt(item.completionDate)} />
@@ -1306,35 +1378,36 @@ function DetailModal({
               {allNotes.length === 0 ? (
                 <p className="text-sm text-gray-400 italic">Chưa có ghi chú nào.</p>
               ) : (
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1 
+      [scrollbar-width:none] 
+    [-ms-overflow-style:none] 
+    [&::-webkit-scrollbar]:hidden">
+
                   {allNotes.map((n) => (
-                    <div
-                      key={n.id}
-                      className="rounded-lg bg-gray-50 dark:bg-gray-800/60 px-3 py-2 text-xs text-gray-800 dark:text-gray-200"
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-semibold">
-                          {n.authorName || `User-${n.authorId}`}
-                        </span>
-                        <span className="text-[11px] text-gray-400">
-                          {n.updatedAt
-                            ? fmt(n.updatedAt)
-                            : n.createdAt
-                            ? fmt(n.createdAt)
-                            : ""}
-                        </span>
-                      </div>
-                      <div className="whitespace-pre-wrap break-words">
-                        {n.content}
-                      </div>
-                    </div>
-                  ))}
+                        <div key={n.id} className="relative rounded-lg bg-gray-50 dark:bg-gray-800/60 px-3 py-2 text-xs text-gray-800 dark:text-gray-200">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-semibold">{n.authorName || `User-${n.authorId}`}</span>
+                            <span className="text-[11px] text-gray-400">{n.updatedAt ? fmt(n.updatedAt) : n.createdAt ? fmt(n.createdAt) : ""}</span>
+                          </div>
+                          <div className="whitespace-pre-wrap break-words">{n.content}</div>
+                          {currentUserId && Number(n.authorId) === currentUserId && (
+                            <button
+                              type="button"
+                              onClick={() => { void handleDeleteMyNote(n.id); }}
+                              title="Xóa ghi chú của bạn"
+                              className="absolute right-2 bottom-1 text-xs text-red-600 px-0  rounded dark:bg-gray-800/60"
+                            >
+                              Xóa
+                            </button>
+                          )}
+                        </div>
+                      ))}
                 </div>
               )}
             </div>
 
             {/* Ghi chú của tôi (chỉ Owner + Supporter) */}
-            {item.myRole === "owner" || item.myRole === "supporter" ? (
+                {item.myRole === "owner" || item.myRole === "supporter" ? (
               <div className="pt-2 border-t border-dashed border-gray-200 dark:border-gray-800">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-gray-500 font-medium">Ghi chú của tôi</p>
@@ -1342,6 +1415,9 @@ function DetailModal({
                     <span className="text-xs text-gray-400">Đang tải ghi chú...</span>
                   )}
                 </div>
+                {/* Note: we no longer render the separate list of myNotes to avoid duplication with "Ghi chú khác".
+                    Users can still create/edit their personal note using the textarea below. Deletion is available
+                    directly on cards in the "Ghi chú khác" list when the card belongs to the current user. */}
                 <textarea
                   className="w-full min-h-[80px] rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-100 outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 resize-y"
                   placeholder="Nhập ghi chú riêng của bạn cho công việc này..."
@@ -1361,7 +1437,7 @@ function DetailModal({
                 </div>
               </div>
             ) : null}
-        </div>
+          </div>
         </div>
 
         {/* Footer */}
@@ -1489,7 +1565,7 @@ function FilterToolbar({
                 ))}
               </datalist>
             )}
-            
+
             {statusOptions && statusOptions.length > 0 && onStatusChange && (
               <div className="flex items-center gap-2 w-[280px]">
                 <select
@@ -1498,8 +1574,8 @@ function FilterToolbar({
                   onChange={(e) => onStatusChange(e.target.value)}
                 >
                   {statusOptions.map((opt, index) => (
-                    <option 
-                      key={opt.value} 
+                    <option
+                      key={opt.value}
                       value={opt.value}
                       disabled={index === 0 && opt.value === ""}
                       hidden={index === 0 && opt.value === ""}
@@ -1677,7 +1753,7 @@ const ImplementationTasksPage: React.FC = () => {
     (r: any) => (typeof r === "string" ? r : r.roleName)?.toUpperCase() === "SUPERADMIN"
   );
   const canManage = isSuperAdmin || userTeam === "DEPLOYMENT";
-  
+
   // Filter out tasks from Business that haven't been received yet
   const filtered = useMemo(() => {
     return data.filter((r) => {
@@ -1692,7 +1768,7 @@ const ImplementationTasksPage: React.FC = () => {
       return true;
     });
   }, [data]);
-  
+
   const [completedCount, setCompletedCount] = useState<number | null>(null);
   const navigate = useNavigate();
   // Pending (Business -> Deployment) modal state
@@ -1701,7 +1777,7 @@ const ImplementationTasksPage: React.FC = () => {
   const [loadingPending, setLoadingPending] = useState(false);
   const pendingCountRef = useRef<number>(0);
   const lastPendingCountRef = useRef<number>(0);
-  
+
   // Tính số task đã hoàn thành từ data đã được filter (trong trang hiện tại)
   const completedCountFromFiltered = useMemo(() => {
     return filtered.filter((item) => {
@@ -1717,7 +1793,7 @@ const ImplementationTasksPage: React.FC = () => {
     if (!selectedHospital) return null;
     return hospitalsWithTasks.find(h => h.label === selectedHospital) ?? null;
   }, [selectedHospital, hospitalsWithTasks]);
-  
+
   const hiddenPendingSummary = selectedHospitalMeta?.hiddenPendingCount ?? 0;
 
   // Filter PIC options based on search query
@@ -1913,7 +1989,7 @@ const ImplementationTasksPage: React.FC = () => {
             if (searchTerm) countParams.set("search", searchTerm.trim());
             countParams.set("status", "COMPLETED"); // Chỉ lấy COMPLETED
             if (selectedHospital) countParams.set("hospitalName", selectedHospital);
-            
+
             const countUrl = `${apiBase}?${countParams.toString()}`;
             const countRes = await fetch(countUrl, { method: "GET", headers: authHeaders(), credentials: "include" });
             if (countRes.ok) {
@@ -2004,7 +2080,7 @@ const ImplementationTasksPage: React.FC = () => {
     try {
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
         // request in background; user may decline
-        Notification.requestPermission().catch(() => {});
+        Notification.requestPermission().catch(() => { });
       }
     } catch (err) {
       console.debug('Notification permission request failed', err);
@@ -2091,7 +2167,7 @@ const ImplementationTasksPage: React.FC = () => {
 
   const handleBulkComplete = async () => {
     if (selectedTaskIds.size === 0) return;
-    
+
     setBulkCompleting(true);
     try {
       const taskIdsArray = Array.from(selectedTaskIds);
@@ -2104,21 +2180,21 @@ const ImplementationTasksPage: React.FC = () => {
         credentials: "include",
         body: JSON.stringify({ taskIds: taskIdsArray }),
       });
-      
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ message: "Lỗi khi hoàn thành tasks" }));
         throw new Error(errorData.message || `HTTP ${res.status}`);
       }
-      
+
       const result = await res.json();
       const completedCount = result.completedCount || 0;
-      
+
       toast.success(`Đã hoàn thành ${completedCount} task${completedCount > 1 ? "s" : ""}`);
-      
+
       // Clear selection and refresh list
       setSelectedTaskIds(new Set());
       await fetchList();
-      
+
       // Refresh hospital summary if in hospital view
       if (showHospitalList) {
         await fetchHospitalsWithTasks();
@@ -2177,12 +2253,12 @@ const ImplementationTasksPage: React.FC = () => {
         throw new Error(`Failed to fetch hospitals: ${res.status}`);
       }
       const hospitals = await res.json();
-      
+
       // Parse task count from subLabel (format: "Province - X tasks" or "X tasks")
       const baseList = (Array.isArray(hospitals) ? hospitals : []).map((hospital: { id: number; label: string; subLabel?: string; transferredToMaintenance?: boolean; acceptedByMaintenance?: boolean; personInChargeId?: number | null; personInChargeName?: string | null }) => {
         let taskCount = 0;
         let province = hospital.subLabel || "";
-        
+
         // Parse task count from subLabel
         if (hospital.subLabel) {
           const match = hospital.subLabel.match(/(\d+)\s+tasks?/i);
@@ -2192,7 +2268,7 @@ const ImplementationTasksPage: React.FC = () => {
             province = hospital.subLabel.replace(/\s*-\s*\d+\s+tasks?/i, "").trim();
           }
         }
-        
+
         return {
           ...hospital,
           subLabel: province, // Keep only province without task count
@@ -2236,7 +2312,7 @@ const ImplementationTasksPage: React.FC = () => {
       const allRes = await fetch(`${API_ROOT}/api/v1/admin/implementation/tasks?${allParams.toString()}`, { method: 'GET', headers: authHeaders(), credentials: 'include' });
       const allPayload = allRes.ok ? await allRes.json() : [];
       const allItems = Array.isArray(allPayload?.content) ? allPayload.content : Array.isArray(allPayload) ? allPayload : [];
-      
+
       // Track business transfer status (similar to SuperAdmin)
       const businessTransferStatus = new Map<string, { hasGeneratedTask: boolean; hasTransfer: boolean; pending: number; accepted: boolean }>();
       const makeHospitalKey = (hospitalId: number | null | undefined, hospitalName: string) => {
@@ -2317,7 +2393,7 @@ const ImplementationTasksPage: React.FC = () => {
         if (taskStatus !== 'COMPLETED' && it.deadline) {
           const d = new Date(it.deadline);
           if (!Number.isNaN(d.getTime())) {
-            d.setHours(0,0,0,0);
+            d.setHours(0, 0, 0, 0);
             const today = new Date();
             const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
             const dayDiff = Math.round((d.getTime() - startToday) / (24 * 60 * 60 * 1000));
@@ -2333,10 +2409,10 @@ const ImplementationTasksPage: React.FC = () => {
       // Fetch pending tasks from Business (use dedicated endpoint)
       let pendingTasksFromBusiness: ImplementationTaskResponseDTO[] = [];
       try {
-        const pendingRes = await fetch(`${API_ROOT}/api/v1/admin/implementation/pending`, { 
-          method: 'GET', 
-          headers: authHeaders(), 
-          credentials: 'include' 
+        const pendingRes = await fetch(`${API_ROOT}/api/v1/admin/implementation/pending`, {
+          method: 'GET',
+          headers: authHeaders(),
+          credentials: 'include'
         });
         if (pendingRes.ok) {
           const pendingList = await pendingRes.json();
@@ -2372,7 +2448,7 @@ const ImplementationTasksPage: React.FC = () => {
         const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
         if (!name) continue;
         const key = hospitalId != null ? `id-${hospitalId}` : `name-${name}`;
-        
+
         // Track in businessTransferStatus (for hospitals with only pending tasks)
         const received = Boolean(it.receivedById || it.receivedByName);
         const businessName = isBusinessContractTask(
@@ -2391,20 +2467,20 @@ const ImplementationTasksPage: React.FC = () => {
           entry.pending += 1;
           businessTransferStatus.set(key, entry);
         }
-        
+
         // Create entry if hospital not in acc yet (hospital with only pending tasks)
-        const current = acc.get(key) || { 
-          id: hospitalId, 
-          label: name, 
-          subLabel: "", 
-          taskCount: 0, 
-          acceptedCount: 0, 
-          nearDueCount: 0, 
-          overdueCount: 0, 
-          transferredCount: 0, 
-          acceptedByMaintenanceCount: 0, 
-          hiddenPendingCount: 0, 
-          hiddenTaskCount: 0 
+        const current = acc.get(key) || {
+          id: hospitalId,
+          label: name,
+          subLabel: "",
+          taskCount: 0,
+          acceptedCount: 0,
+          nearDueCount: 0,
+          overdueCount: 0,
+          transferredCount: 0,
+          acceptedByMaintenanceCount: 0,
+          hiddenPendingCount: 0,
+          hiddenTaskCount: 0
         };
         if (current.id == null && hospitalId != null) current.id = hospitalId;
         if (!current.label && name) current.label = name;
@@ -2422,7 +2498,7 @@ const ImplementationTasksPage: React.FC = () => {
         const key = hospitalId != null ? `id-${hospitalId}` : `name-${hospitalName}`;
         baseListMap.set(key, { ...h, _index: idx } as typeof h & { _index: number });
       });
-      
+
       const withCompleted = baseList
         .map((h, idx) => {
           // Tìm matching hospital từ acc (aggregated from tasks - đã loại pending)
@@ -2432,7 +2508,7 @@ const ImplementationTasksPage: React.FC = () => {
           const keyByName = `name-${hospitalName}`;
           const aggregated = (keyById && acc.get(keyById)) || acc.get(keyByName);
           const businessInfo = (keyById && businessTransferStatus.get(keyById)) || businessTransferStatus.get(keyByName);
-          
+
           // Chỉ sử dụng taskCount từ aggregated (đã filter pending tasks)
           // Không fallback về h.taskCount vì nó có thể bao gồm pending tasks
           const visibleTaskCount = aggregated?.taskCount ?? 0;
@@ -2441,10 +2517,10 @@ const ImplementationTasksPage: React.FC = () => {
           const businessHiddenPending = businessInfo?.pending ?? 0;
           const hiddenPendingCount = Math.max(aggregatedHiddenPending, businessHiddenPending);
           const hiddenTaskCount = hiddenPendingCount;
-          
+
           // Check if hospital has accepted tasks from Business (even if all tasks are completed now)
           const acceptedFromBusiness = visibleTaskCount === 0 && Boolean(businessInfo?.accepted);
-          
+
           return {
             ...h,
             taskCount: visibleTaskCount,
@@ -2459,12 +2535,12 @@ const ImplementationTasksPage: React.FC = () => {
           };
         })
         .filter((h) => (h.taskCount ?? 0) > 0 || (h.hiddenPendingCount ?? 0) > 0 || h.acceptedFromBusiness); // Hiển thị bệnh viện có task đã tiếp nhận, có pending tasks, hoặc đã tiếp nhận từ phòng KD
-      
+
       // Thêm các bệnh viện chỉ có pending tasks (không có trong baseList)
       // Đảm bảo TẤT CẢ các bệnh viện trong pendingTasksFromBusiness đều được hiển thị
       const hospitalsWithOnlyPending: Array<{ id: number | null; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean; personInChargeId?: number | null; personInChargeName?: string | null; hiddenPendingCount?: number; hiddenTaskCount?: number; acceptedFromBusiness?: boolean; hasBusinessPlaceholder?: boolean }> = [];
       const addedHospitalKeys = new Set<string>();
-      
+
       // First, add hospitals from acc that are not in baseList
       for (const [key, aggregated] of acc.entries()) {
         if (!baseListMap.has(key)) {
@@ -2473,7 +2549,7 @@ const ImplementationTasksPage: React.FC = () => {
           const businessPending = businessInfo?.pending ?? 0;
           const hasPending = aggregatedPending > 0 || businessPending > 0;
           const hasAccepted = Boolean(businessInfo?.accepted);
-          
+
           if (hasPending || hasAccepted) {
             addedHospitalKeys.add(key);
             const hiddenPendingCount = Math.max(aggregatedPending, businessPending);
@@ -2498,7 +2574,7 @@ const ImplementationTasksPage: React.FC = () => {
           }
         }
       }
-      
+
       // Then, ensure ALL hospitals from pendingTasksFromBusiness are added (even if not in acc)
       // Count pending tasks per hospital from pendingTasksFromBusiness
       const pendingCountByHospital = new Map<string, number>();
@@ -2510,15 +2586,15 @@ const ImplementationTasksPage: React.FC = () => {
         const current = pendingCountByHospital.get(key) || 0;
         pendingCountByHospital.set(key, current + 1);
       }
-      
+
       // Add hospitals from pendingTasksFromBusiness that aren't in baseList or already added
       for (const [key, pendingCount] of pendingCountByHospital.entries()) {
         // Skip if already in baseList (already displayed)
         if (baseListMap.has(key)) continue;
-        
+
         // Skip if already added
         if (addedHospitalKeys.has(key)) continue;
-        
+
         // Find hospital info from pendingTasksFromBusiness
         const pendingTask = pendingTasksFromBusiness.find(t => {
           const name = (t.hospitalName || "").toString().trim();
@@ -2526,13 +2602,13 @@ const ImplementationTasksPage: React.FC = () => {
           const taskKey = hospitalId != null ? `id-${hospitalId}` : `name-${name}`;
           return taskKey === key && name;
         });
-        
+
         if (!pendingTask) continue;
-        
+
         const name = (pendingTask.hospitalName || "").toString().trim();
         const hospitalId = typeof pendingTask.hospitalId === "number" ? pendingTask.hospitalId : pendingTask.hospitalId != null ? Number(pendingTask.hospitalId) : null;
         if (!name) continue;
-        
+
         // Add this hospital
         addedHospitalKeys.add(key);
         const businessInfo = businessTransferStatus.get(key);
@@ -2554,10 +2630,10 @@ const ImplementationTasksPage: React.FC = () => {
           hasBusinessPlaceholder: Boolean(businessInfo?.hasGeneratedTask) || pendingCount > 0,
         });
       }
-      
+
       // Merge và loại bỏ duplicate (theo ID hoặc tên), sau đó sắp xếp theo tên bệnh viện
       const mergedMap = new Map<string, typeof withCompleted[0]>();
-      
+
       // Add from withCompleted first
       for (const h of withCompleted) {
         const key = h.id != null ? `id-${h.id}` : `name-${h.label}`;
@@ -2565,7 +2641,7 @@ const ImplementationTasksPage: React.FC = () => {
           mergedMap.set(key, h as any);
         }
       }
-      
+
       // Add from hospitalsWithOnlyPending, skip if already exists
       for (const h of hospitalsWithOnlyPending) {
         const key = h.id != null ? `id-${h.id}` : `name-${h.label}`;
@@ -2587,11 +2663,11 @@ const ImplementationTasksPage: React.FC = () => {
           }
         }
       }
-      
-      const finalList = Array.from(mergedMap.values()).sort((a, b) => 
+
+      const finalList = Array.from(mergedMap.values()).sort((a, b) =>
         (a.label || "").localeCompare(b.label || "")
       );
-      
+
       // Province đã có trong subLabel từ endpoint, không cần fetch thêm
       setHospitalsWithTasks(finalList);
     } catch (e: any) {
@@ -2642,11 +2718,11 @@ const ImplementationTasksPage: React.FC = () => {
       const url = `${API_ROOT}/api/v1/admin/implementation/accept/${taskId}`;
       // Set startDate to current date/time and status to RECEIVED when accepting
       const startDate = toLocalISOString(new Date());
-      const res = await fetch(url, { 
-        method: 'PUT', 
-        headers: authHeaders(), 
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: authHeaders(),
         credentials: 'include',
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           startDate,
           status: 'RECEIVED'
         })
@@ -2673,7 +2749,7 @@ const ImplementationTasksPage: React.FC = () => {
             // avoid duplicates
             const exists = prev.some((p) => p.id === updated.id);
             if (exists) return prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
-            return [ { ...updated, status: normalizeStatus(updated.status) || updated.status }, ...prev ];
+            return [{ ...updated, status: normalizeStatus(updated.status) || updated.status }, ...prev];
           });
         } else {
           // Not viewing that hospital — update hospitals summary counters optimistically
@@ -2690,8 +2766,8 @@ const ImplementationTasksPage: React.FC = () => {
       }
 
       // Refresh hospital summary to keep counters in sync (best-effort)
-      fetchHospitalsWithTasks().catch(() => {});
-      
+      fetchHospitalsWithTasks().catch(() => { });
+
       // Refresh task list if viewing tasks to show updated startDate and status
       if (!showHospitalList && selectedHospital) {
         await fetchList();
@@ -2725,7 +2801,7 @@ const ImplementationTasksPage: React.FC = () => {
     let list = hospitalsWithTasks;
     const q = hospitalSearch.trim().toLowerCase();
     if (q) list = list.filter(h => h.label.toLowerCase().includes(q) || (h.subLabel || '').toLowerCase().includes(q));
-    
+
     // Apply status filter
     if (hospitalStatusFilter === 'hasCompleted') {
       list = list.filter(h => (h.acceptedCount || 0) > 0);
@@ -2851,7 +2927,7 @@ const ImplementationTasksPage: React.FC = () => {
         toast.error(`Chuyển sang bảo trì thất bại: ${text || res.status}`);
         return;
       }
-      
+
       toast.success(`Đã chuyển bệnh viện ${hospital.label} sang bảo trì`);
 
       // ✅ Update state ngay lập tức để UI cập nhật (từ "Chuyển sang bảo trì" → "Chờ tiếp nhận")
@@ -3021,7 +3097,7 @@ const ImplementationTasksPage: React.FC = () => {
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/Thành phố</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phụ trách chính</th>                            
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phụ trách chính</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượng task</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
                           </tr>
@@ -3032,103 +3108,103 @@ const ImplementationTasksPage: React.FC = () => {
                             .map((hospital, index) => {
                               const longName = (hospital.label || "").length > 32;
                               return (
-                            <tr key={hospital.id ?? `${hospital.label}-${index}`} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => { setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }}>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospitalPage * hospitalSize + index + 1}</td>
-                              <td className="px-6 py-4">
-                                <div className={`flex gap-3 ${longName ? 'items-start' : 'items-center'}`}>
-                                  
-                                  <div className={`text-sm font-medium text-gray-900 break-words max-w-[260px] flex flex-wrap gap-2 ${longName ? 'leading-snug' : ''}`}>
-                                    <span>{hospital.label}</span>
-                                    {hospital.acceptedFromBusiness && (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-700">
-                                        Tiếp nhận từ phòng KD
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.subLabel || "—"}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.personInChargeName || "—"}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm align-top">
-                                <div className="flex flex-col items-start gap-1">
-                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task</span>
-                                  {(hospital.nearDueCount ?? 0) > 0 && (
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Sắp đến hạn: {hospital.nearDueCount}</span>
-                                  )}
-                                  {(hospital.overdueCount ?? 0) > 0 && (
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Quá hạn: {hospital.overdueCount}</span>
-                                  )}
-                                  {(hospital.hiddenPendingCount ?? 0) > 0 && (
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
-                                      + {hospital.hiddenPendingCount} task từ Phòng KD chờ tiếp nhận
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                <div className="flex items-center gap-3">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedHospital(hospital.label);
-                                      setShowHospitalList(false);
-                                      setPage(0);
-                                    }}
-                                    className="p-2 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition" title="Xem công việc"
-                                  >
-                                    <AiOutlineEye className="text-lg" />
-                                  </button>
-                                  {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) === (hospital.taskCount || 0) && !hospital.allTransferred && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleConvertHospital(hospital);
-                                      }}
-                                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-medium hover:bg-indigo-100 transition-colors"
-                                      title="Chuyển tất cả tác vụ đã hoàn thành sang bảo trì"
-                                    >
-                                      ➜ Chuyển sang bảo trì
-                                    </button>
-                                  )}
-                                  {canManage && (hospital.taskCount || 0) > 0 && hospital.allTransferred && !hospital.allAccepted && (
-                                    <span
-                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-yellow-100 text-yellow-700 text-sm font-medium"
-                                      title="Đã chuyển sang bảo trì, đang chờ bảo trì tiếp nhận"
-                                    >
-                                      ⏳ Chờ tiếp nhận
-                                    </span>
-                                  )}
-                                  {canManage && (hospital.taskCount || 0) > 0 && hospital.allTransferred && hospital.allAccepted && (
-                                    <span
-                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-sm"
-                                      title="Đã chuyển sang bảo trì và bảo trì đã tiếp nhận"
-                                    >
-                                     ✓ Đã chuyển sang bảo trì
-                                    </span>
-                                  )}
-                                  {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) < (hospital.taskCount || 0) && !hospital.allTransferred && (
-                                    <span
-                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-sm"
-                                      title={`Còn ${(hospital.taskCount || 0) - (hospital.acceptedCount || 0)} task chưa hoàn thành`}
-                                    >
-                                      <span className="text-orange-500">⚠</span>
-                                      Chưa thể chuyển
-                                    </span>
-                                  )}
-                                  {canManage && (hospital.taskCount || 0) === 0 && (hospital.hiddenPendingCount ?? 0) > 0 && (
-                                    <span
-                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-sm"
-                                      title={`Còn ${hospital.hiddenPendingCount} task từ Phòng KD chưa tiếp nhận`}
-                                    >
-                                      <span className="text-orange-500">⚠</span>
-                                      Chưa thể chuyển
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                                <tr key={hospital.id ?? `${hospital.label}-${index}`} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => { setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }}>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospitalPage * hospitalSize + index + 1}</td>
+                                  <td className="px-6 py-4">
+                                    <div className={`flex gap-3 ${longName ? 'items-start' : 'items-center'}`}>
+
+                                      <div className={`text-sm font-medium text-gray-900 break-words max-w-[260px] flex flex-wrap gap-2 ${longName ? 'leading-snug' : ''}`}>
+                                        <span>{hospital.label}</span>
+                                        {hospital.acceptedFromBusiness && (
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-700">
+                                            Tiếp nhận từ phòng KD
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.subLabel || "—"}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.personInChargeName || "—"}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm align-top">
+                                    <div className="flex flex-col items-start gap-1">
+                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task</span>
+                                      {(hospital.nearDueCount ?? 0) > 0 && (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Sắp đến hạn: {hospital.nearDueCount}</span>
+                                      )}
+                                      {(hospital.overdueCount ?? 0) > 0 && (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Quá hạn: {hospital.overdueCount}</span>
+                                      )}
+                                      {(hospital.hiddenPendingCount ?? 0) > 0 && (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                                          + {hospital.hiddenPendingCount} task từ Phòng KD chờ tiếp nhận
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                    <div className="flex items-center gap-3">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedHospital(hospital.label);
+                                          setShowHospitalList(false);
+                                          setPage(0);
+                                        }}
+                                        className="p-2 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition" title="Xem công việc"
+                                      >
+                                        <AiOutlineEye className="text-lg" />
+                                      </button>
+                                      {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) === (hospital.taskCount || 0) && !hospital.allTransferred && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleConvertHospital(hospital);
+                                          }}
+                                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-medium hover:bg-indigo-100 transition-colors"
+                                          title="Chuyển tất cả tác vụ đã hoàn thành sang bảo trì"
+                                        >
+                                          ➜ Chuyển sang bảo trì
+                                        </button>
+                                      )}
+                                      {canManage && (hospital.taskCount || 0) > 0 && hospital.allTransferred && !hospital.allAccepted && (
+                                        <span
+                                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-yellow-100 text-yellow-700 text-sm font-medium"
+                                          title="Đã chuyển sang bảo trì, đang chờ bảo trì tiếp nhận"
+                                        >
+                                          ⏳ Chờ tiếp nhận
+                                        </span>
+                                      )}
+                                      {canManage && (hospital.taskCount || 0) > 0 && hospital.allTransferred && hospital.allAccepted && (
+                                        <span
+                                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-sm"
+                                          title="Đã chuyển sang bảo trì và bảo trì đã tiếp nhận"
+                                        >
+                                          ✓ Đã chuyển sang bảo trì
+                                        </span>
+                                      )}
+                                      {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) < (hospital.taskCount || 0) && !hospital.allTransferred && (
+                                        <span
+                                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-sm"
+                                          title={`Còn ${(hospital.taskCount || 0) - (hospital.acceptedCount || 0)} task chưa hoàn thành`}
+                                        >
+                                          <span className="text-orange-500">⚠</span>
+                                          Chưa thể chuyển
+                                        </span>
+                                      )}
+                                      {canManage && (hospital.taskCount || 0) === 0 && (hospital.hiddenPendingCount ?? 0) > 0 && (
+                                        <span
+                                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-sm"
+                                          title={`Còn ${hospital.hiddenPendingCount} task từ Phòng KD chưa tiếp nhận`}
+                                        >
+                                          <span className="text-orange-500">⚠</span>
+                                          Chưa thể chuyển
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
                         </tbody>
                       </table>
                     </div>
@@ -3238,7 +3314,7 @@ const ImplementationTasksPage: React.FC = () => {
                           </>
                         ) : (
                           <>
-                            
+
                             <span>Hoàn thành</span>
                           </>
                         )}
@@ -3246,21 +3322,21 @@ const ImplementationTasksPage: React.FC = () => {
                     </div>
                   </div>
                 )}
-                
+
                 {/* Task list with checkboxes */}
                 {filtered.map((row, idx) => {
                   const taskId = row.id;
                   const isSelected = selectedTaskIds.has(taskId);
-                  const canComplete = canManage && (() => { 
-                    try { 
-                      const uidRaw = localStorage.getItem("userId") || sessionStorage.getItem("userId"); 
-                      const uid = uidRaw ? Number(uidRaw) : 0; 
-                      return uid > 0 && Number(row.picDeploymentId) === uid && row.status !== "COMPLETED"; 
-                    } catch { 
-                      return false; 
-                    } 
+                  const canComplete = canManage && (() => {
+                    try {
+                      const uidRaw = localStorage.getItem("userId") || sessionStorage.getItem("userId");
+                      const uid = uidRaw ? Number(uidRaw) : 0;
+                      return uid > 0 && Number(row.picDeploymentId) === uid && row.status !== "COMPLETED";
+                    } catch {
+                      return false;
+                    }
                   })();
-                  
+
                   return (
                     <div key={row.id}>
                       <TaskCardNew
@@ -3296,72 +3372,72 @@ const ImplementationTasksPage: React.FC = () => {
       </div>
 
       {!showHospitalList && (
-      <div className="mt-4 flex items-center justify-between py-3">
-        <div className="text-sm text-gray-600">
-          {totalCount === null || totalCount === 0 ? (
-            <span>Hiển thị 0 trong tổng số 0 mục</span>
-          ) : (
-            (() => {
-              const from = page * size + 1;
-              const to = Math.min((page + 1) * size, totalCount);
-              return <span>Hiển thị {from} đến {to} trong tổng số {totalCount} mục</span>;
-            })()
-          )}
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-600">Hiển thị:</label>
-            <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1 text-sm">
-              <option value="5">5</option>
-              <option value="10">10</option>
-              <option value="20">20</option>
-              <option value="50">50</option>
-            </select>
+        <div className="mt-4 flex items-center justify-between py-3">
+          <div className="text-sm text-gray-600">
+            {totalCount === null || totalCount === 0 ? (
+              <span>Hiển thị 0 trong tổng số 0 mục</span>
+            ) : (
+              (() => {
+                const from = page * size + 1;
+                const to = Math.min((page + 1) * size, totalCount);
+                return <span>Hiển thị {from} đến {to} trong tổng số {totalCount} mục</span>;
+              })()
+            )}
           </div>
 
-          <div className="inline-flex items-center gap-1">
-            <button onClick={() => setPage(0)} disabled={page <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Đầu">«</button>
-            <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Trước">‹</button>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-600">Hiển thị:</label>
+              <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1 text-sm">
+                <option value="5">5</option>
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+              </select>
+            </div>
 
-            {(() => {
-              const total = Math.max(1, Math.ceil((totalCount || 0) / size));
-              const pages: number[] = [];
-              const start = Math.max(1, page + 1 - 2);
-              const end = Math.min(total, start + 4);
-              for (let i = start; i <= end; i++) pages.push(i);
-              return pages.map((p) => (
-                <button key={p} onClick={() => setPage(p - 1)} className={`px-3 py-1 border rounded text-sm ${page + 1 === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}>
-                  {p}
-                </button>
-              ));
-            })()}
+            <div className="inline-flex items-center gap-1">
+              <button onClick={() => setPage(0)} disabled={page <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Đầu">«</button>
+              <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Trước">‹</button>
 
-            <button onClick={() => setPage((p) => Math.min(Math.max(0, Math.ceil((totalCount || 0) / size) - 1), p + 1))} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Tiếp">›</button>
-            <button onClick={() => setPage(Math.max(0, Math.ceil((totalCount || 0) / size) - 1))} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Cuối">»</button>
+              {(() => {
+                const total = Math.max(1, Math.ceil((totalCount || 0) / size));
+                const pages: number[] = [];
+                const start = Math.max(1, page + 1 - 2);
+                const end = Math.min(total, start + 4);
+                for (let i = start; i <= end; i++) pages.push(i);
+                return pages.map((p) => (
+                  <button key={p} onClick={() => setPage(p - 1)} className={`px-3 py-1 border rounded text-sm ${page + 1 === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}>
+                    {p}
+                  </button>
+                ));
+              })()}
+
+              <button onClick={() => setPage((p) => Math.min(Math.max(0, Math.ceil((totalCount || 0) / size) - 1), p + 1))} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Tiếp">›</button>
+              <button onClick={() => setPage(Math.max(0, Math.ceil((totalCount || 0) / size) - 1))} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)} className="px-2 py-1 border rounded text-sm disabled:opacity-50" title="Cuối">»</button>
+            </div>
           </div>
         </div>
-      </div>
       )}
 
       {(() => {
         const initialForForm = editing
           ? ({
-              id: (editing as ImplementationTaskResponseDTO).id,
-              name: (editing as ImplementationTaskResponseDTO).name,
-              hospitalId: (editing as ImplementationTaskResponseDTO).hospitalId ?? undefined,
-              hospitalName: (editing as ImplementationTaskResponseDTO).hospitalName ?? null,
-              picDeploymentId: (editing as ImplementationTaskResponseDTO).picDeploymentId ?? undefined,
-              picDeploymentName: (editing as ImplementationTaskResponseDTO).picDeploymentName ?? null,
-              picDeploymentIds: (editing as ImplementationTaskResponseDTO).picDeploymentIds ?? undefined,
-              picDeploymentNames: (editing as ImplementationTaskResponseDTO).picDeploymentNames ?? undefined,
-              apiTestStatus: (editing as ImplementationTaskResponseDTO).apiTestStatus ?? undefined,
-              additionalRequest: (editing as ImplementationTaskResponseDTO).additionalRequest ?? undefined,
-              deadline: (editing as ImplementationTaskResponseDTO).deadline ?? undefined,
-              completionDate: (editing as ImplementationTaskResponseDTO).completionDate ?? undefined,
-              status: (editing as ImplementationTaskResponseDTO).status ?? undefined,
-              startDate: (editing as ImplementationTaskResponseDTO).startDate ?? undefined,
-            } as Partial<ImplementationTaskRequestDTO> & { id?: number; hospitalName?: string | null; picDeploymentName?: string | null; picDeploymentIds?: number[] | null; picDeploymentNames?: string[] | null })
+            id: (editing as ImplementationTaskResponseDTO).id,
+            name: (editing as ImplementationTaskResponseDTO).name,
+            hospitalId: (editing as ImplementationTaskResponseDTO).hospitalId ?? undefined,
+            hospitalName: (editing as ImplementationTaskResponseDTO).hospitalName ?? null,
+            picDeploymentId: (editing as ImplementationTaskResponseDTO).picDeploymentId ?? undefined,
+            picDeploymentName: (editing as ImplementationTaskResponseDTO).picDeploymentName ?? null,
+            picDeploymentIds: (editing as ImplementationTaskResponseDTO).picDeploymentIds ?? undefined,
+            picDeploymentNames: (editing as ImplementationTaskResponseDTO).picDeploymentNames ?? undefined,
+            apiTestStatus: (editing as ImplementationTaskResponseDTO).apiTestStatus ?? undefined,
+            additionalRequest: (editing as ImplementationTaskResponseDTO).additionalRequest ?? undefined,
+            deadline: (editing as ImplementationTaskResponseDTO).deadline ?? undefined,
+            completionDate: (editing as ImplementationTaskResponseDTO).completionDate ?? undefined,
+            status: (editing as ImplementationTaskResponseDTO).status ?? undefined,
+            startDate: (editing as ImplementationTaskResponseDTO).startDate ?? undefined,
+          } as Partial<ImplementationTaskRequestDTO> & { id?: number; hospitalName?: string | null; picDeploymentName?: string | null; picDeploymentIds?: number[] | null; picDeploymentNames?: string[] | null })
           : undefined;
 
         return (
@@ -3387,13 +3463,13 @@ const ImplementationTasksPage: React.FC = () => {
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold">📨 Công việc chờ - Tiếp nhận từ Phòng Kinh Doanh</h3>
               <div className="flex items-center gap-2">
-                <button 
+                <button
                   className="h-10 rounded-xl px-4 text-sm font-medium transition shadow-sm bg-transparent border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
                   onClick={() => { setPendingOpen(false); }}
                 >
                   Đóng
                 </button>
-                <button 
+                <button
                   className="h-10 rounded-xl px-4 text-sm font-medium transition shadow-sm border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-900/20"
                   onClick={async () => { await fetchPendingGroups(); }}
                 >
@@ -3409,9 +3485,9 @@ const ImplementationTasksPage: React.FC = () => {
               ) : (
                 <>
                   <div className="mb-4 flex justify-end">
-                    <Button 
-                      variant="primary" 
-                      onClick={handleAcceptAll} 
+                    <Button
+                      variant="primary"
+                      onClick={handleAcceptAll}
                       disabled={pendingGroups.reduce((sum, g) => sum + g.tasks.length, 0) === 0}
                       className="!bg-green-600 !text-white !border-green-600 hover:!bg-green-700 hover:!border-green-700 disabled:!bg-green-300 disabled:!border-green-300 disabled:!text-white"
                     >
@@ -3425,8 +3501,8 @@ const ImplementationTasksPage: React.FC = () => {
                           {g.hospitalName} <span className="text-sm text-gray-500 font-normal">({g.tasks.length} hợp đồng)</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Button 
-                            variant="primary" 
+                          <Button
+                            variant="primary"
                             onClick={() => handleAcceptGroup(g.hospitalId)}
                             className="!bg-blue-600 !text-white !border-blue-600 hover:!bg-blue-700 hover:!border-blue-700 disabled:!bg-blue-300 disabled:!border-blue-300 disabled:!text-white"
                           >
