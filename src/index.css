@@ -1069,6 +1069,10 @@ span.flatpickr-weekday,
 .event-fc-color.fc-bg-warning {
   @apply border-orange-50 bg-orange-50;
 }
+.event-fc-color.fc-bg-secondary {
+  @apply border-gray-200 bg-gray-100;
+  opacity: 0.7;
+}
 .event-fc-color.fc-bg-success .fc-daygrid-event-dot {
   @apply bg-success-500;
 }
@@ -1080,6 +1084,9 @@ span.flatpickr-weekday,
 }
 .event-fc-color.fc-bg-warning .fc-daygrid-event-dot {
   @apply bg-orange-500;
+}
+.event-fc-color.fc-bg-secondary .fc-daygrid-event-dot {
+  @apply bg-gray-400;
 }
 .fc-direction-ltr .fc-timegrid-slot-label-frame {
   @apply px-3 py-1.5 text-left text-sm font-medium text-gray-500 dark:text-gray-400;

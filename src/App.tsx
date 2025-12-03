@@ -15,6 +15,9 @@ import Buttons from "./pages/UiElements/Buttons";
 import LineChart from "./pages/Charts/LineChart";
 import BarChart from "./pages/Charts/BarChart";
 import Calendar from "./pages/Calendar";
+import BusinessCalendar from "./pages/Calendar/BusinessCalendar";
+import DeploymentCalendar from "./pages/Calendar/DeploymentCalendar";
+import MaintenanceCalendar from "./pages/Calendar/MaintenanceCalendar";
 import FormElements from "./pages/Forms/FormElements";
 import AppLayout from "./layout/AppLayout";
 import SuperAdminLayout from "./layout/SuperAdminLayout";
@@ -80,6 +83,9 @@ export default function App() {
     <div className="font-outfit">
       <Toaster
         position="top-right"
+        containerStyle={{
+          zIndex: 100002,
+        }}
         toastOptions={{
           duration: 3000,
           style: {
@@ -88,6 +94,7 @@ export default function App() {
             padding: '16px',
             borderRadius: '8px',
             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+            zIndex: 100002,
           },
           success: {
             iconTheme: {
@@ -127,6 +134,10 @@ export default function App() {
             <Route path="/superadmin/business" element={<BusinessPage />} />
             <Route path="/superadmin/warranty-contracts" element={<WarrantyContractsPage />} />
             <Route path="/superadmin/notifications" element={<AllNotificationsPage />} />
+            <Route path="/superadmin/calendar" element={<Calendar />} />
+            <Route path="/superadmin/calendar/business" element={<BusinessCalendar />} />
+            <Route path="/superadmin/calendar/deployment" element={<DeploymentCalendar />} />
+            <Route path="/superadmin/calendar/maintenance" element={<MaintenanceCalendar />} />
           </Route>
 
           {/* Dashboard Layout - Protected */}
@@ -140,6 +151,9 @@ export default function App() {
             {/* Others Page */}
             <Route path="/profile" element={<UserProfiles />} />
             <Route path="/calendar" element={<Calendar />} />
+            <Route path="/calendar/business" element={<BusinessCalendar />} />
+            <Route path="/calendar/deployment" element={<DeploymentCalendar />} />
+            <Route path="/calendar/maintenance" element={<MaintenanceCalendar />} />
             <Route path="/implementation-tasks" element={<ImplementationTasksPage />} />
             <Route path="/dev-tasks" element={<DevTasksPage />} />
             <Route path="/maintenance-tasks" element={<MaintenanceTasksPage />} />

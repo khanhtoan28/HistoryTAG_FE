@@ -14,6 +14,7 @@ import {
   BoxIconLine,
   DollarLineIcon,
   BoltIcon,
+  CalenderIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 
@@ -30,6 +31,16 @@ const navItems: NavItem[] = [
     icon: <GridIcon />,
     name: "Dashboard",
     path: "/superadmin/home",
+  },
+  {
+    icon: <CalenderIcon />,
+    name: "Lịch",
+    subItems: [
+      { name: "Lịch cá nhân", path: "/superadmin/calendar", pro: false },
+      { name: "Lịch phòng kinh doanh", path: "/superadmin/calendar/business", pro: false },
+      { name: "Lịch team triển khai", path: "/superadmin/calendar/deployment", pro: false },
+      { name: "Lịch team bảo hành", path: "/superadmin/calendar/maintenance", pro: false },
+    ],
   },
   {
     name: "Quản lý người dùng",

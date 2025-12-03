@@ -35,7 +35,12 @@ const navItems: NavItem[] = [
   {
     icon: <CalenderIcon />,
     name: "Lịch",
-    path: "/calendar",
+    subItems: [
+      { name: "Lịch cá nhân", path: "/calendar", pro: false },
+      { name: "Lịch phòng kinh doanh", path: "/calendar/business", pro: false },
+      { name: "Lịch team triển khai", path: "/calendar/deployment", pro: false },
+      { name: "Lịch team bảo hành", path: "/calendar/maintenance", pro: false },
+    ],
   },
   // {
   //   name: "Biểu mẫu",
@@ -111,6 +116,91 @@ const AppSidebar: React.FC = () => {
   } | null>(null);
   const [subMenuHeight, setSubMenuHeight] = useState<Record<string, number>>({});
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Get user info to filter calendar menu
+  const getUserInfo = () => {
+    try {
+      const storedUserRaw = localStorage.getItem("user") || sessionStorage.getItem("user");
+      if (storedUserRaw) {
+        return JSON.parse(storedUserRaw);
+      }
+    } catch (e) {
+      console.error("Error parsing user info:", e);
+    }
+    return null;
+  };
+
+  const getRoles = () => {
+    try {
+      const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
+      if (rolesStr) {
+        return JSON.parse(rolesStr);
+      }
+    } catch (e) {
+      console.error("Error parsing roles:", e);
+    }
+    return [];
+  };
+
+  const userInfo = getUserInfo();
+  const roles = getRoles();
+  const isSuperAdmin = roles.some((role: any) => {
+    if (typeof role === "string") {
+      return role.toUpperCase() === "SUPERADMIN" || role.toUpperCase() === "SUPER_ADMIN";
+    }
+    if (role && typeof role === "object") {
+      const roleName = role.roleName || role.role_name || role.role;
+      return typeof roleName === "string" && roleName.toUpperCase() === "SUPERADMIN";
+    }
+    return false;
+  });
+
+  const userTeam = userInfo?.team ? String(userInfo.team).toUpperCase() : null;
+  const userDepartment = userInfo?.department ? String(userInfo.department).toUpperCase() : null;
+
+  // Filter calendar menu items based on user role/team/department
+  const getCalendarMenuItems = () => {
+    // SuperAdmin sees all
+    if (isSuperAdmin) {
+      return [
+        { name: "Lịch cá nhân", path: "/calendar", pro: false },
+        { name: "Lịch phòng kinh doanh", path: "/calendar/business", pro: false },
+        { name: "Lịch team triển khai", path: "/calendar/deployment", pro: false },
+        { name: "Lịch team bảo hành", path: "/calendar/maintenance", pro: false },
+      ];
+    }
+
+    // Default: only personal calendar
+    const items = [{ name: "Lịch cá nhân", path: "/calendar", pro: false }];
+
+    // Add business calendar for SALES team or BUSINESS department
+    if (userTeam === "SALES" || userDepartment === "BUSINESS") {
+      items.push({ name: "Lịch phòng kinh doanh", path: "/calendar/business", pro: false });
+    }
+
+    // Add deployment calendar for DEPLOYMENT team
+    if (userTeam === "DEPLOYMENT") {
+      items.push({ name: "Lịch team triển khai", path: "/calendar/deployment", pro: false });
+    }
+
+    // Add maintenance calendar for MAINTENANCE team
+    if (userTeam === "MAINTENANCE") {
+      items.push({ name: "Lịch team bảo hành", path: "/calendar/maintenance", pro: false });
+    }
+
+    return items;
+  };
+
+  // Create filtered nav items
+  const filteredNavItems = navItems.map((item) => {
+    if (item.name === "Lịch" && item.subItems) {
+      return {
+        ...item,
+        subItems: getCalendarMenuItems(),
+      };
+    }
+    return item;
+  });
 
   // Kiểm tra xem đường dẫn hiện tại có trùng khớp hay không
   const isActive = useCallback(
@@ -362,7 +452,7 @@ const AppSidebar: React.FC = () => {
                   <HorizontaLDots className="size-6" />
                 )}
               </h2>
-              {renderMenuItems(navItems, "main")}
+              {renderMenuItems(filteredNavItems, "main")}
             </div>
             <div className="">
               <h2

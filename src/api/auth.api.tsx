@@ -223,3 +223,83 @@ export const pickFieldErrors = (err: any): Record<string, string> => {
   if (d?.data && typeof d.data === "object") return d.data as Record<string, string>;
   return {};
 };
+
+// ==========================
+// Personal Calendar Events APIs
+// ==========================
+
+export type PersonalCalendarEventRequestDTO = {
+  title: string;
+  startDate: string; // ISO date string
+  endDate?: string | null; // ISO date string
+  color?: string;
+  allDay?: boolean;
+};
+
+export type PersonalCalendarEventResponseDTO = {
+  id: number;
+  title: string;
+  startDate: string;
+  endDate: string | null;
+  color: string;
+  allDay: boolean;
+  userId: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function createPersonalCalendarEvent(
+  payload: PersonalCalendarEventRequestDTO
+): Promise<PersonalCalendarEventResponseDTO> {
+  const { data } = await api.post<PersonalCalendarEventResponseDTO>(
+    "/api/v1/auth/calendar/events",
+    payload
+  );
+  return data;
+}
+
+export async function updatePersonalCalendarEvent(
+  eventId: number,
+  payload: PersonalCalendarEventRequestDTO
+): Promise<PersonalCalendarEventResponseDTO> {
+  const { data } = await api.put<PersonalCalendarEventResponseDTO>(
+    `/api/v1/auth/calendar/events/${eventId}`,
+    payload
+  );
+  return data;
+}
+
+export async function deletePersonalCalendarEvent(eventId: number): Promise<void> {
+  await api.delete(`/api/v1/auth/calendar/events/${eventId}`);
+}
+
+export async function getPersonalCalendarEventById(
+  eventId: number
+): Promise<PersonalCalendarEventResponseDTO> {
+  const { data } = await api.get<PersonalCalendarEventResponseDTO>(
+    `/api/v1/auth/calendar/events/${eventId}`
+  );
+  return data;
+}
+
+export async function getAllPersonalCalendarEvents(): Promise<
+  PersonalCalendarEventResponseDTO[]
+> {
+  const { data } = await api.get<PersonalCalendarEventResponseDTO[]>(
+    "/api/v1/auth/calendar/events"
+  );
+  return data;
+}
+
+export async function getPersonalCalendarEventsByDateRange(
+  startDate: string,
+  endDate: string
+): Promise<PersonalCalendarEventResponseDTO[]> {
+  const { data } = await api.get<PersonalCalendarEventResponseDTO[]>(
+    "/api/v1/auth/calendar/events/date-range",
+    {
+      params: { startDate, endDate },
+    }
+  );
+  return data;
+}
