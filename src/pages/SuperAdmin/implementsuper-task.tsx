@@ -320,6 +320,38 @@ const ImplementSuperTaskPage: React.FC = () => {
     })();
   }, []);
 
+  // Resolve hospital id by exact name using superadmin search endpoint
+  async function resolveHospitalIdByName(name: string): Promise<number | null> {
+    try {
+      const res = await fetch(`${API_ROOT}/api/v1/superadmin/hospitals/search?name=${encodeURIComponent(name)}`, { headers: authHeaders(), credentials: 'include' });
+      if (!res.ok) return null;
+      const arr = await res.json();
+      if (!Array.isArray(arr) || arr.length === 0) return null;
+      const exact = (arr as any[]).find((h) => String(h?.label ?? h?.name ?? '').trim().toLowerCase() === name.trim().toLowerCase());
+      const pick = exact || arr[0];
+      const id = Number(pick?.id);
+      return Number.isFinite(id) ? id : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Handler for New Task button: if viewing a hospital, prefill hospitalName / hospitalId
+  const handleNewTaskClick = async () => {
+    if (!showHospitalList && selectedHospital) {
+      const hid = await resolveHospitalIdByName(selectedHospital);
+      if (hid) {
+        setEditing({ hospitalId: hid, hospitalName: selectedHospital } as any);
+      } else {
+        setEditing({ hospitalName: selectedHospital } as any);
+      }
+    } else {
+      setEditing(null);
+    }
+    setViewOnly(false);
+    setModalOpen(true);
+  };
+
   async function fetchPendingGroups(): Promise<number> {
     setLoadingPending(true);
     try {
@@ -1593,10 +1625,10 @@ const ImplementSuperTaskPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <button
                   className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
-                  onClick={() => { setViewOnly(false); setEditing(null); setModalOpen(true); }}
+                  onClick={() => { void handleNewTaskClick(); }}
                   type="button"
                 >
-                  + Thêm công việc mới
+                  + Thêm task mới
                 </button>
                 <button
                   className="relative inline-flex items-center gap-2 rounded-full border border-gray-300 text-gray-800 px-4 py-2 text-sm bg-white hover:bg-gray-50"
@@ -1956,7 +1988,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                     setModalOpen(true);
                   }}
                 >
-                  + Thêm mới
+                  + Thêm task mới
                 </button>
                 <button className="rounded-full border px-4 py-2 text-sm shadow-sm" onClick={async () => {
                   setSearchTerm(''); setStatusFilter(''); setSortBy('id'); setSortDir('asc'); setPage(0);

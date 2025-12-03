@@ -154,8 +154,8 @@ const showStyledToast = (
         >
           <span
             className={`flex h-9 w-9 items-center justify-center rounded-full ${type === "success"
-                ? "bg-green-100 text-green-600"
-                : "bg-red-100 text-red-600"
+              ? "bg-green-100 text-green-600"
+              : "bg-red-100 text-red-600"
               }`}
           >
             {type === "success" ? (
@@ -800,6 +800,38 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     }
   }
 
+  // Resolve hospital id by exact name using superadmin search endpoint
+  async function resolveHospitalIdByName(name: string): Promise<number | null> {
+    try {
+      const res = await fetch(`${API_ROOT}/api/v1/superadmin/hospitals/search?name=${encodeURIComponent(name)}`, { headers: authHeaders(), credentials: 'include' });
+      if (!res.ok) return null;
+      const arr = await res.json();
+      if (!Array.isArray(arr) || arr.length === 0) return null;
+      const exact = (arr as any[]).find((h) => String(h?.label ?? h?.name ?? '').trim().toLowerCase() === name.trim().toLowerCase());
+      const pick = exact || arr[0];
+      const id = Number(pick?.id);
+      return Number.isFinite(id) ? id : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Handler for New Task button: if viewing a hospital, prefill hospitalName / hospitalId
+  const handleNewTaskClick = async () => {
+    if (!showHospitalList && selectedHospital) {
+      const hid = await resolveHospitalIdByName(selectedHospital);
+      if (hid) {
+        setEditing({ hospitalId: hid, hospitalName: selectedHospital } as any);
+      } else {
+        setEditing({ hospitalName: selectedHospital } as any);
+      }
+    } else {
+      setEditing(null);
+    }
+    setViewOnly(false);
+    setModalOpen(true);
+  };
+
   async function fetchAcceptedCountForHospital(hospitalName: string) {
     try {
       const params = new URLSearchParams({ page: "0", size: "1", status: "ACCEPTED", hospitalName });
@@ -1137,7 +1169,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <button
                   className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
-                  onClick={() => { setViewOnly(false); setEditing(null); setModalOpen(true); }}
+                  onClick={() => { void handleNewTaskClick(); }}
                   type="button"
                 >
                   + Thêm task mới
@@ -1177,8 +1209,8 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                   <table className="w-full">
                     <thead className="bg-gray-50 border-b border-gray-200">
                       <tr>
-                      <th className="px-6 w-10 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
+                        <th className="px-6 w-10 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/Thành phố</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượng task</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
@@ -1200,7 +1232,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                               </td>
                               <td className="px-6 py-4">
                                 <div className={`flex gap-3 ${longName ? 'items-start' : 'items-center'}`}>
-                                  
+
                                   <div className={`text-sm font-medium text-gray-900 break-words max-w-[260px] flex flex-wrap gap-2 ${longName ? 'leading-snug' : ''}`}>
                                     <span>{hospital.label}</span>
                                     {hospital.fromDeployment && !hospital.acceptedByMaintenance && (
@@ -1362,9 +1394,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                 <button
                   className="rounded-xl bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
                   onClick={() => {
-                    setEditing(null);
-                    setViewOnly(false);
-                    setModalOpen(true);
+                    void handleNewTaskClick();
                   }}
                 >
                   + Thêm task mới
@@ -1597,8 +1627,7 @@ function DetailModal({
         {/* Header (sticky) */}
         <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-6 py-4 rounded-t-2xl flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
-            <span className="text-green-600 dark:text-green-400"><FiActivity /></span>
-            <span>Chi tiết tác vụ bảo trì</span>
+            <span> 📋 Chi tiết tác vụ bảo trì</span>
           </h2>
           <button
             onClick={onClose}
@@ -1611,19 +1640,19 @@ function DetailModal({
         {/* Body (scrollable) */}
         <div className="p-6 max-h-[60vh] overflow-y-auto text-sm">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
-            <Info label="Tên" value={item.name} icon={<FiInfo />} />
-            <Info label="Bệnh viện" value={item.hospitalName} icon={<FiUser />} />
+            <Info label="Tên " value={item.name} icon={<FiInfo />} />
+            <Info label="Bệnh viện " value={item.hospitalName} icon={<FiUser />} />
             {/* 1. Người phụ trách (Chỉ lấy người chính từ item, KHÔNG dùng picNames) */}
-            <Info 
-              label="Người phụ trách" 
-              value={item.picDeploymentName || "—"} 
-              icon={<FiUser />} 
+            <Info
+              label="Người phụ trách "
+              value={item.picDeploymentName || "—"}
+              icon={<FiUser />}
             />
 
             {/* 2. Người hỗ trợ (Dùng picNames nhưng LỌC BỎ người chính ra) */}
-            <Info 
-              label="Người hỗ trợ" 
-              icon={<FiUser />} 
+            <Info
+              label="Người hỗ trợ"
+              icon={<FiUser />}
               value={
                 loadingPics ? (
                   <span className="text-gray-500">Đang tải...</span>
@@ -1637,7 +1666,7 @@ function DetailModal({
                     }
                   </span>
                 )
-              } 
+              }
             />
             <Info
               label="Người tiếp nhận"
@@ -1667,15 +1696,17 @@ function DetailModal({
               }
             /> */}
             {/* <Info label="API Test" value={item.apiTestStatus} icon={<FiInfo />} /> */}
-            <Info label="Ngày bắt đầu" value={fmt(item.startDate)} icon={<FiClock />} />
-            <Info label="Ngày nghiệm thu" value={fmt(item.acceptanceDate)} icon={<FiClock />} />
-            <Info label="Ngày hoàn thành" value={fmt(item.finishDate ?? item.completionDate)} icon={<FiClock />} />
+            <Info label="Bắt đầu" value={fmt(item.startDate)} icon={<FiClock />} />
+            <Info icon={<FiClock />} label="Deadline:" value={fmt(item.deadline)} />
+            
+            {/* <Info label="Ngày nghiệm thu" value={fmt(item.acceptanceDate)} icon={<FiClock />} /> */}
+            <Info label="Hoàn thành" value={fmt(item.finishDate ?? item.completionDate)} icon={<FiClock />} />
             <Info label="Tạo lúc" value={fmt(item.createdAt)} icon={<FiClock />} />
           </div>
 
-          <div className="mt-6">
+          <div className="pt-4 mt-6 border-t border-gray-200 dark:border-gray-800">
             <p className="text-gray-500 mb-2">Ghi chú / Yêu cầu bổ sung:</p>
-            <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 min-h-[60px]">
+            <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 min-h-[60px]">
               {(() => {
                 const notes = item.notes || item.additionalRequest || "";
                 // Loại bỏ phần [PIC_IDS: ...] khỏi hiển thị
@@ -1810,13 +1841,12 @@ function Info({
   icon?: React.ReactNode;
 }) {
   return (
-    <div className="flex justify-between items-start">
-      <div className="flex items-center gap-2 min-w-[140px]">
+    <div className="flex justify-start items-start gap-3">
+      <div className="flex items-center gap-2 min-w-[140px] shrink-0">
         {icon && <span className="text-gray-400">{icon}</span>}
         <span className="font-semibold text-gray-900 dark:text-gray-100">{label}:</span>
       </div>
-      <div className="text-gray-700 dark:text-gray-300 text-right max-w-[60%] break-words">
-        {value ?? "—"}
+      <div className="text-gray-700 dark:text-gray-300 text-left flex-1 break-words">        {value ?? "—"}
       </div>
     </div>
   );

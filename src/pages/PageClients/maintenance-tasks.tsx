@@ -1338,26 +1338,7 @@ function DetailModal({
     const fmt = (d?: string | null) =>
         d ? new Date(d).toLocaleString("vi-VN") : "—";
 
-    // Badge màu trạng thái
-    const statusBadge = (status?: string | null) => {
-        const s = (status || "").toUpperCase();
-        const base = "px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap";
-        switch (s) {
-            case "NOT_STARTED":
-                return `${base} bg-gray-100 text-gray-800`;
-            case "IN_PROGRESS":
-                return `${base} bg-yellow-100 text-yellow-800`;
-            case "API_TESTING":
-                return `${base} bg-blue-100 text-blue-800`;
-            case "INTEGRATING":
-                return `${base} bg-red-100 text-red-700`;
-            case "WAITING_FOR_DEV":
-            case "ACCEPTED":
-                return `${base} bg-green-100 text-green-700`;
-            default:
-                return `${base} bg-gray-100 text-gray-800`;
-        }
-    };
+    // use shared statusBadgeClasses (defined higher in file) for color classes
 
     return (
         <div
@@ -1371,52 +1352,59 @@ function DetailModal({
                 className="w-full max-w-4xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-6"
                 onMouseDown={(e) => e.stopPropagation()}
             >
-                {/* Header */}
-                <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 dark:border-gray-800">
-                    <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                        📋 Chi tiết tác vụ bảo trì
+                {/* Header (sticky like SuperAdmin) */}
+                <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
+                        <span> 📋 Chi tiết tác vụ bảo trì</span>
                     </h2>
-                    {/* <button
+                    <button
                         onClick={onClose}
-                        className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition"
+                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                     >
                         ✕
-                    </button> */}
+                    </button>
                 </div>
 
-                {/* Content */}
-                <div className="p-6 space-y-6 text-sm text-gray-800 dark:text-gray-200">
+                {/* Content (scrollable) */}
+                <div className="p-6 max-h-[60vh] overflow-y-auto text-sm text-gray-800 dark:text-gray-200">
                     {/* Grid Info */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3">
+                    <div className="grid  grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
                         <Info icon={<FiTag />} label="Tên" value={item.name} />
                         <Info icon={<FaHospital />} label="Bệnh viện" value={item.hospitalName} />
-                        <Info 
-                            icon={<FiUser />} 
-                            label="Người làm" 
+
+                        {/* Người phụ trách (chính) */}
+                        <Info
+                            icon={<FiUser />}
+                            label="Người phụ trách"
+                            value={item.picDeploymentName || "—"}
+                        />
+
+                        {/* Người hỗ trợ (lọc bỏ người chính) */}
+                        <Info
+                            icon={<FiUser />}
+                            label="Người hỗ trợ"
                             value={
                                 loadingPics ? (
                                     <span className="text-gray-500">Đang tải...</span>
-                                ) : picNames.length > 0 ? (
-                                    <span className="font-medium">
-                                        {picNames.map((pic, idx) => (
-                                            <span key={pic.id}>
-                                                {idx > 0 && <span className="text-gray-400">, </span>}
-                                                {pic.name}
-                                            </span>
-                                        ))}
-                                    </span>
                                 ) : (
-                                    item.picDeploymentName || "-"
+                                    <span className="font-medium">
+                                        {picNames
+                                            .filter((p) => Number(p.id) !== Number(item.picDeploymentId))
+                                            .map((p) => p.name)
+                                            .join(", ") || <span className="text-gray-400 font-normal">Chưa có</span>
+                                        }
+                                    </span>
                                 )
-                            } 
+                            }
                         />
+
                         <Info icon={<FiUser />} label="Tiếp nhận bởi" value={item.receivedByName || "—"} />
 
                         <Info
                             icon={<FiTag />}
                             label="Trạng thái"
                             value={(
-                                <span className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${statusBadge(item.status)}`}>
+                                <span className={`px-3 py-1 text-xs font-medium rounded-full ${statusBadgeClasses(item.status)}`}>
                                     {statusLabel(item.status)}
                                 </span>
                             )}
@@ -1438,20 +1426,20 @@ function DetailModal({
                         /> */}
                         {/* <Info icon={<FiTag />} label="API Test" value={item.apiTestStatus || "—"} /> */}
                         {/* <Info icon={<FiTag />} label="Số lượng" value={item.quantity ?? "—"} /> */}
-                        <Info icon={<FiClock />} label="Deadline" value={fmt(item.deadline)} />
-                        <Info icon={<FiClock />} label="Ngày bắt đầu" value={fmt(item.startDate)} />
-                        <Info icon={<FiClock />} label="Ngày nghiệm thu" value={fmt(item.acceptanceDate)} />
-                        <Info icon={<FiClock />} label="Ngày hoàn thành" value={fmt(item.completionDate)} />
-                        <Info icon={<FiClock />} label="Tạo lúc" value={fmt(item.createdAt)} />
-                        <Info icon={<FiClock />} label="Cập nhật lúc" value={fmt(item.updatedAt)} />
+                        <Info icon={<FiClock />} label="Deadline:" value={fmt(item.deadline)} />
+                        <Info icon={<FiClock />} label="Bắt đầu:" value={fmt(item.startDate)} />
+                        {/* <Info icon={<FiClock />} label="Ngày nghiệm thu:" value={fmt(item.acceptanceDate)} /> */}
+                        <Info icon={<FiClock />} label="Hoàn thành:" value={fmt(item.completionDate)} />
+                        <Info icon={<FiClock />} label="Tạo lúc:" value={fmt(item.createdAt)} />
+                        {/* <Info icon={<FiClock />} label="Cập nhật lúc:" value={fmt(item.updatedAt)} /> */}
                     </div>
 
                     {/* Additional request */}
-                    <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+                    <div className="pt-4 mt-6 border-t border-gray-200 dark:border-gray-800">
                         <p className="text-gray-500 mb-2">Yêu cầu bổ sung:</p>
                         <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px]">
                             {(() => {
-                                const notes = item.additionalRequest || "";
+                                const notes = (item as any).notes || item.additionalRequest || "";
                                 // Loại bỏ phần [PIC_IDS: ...] khỏi hiển thị
                                 const cleaned = notes.replace(/\[PIC_IDS:\s*[^\]]+\]\s*/g, "").trim();
                                 return cleaned || "—";
@@ -1460,8 +1448,8 @@ function DetailModal({
                     </div>
                 </div>
 
-                {/* Footer */}
-                <div className="flex justify-end px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-10 dark:bg-gray-800/40">
+                {/* Footer (sticky) */}
+                <div className="sticky bottom-0 z-10 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 px-6 py-4 rounded-b-2xl flex justify-end">
                     <button
                         onClick={onClose}
                         className="px-4 py-2 rounded-lg text-sm font-medium text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
@@ -1491,10 +1479,10 @@ function Info({
     if (stacked) {
         // keep the same left columns (icon + fixed label width) so rows align vertically
         return (
-            <div className="flex items-start gap-3">
-                {icon && <div className="min-w-[36px] flex items-center justify-center text-gray-500">{icon}</div>}
-                <div className="flex-1">
-                    <div className="min-w-[140px] font-semibold text-gray-900 dark:text-gray-100">{label}</div>
+            <div className="flex justify-start items-start gap-3">
+                <div className="flex items-center gap-2 min-w-[140px] shrink-0">
+        {icon && <span className="text-gray-400">{icon}</span>}
+        <span className="font-semibold text-gray-900 dark:text-gray-100">{label}</span>
                     <div className="mt-1 text-gray-700 dark:text-gray-300 text-sm break-words">{value ?? "—"}</div>
                 </div>
             </div>
@@ -1506,7 +1494,7 @@ function Info({
             {icon && <div className="min-w-[36px] flex items-center justify-center text-gray-500">{icon}</div>}
             <div className="flex-1 flex items-start">
                 <div className="min-w-[140px] font-semibold text-gray-900 dark:text-gray-100">{label}</div>
-                <div className="text-gray-700 dark:text-gray-300 flex-1 text-right break-words">{value ?? "—"}</div>
+                <div className="text-gray-700 dark:text-gray-300 flex-1 text-left break-words">{value ?? "—"}</div>
             </div>
         </div>
     );
