@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import type { ToastOptions } from "react-hot-toast";
 import TaskCard from "./TaskCardNew";
 import TaskFormModal from "./TaskFormModal";
+import TaskNotes from "../../components/TaskNotes";
 import { isBusinessContractTaskName as isBusinessContractTask } from "../../utils/businessContract";
 
 const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
@@ -2251,6 +2252,8 @@ function DetailModal({
               })()}
             </div>
           </div>
+          {/* Shared TaskNotes component (shows all notes + my note textarea + delete) */}
+          <TaskNotes taskId={item?.id} myRole={(item as any)?.myRole} />
         </div>
 
         {/* Footer */}
