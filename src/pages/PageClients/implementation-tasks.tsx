@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCardNew from "../SuperAdmin/TaskCardNew";
+import TaskNotes from "../../components/TaskNotes";
 import { AiOutlineEye } from "react-icons/ai";
 import { toast } from "react-hot-toast";
 import { FiUser, FiMapPin, FiLink, FiClock, FiTag, FiPhone, FiCheckCircle } from "react-icons/fi";
@@ -1138,7 +1139,7 @@ function DetailModal({
         if (list.length > 0) {
           // Dùng nội dung ghi chú mới nhất để hiển thị trong textarea
           const latest = list[list.length - 1];
-          setMyNoteText(latest?.content ?? "");
+          setMyNoteText("");
         } else {
           setMyNoteText("");
         }
@@ -1214,28 +1215,31 @@ function DetailModal({
         throw new Error(`POST ${url} failed: ${res.status}`);
       }
       const created = await res.json();
+
+      // Cập nhật list ghi chú của tôi
       setMyNotes((prev) => {
         try {
           if (!created || typeof created !== 'object') return prev;
           const cid = Number((created as any).id);
           if (Number.isFinite(cid) && prev.some((p) => Number(p.id) === cid)) return prev;
-        } catch {
-          // ignore and append
-        }
+        } catch { }
         return [...prev, created];
       });
-      // Also insert into the "all notes" list so it appears immediately in "Ghi chú khác"
+
+      // Cập nhật list tất cả ghi chú (để hiện ngay bên kia mà ko cần F5)
       setAllNotes((prev) => {
         try {
           if (!created || typeof created !== 'object') return prev;
           const cid = Number((created as any).id);
           if (Number.isFinite(cid) && prev.some((p) => Number(p.id) === cid)) return prev;
-        } catch {
-          // ignore and append
-        }
+        } catch { }
         return [...prev, created];
       });
-      setMyNoteText(created?.content ?? content);
+
+      // 👇👇👇 SỬA Ở ĐÂY 👇👇👇
+      setMyNoteText(""); // Xóa trắng ô nhập
+      // 👆👆👆 (Đừng dùng created?.content ?? content)
+
       toast.success("Đã lưu ghi chú của bạn");
     } catch (err) {
       console.error("Error saving my note", err);
@@ -1311,7 +1315,7 @@ function DetailModal({
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 text-sm text-gray-800 dark:text-gray-200">
           {/* Grid Info */}
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
             <Info icon={<FiMapPin />} label="Tên: " value={item.name} />
             <Info icon={<FiMapPin />} label="Bệnh viện: " value={item.hospitalName} />
             <Info
@@ -1347,97 +1351,14 @@ function DetailModal({
 
 
             <Info icon={<FiClock />} label="Deadline: " value={fmt(item.deadline)} />
-            <Info icon={<FiClock />} label="Ngày bắt đầu: " value={fmt(item.startDate)} />
-            <Info icon={<FiClock />} label="Ngày hoàn thành: " value={fmt(item.completionDate)} />
+            <Info icon={<FiClock />} label="Bắt đầu: " value={fmt(item.startDate)} />
+            <Info icon={<FiClock />} label="Hoàn thành: " value={fmt(item.completionDate)} />
             <Info icon={<FiClock />} label="Tạo lúc: " value={fmt(item.createdAt)} />
             {/* <Info icon={<FiClock />} label="Cập nhật lúc: " value={fmt(item.updatedAt)} /> */}
           </div>
 
-          {/* Additional request */}
-          <div className="pt-4 border-t border-gray-200 dark:border-gray-800 space-y-4">
-            <div>
-              <p className="text-gray-500 mb-2">Ghi chú / Yêu cầu bổ sung:</p>
-              <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px]">
-                {(() => {
-                  const notes = item.additionalRequest || "";
-                  // Loại bỏ phần [PIC_IDS: ...] khỏi hiển thị
-                  const cleaned = notes.replace(/\[PIC_IDS:\s*[^\]]+\]\s*/g, "").trim();
-                  return cleaned || "—";
-                })()}
-              </div>
-            </div>
-
-            {/* Ghi chú khác (read-only) */}
-            <div className="pt-2 border-t border-dashed border-gray-200 dark:border-gray-800">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-gray-500 font-medium">Ghi chú khác</p>
-                {loadingAllNotes && (
-                  <span className="text-xs text-gray-400">Đang tải...</span>
-                )}
-              </div>
-              {allNotes.length === 0 ? (
-                <p className="text-sm text-gray-400 italic">Chưa có ghi chú nào.</p>
-              ) : (
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1 
-      [scrollbar-width:none] 
-    [-ms-overflow-style:none] 
-    [&::-webkit-scrollbar]:hidden">
-
-                  {allNotes.map((n) => (
-                        <div key={n.id} className="relative rounded-lg bg-gray-50 dark:bg-gray-800/60 px-3 py-2 text-xs text-gray-800 dark:text-gray-200">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-semibold">{n.authorName || `User-${n.authorId}`}</span>
-                            <span className="text-[11px] text-gray-400">{n.updatedAt ? fmt(n.updatedAt) : n.createdAt ? fmt(n.createdAt) : ""}</span>
-                          </div>
-                          <div className="whitespace-pre-wrap break-words">{n.content}</div>
-                          {currentUserId && Number(n.authorId) === currentUserId && (
-                            <button
-                              type="button"
-                              onClick={() => { void handleDeleteMyNote(n.id); }}
-                              title="Xóa ghi chú của bạn"
-                              className="absolute right-2 bottom-1 text-xs text-red-600 px-0  rounded dark:bg-gray-800/60"
-                            >
-                              Xóa
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                </div>
-              )}
-            </div>
-
-            {/* Ghi chú của tôi (chỉ Owner + Supporter) */}
-                {item.myRole === "owner" || item.myRole === "supporter" ? (
-              <div className="pt-2 border-t border-dashed border-gray-200 dark:border-gray-800">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-gray-500 font-medium">Ghi chú của tôi</p>
-                  {loadingMyNotes && (
-                    <span className="text-xs text-gray-400">Đang tải ghi chú...</span>
-                  )}
-                </div>
-                {/* Note: we no longer render the separate list of myNotes to avoid duplication with "Ghi chú khác".
-                    Users can still create/edit their personal note using the textarea below. Deletion is available
-                    directly on cards in the "Ghi chú khác" list when the card belongs to the current user. */}
-                <textarea
-                  className="w-full min-h-[80px] rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-100 outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 resize-y"
-                  placeholder="Nhập ghi chú riêng của bạn cho công việc này..."
-                  value={myNoteText}
-                  onChange={(e) => setMyNoteText(e.target.value)}
-                  disabled={savingMyNote}
-                />
-                <div className="mt-2 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => { void handleSaveMyNote(); }}
-                    disabled={savingMyNote || loadingMyNotes}
-                    className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {savingMyNote ? "Đang lưu..." : "Lưu ghi chú"}
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
+          {/* Additional request + task notes (reused component) */}
+          <TaskNotes taskId={item?.id} myRole={item?.myRole} />
         </div>
 
         {/* Footer */}
@@ -1482,7 +1403,7 @@ function Info({
     <div className="flex items-start gap-3">
       {icon && <div className="min-w-[36px] flex items-center justify-center text-gray-500">{icon}</div>}
       <div className="flex-1 flex items-start">
-        <div className="min-w-[140px] font-semibold text-gray-900 dark:text-gray-100">{label}</div>
+        <div className="min-w-[125px] font-semibold text-gray-900 dark:text-gray-100">{label}</div>
         <div className="text-gray-700 dark:text-gray-300 flex-1 text-left break-words">{value ?? "—"}</div>
       </div>
     </div>
