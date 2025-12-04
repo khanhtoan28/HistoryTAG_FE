@@ -6,9 +6,11 @@ import { AiOutlineEye } from "react-icons/ai";
 import toast, { ToastOptions } from "react-hot-toast";
 import TaskCard from "./TaskCardNew";
 import TaskFormModal from "./TaskFormModal";
+import TaskNotes from "../../components/TaskNotes";
 
 const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
 const MIN_LOADING_MS = 2000;
+
 
 // Helper function để parse PIC IDs từ additionalRequest hoặc notes
 function parsePicIdsFromAdditionalRequest(additionalRequest?: string | null, notes?: string | null, picDeploymentId?: number | null): number[] {
@@ -1625,20 +1627,16 @@ function DetailModal({
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header (sticky) */}
-        <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-6 py-4 rounded-t-2xl flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
-            <span> 📋 Chi tiết tác vụ bảo trì</span>
+        <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            📋 Chi tiết tác vụ bảo trì
           </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          >
-            ✕
-          </button>
+
         </div>
 
         {/* Body (scrollable) */}
-        <div className="p-6 max-h-[60vh] overflow-y-auto text-sm">
+        
+        <div className="p-6 max-h-[60vh] overflow-y-auto text-sm [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
             <Info label="Tên " value={item.name} icon={<FiInfo />} />
             <Info label="Bệnh viện " value={item.hospitalName} icon={<FiUser />} />
@@ -1704,7 +1702,7 @@ function DetailModal({
             <Info label="Tạo lúc" value={fmt(item.createdAt)} icon={<FiClock />} />
           </div>
 
-          <div className="pt-4 mt-6 border-t border-gray-200 dark:border-gray-800">
+          <div className="pt-6 mb-6">
             <p className="text-gray-500 mb-2">Ghi chú / Yêu cầu bổ sung:</p>
             <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 min-h-[60px]">
               {(() => {
@@ -1715,6 +1713,8 @@ function DetailModal({
               })()}
             </div>
           </div>
+          {/* Shared TaskNotes component (shows all notes + my note textarea + delete) */}
+          <TaskNotes taskId={item?.id} myRole={(item as any)?.myRole} taskType="maintenance" />
         </div>
 
         {/* Footer (sticky) */}

@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { toast } from "react-hot-toast";
 
 const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
+const WS_URL = import.meta.env.VITE_NOTIFICATION_STOMP_URL || `${API_ROOT.replace(/^http/, "ws")}/ws`;
 
 function authHeaders(extra?: Record<string, string>) {
   const token =
@@ -39,9 +40,11 @@ export type NoteDTO = {
 export default function TaskNotes({
   taskId,
   myRole,
+  taskType = "implementation", // "implementation" | "maintenance"
 }: {
   taskId: number | null | undefined;
   myRole?: string | null;
+  taskType?: "implementation" | "maintenance";
 }) {
   const [allNotes, setAllNotes] = useState<NoteDTO[]>([]);
   const [myNotes, setMyNotes] = useState<NoteDTO[]>([]);
@@ -49,6 +52,9 @@ export default function TaskNotes({
   const [loadingAllNotes, setLoadingAllNotes] = useState(false);
   const [loadingMyNotes, setLoadingMyNotes] = useState(false);
   const [savingMyNote, setSavingMyNote] = useState(false);
+  const stompClientRef = useRef<any>(null);
+  const subscriptionRef = useRef<any>(null);
+  const notesContainerRef = useRef<HTMLDivElement | null>(null);
 
   const currentUserId: number | null = React.useMemo(() => {
     try {
@@ -175,7 +181,120 @@ export default function TaskNotes({
     });
   }, [taskId, myRole, isAdmin, isSuperAdmin, canAddNote, currentUserId]);
 
-  const apiBase = `${API_ROOT}/api/v1/admin/implementation/tasks`;
+  const apiBase = taskType === "maintenance" 
+    ? `${API_ROOT}/api/v1/admin/maintenance/tasks`
+    : `${API_ROOT}/api/v1/admin/implementation/tasks`;
+
+  // WebSocket subscription for real-time updates
+  useEffect(() => {
+    if (!taskId) return;
+
+    const connectWebSocket = async () => {
+      // Cleanup existing connection first
+      if (subscriptionRef.current) {
+        try {
+          subscriptionRef.current.unsubscribe();
+        } catch (e) {
+          // ignore
+        }
+        subscriptionRef.current = null;
+      }
+      if (stompClientRef.current) {
+        try {
+          stompClientRef.current.deactivate();
+        } catch (e) {
+          // ignore
+        }
+        stompClientRef.current = null;
+      }
+
+      try {
+        const [stompMod, sockjsMod] = await Promise.all([
+          import("@stomp/stompjs"),
+          import("sockjs-client")
+        ]);
+
+        const StompClient = stompMod.Client;
+        const SockJS = sockjsMod.default;
+
+        const token = authHeaders().Authorization?.replace("Bearer ", "") || "";
+        const wsUrl = token ? `${WS_URL}?token=${encodeURIComponent(token)}` : WS_URL;
+
+        const client = new StompClient({
+          webSocketFactory: () => new SockJS(wsUrl) as any,
+          reconnectDelay: 5000,
+          heartbeatIncoming: 4000,
+          heartbeatOutgoing: 4000,
+          onConnect: () => {
+            const topic = `/topic/task-notes/${taskType}/${taskId}`;
+            const subscription = client.subscribe(topic, (message: any) => {
+              try {
+                const data = JSON.parse(message.body);
+                if (data.type === "new-note" && data.note) {
+                  const newNote = data.note as NoteDTO;
+                  // Check if note already exists to avoid duplicates
+                  setAllNotes((prev) => {
+                    if (prev.some((n) => n.id === newNote.id)) return prev;
+                    return [...prev, newNote];
+                  });
+                  // If it's my note, also add to myNotes
+                  const userId = currentUserId;
+                  if (userId && newNote.authorId === userId) {
+                    setMyNotes((prev) => {
+                      if (prev.some((n) => n.id === newNote.id)) return prev;
+                      return [...prev, newNote];
+                    });
+                  }
+                  // Toast notification disabled - too many notifications if multiple users add notes
+                } else if (data.type === "note-deleted" && data.noteId) {
+                  const deletedNoteId = Number(data.noteId);
+                  setAllNotes((prev) => prev.filter((n) => n.id !== deletedNoteId));
+                  setMyNotes((prev) => prev.filter((n) => n.id !== deletedNoteId));
+                }
+              } catch (err) {
+                console.error("Failed to parse WebSocket message:", err);
+              }
+            });
+            subscriptionRef.current = subscription;
+            console.log(`[TaskNotes] Subscribed to ${topic}`);
+          },
+          onStompError: (frame: any) => {
+            console.error("[TaskNotes] STOMP error:", frame);
+          },
+          onWebSocketClose: () => {
+            console.log("[TaskNotes] WebSocket closed");
+            subscriptionRef.current = null;
+          }
+        });
+
+        client.activate();
+        stompClientRef.current = client;
+      } catch (err) {
+        console.error("[TaskNotes] Failed to connect WebSocket:", err);
+      }
+    };
+
+    connectWebSocket();
+
+    return () => {
+      if (subscriptionRef.current) {
+        try {
+          subscriptionRef.current.unsubscribe();
+        } catch (e) {
+          // ignore
+        }
+        subscriptionRef.current = null;
+      }
+      if (stompClientRef.current) {
+        try {
+          stompClientRef.current.deactivate();
+        } catch (e) {
+          // ignore
+        }
+        stompClientRef.current = null;
+      }
+    };
+  }, [taskId, taskType]); // Removed currentUserId from dependencies
 
   useEffect(() => {
     if (!taskId) return;
@@ -194,7 +313,7 @@ export default function TaskNotes({
       }
     })();
     return () => { alive = false; };
-  }, [taskId]);
+  }, [taskId, apiBase]);
 
   useEffect(() => {
     if (!taskId) return;
@@ -220,6 +339,22 @@ export default function TaskNotes({
     })();
     return () => { alive = false; };
   }, [taskId, myRole]);
+
+  // Auto-scroll to bottom when new note is added
+  useEffect(() => {
+    if (allNotes.length > 0 && notesContainerRef.current) {
+      // Small delay to ensure DOM is updated with new note
+      const timeoutId = setTimeout(() => {
+        if (notesContainerRef.current) {
+          notesContainerRef.current.scrollTo({
+            top: notesContainerRef.current.scrollHeight,
+            behavior: "smooth"
+          });
+        }
+      }, 150);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [allNotes]);
 
   const handleSaveMyNote = async () => {
     if (!taskId) return;
@@ -266,9 +401,10 @@ export default function TaskNotes({
 
   const handleDeleteNote = async (noteId: number, authorId?: number | string) => {
     if (!noteId || !taskId) return;
-    // block if user is not admin and not the author
-    if (!isAdmin && !(currentUserId && Number(authorId) === currentUserId)) {
-      toast.error("Bạn không có quyền xóa ghi chú này.");
+    // Phải vừa là admin vừa là tác giả mới được xóa
+    const isAuthor = currentUserId && Number(authorId) === currentUserId;
+    if (!isAdmin || !isAuthor) {
+      toast.error("Bạn không có quyền xóa ghi chú này. Chỉ ADMIN/SUPERADMIN là tác giả của ghi chú mới được phép xóa.");
       return;
     }
     if (!confirm("Bạn chắc chắn muốn xóa ghi chú này?")) return;
@@ -303,7 +439,9 @@ export default function TaskNotes({
         {allNotes.length === 0 ? (
           <p className="text-sm text-gray-400 italic">Chưa có ghi chú nào.</p>
         ) : (
-          <div className="space-y-2 max-h-48 overflow-y-auto pr-1 [scrollbar-width:none] 
+          <div 
+            ref={notesContainerRef}
+            className="space-y-2 max-h-48 overflow-y-auto pr-1 [scrollbar-width:none] 
     [-ms-overflow-style:none] 
     [&::-webkit-scrollbar]:hidden">
             {allNotes.map((n) => (
@@ -313,7 +451,7 @@ export default function TaskNotes({
                   <span className="text-[11px] text-gray-400">{n.updatedAt ? fmt(n.updatedAt) : n.createdAt ? fmt(n.createdAt) : ""}</span>
                 </div>
                 <div className="whitespace-pre-wrap break-words">{n.content}</div>
-                {(isAdmin || (currentUserId && Number(n.authorId) === currentUserId)) && (
+                {isAdmin && currentUserId && Number(n.authorId) === currentUserId && (
                   <button
                     type="button"
                     onClick={() => { void handleDeleteNote(n.id, n.authorId); }}

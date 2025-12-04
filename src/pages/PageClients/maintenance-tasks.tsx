@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCardNew from "../SuperAdmin/TaskCardNew";
+import TaskNotes from "../../components/TaskNotes";
 import { AiOutlineEye } from "react-icons/ai";
 import toast from "react-hot-toast";
 import { FaHospital } from "react-icons/fa";
@@ -1236,8 +1237,8 @@ function TaskFormModal({
                                                         key={pic._uid}
                                                         // Logic đổi màu cho người đầu tiên
                                                         className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs border ${index === 0
-                                                                ? "bg-blue-100 border-blue-200 text-blue-800 font-bold" // Người chính màu xanh
-                                                                : "bg-gray-50 dark:bg-gray-800 border-gray-200 text-gray-700"
+                                                            ? "bg-blue-100 border-blue-200 text-blue-800 font-bold" // Người chính màu xanh
+                                                            : "bg-gray-50 dark:bg-gray-800 border-gray-200 text-gray-700"
                                                             }`}
                                                     >
                                                         {/* Logic tìm tên "thông minh" (quét hết các trường có thể chứa tên) */}
@@ -1495,20 +1496,14 @@ function DetailModal({
                 onMouseDown={(e) => e.stopPropagation()}
             >
                 {/* Header (sticky like SuperAdmin) */}
-                <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-6 py-4 rounded-t-2xl flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
-                        <span> 📋 Chi tiết tác vụ bảo trì</span>
+                <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                        📋 Chi tiết tác vụ bảo trì
                     </h2>
-                    <button
-                        onClick={onClose}
-                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                    >
-                        ✕
-                    </button>
                 </div>
 
                 {/* Content (scrollable) */}
-                <div className="p-6 max-h-[60vh] overflow-y-auto text-sm text-gray-800 dark:text-gray-200">
+                <div className="p-6 max-h-[60vh] overflow-y-auto text-sm [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                     {/* Grid Info */}
                     <div className="grid  grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
                         <Info icon={<FiTag />} label="Tên" value={item.name} />
@@ -1577,7 +1572,7 @@ function DetailModal({
                     </div>
 
                     {/* Additional request */}
-                    <div className="pt-4 mt-6 border-t border-gray-200 dark:border-gray-800">
+                    <div className="pt-6 mb-6">
                         <p className="text-gray-500 mb-2">Yêu cầu bổ sung:</p>
                         <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px]">
                             {(() => {
@@ -1588,6 +1583,9 @@ function DetailModal({
                             })()}
                         </div>
                     </div>
+
+                    {/* Task Notes (personal notes for maintenance) */}
+                    <TaskNotes taskId={item?.id} myRole={(item as any)?.myRole} taskType="maintenance" />
                 </div>
 
                 {/* Footer (sticky) */}
