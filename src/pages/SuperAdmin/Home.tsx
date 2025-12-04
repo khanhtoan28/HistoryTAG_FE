@@ -2838,16 +2838,16 @@ export default function SuperAdminHome() {
                       <div className="text-xs text-gray-500">Tổng: {detailTotalItems} công việc</div>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="min-w-full text-sm">
+                      <table className="min-w-full text-sm table-fixed">
                         <thead className="bg-gray-50">
                           <tr className="text-xs text-gray-600">
-                            <th className="px-3 py-2 text-left">Tên bệnh viện</th>
-                            <th className="px-3 py-2 text-left">Nội dung công việc</th>
-                            <th className="px-3 py-2 text-center">Ngày bắt đầu</th>
-                            <th className="px-3 py-2 text-left">Người phụ trách</th>
-                            <th className="px-3 py-2 text-center">Trạng thái</th>
-                            <th className="px-3 py-2 text-center">Ngày hoàn thành</th>
-                            <th className="px-3 py-2 text-center">Số ngày thực hiện</th>
+                            <th className="px-3 py-2 text-left w-[20%]">Tên bệnh viện</th>
+                            <th className="px-3 py-2 text-left w-[25%]">Nội dung công việc</th>
+                            <th className="px-3 py-2 text-center w-[10%]">Ngày bắt đầu</th>
+                            <th className="px-3 py-2 text-left w-[15%]">Người phụ trách</th>
+                            <th className="px-3 py-2 text-center w-[10%]">Trạng thái</th>
+                            <th className="px-3 py-2 text-center w-[10%]">Ngày hoàn thành</th>
+                            <th className="px-3 py-2 text-center w-[10%]">Số ngày thực hiện</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2887,7 +2887,7 @@ export default function SuperAdminHome() {
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-2">
                                         <span className="text-sm font-semibold text-gray-900">
-                                          <svg className={`w-4 h-4 inline-block mr-2 transition-transform ${isCollapsed ? 'rotate-270' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                          <svg className={`w-4 h-4 inline-block mr-2 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                           </svg>
                                           {group.hospitalName}

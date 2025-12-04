@@ -67,32 +67,113 @@ export default function TaskNotes({
 
   const isAdmin: boolean = React.useMemo(() => {
     try {
+      // Check từ localStorage.getItem("roles") - array of strings
+      const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
+      if (rolesStr) {
+        try {
+          const roles = JSON.parse(rolesStr);
+          if (Array.isArray(roles)) {
+            if (roles.some((r: string) => r === "SUPERADMIN" || r === "ADMIN")) {
+              return true;
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+      
+      // Check từ localStorage.getItem("user") - object với roles array
       const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
       if (raw) {
         const parsed = JSON.parse(raw);
-        const roles = parsed?.roles ?? parsed?.authorities ?? parsed?.role;
+        const roles = parsed?.roles;
         if (Array.isArray(roles)) {
-          for (const r of roles) {
-            const name = typeof r === "string" ? r : (r?.name || r?.authority || r?.role);
-            if (name === "SUPERADMIN" || name === "ADMIN") return true;
-          }
-        } else if (typeof roles === "string") {
-          if (roles.includes("SUPERADMIN") || roles.includes("ADMIN")) return true;
+          return roles.some((r: any) => {
+            // Handle both string and object formats
+            if (typeof r === "string") {
+              return r === "SUPERADMIN" || r === "ADMIN";
+            }
+            // Handle object format: { roleId: number, roleName: string } or { id: number, roleName: string }
+            const name = r?.roleName || r?.name || r?.authority;
+            return name === "SUPERADMIN" || name === "ADMIN";
+          });
         }
       }
     } catch {
-      // ignore
+      // ignore parsing errors
     }
-    try {
-      const fallback = (localStorage.getItem("roles") || sessionStorage.getItem("roles") || "") as string;
-      if (fallback && (fallback.includes("SUPERADMIN") || fallback.includes("ADMIN"))) return true;
-    } catch {}
-    try {
-      const roleSingle = (localStorage.getItem("userRole") || sessionStorage.getItem("userRole") || "") as string;
-      if (roleSingle && (roleSingle.includes("SUPERADMIN") || roleSingle.includes("ADMIN"))) return true;
-    } catch {}
     return false;
   }, []);
+
+  const isSuperAdmin: boolean = React.useMemo(() => {
+    try {
+      // Check từ localStorage.getItem("roles") - array of strings
+      const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
+      if (rolesStr) {
+        try {
+          const roles = JSON.parse(rolesStr);
+          if (Array.isArray(roles)) {
+            if (roles.some((r: string) => r === "SUPERADMIN")) {
+              return true;
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+      
+      // Check từ localStorage.getItem("user") - object với roles array
+      const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const roles = parsed?.roles;
+        if (Array.isArray(roles)) {
+          return roles.some((r: any) => {
+            // Handle both string and object formats
+            if (typeof r === "string") {
+              return r === "SUPERADMIN";
+            }
+            // Handle object format: { roleId: number, roleName: string } or { id: number, roleName: string }
+            const name = r?.roleName || r?.name || r?.authority;
+            return name === "SUPERADMIN";
+          });
+        }
+      }
+    } catch {
+      // ignore parsing errors
+    }
+    return false;
+  }, []);
+
+  const canAddNote = React.useMemo(() => {
+     const role = (myRole || "").toLowerCase();
+  // Owner hoặc supporter được thêm ghi chú
+  // SUPERADMIN là ngoại lệ: được thêm ghi chú bất kể role
+  // ADMIN chỉ được thêm nếu là owner hoặc supporter
+  return (
+    role === "owner" || 
+    role === "supporter" ||
+    isSuperAdmin  // SUPERADMIN là ngoại lệ
+  );
+}, [myRole, isSuperAdmin]);
+
+  // debug: expose key permission values when component renders
+  React.useEffect(() => {
+    // Debug: log raw data from storage
+    const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
+    const userStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+    // eslint-disable-next-line no-console
+    console.log("TaskNotes Render:", { 
+      taskId, 
+      myRole, 
+      isAdmin, 
+      isSuperAdmin, 
+      canAddNote, 
+      currentUserId,
+      rolesFromStorage: rolesStr ? JSON.parse(rolesStr) : null,
+      userRoles: userStr ? JSON.parse(userStr)?.roles : null
+    });
+  }, [taskId, myRole, isAdmin, isSuperAdmin, canAddNote, currentUserId]);
 
   const apiBase = `${API_ROOT}/api/v1/admin/implementation/tasks`;
 
@@ -117,7 +198,9 @@ export default function TaskNotes({
 
   useEffect(() => {
     if (!taskId) return;
-    if (myRole !== "owner" && myRole !== "supporter") return;
+    // allow owners, supporters, and SUPERADMIN to load their "my notes"
+    const role = (myRole || "").toLowerCase();
+    if (role !== "owner" && role !== "supporter" && !isSuperAdmin) return;
     let alive = true;
     (async () => {
       setLoadingMyNotes(true);
@@ -140,6 +223,10 @@ export default function TaskNotes({
 
   const handleSaveMyNote = async () => {
     if (!taskId) return;
+    if (!canAddNote) {
+      toast.error("Bạn không có quyền thêm ghi chú.");
+      return;
+    }
     const content = myNoteText.trim();
     if (!content) return toast.error("Nội dung ghi chú không được để trống");
     try {
@@ -177,8 +264,13 @@ export default function TaskNotes({
     }
   };
 
-  const handleDeleteNote = async (noteId: number) => {
+  const handleDeleteNote = async (noteId: number, authorId?: number | string) => {
     if (!noteId || !taskId) return;
+    // block if user is not admin and not the author
+    if (!isAdmin && !(currentUserId && Number(authorId) === currentUserId)) {
+      toast.error("Bạn không có quyền xóa ghi chú này.");
+      return;
+    }
     if (!confirm("Bạn chắc chắn muốn xóa ghi chú này?")) return;
     try {
       const res = await fetch(`${apiBase}/${taskId}/notes/${noteId}`, {
@@ -221,12 +313,13 @@ export default function TaskNotes({
                   <span className="text-[11px] text-gray-400">{n.updatedAt ? fmt(n.updatedAt) : n.createdAt ? fmt(n.createdAt) : ""}</span>
                 </div>
                 <div className="whitespace-pre-wrap break-words">{n.content}</div>
-                {currentUserId && Number(n.authorId) === currentUserId && (
+                {(isAdmin || (currentUserId && Number(n.authorId) === currentUserId)) && (
                   <button
                     type="button"
-                    onClick={() => { void handleDeleteNote(n.id); }}
-                    title="Xóa ghi chú của bạn"
-                              className="absolute right-2 bottom-1 text-xs text-red-600 px-0  rounded dark:bg-gray-800/60"                  >
+                    onClick={() => { void handleDeleteNote(n.id, n.authorId); }}
+                    title="Xóa ghi chú"
+                    className="absolute right-2 bottom-1 text-xs text-red-600 px-0  rounded dark:bg-gray-800/60"
+                  >
                     Xóa
                   </button>
                 )}
@@ -236,7 +329,7 @@ export default function TaskNotes({
         )}
       </div>
 
-      {(myRole === "owner" || myRole === "supporter" || isAdmin) && (
+      {canAddNote && (
         <div>
           <textarea
             className="w-full min-h-[80px] rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-100 outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 resize-y"
