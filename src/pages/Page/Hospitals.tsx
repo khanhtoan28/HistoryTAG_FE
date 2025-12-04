@@ -1775,7 +1775,7 @@ export default function HospitalsPage() {
                       <div className="flex-shrink-0 mt-0 flex items-center gap-2">
                         {/* Larger badge that includes project status/priority dots to avoid overflow */}
                         <div className="w-14 h-14 rounded-md bg-white border border-gray-100 flex flex-col items-center justify-center text-sm font-semibold text-gray-700 shadow-sm relative">
-                          <span className="text-base font-bold">{leftIndex}</span>
+                          <span className="text-[10px] font-bold">{leftIndex}</span>
                           <div className="absolute -top-1 -right-1 flex space-x-1">
                             <span className={`${getStatusBg(h.projectStatus)} w-3 h-3 rounded-full border-2 border-white`} />
                             <span className={`${getPriorityBg(h.priority)} w-3 h-3 rounded-full border-2 border-white`} />
