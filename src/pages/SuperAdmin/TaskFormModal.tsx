@@ -678,9 +678,16 @@ export default function TaskFormModal({
                                     <Field label="Người phụ trách (PIC)" required>
                                         <div className="flex flex-col gap-2">
                                             <div className="flex flex-wrap items-center gap-2">
-                                                {picOpts.map((pic) => (
-                                                    <div key={pic._uid} className="inline-flex items-center gap-2 px-3 py-1 bg-gray-50 dark:bg-gray-800 rounded-full text-xs">
-                                                        <span className="max-w-[12rem] truncate block">{pic.name}</span>
+                                                {picOpts.map((pic, index) => (
+                                                    <div key={pic._uid} className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs border ${index === 0
+                                                        ? "bg-blue-100 border-blue-200 text-blue-800 font-bold" // Người chính màu xanh
+                                                        : "bg-gray-50 dark:bg-gray-800 border-gray-200 text-gray-700"
+                                                        }`}>
+
+                                                        <span className="max-w-[12rem] truncate block">
+                                                            {pic.name || (pic as any).fullName || (pic as any).label || (pic as any).username || String(pic.id) || "Không có tên"}
+                                                            {index === 0 && " (Chính)"}
+                                                        </span>
                                                         {!readOnly && (
                                                             <button
                                                                 type="button"

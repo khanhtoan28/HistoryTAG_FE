@@ -838,9 +838,16 @@ function TaskFormModal({
                 <Field label="Người phụ trách (PIC)" required>
                   <div className="flex flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      {picOpts.map((pic) => (
-                        <div key={pic._uid} className="inline-flex items-center gap-2 px-3 py-1 bg-gray-50 dark:bg-gray-800 rounded-full text-xs">
-                          <span className="max-w-[12rem] truncate block">{pic.name}</span>
+                      {picOpts.map((pic, index) => (
+                        <div key={pic._uid} className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs border ${index === 0
+                          ? "bg-blue-100 border-blue-200 text-blue-800 font-bold" // Người chính màu xanh
+                          : "bg-gray-50 dark:bg-gray-800 border-gray-200 text-gray-700"
+                          }`}>
+
+                          <span className="max-w-[12rem] truncate block">
+                            {pic.name || (pic as any).fullName || (pic as any).label || (pic as any).username || String(pic.id) || "Không có tên"}
+                            {index === 0 && " (Chính)"}
+                          </span>
                           <button
                             type="button"
                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); removePic(pic._uid); }}
@@ -1355,6 +1362,18 @@ function DetailModal({
             <Info icon={<FiClock />} label="Hoàn thành: " value={fmt(item.completionDate)} />
             <Info icon={<FiClock />} label="Tạo lúc: " value={fmt(item.createdAt)} />
             {/* <Info icon={<FiClock />} label="Cập nhật lúc: " value={fmt(item.updatedAt)} /> */}
+          </div>
+          {/* Additional request */}
+          <div className="">
+            <p className="text-gray-500 mb-2">Yêu cầu bổ sung:</p>
+            <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px]">
+              {(() => {
+                const notes = (item as any).notes || item.additionalRequest || "";
+                // Loại bỏ phần [PIC_IDS: ...] khỏi hiển thị
+                const cleaned = notes.replace(/\[PIC_IDS:\s*[^\]]+\]\s*/g, "").trim();
+                return cleaned || "—";
+              })()}
+            </div>
           </div>
 
           {/* Additional request + task notes (reused component) */}

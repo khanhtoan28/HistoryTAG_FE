@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCardNew from "../SuperAdmin/TaskCardNew";
+import TaskNotes from "../../components/TaskNotes";
 import { AiOutlineEye } from "react-icons/ai";
 import toast from "react-hot-toast";
 import { FaHospital } from "react-icons/fa";
@@ -8,18 +9,18 @@ import { FiUser, FiLink, FiClock, FiTag, FiCheckCircle } from "react-icons/fi";
 
 // Helper function để parse PIC IDs từ additionalRequest
 function parsePicIdsFromAdditionalRequest(additionalRequest?: string | null, picDeploymentId?: number | null): number[] {
-  const ids: number[] = [];
-  if (picDeploymentId) {
-    ids.push(picDeploymentId);
-  }
-  if (additionalRequest) {
-    const match = additionalRequest.match(/\[PIC_IDS:\s*([^\]]+)\]/);
-    if (match) {
-      const parsedIds = match[1].split(',').map(id => Number(id.trim())).filter(id => !isNaN(id) && id > 0);
-      ids.push(...parsedIds);
+    const ids: number[] = [];
+    if (picDeploymentId) {
+        ids.push(picDeploymentId);
     }
-  }
-  return [...new Set(ids)]; // Loại bỏ duplicate
+    if (additionalRequest) {
+        const match = additionalRequest.match(/\[PIC_IDS:\s*([^\]]+)\]/);
+        if (match) {
+            const parsedIds = match[1].split(',').map(id => Number(id.trim())).filter(id => !isNaN(id) && id > 0);
+            ids.push(...parsedIds);
+        }
+    }
+    return [...new Set(ids)]; // Loại bỏ duplicate
 }
 
 function PendingTasksModal({
@@ -460,6 +461,7 @@ function RemoteSelect({
     value,
     onChange,
     required,
+    excludeIds,
 }: {
     label: string;
     placeholder?: string;
@@ -467,6 +469,7 @@ function RemoteSelect({
     fetchOptions: (q: string) => Promise<Array<{ id: number; name: string }>>;
     value: { id: number; name: string } | null;
     onChange: (v: { id: number; name: string } | null) => void;
+    excludeIds?: number[];
 }) {
     const [open, setOpen] = useState(false);
     const [q, setQ] = useState("");
@@ -481,7 +484,12 @@ function RemoteSelect({
             setLoading(true);
             try {
                 const res = await fetchOptions(q.trim());
-                if (alive) setOptions(res);
+                if (!alive) return;
+                const mapped = Array.isArray(res) ? res.map((o: any) => ({ id: Number(o.id), name: String(o.name) })) : [];
+                const filtered = excludeIds && excludeIds.length ? mapped.filter((o) => !excludeIds.includes(o.id)) : mapped;
+                if (alive) setOptions(filtered);
+            } catch (err) {
+                if (alive) setOptions([]);
             } finally {
                 if (alive) setLoading(false);
             }
@@ -490,7 +498,7 @@ function RemoteSelect({
             alive = false;
             clearTimeout(t);
         };
-    }, [q, fetchOptions]);
+    }, [q, fetchOptions, excludeIds]);
 
     useEffect(() => {
         if (open) {
@@ -741,6 +749,8 @@ function TaskFormModal({
     }, []);
     const currentUserId = currentUser.id;
     const currentUserName = currentUser.name;
+    // Nếu task được server đánh dấu read-only cho deployment, ẩn input/controls
+    const readOnly = Boolean((initial as any)?.readOnlyForDeployment);
 
     const [model, setModel] = useState<ImplementationTaskRequestDTO>(() => {
         const isNew = !(initial?.id);
@@ -777,16 +787,51 @@ function TaskFormModal({
         const nm = (initial?.hospitalName as string) || "";
         return id ? { id, name: nm || String(id) } : null;
     });
-    const [picOpt, setPicOpt] = useState<{ id: number; name: string } | null>(() => {
-        const isNew = !initial?.id;
-        const id = (initial?.picDeploymentId as number) || (isNew ? currentUserId ?? 0 : 0);
-        const nm = (initial?.picDeploymentName as string) || (isNew ? currentUserName : "");
-        return id ? { id, name: nm && nm.trim() ? nm : String(id) } : null;
-    });
+    // 1) State lưu danh sách những người ĐÃ chọn (dạng mảng)
+    const buildPicOptsFromInitial = (init?: any) => {
+        const isNew = !init?.id;
+        const pairs: Array<{ id: number; name?: string | null }> = [];
+
+        if (init?.picDeploymentId) {
+            pairs.push({ id: Number(init.picDeploymentId), name: (init as any).picDeploymentName });
+        }
+
+        if (Array.isArray(init?.picDeploymentIds)) {
+            const ids = init!.picDeploymentIds as any[];
+            const names = Array.isArray((init as any)?.picDeploymentNames) ? (init as any).picDeploymentNames : [];
+            for (let i = 0; i < ids.length; i++) {
+                const id = Number(ids[i]);
+                const name = names[i];
+                pairs.push({ id, name });
+            }
+        }
+
+        // Deduplicate while preserving first occurrence
+        const seen = new Set<number>();
+        const uniq: Array<{ id: number; name?: string | null }> = [];
+        for (const p of pairs) {
+            if (!Number.isFinite(p.id) || p.id <= 0) continue;
+            if (seen.has(p.id)) continue;
+            seen.add(p.id);
+            uniq.push(p);
+        }
+
+        if (isNew && uniq.length === 0 && currentUserId) uniq.unshift({ id: currentUserId, name: currentUserName });
+
+        return uniq.map((p, idx) => ({
+            id: p.id,
+            name: p.name && String(p.name).trim() ? String(p.name) : p.id === currentUserId ? currentUserName || String(p.id) : String(p.id),
+            _uid: `pic-${p.id}-${idx}-${Math.random().toString(36).slice(2, 9)}`,
+        }));
+    };
+
+    const [picOpts, setPicOpts] = useState<Array<{ id: number; name: string; _uid: string }>>(() => buildPicOptsFromInitial(initial));
+    // 2) State lưu giá trị tạm thời của ô tìm kiếm (để clear sau khi chọn xong)
+    const [currentPicInput, setCurrentPicInput] = useState<{ id: number; name: string } | null>(null);
     const [supporterOpts, setSupporterOpts] = useState<Array<{ id: number; name: string; _uid: string }>>(() => {
         if (!initial?.picDeploymentIds || initial.picDeploymentIds.length === 0) return [];
         const ids = initial.picDeploymentIds.map((x: any) => Number(x)).filter((n) => Number.isFinite(n) && n > 0);
-        const names = Array.isArray((initial as any).picDeploymentNames) ? (initial as any).picDeploymentNames : [];
+        const names = Array.isArray((initial as any)?.picDeploymentNames) ? (initial as any).picDeploymentNames : [];
         return ids.map((id, idx) => ({
             id,
             name: names[idx] && String(names[idx]).trim() ? String(names[idx]) : `User-${id}`,
@@ -853,19 +898,8 @@ function TaskFormModal({
             const hnm = (initial?.hospitalName as string) || "";
             setHospitalOpt(hid ? { id: hid, name: hnm || String(hid) } : null);
 
-            // Set picOpt: nếu là task mới và có currentUserId, dùng currentUser; ngược lại dùng từ initial
-            if (isNew && currentUserId) {
-                // Set với currentUserId, name sẽ được fetch bởi resolveById nếu chưa có
-                setPicOpt({ id: currentUserId, name: currentUserName || String(currentUserId) });
-            } else {
-                const pid = (initial?.picDeploymentId as number) || 0;
-                const pnm = (initial?.picDeploymentName as string) || "";
-                if (pid) {
-                    setPicOpt({ id: pid, name: pnm || String(pid) });
-                } else {
-                    setPicOpt(null);
-                }
-            }
+            // Set danh sách PICs: dùng helper để ghép id->name ổn định, tránh sai lệch chỉ số
+            setPicOpts(buildPicOptsFromInitial(initial));
 
             // Prefill các select phụ
             // const aid = (initial?.agencyId as number) || 0;
@@ -956,12 +990,74 @@ function TaskFormModal({
         // - Nếu là task mới và có currentUserId: luôn fetch để đảm bảo có tên đầy đủ
         // - Nếu là task cũ: chỉ fetch khi có picDeploymentId
         if (isNewTask && currentUserId) {
-            resolveById(currentUserId, setPicOpt, "/api/v1/admin/users", ["fullName", "fullname", "name", "username", "label"]);
+            // resolve into temporary input (will be added to picOpts on user interaction if needed)
+            resolveById(currentUserId, setCurrentPicInput, "/api/v1/admin/users", ["fullName", "fullname", "name", "username", "label"]);
         } else if (initial?.picDeploymentId) {
-            resolveById((initial?.picDeploymentId as number) || null, setPicOpt, "/api/v1/admin/users", ["fullName", "fullname", "name", "username", "label"]);
+            resolveById((initial?.picDeploymentId as number) || null, setCurrentPicInput, "/api/v1/admin/users", ["fullName", "fullname", "name", "username", "label"]);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, initial, currentUserId]);
+
+    // Nếu có các picOpts hiển thị là số/placeholder (ví dụ "9" hoặc "User-9"),
+    // fetch thông tin user và cập nhật tên hiển thị.
+    useEffect(() => {
+        if (!open) return;
+        if (!picOpts || picOpts.length === 0) return;
+
+        const needsResolve = picOpts
+            .filter((p) => {
+                const n = String(p.name ?? "").trim();
+                return (
+                    !n ||
+                    /^\d+$/.test(n) ||
+                    n === String(p.id) ||
+                    n === `User-${p.id}` ||
+                    n === "Không có tên"
+                );
+            })
+            .map((p) => Number(p.id))
+            .filter((id, i, arr) => Number.isFinite(id) && id > 0 && arr.indexOf(id) === i);
+
+        if (needsResolve.length === 0) return;
+
+        let cancelled = false;
+
+        (async () => {
+            try {
+                const results = await Promise.all(
+                    needsResolve.map(async (id) => {
+                        try {
+                            const res = await fetch(`${API_ROOT}/api/v1/admin/users/${id}`, { headers: authHeaders(), credentials: "include" });
+                            if (!res.ok) return null;
+                            return await res.json();
+                        } catch {
+                            return null;
+                        }
+                    })
+                );
+
+                if (cancelled) return;
+
+                setPicOpts((prev) =>
+                    prev.map((p) => {
+                        const idx = needsResolve.indexOf(Number(p.id));
+                        if (idx === -1) return p;
+                        const u = results[idx];
+                        if (!u) return p;
+                        const resolvedName = (u.fullName || u.fullname || u.name || u.username || u.label) as string | undefined;
+                        if (!resolvedName) return p;
+                        return { ...p, name: String(resolvedName) };
+                    })
+                );
+            } catch {
+                // ignore
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [open, picOpts]);
 
     useEffect(() => {
         if (!open) return;
@@ -972,7 +1068,7 @@ function TaskFormModal({
         const ids = initial.picDeploymentIds
             .map((x: any) => Number(x))
             .filter((n: number) => Number.isFinite(n) && n > 0);
-        const names = Array.isArray((initial as any).picDeploymentNames) ? (initial as any).picDeploymentNames : [];
+        const names = Array.isArray((initial as any)?.picDeploymentNames) ? (initial as any).picDeploymentNames : [];
         const opts = ids.map((id, idx) => ({
             id,
             name: names[idx] && String(names[idx]).trim() ? String(names[idx]) : `User-${id}`,
@@ -982,9 +1078,10 @@ function TaskFormModal({
     }, [open, initial]);
 
     useEffect(() => {
-        if (!picOpt?.id) return;
-        setSupporterOpts((prev) => prev.filter((s) => s.id !== picOpt.id));
-    }, [picOpt?.id]);
+        if (!picOpts || picOpts.length === 0) return;
+        const ids = new Set(picOpts.map((p) => p.id));
+        setSupporterOpts((prev) => prev.filter((s) => !ids.has(s.id)));
+    }, [picOpts]);
 
     const removeSupporter = (uid: string) => {
         setSupporterOpts((prev) => prev.filter((s) => s._uid !== uid));
@@ -992,7 +1089,7 @@ function TaskFormModal({
 
     const addSupporter = (supporter: { id: number; name: string }) => {
         if (!supporter?.id) return;
-        if (picOpt?.id && supporter.id === picOpt.id) {
+        if (picOpts.some((p) => p.id === supporter.id)) {
             toast.error("Đang là người phụ trách chính");
             setCurrentSupporterInput(null);
             return;
@@ -1013,6 +1110,11 @@ function TaskFormModal({
         setCurrentSupporterInput(null);
     };
 
+    // 3) Hàm xóa một người khỏi danh sách PICs (tags)
+    const removePic = (uidToRemove: string) => {
+        setPicOpts((prev) => prev.filter((p) => p._uid !== uidToRemove));
+    };
+
     // Đóng bằng phím ESC
     useEffect(() => {
         if (!open) return;
@@ -1031,7 +1133,7 @@ function TaskFormModal({
         e.preventDefault();
         if (!model.name?.trim()) { toast.error("Tên dự án không được để trống"); return; }
         if (!hospitalOpt?.id) { toast.error("Bệnh viện không được để trống"); return; }
-        if (!picOpt?.id) { toast.error("Người phụ trách không được để trống"); return; }
+        if (!picOpts || picOpts.length === 0) { toast.error("Người phụ trách không được để trống"); return; }
 
         const normalizedStatus = normalizeStatus(model.status) ?? "RECEIVED";
 
@@ -1041,14 +1143,13 @@ function TaskFormModal({
             ? (model.completionDate && String(model.completionDate).trim() ? model.completionDate : toLocalISOString(new Date()))
             : "";
 
-        const supporterIds = supporterOpts.map((s) => s.id);
-        const combinedPicIds = Array.from(new Set([picOpt.id, ...supporterIds].filter((id): id is number => Number.isFinite(id))));
+        const picIds = picOpts.map((p) => p.id).filter((id) => Number.isFinite(id));
 
         const payload: ImplementationTaskRequestDTO = {
             ...model,
             hospitalId: hospitalOpt.id,
-            picDeploymentId: picOpt.id,
-            picDeploymentIds: combinedPicIds,
+            picDeploymentId: picIds[0],
+            picDeploymentIds: picIds,
             status: normalizedStatus,
             deadline: toISOOrNull(model.deadline) || undefined,
             completionDate: completionRaw ? toISOOrNull(completionRaw) || undefined : undefined,
@@ -1125,54 +1226,96 @@ function TaskFormModal({
                                     />
                                 )}
 
-                                {/* PIC theo TÊN */}
-                                <RemoteSelect
-                                    label="Người làm"
-                                    required
-                                    placeholder="Nhập tên người phụ trách để tìm…"
-                                    fetchOptions={searchPICs}
-                                    value={picOpt}
-                                    onChange={setPicOpt}
-                                />
+                                {/* PIC theo TÊN (multi-select tags) */}
+                                <div className="col-span-2">
+                                    <Field label="Người phụ trách (PIC)" required>
+                                        <div className="flex flex-col gap-2">
+                                            {/* PHẦN 1: Hiển thị tags (ĐÃ FIX CSS HIỂN THỊ) */}
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                {picOpts.map((pic, index) => (
+                                                    <div
+                                                        key={pic._uid}
+                                                        // Logic đổi màu cho người đầu tiên
+                                                        className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs border ${index === 0
+                                                            ? "bg-blue-100 border-blue-200 text-blue-800 font-bold" // Người chính màu xanh
+                                                            : "bg-gray-50 dark:bg-gray-800 border-gray-200 text-gray-700"
+                                                            }`}
+                                                    >
+                                                        {/* Logic tìm tên "thông minh" (quét hết các trường có thể chứa tên) */}
+                                                        <span className="max-w-[12rem] truncate block">
+                                                            {pic.name || (pic as any).fullName || (pic as any).label || (pic as any).username || String(pic.id) || "Không có tên"}
+                                                            {index === 0 && " (Chính)"}
+                                                        </span>
 
-                                <Field label="Người hỗ trợ (tùy chọn)">
-                                    <div className="flex flex-col gap-2">
-                                        <div className="flex flex-wrap items-center gap-2 min-h-[36px]">
-                                            {supporterOpts.length === 0 ? (
-                                                <span className="text-xs text-gray-400">Chưa có người hỗ trợ</span>
-                                            ) : (
-                                                supporterOpts.map((sup) => (
-                                                    <div key={sup._uid} className="inline-flex items-center gap-2 px-3 py-1 bg-gray-50 dark:bg-gray-800 rounded-full text-xs">
-                                                        <span className="max-w-[12rem] truncate block">{sup.name}</span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                removeSupporter(sup._uid);
-                                                            }}
-                                                            className="text-red-500 hover:text-red-700 text-xs px-1"
-                                                            aria-label={`Remove ${sup.name}`}
-                                                        >
-                                                            ✕
-                                                        </button>
+                                                        {!readOnly && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    removePic(pic._uid);
+                                                                }}
+                                                                className="text-red-500 hover:text-red-700 text-xs px-1 ml-1 font-bold"
+                                                            >
+                                                                ✕
+                                                            </button>
+                                                        )}
                                                     </div>
-                                                ))
+                                                ))}
+                                            </div>
+
+                                            {/* PHẦN 2: Input tìm kiếm (ĐÃ FIX LOGIC) */}
+                                            {!readOnly && (
+                                                <div>
+                                                    <RemoteSelect
+                                                        label=""
+                                                        placeholder="Nhập tên người phụ trách để tìm…"
+                                                        fetchOptions={searchPICs}
+                                                        value={currentPicInput}
+                                                        excludeIds={picOpts.map((p) => p.id)}
+                                                        onChange={(selected) => {
+                                                            // 1. Nếu không chọn gì thì thôi
+                                                            if (!selected || !selected.id) return;
+
+                                                            // 2. Ép kiểu String để so sánh ID (Chấp hết số hay chữ)
+                                                            const isDuplicate = picOpts.some((p) => String(p.id) === String(selected.id));
+
+                                                            if (!isDuplicate) {
+                                                                // 3. Chuẩn hóa tên (Phòng trường hợp API thiếu field name)
+                                                                const displayName = (selected as any).name || (selected as any).fullName || (selected as any).label || (selected as any).username;
+
+                                                                // Nếu data lỗi chỉ có ID mà không có tên => Bỏ qua luôn cho sạch
+                                                                if (!displayName) {
+                                                                    console.log("Selected item has no display name, ignoring");
+                                                                    setCurrentPicInput(null);
+                                                                    return;
+                                                                }
+
+                                                                const newPic = {
+                                                                    ...selected,
+                                                                    name: displayName, // Gán cứng tên để hiển thị
+                                                                    _uid: `pic-${Date.now()}-${selected.id}`,
+                                                                };
+
+                                                                setPicOpts((prev) => {
+                                                                    // 4. QUAN TRỌNG: Đưa newPic lên đầu mảng (index 0)
+                                                                    return [newPic, ...prev];
+                                                                });
+
+                                                                setCurrentPicInput(null);
+                                                            } else {
+                                                                // Đã trùng rồi thì xóa input đi thôi
+                                                                setCurrentPicInput(null);
+                                                            }
+                                                        }}
+                                                    />
+                                                </div>
                                             )}
                                         </div>
-                                        <RemoteSelect
-                                            label=""
-                                            placeholder="Thêm người hỗ trợ..."
-                                            fetchOptions={searchPICs}
-                                            value={currentSupporterInput}
-                                            onChange={(selected) => {
-                                                if (selected) {
-                                                    addSupporter(selected);
-                                                }
-                                            }}
-                                        />
-                                    </div>
-                                </Field>
+                                    </Field>
+                                </div>
+
+
 
                                 {/* Ẩn các trường nâng cao để đồng bộ với form triển khai */}
                                 <Field label="Trạng thái" required>
@@ -1353,20 +1496,14 @@ function DetailModal({
                 onMouseDown={(e) => e.stopPropagation()}
             >
                 {/* Header (sticky like SuperAdmin) */}
-                <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-6 py-4 rounded-t-2xl flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
-                        <span> 📋 Chi tiết tác vụ bảo trì</span>
+                <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                        📋 Chi tiết tác vụ bảo trì
                     </h2>
-                    <button
-                        onClick={onClose}
-                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                    >
-                        ✕
-                    </button>
                 </div>
 
                 {/* Content (scrollable) */}
-                <div className="p-6 max-h-[60vh] overflow-y-auto text-sm text-gray-800 dark:text-gray-200">
+                <div className="p-6 max-h-[60vh] overflow-y-auto text-sm [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                     {/* Grid Info */}
                     <div className="grid  grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
                         <Info icon={<FiTag />} label="Tên" value={item.name} />
@@ -1435,7 +1572,7 @@ function DetailModal({
                     </div>
 
                     {/* Additional request */}
-                    <div className="pt-4 mt-6 border-t border-gray-200 dark:border-gray-800">
+                    <div className="pt-6 mb-6">
                         <p className="text-gray-500 mb-2">Yêu cầu bổ sung:</p>
                         <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px]">
                             {(() => {
@@ -1446,6 +1583,9 @@ function DetailModal({
                             })()}
                         </div>
                     </div>
+
+                    {/* Task Notes (personal notes for maintenance) */}
+                    <TaskNotes taskId={item?.id} myRole={(item as any)?.myRole} taskType="maintenance" />
                 </div>
 
                 {/* Footer (sticky) */}
@@ -1481,8 +1621,8 @@ function Info({
         return (
             <div className="flex justify-start items-start gap-3">
                 <div className="flex items-center gap-2 min-w-[140px] shrink-0">
-        {icon && <span className="text-gray-400">{icon}</span>}
-        <span className="font-semibold text-gray-900 dark:text-gray-100">{label}</span>
+                    {icon && <span className="text-gray-400">{icon}</span>}
+                    <span className="font-semibold text-gray-900 dark:text-gray-100">{label}</span>
                     <div className="mt-1 text-gray-700 dark:text-gray-300 text-sm break-words">{value ?? "—"}</div>
                 </div>
             </div>
@@ -2464,7 +2604,7 @@ const ImplementationTasksPage: React.FC = () => {
                                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospitalPage * hospitalSize + index + 1}</td>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="flex items-center gap-3">
-                                                                        
+
                                                                         <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
                                                                             <span>{hospital.label}</span>
                                                                             {hospital.fromDeployment && !hospital.acceptedByMaintenance && (
