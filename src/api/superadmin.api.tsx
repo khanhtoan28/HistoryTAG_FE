@@ -15,6 +15,8 @@ export type UserResponseDTO = {
   address?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  workStatus?: string | null;
+  workStatusDate?: string | null;
   department?: string | null;
   team?: string | null;
   roles?: { roleId: number; roleName: string }[];
@@ -44,6 +46,7 @@ export type UserUpdateRequestDTO = {
   avatar?: File | null;
   assignedHospitalIds?: number[];
   workStatus?: string;
+  workStatusDate?: string | null;
   department?: "IT" | "ACCOUNTING" | "BUSINESS" | null;
   team?: "DEV" | "DEPLOYMENT" | "MAINTENANCE" | "SALES" | null;
   roles?: string[];

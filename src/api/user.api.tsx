@@ -18,6 +18,7 @@ export type UserResponse = {
   roles: RoleDTO[];
   assignedHospitals?: HospitalDTO[];
   workStatus?: string | null;
+  workStatusDate?: string | null;
   department?: string | null;
   team?: string | null;
 };
@@ -37,6 +38,7 @@ export type UpdateAccountPayload = {
   // gán hospital/enum nếu muốn sau này
   assignedHospitalIds?: number[];
   workStatus?: string;
+  workStatusDate?: string;
 };
 
 // Dùng FormData vì có thể upload avatar
@@ -50,6 +52,7 @@ export const updateMyAccount = (userId: number, payload: UpdateAccountPayload) =
     payload.assignedHospitalIds.forEach((id) => fd.append("assignedHospitalIds", String(id)));
   }
   if (payload.workStatus) fd.append("workStatus", payload.workStatus);
+  if (payload.workStatusDate) fd.append("workStatusDate", payload.workStatusDate);
   return api.put<UserResponse>(`${ACCOUNT_BASE}/${userId}`, fd, {
     headers: { "Content-Type": "multipart/form-data" },
   });

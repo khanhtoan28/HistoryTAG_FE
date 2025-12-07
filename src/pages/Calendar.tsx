@@ -33,11 +33,13 @@ const Calendar: React.FC = () => {
   const [eventTitle, setEventTitle] = useState("");
   const [eventStartDate, setEventStartDate] = useState("");
   const [eventEndDate, setEventEndDate] = useState("");
+  const [eventTime, setEventTime] = useState(""); // Thêm state cho giờ
   const [eventLevel, setEventLevel] = useState("");
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [updateConfirmOpen, setUpdateConfirmOpen] = useState(false);
+  const [dateLocked, setDateLocked] = useState(false); // Track xem ngày có bị khóa không
   const [errors, setErrors] = useState<{
     title?: string;
     startDate?: string;
@@ -65,6 +67,15 @@ const Calendar: React.FC = () => {
     "Quan trọng": "warning",
   };
 
+  // Time picker state
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [selectedHour, setSelectedHour] = useState<number | null>(null);
+  const [selectedMinute, setSelectedMinute] = useState<number | null>(null);
+
+  // Tạo danh sách giờ (0-23) và phút (0-59)
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  const minutes = Array.from({ length: 60 }, (_, i) => i);
+
   // Load events from API
   useEffect(() => {
     loadEvents();
@@ -88,15 +99,22 @@ const Calendar: React.FC = () => {
       
       const mappedEvents: CalendarEvent[] = apiEvents.map((event) => {
         const eventDate = new Date(event.startDate);
-        eventDate.setHours(0, 0, 0, 0);
-        const isPast = eventDate < today;
+        const isAllDay = event.allDay ?? true;
+        
+        // Kiểm tra isPast: chỉ so sánh ngày, không so sánh giờ
+        // Event là "past" chỉ khi ngày của event < ngày hôm nay
+        const eventDay = new Date(eventDate);
+        eventDay.setHours(0, 0, 0, 0);
+        // So sánh: event đã qua nếu eventDay < today (tức là ngày hôm qua hoặc trước đó)
+        // Event của ngày hôm nay (eventDay === today) sẽ KHÔNG bị đánh dấu là past
+        const isPast = eventDay.getTime() < today.getTime();
         
         return {
           id: String(event.id),
           title: event.title,
           start: event.startDate,
           end: event.endDate || undefined,
-          allDay: event.allDay ?? true,
+          allDay: isAllDay,
           extendedProps: {
             calendar: colorToPriorityLevel[event.color] || "Bình thường",
             color: isPast ? "secondary" : (event.color || "success"), // Dùng "secondary" (xám) nếu đã qua ngày
@@ -123,6 +141,7 @@ const Calendar: React.FC = () => {
       : selectInfo.startStr;
     setEventStartDate(selectedDate);
     setEventEndDate(selectedDate);
+    setDateLocked(true); // Khóa ngày khi chọn từ calendar
     openModal();
   };
 
@@ -140,10 +159,21 @@ const Calendar: React.FC = () => {
       return `${year}-${month}-${day}`;
     };
     
+    // Format giờ từ event
+    const formatTimeFromDate = (date: Date | null | undefined): string => {
+      if (!date) return "";
+      const hours = String(date.getHours()).padStart(2, "0");
+      const minutes = String(date.getMinutes()).padStart(2, "0");
+      return `${hours}:${minutes}`;
+    };
+    
     const eventDate = formatDate(event.start);
+    const eventTimeStr = formatTimeFromDate(event.start);
     setEventStartDate(eventDate);
     setEventEndDate(eventDate);
+    setEventTime(eventTimeStr);
     setEventLevel(event.extendedProps.calendar);
+    setDateLocked(true); // Khóa ngày khi edit event từ calendar
     openModal();
   };
 
@@ -211,12 +241,27 @@ const Calendar: React.FC = () => {
     try {
       const trimmedTitle = eventTitle.trim();
       const color = workPriorityLevels[eventLevel as keyof typeof workPriorityLevels] || "success";
+      
+      // Tạo datetime từ ngày và giờ
+      let startDateTime = eventStartDate;
+      let endDateTime = eventStartDate;
+      
+      // Nếu có giờ, thêm vào datetime
+      if (eventTime) {
+        startDateTime = `${eventStartDate}T${eventTime}:00`;
+        endDateTime = `${eventStartDate}T${eventTime}:00`;
+      } else {
+        // Nếu không có giờ, dùng allDay
+        startDateTime = `${eventStartDate}T00:00:00`;
+        endDateTime = `${eventStartDate}T23:59:59`;
+      }
+      
       const payload = {
         title: trimmedTitle,
-        startDate: eventStartDate,
-        endDate: eventStartDate, // Dùng cùng ngày với ngày bắt đầu
+        startDate: startDateTime,
+        endDate: endDateTime,
         color: color,
-        allDay: true,
+        allDay: !eventTime, // allDay = false nếu có giờ
       };
 
       if (selectedEvent && selectedEvent.extendedProps.eventId) {
@@ -297,10 +342,49 @@ const Calendar: React.FC = () => {
     setEventTitle("");
     setEventStartDate("");
     setEventEndDate("");
+    setEventTime("");
     setEventLevel("");
     setSelectedEvent(null);
+    setDateLocked(false);
+    setSelectedHour(null);
+    setSelectedMinute(null);
+    setShowTimePicker(false);
     setErrors({});
   };
+
+  // Parse time từ string HH:mm
+  const parseTime = (timeStr: string) => {
+    if (!timeStr) return { hour: null, minute: null };
+    const [hour, minute] = timeStr.split(":").map(Number);
+    return { hour, minute };
+  };
+
+  // Format time thành HH:mm
+  const formatTime = (hour: number | null, minute: number | null): string => {
+    if (hour === null || minute === null) return "";
+    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  };
+
+  // Khi chọn giờ/phút, cập nhật eventTime
+  useEffect(() => {
+    if (selectedHour !== null && selectedMinute !== null) {
+      setEventTime(formatTime(selectedHour, selectedMinute));
+    } else if (selectedHour === null && selectedMinute === null) {
+      setEventTime("");
+    }
+  }, [selectedHour, selectedMinute]);
+
+  // Khi eventTime thay đổi từ bên ngoài, parse lại
+  useEffect(() => {
+    if (eventTime) {
+      const { hour, minute } = parseTime(eventTime);
+      setSelectedHour(hour);
+      setSelectedMinute(minute);
+    } else {
+      setSelectedHour(null);
+      setSelectedMinute(null);
+    }
+  }, [eventTime]);
 
   return (
     <>
@@ -331,10 +415,26 @@ const Calendar: React.FC = () => {
             select={handleDateSelect}
             eventClick={handleEventClick}
             eventContent={renderEventContent}
+            dayMaxEvents={2}
+            moreLinkContent={(arg) => {
+              // arg.num là số events còn lại
+              return `Bạn còn ${arg.num}\ncông việc trong ngày`;
+            }}
+            moreLinkClick={(info) => {
+              // Chuyển sang day view của ngày đó khi click "còn tiếp..."
+              if (calendarRef.current) {
+                const calendarApi = calendarRef.current.getApi();
+                calendarApi.changeView('timeGridDay', info.date);
+              }
+            }}
             customButtons={{
               addEventButton: {
                 text: "Thêm sự kiện +",
-                click: openModal,
+                click: () => {
+                  resetModalFields();
+                  setDateLocked(false); // Cho phép sửa ngày khi click nút
+                  openModal();
+                },
               },
             }}
           />
@@ -344,7 +444,7 @@ const Calendar: React.FC = () => {
           onClose={closeModal}
           className="max-w-[700px] p-6 lg:p-10"
         >
-          <div className="flex flex-col px-2 overflow-y-auto custom-scrollbar">
+          <div className="flex flex-col px-2 max-h-[80vh] overflow-y-auto custom-scrollbar">
             <div>
               <h5 className="mb-2 font-semibold text-gray-800 modal-title text-theme-xl dark:text-white/90 lg:text-2xl">
                 {selectedEvent ? "Chỉnh sửa sự kiện" : "Thêm sự kiện"}
@@ -368,7 +468,7 @@ const Calendar: React.FC = () => {
                       ? "text-gray-400 dark:text-gray-500" 
                       : "text-gray-700 dark:text-gray-400"
                   }`}>
-                    Tiêu đề sự kiện {!isSelectedEventPast() && <span className="text-red-500">*</span>}
+                    Tên công việc {!isSelectedEventPast() && <span className="text-red-500">*</span>}
                   </label>
                   <input
                     id="event-title"
@@ -394,6 +494,162 @@ const Calendar: React.FC = () => {
                     <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">{errors.title}</p>
                   )}
                 </div>
+              </div>
+              <div className="mt-6">
+                <label className={`mb-1.5 block text-sm font-medium ${
+                  isSelectedEventPast() 
+                    ? "text-gray-400 dark:text-gray-500" 
+                    : "text-gray-700 dark:text-gray-400"
+                }`}>
+                  Ngày sự kiện {!isSelectedEventPast() && <span className="text-red-500">*</span>}
+                </label>
+                <input
+                  id="event-date"
+                  type="date"
+                  value={eventStartDate}
+                  onChange={(e) => {
+                    setEventStartDate(e.target.value);
+                    setEventEndDate(e.target.value);
+                    // Clear error when user selects date
+                    if (errors.startDate) {
+                      setErrors({ ...errors, startDate: undefined });
+                    }
+                  }}
+                  disabled={isSelectedEventPast() || dateLocked}
+                  className={`dark:bg-dark-900 h-11 w-full rounded-lg border px-4 py-2.5 text-sm shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800 ${
+                    isSelectedEventPast() || dateLocked
+                      ? "bg-gray-200 border-gray-300 text-gray-500 cursor-not-allowed opacity-70 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-400"
+                      : errors.startDate
+                      ? "bg-transparent border-red-500 text-gray-800 focus:border-red-500 focus:ring-red-500/10"
+                      : "bg-transparent border-gray-300 text-gray-800 focus:border-brand-300"
+                  }`}
+                />
+                {errors.startDate && !isSelectedEventPast() && (
+                  <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">{errors.startDate}</p>
+                )}
+                {dateLocked && !isSelectedEventPast() && (
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Ngày đã được chọn từ lịch, không thể thay đổi
+                  </p>
+                )}
+              </div>
+              <div className="mt-6">
+                <label className={`mb-1.5 block text-sm font-medium ${
+                  isSelectedEventPast() 
+                    ? "text-gray-400 dark:text-gray-500" 
+                    : "text-gray-700 dark:text-gray-400"
+                }`}>
+                  Giờ sự kiện
+                </label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => !isSelectedEventPast() && setShowTimePicker(!showTimePicker)}
+                    disabled={isSelectedEventPast()}
+                    className={`w-full h-11 rounded-lg border px-4 py-2.5 text-left text-sm shadow-theme-xs focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800 ${
+                      isSelectedEventPast()
+                        ? "bg-gray-200 border-gray-300 text-gray-500 cursor-not-allowed opacity-70 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-400"
+                        : eventTime
+                        ? "bg-transparent border-gray-300 text-gray-800 focus:border-brand-300"
+                        : "bg-transparent border-gray-300 text-gray-500 focus:border-brand-300"
+                    }`}
+                  >
+                    {eventTime && eventTime.trim() !== ""
+                      ? (() => {
+                          const [hours, minutes] = eventTime.split(":").map(Number);
+                          if (isNaN(hours) || isNaN(minutes)) return "— Chọn giờ (tùy chọn) —";
+                          const hour12 = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+                          const ampm = hours < 12 ? "SA" : "CH";
+                          return `${hour12}:${String(minutes).padStart(2, "0")} ${ampm}`;
+                        })()
+                      : "— Chọn giờ (tùy chọn) —"
+                    }
+                  </button>
+                  
+                  {showTimePicker && !isSelectedEventPast() && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-40" 
+                        onClick={() => {
+                          // Khi click ra ngoài, đóng time picker và giữ nguyên giờ đã chọn
+                          setShowTimePicker(false);
+                        }}
+                      />
+                      <div className="absolute z-50 mt-2 w-full max-w-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300">Chọn giờ</h4>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedHour(null);
+                            setSelectedMinute(null);
+                            setShowTimePicker(false);
+                          }}
+                          className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                        >
+                          Xóa
+                        </button>
+                      </div>
+                      <div className="flex gap-2">
+                        {/* Giờ */}
+                        <div className="flex-1">
+                          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1 text-center">Giờ</div>
+                          <div className="h-32 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent border border-gray-200 dark:border-gray-700 rounded">
+                            {hours.map((hour) => (
+                              <div
+                                key={hour}
+                                onClick={() => setSelectedHour(hour)}
+                                className={`px-2 py-1 text-xs text-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+                                  selectedHour === hour
+                                    ? "bg-brand-500 text-white dark:bg-brand-600"
+                                    : "text-gray-700 dark:text-gray-300"
+                                }`}
+                              >
+                                {String(hour).padStart(2, "0")}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        {/* Phút */}
+                        <div className="flex-1">
+                          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1 text-center">Phút</div>
+                          <div className="h-32 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent border border-gray-200 dark:border-gray-700 rounded">
+                            {minutes.map((minute) => (
+                              <div
+                                key={minute}
+                                onClick={() => setSelectedMinute(minute)}
+                                className={`px-2 py-1 text-xs text-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+                                  selectedMinute === minute
+                                    ? "bg-brand-500 text-white dark:bg-brand-600"
+                                    : "text-gray-700 dark:text-gray-300"
+                                }`}
+                              >
+                                {String(minute).padStart(2, "0")}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // Đóng time picker và giữ nguyên giờ đã chọn
+                            setShowTimePicker(false);
+                          }}
+                          className="px-3 py-1.5 text-xs font-medium text-white bg-brand-500 rounded hover:bg-brand-600"
+                        >
+                          Xong
+                        </button>
+                      </div>
+                    </div>
+                    </>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Chọn giờ hoặc để trống nếu sự kiện kéo dài cả ngày
+                </p>
               </div>
               <div className="mt-6">
                 <label className={`block mb-4 text-sm font-medium ${
@@ -585,15 +841,30 @@ const renderEventContent = (eventInfo: any) => {
   const color = eventInfo.event.extendedProps.color || "success";
   const colorClass = `fc-bg-${color}`;
   const isPast = eventInfo.event.extendedProps.isPast || false;
+  
+  // Format giờ từ event nếu có
+  const formatEventTime = (event: any) => {
+    if (!event.start) return "";
+    const date = new Date(event.start);
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    if (hours === 0 && minutes === 0 && event.allDay) return ""; // All day event, không hiển thị giờ
+    const hour12 = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+    const ampm = hours < 12 ? "SA" : "CH";
+    return `${hour12}:${String(minutes).padStart(2, "0")} ${ampm}`;
+  };
+  
+  const eventTime = formatEventTime(eventInfo.event);
+  
   return (
     <div
-      className={`event-fc-color flex fc-event-main ${colorClass} p-1 rounded-sm ${
+      className={`event-fc-color flex flex-col fc-event-main ${colorClass} p-1 rounded-sm ${
         isPast ? "opacity-70" : ""
       }`}
     >
       <div className="fc-daygrid-event-dot"></div>
-      <div className="fc-event-time">{eventInfo.timeText}</div>
       <div className="fc-event-title">{eventInfo.event.title}</div>
+      {eventTime && <div className="fc-event-time text-xs">{eventTime}</div>}
     </div>
   );
 };

@@ -35,6 +35,7 @@ type UserForm = {
   department: "" | (typeof DEPARTMENT_OPTIONS)[number];
   team: "" | (typeof TEAM_OPTIONS)[number];
   workStatus?: string;
+  workStatusDate?: string;
 };
 
 const ROLE_OPTIONS = ["USER", "ADMIN", "SUPERADMIN"]; // Match backend RoleType enum
@@ -78,7 +79,7 @@ export default function SuperAdminUsers() {
     department: "",
     team: "",
     workStatus: "",
-  
+    workStatusDate: "",
   });
 
   // business projects selection removed from UI; keep backend support if needed later
@@ -120,6 +121,7 @@ export default function SuperAdminUsers() {
       department: "",
       team: "",
       workStatus: "",
+      workStatusDate: "",
     });
   }
 
@@ -145,7 +147,8 @@ export default function SuperAdminUsers() {
       roles: normalizedRoles,
       department: (user.department ?? "") as UserForm["department"],
       team: (user.team ?? "") as UserForm["team"],
-      workStatus: "",
+      workStatus: user.workStatus || "",
+      workStatusDate: user.workStatusDate || "",
     });
   }
 
@@ -204,6 +207,7 @@ export default function SuperAdminUsers() {
       department: "",
       team: "",
       workStatus: "",
+      workStatusDate: "",
     });
     setOpen(true);
   }
@@ -337,6 +341,7 @@ export default function SuperAdminUsers() {
           team: form.team || undefined,
           
           workStatus: form.workStatus || undefined,
+          workStatusDate: form.workStatusDate || undefined,
           roles: form.roles && form.roles.length ? form.roles : undefined,
         };
         await updateUser(editing!.id, payload);
@@ -572,6 +577,13 @@ export default function SuperAdminUsers() {
                   <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiInfo className="text-gray-500" />Trạng thái làm việc:</span></div>
                   <div className="flex-1 text-gray-700 break-words">{(() => { const obj = viewing as Record<string, unknown>; const v = 'workStatus' in obj ? obj['workStatus'] : undefined; return v != null && v !== '' ? String(v) : '—'; })()}</div>
                 </div>
+
+                {viewing.workStatusDate && (
+                  <div className="flex items-start gap-4">
+                    <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiCalendar className="text-gray-500" />Ngày cập nhật trạng thái:</span></div>
+                    <div className="flex-1 text-gray-700 break-words">{new Date(viewing.workStatusDate).toLocaleString('vi-VN')}</div>
+                  </div>
+                )}
 
                 <div className="flex items-start gap-4">
                   <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiCalendar className="text-gray-500" />Tạo lúc:</span></div>

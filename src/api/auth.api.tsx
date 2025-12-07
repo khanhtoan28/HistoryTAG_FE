@@ -36,6 +36,8 @@ export type UserResponseDTO = {
   address?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  workStatus?: string | null;
+  workStatusDate?: string | null;
   department?: string | null;
   team?: string | null;
   roles?: { roleId: number; roleName: string }[];
@@ -49,6 +51,7 @@ export type UserUpdateRequestDTO = {
   avatar?: File | null;
   assignedHospitalIds?: number[];
   workStatus?: string | null;
+  workStatusDate?: string | null;
   department?: "IT" | "ACCOUNTING" | null;
   team?: "DEV" | "DEPLOYMENT" | "MAINTENANCE" | null;
 };
@@ -299,6 +302,112 @@ export async function getPersonalCalendarEventsByDateRange(
     "/api/v1/auth/calendar/events/date-range",
     {
       params: { startDate, endDate },
+    }
+  );
+  return data;
+}
+
+// ==========================
+// Team Calendar Events APIs
+// ==========================
+
+export type TeamCalendarEventRequestDTO = {
+  title: string;
+  startDate: string; // ISO date string
+  endDate?: string | null; // ISO date string
+  color?: string;
+  allDay?: boolean;
+  team: string; // SALES, DEPLOYMENT, MAINTENANCE
+  eventType?: string; // team or member
+  memberId?: number | null;
+};
+
+export type TeamCalendarEventResponseDTO = {
+  id: number;
+  title: string;
+  startDate: string;
+  endDate: string | null;
+  color: string;
+  allDay: boolean;
+  team: string;
+  eventType: string;
+  memberId: number | null;
+  createdBy: number;
+  createdByName: string; // Full name of the user who created the event
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function createTeamCalendarEvent(
+  payload: TeamCalendarEventRequestDTO
+): Promise<TeamCalendarEventResponseDTO> {
+  const { data } = await api.post<TeamCalendarEventResponseDTO>(
+    "/api/v1/auth/team-calendar/events",
+    payload
+  );
+  return data;
+}
+
+export async function updateTeamCalendarEvent(
+  eventId: number,
+  payload: TeamCalendarEventRequestDTO
+): Promise<TeamCalendarEventResponseDTO> {
+  const { data } = await api.put<TeamCalendarEventResponseDTO>(
+    `/api/v1/auth/team-calendar/events/${eventId}`,
+    payload
+  );
+  return data;
+}
+
+export async function deleteTeamCalendarEvent(eventId: number): Promise<void> {
+  await api.delete(`/api/v1/auth/team-calendar/events/${eventId}`);
+}
+
+export async function getTeamCalendarEventById(
+  eventId: number
+): Promise<TeamCalendarEventResponseDTO> {
+  const { data } = await api.get<TeamCalendarEventResponseDTO>(
+    `/api/v1/auth/team-calendar/events/${eventId}`
+  );
+  return data;
+}
+
+export async function getTeamCalendarEventsByTeam(
+  team: string
+): Promise<TeamCalendarEventResponseDTO[]> {
+  const { data } = await api.get<TeamCalendarEventResponseDTO[]>(
+    "/api/v1/auth/team-calendar/events",
+    {
+      params: { team },
+    }
+  );
+  return data;
+}
+
+export async function getTeamCalendarEventsByTeamAndDateRange(
+  team: string,
+  startDate: string,
+  endDate: string
+): Promise<TeamCalendarEventResponseDTO[]> {
+  const { data } = await api.get<TeamCalendarEventResponseDTO[]>(
+    "/api/v1/auth/team-calendar/events/date-range",
+    {
+      params: { team, startDate, endDate },
+    }
+  );
+  return data;
+}
+
+export async function getTeamCalendarEventsByTeamAndMember(
+  team: string,
+  memberId: number,
+  startDate: string,
+  endDate: string
+): Promise<TeamCalendarEventResponseDTO[]> {
+  const { data } = await api.get<TeamCalendarEventResponseDTO[]>(
+    "/api/v1/auth/team-calendar/events/member",
+    {
+      params: { team, memberId, startDate, endDate },
     }
   );
   return data;

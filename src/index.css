@@ -1027,6 +1027,35 @@ span.flatpickr-weekday,
 .fc .fc-daygrid-day {
   @apply p-2;
 }
+.fc .fc-daygrid-day-frame {
+  overflow: hidden;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.fc .fc-daygrid-day-events {
+  overflow: hidden;
+  max-width: 100%;
+}
+.fc .fc-daygrid-day-bottom {
+  margin-top: auto;
+  padding-top: 4px;
+}
+.fc .fc-more-link {
+  display: block;
+  padding: 2px 4px;
+  font-size: 0.75rem;
+  color: #6b7280;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: pre-line;
+  line-height: 1.4;
+}
+.fc .fc-more-link:hover {
+  color: #374151;
+  text-decoration: underline;
+}
 .fc .fc-daygrid-day.fc-day-today .fc-scrollgrid-sync-inner {
   @apply rounded-sm bg-gray-100 dark:bg-white/[0.03];
 }
