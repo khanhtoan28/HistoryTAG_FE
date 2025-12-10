@@ -57,6 +57,20 @@ const TEAM_LABELS: Record<string, string> = {
   SALES: "Kinh doanh",
 };
 
+const WORK_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Đang làm việc",
+  INACTIVE: "Không hoạt động",
+  ON_LEAVE: "Nghỉ phép",
+  TERMINATED: "Đã nghỉ việc",
+};
+
+const WORK_STATUS_COLORS: Record<string, string> = {
+  ACTIVE: "bg-green-100 text-green-800 border-green-200",
+  INACTIVE: "bg-gray-100 text-gray-800 border-gray-200",
+  ON_LEAVE: "bg-yellow-100 text-yellow-800 border-yellow-200",
+  TERMINATED: "bg-red-100 text-red-800 border-red-200",
+};
+
 // Helper functions để lấy label tiếng Việt
 function getDepartmentLabel(value: string): string {
   return DEPARTMENT_LABELS[value] || value;
@@ -64,6 +78,14 @@ function getDepartmentLabel(value: string): string {
 
 function getTeamLabel(value: string): string {
   return TEAM_LABELS[value] || value;
+}
+
+function getWorkStatusLabel(value: string): string {
+  return WORK_STATUS_LABELS[value] || value;
+}
+
+function getWorkStatusColor(value: string): string {
+  return WORK_STATUS_COLORS[value] || "bg-gray-100 text-gray-800 border-gray-200";
 }
 
 export default function SuperAdminUsers() {
@@ -537,7 +559,7 @@ export default function SuperAdminUsers() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3">
                 <div className="flex items-start gap-4">
                   <div className="min-w-[150px]">
-                    <span className="font-semibold text-gray-900 flex items-center gap-2"><FiUser className="text-gray-500" />Username:</span>
+                    <span className="font-semibold text-gray-900 flex items-center gap-2"><FiUser className="text-gray-500" />Tên tài khoản:</span>
                   </div>
                   <div className="flex-1 text-gray-700 break-words">{viewing.username ?? "—"}</div>
                 </div>
@@ -598,7 +620,21 @@ export default function SuperAdminUsers() {
 
                 <div className="flex items-start gap-4">
                   <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiInfo className="text-gray-500" />Trạng thái làm việc:</span></div>
-                  <div className="flex-1 text-gray-700 break-words">{(() => { const obj = viewing as Record<string, unknown>; const v = 'workStatus' in obj ? obj['workStatus'] : undefined; return v != null && v !== '' ? String(v) : '—'; })()}</div>
+                  <div className="flex-1 text-gray-700 break-words">
+                    {(() => { 
+                      const obj = viewing as Record<string, unknown>; 
+                      const v = 'workStatus' in obj ? obj['workStatus'] : undefined; 
+                      if (v != null && v !== '') {
+                        const statusValue = String(v);
+                        return (
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getWorkStatusColor(statusValue)}`}>
+                            {getWorkStatusLabel(statusValue)}
+                          </span>
+                        );
+                      }
+                      return '—';
+                    })()}
+                  </div>
                 </div>
 
                 {viewing.workStatusDate && (
@@ -760,7 +796,7 @@ export default function SuperAdminUsers() {
                         <label className="mb-1 block text-sm">Trạng thái làm việc</label>
                         <select className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.workStatus} onChange={(e) => setForm((s) => ({ ...s, workStatus: e.target.value }))} disabled={isViewing}>
                           <option value="">— Chọn trạng thái —</option>
-                          {WORK_STATUS_OPTIONS.map((w) => <option key={w} value={w}>{w}</option>)}
+                          {WORK_STATUS_OPTIONS.map((w) => <option key={w} value={w}>{getWorkStatusLabel(w)}</option>)}
                         </select>
                       </div>
                     )}
