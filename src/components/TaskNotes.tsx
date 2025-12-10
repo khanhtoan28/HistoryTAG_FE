@@ -2,7 +2,9 @@ import React, { useEffect, useState, useRef } from "react";
 import { toast } from "react-hot-toast";
 
 const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
-const WS_URL = import.meta.env.VITE_NOTIFICATION_STOMP_URL || `${API_ROOT.replace(/^http/, "ws")}/ws`;
+// ✅ SockJS cần URL HTTP (không phải ws://), nó sẽ tự động upgrade sang WebSocket
+// Nếu VITE_NOTIFICATION_STOMP_URL được set, dùng nó; nếu không, dùng API_ROOT + /ws
+const WS_URL = import.meta.env.VITE_NOTIFICATION_STOMP_URL || `${API_ROOT}/ws`;
 
 function authHeaders(extra?: Record<string, string>) {
   const token =
