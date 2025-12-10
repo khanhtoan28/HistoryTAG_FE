@@ -20,11 +20,20 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = getAuthToken();
-  if (token) {
-    config.headers = config.headers || {};
-    config.headers.Authorization = `Bearer ${token}`;
+  // ✅ Không gửi token cho các API public (đăng nhập, đăng ký, quên mật khẩu, etc.)
+  // Điều này tránh lỗi 401 khi token hết hạn hoặc invalid trên Server
+  // Pattern matching: bắt tất cả các path bắt đầu bằng /api/v1/public/
+  const isPublicPath = config.url?.startsWith('/api/v1/public/') || false;
+  
+  // Chỉ thêm token nếu KHÔNG phải là API public
+  if (!isPublicPath) {
+    const token = getAuthToken();
+    if (token) {
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${token}`;
+    }
   }
+  
   return config;
 });
 
