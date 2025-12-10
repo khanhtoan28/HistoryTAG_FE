@@ -43,6 +43,29 @@ const DEPARTMENT_OPTIONS = ["IT", "ACCOUNTING", "BUSINESS"] as const;
 const TEAM_OPTIONS = ["DEV", "DEPLOYMENT", "MAINTENANCE", "SALES"] as const;
 const WORK_STATUS_OPTIONS = ["ACTIVE", "INACTIVE", "ON_LEAVE", "TERMINATED"] as const;
 
+// Mapping để hiển thị tiếng Việt
+const DEPARTMENT_LABELS: Record<string, string> = {
+  IT: "Công nghệ thông tin",
+  ACCOUNTING: "Kế toán",
+  BUSINESS: "Kinh doanh",
+};
+
+const TEAM_LABELS: Record<string, string> = {
+  DEV: "Phát triển",
+  DEPLOYMENT: "Triển khai",
+  MAINTENANCE: "Bảo trì",
+  SALES: "Kinh doanh",
+};
+
+// Helper functions để lấy label tiếng Việt
+function getDepartmentLabel(value: string): string {
+  return DEPARTMENT_LABELS[value] || value;
+}
+
+function getTeamLabel(value: string): string {
+  return TEAM_LABELS[value] || value;
+}
+
 export default function SuperAdminUsers() {
   const [items, setItems] = useState<UserResponseDTO[]>([]);
   const [loading, setLoading] = useState(false);
@@ -563,12 +586,12 @@ export default function SuperAdminUsers() {
 
                 <div className="flex items-start gap-4">
                   <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiBriefcase className="text-gray-500" />Phòng ban:</span></div>
-                  <div className="flex-1 text-gray-700 break-words">{viewing.department ?? "—"}</div>
+                  <div className="flex-1 text-gray-700 break-words">{viewing.department ? getDepartmentLabel(viewing.department) : "—"}</div>
                 </div>
 
                 <div className="flex items-start gap-4">
                   <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiBriefcase className="text-gray-500" />Team:</span></div>
-                  <div className="flex-1 text-gray-700 break-words">{viewing.team ?? "—"}</div>
+                  <div className="flex-1 text-gray-700 break-words">{viewing.team ? getTeamLabel(viewing.team) : "—"}</div>
                 </div>
 
                 {/* Team kinh doanh view removed */}
@@ -598,7 +621,7 @@ export default function SuperAdminUsers() {
 
               {viewing.avatar && (
                 <div className="pt-4 border-t border-gray-200">
-                  <p className="font-semibold text-gray-900 mb-2"><FiImage className="inline mr-2 text-lg text-gray-600" />Avatar</p>
+                  <p className="font-semibold text-gray-900 mb-2"><FiImage className="inline mr-2 text-lg text-gray-600" />Ảnh đại diện</p>
                   <div className="rounded-xl overflow-hidden w-full">
                     <img src={viewing.avatar} alt="Avatar" className="w-full h-auto object-cover rounded-lg max-h-[420px]" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                   </div>
@@ -679,11 +702,11 @@ export default function SuperAdminUsers() {
                     </div>
 
                     <div>
-                      <label className="mb-1 block text-sm font-medium">Avatar</label>
+                      <label className="mb-1 block text-sm font-medium">Ảnh đại diện</label>
                       {form.avatar && (
                         <div className="mb-3">
-                          <img src={form.avatar} alt="Avatar hiện tại" className="h-32 w-full max-w-full rounded-lg border object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                          {!isViewing && <p className="mt-1 text-xs text-gray-500">Avatar hiện tại</p>}
+                          <img src={form.avatar} alt="Ảnh đại diện hiện tại" className="h-32 w-full max-w-full rounded-lg border object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                          {!isViewing && <p className="mt-1 text-xs text-gray-500">Ảnh đại diện hiện tại</p>}
                         </div>
                       )}
                       <input type="file" accept="image/*" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50" onChange={(e) => setForm((s) => ({ ...s, avatarFile: e.target.files?.[0] ?? null }))} disabled={isViewing} />
@@ -718,7 +741,7 @@ export default function SuperAdminUsers() {
                       <label className="mb-1 block text-sm font-medium">Phòng ban <span className="text-red-500">*</span></label>
                       <select required={!isEditing} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.department} onChange={(e) => setForm((s) => ({ ...s, department: e.target.value as UserForm['department'] }))} disabled={isViewing}>
                         <option value="">— Chọn phòng ban —</option>
-                        {DEPARTMENT_OPTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+                        {DEPARTMENT_OPTIONS.map((d) => <option key={d} value={d}>{getDepartmentLabel(d)}</option>)}
                       </select>
                     </div>
 
@@ -726,7 +749,7 @@ export default function SuperAdminUsers() {
                       <label className="mb-1 block text-sm">Team</label>
                       <select className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.team} onChange={(e) => setForm((s) => ({ ...s, team: e.target.value as UserForm['team'] }))} disabled={isViewing}>
                         <option value="">— Chọn team —</option>
-                        {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                        {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{getTeamLabel(t)}</option>)}
                       </select>
                     </div>
 
