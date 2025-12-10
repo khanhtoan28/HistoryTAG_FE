@@ -14,10 +14,9 @@ export function getAuthToken(): string | null {
     || sessionStorage.getItem("access_token")
     || localStorage.getItem("token");
 }
-
 const api = axios.create({
-  baseURL: "http://localhost:8080",
-  withCredentials: true, // cho phép gửi cookie (nếu bạn dùng cookie để BE đọc)
+  baseURL: import.meta.env.VITE_API_URL,
+  withCredentials: true,
 });
 
 api.interceptors.request.use((config) => {

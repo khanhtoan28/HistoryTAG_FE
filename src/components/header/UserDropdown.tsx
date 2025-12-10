@@ -23,7 +23,7 @@ export default function UserDropdown() {
   }, []);
   const isSuperAdmin = roles.includes("SUPERADMIN") || roles.includes("SUPER_ADMIN") || roles.includes("Super Admin");
 
-  const LOGOUT_URL = "http://localhost:8080/api/v1/auth/logout";
+  const LOGOUT_URL = import.meta.env.VITE_LOGOUT_URL;
 
   const userId = useMemo(() => {
     const s = localStorage.getItem("userId");
