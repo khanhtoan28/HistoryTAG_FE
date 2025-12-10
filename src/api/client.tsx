@@ -25,8 +25,12 @@ api.interceptors.request.use((config) => {
   // Pattern matching: bắt tất cả các path bắt đầu bằng /api/v1/public/
   const isPublicPath = config.url?.startsWith('/api/v1/public/') || false;
   
-  // Chỉ thêm token nếu KHÔNG phải là API public
-  if (!isPublicPath) {
+  if (isPublicPath) {
+    // ✅ Tắt withCredentials cho API public để browser KHÔNG gửi cookie
+    // Điều này ngăn chặn việc gửi cookie access_token cũ (hết hạn) đến server
+    config.withCredentials = false;
+  } else {
+    // Chỉ thêm token nếu KHÔNG phải là API public
     const token = getAuthToken();
     if (token) {
       config.headers = config.headers || {};
