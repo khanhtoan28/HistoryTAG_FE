@@ -251,7 +251,7 @@ export default function SuperAdminUsers() {
       roles: [],
       department: "",
       team: "",
-      workStatus: "",
+      workStatus: "ACTIVE", // Mặc định là "Đang làm việc"
       workStatusDate: "",
     });
     setOpen(true);
@@ -637,12 +637,13 @@ export default function SuperAdminUsers() {
                   </div>
                 </div>
 
-                {viewing.workStatusDate && (
+
+                {/* {viewing.workStatusDate && (
                   <div className="flex items-start gap-4">
                     <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiCalendar className="text-gray-500" />Ngày cập nhật trạng thái:</span></div>
                     <div className="flex-1 text-gray-700 break-words">{new Date(viewing.workStatusDate).toLocaleString('vi-VN')}</div>
                   </div>
-                )}
+                )} */}
 
                 <div className="flex items-start gap-4">
                   <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiCalendar className="text-gray-500" />Tạo lúc:</span></div>
