@@ -948,7 +948,7 @@ const renderEventContent = (eventInfo: any) => {
   
   return (
     <div
-      className={`event-fc-color flex flex-col fc-event-main ${colorClass} p-1 rounded-sm ${
+      className={`event-fc-color w-full flex flex-col fc-event-main ${colorClass} p-1 rounded-sm ${
         isPast ? "opacity-70" : ""
       }`}
     >

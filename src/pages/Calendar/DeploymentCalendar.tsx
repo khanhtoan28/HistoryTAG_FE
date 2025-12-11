@@ -994,7 +994,7 @@ const renderEventContent = (eventInfo: any, isSuperAdmin: boolean) => {
   
   return (
     <div
-      className={`event-fc-color fc-event-main ${colorClass} p-1 rounded-sm`}
+      className={`event-fc-color w-full fc-event-main ${colorClass} p-1 rounded-sm`}
     >
       <div className="flex items-start gap-1">
         {/* Badge phân biệt Team/Cá nhân - chỉ hiển thị cho SuperAdmin */}

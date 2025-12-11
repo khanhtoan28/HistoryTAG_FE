@@ -9,6 +9,14 @@ import { useModal } from "../../hooks/useModal";
 import PageMeta from "../../components/common/PageMeta";
 import { viLocale } from "../../utils/calendarLocale";
 import toast from "react-hot-toast";
+import {
+  createTeamCalendarEvent,
+  updateTeamCalendarEvent,
+  deleteTeamCalendarEvent,
+  getTeamCalendarEventsByTeam,
+  type TeamCalendarEventRequestDTO,
+  type TeamCalendarEventResponseDTO,
+} from "../../api/auth.api";
 import { filterUsers, type UserResponseDTO } from "../../api/superadmin.api";
 
 interface CalendarEvent extends EventInput {
@@ -18,6 +26,7 @@ interface CalendarEvent extends EventInput {
     eventType?: "team" | "member";
     memberId?: string;
     eventId?: number;
+    createdBy?: number; // ID của người tạo event
     createdByName?: string;
     originalTitle?: string;
   };
@@ -92,6 +101,30 @@ const MaintenanceCalendar: React.FC = () => {
 
   const canAddEventForMember = isSuperAdmin();
 
+  // Get current user ID
+  const getCurrentUserId = (): number | null => {
+    try {
+      const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const id = Number(parsed?.id ?? parsed?.userId);
+        if (Number.isFinite(id) && id > 0) return id;
+      }
+    } catch {
+      // ignore
+    }
+    const fallback = Number(localStorage.getItem("userId") || sessionStorage.getItem("userId") || 0);
+    return Number.isFinite(fallback) && fallback > 0 ? fallback : null;
+  };
+
+  // Check if current user is the creator of the selected event
+  const isCurrentUserCreator = (): boolean => {
+    if (!selectedEvent || !selectedEvent.extendedProps.createdBy) return false;
+    const currentUserId = getCurrentUserId();
+    if (!currentUserId) return false;
+    return selectedEvent.extendedProps.createdBy === currentUserId;
+  };
+
   // Load team members from API
   useEffect(() => {
     const loadTeamMembers = async () => {
@@ -111,23 +144,56 @@ const MaintenanceCalendar: React.FC = () => {
     loadTeamMembers();
   }, []);
 
+  // Load events from API
   useEffect(() => {
-    // Initialize with some events for Maintenance team
-    setEvents([
-      {
-        id: "1",
-        title: "Bảo trì hệ thống BV B",
-        start: new Date().toISOString().split("T")[0],
-        extendedProps: { calendar: "Warning", team: "MAINTENANCE" },
-      },
-      {
-        id: "2",
-        title: "Kiểm tra định kỳ",
-        start: new Date(Date.now() + 86400000).toISOString().split("T")[0],
-        extendedProps: { calendar: "Success", team: "MAINTENANCE" },
-      },
-    ]);
+    loadEvents();
   }, []);
+
+  const loadEvents = async () => {
+    setLoading(true);
+    try {
+      const apiEvents = await getTeamCalendarEventsByTeam("MAINTENANCE");
+      
+      // Backend sẽ trả về:
+      // - SuperAdmin: cả team events và member events
+      // - User thường: chỉ team events
+      // Thêm badge để SuperAdmin phân biệt
+      const mappedEvents: CalendarEvent[] = apiEvents.map((event) => {
+        const eventDate = new Date(event.startDate);
+        const isAllDay = event.allDay ?? true;
+        const isMemberEvent = event.eventType === "member";
+        
+        // Chỉ thêm prefix cho SuperAdmin khi có member events
+        const prefix = (canAddEventForMember && isMemberEvent) ? "[Cá nhân] " : "";
+        const displayTitle = `${prefix}${event.title}${event.createdByName ? ` (${event.createdByName})` : ""}`;
+        
+        return {
+          id: event.id.toString(),
+          title: displayTitle,
+          start: eventDate,
+          end: event.endDate ? new Date(event.endDate) : eventDate,
+          allDay: isAllDay,
+          extendedProps: {
+            calendar: event.color || "success",
+            team: event.team,
+            eventType: event.eventType as "team" | "member",
+            memberId: event.memberId?.toString(),
+            eventId: event.id,
+            createdBy: event.createdBy, // ID của người tạo
+            createdByName: event.createdByName,
+            originalTitle: event.title, // Lưu title gốc không có prefix
+          },
+        };
+      });
+      
+      setEvents(mappedEvents);
+    } catch (error: any) {
+      console.error("Error loading events:", error);
+      toast.error("Không thể tải sự kiện: " + (error?.message || "Lỗi không xác định"));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Check if a date is in the past
   const isDatePast = (dateStr: string): boolean => {
@@ -169,7 +235,14 @@ const MaintenanceCalendar: React.FC = () => {
   const handleEventClick = (clickInfo: EventClickArg) => {
     const event = clickInfo.event;
     setSelectedEvent(event as unknown as CalendarEvent);
-    setEventTitle(event.title);
+    
+    // Sử dụng originalTitle nếu có, nếu không thì remove prefix [Cá nhân] và tên người tạo
+    const eventTitleClean = event.extendedProps.originalTitle 
+      ? event.extendedProps.originalTitle 
+      : event.title
+          .replace(/^\[Cá nhân\]\s*/, "")
+          .replace(/\s*\([^)]+\)$/, "");
+    setEventTitle(eventTitleClean);
     
     const formatDate = (date: Date | null | undefined): string => {
       if (!date) return "";
@@ -209,6 +282,12 @@ const MaintenanceCalendar: React.FC = () => {
   };
 
   const handleSaveClick = () => {
+    // Check permission: chỉ người tạo mới được sửa
+    if (selectedEvent && !isCurrentUserCreator()) {
+      toast.error("Bạn không có quyền chỉnh sửa sự kiện này. Chỉ người tạo sự kiện mới có quyền chỉnh sửa.");
+      return;
+    }
+
     // Validation
     if (!eventTitle.trim()) {
       toast.error("Vui lòng nhập tên công việc");
@@ -237,87 +316,101 @@ const MaintenanceCalendar: React.FC = () => {
     }
   };
 
-  const handleAddOrUpdateEvent = () => {
-    // Tạo datetime từ ngày và giờ
-    let startDateTime = eventStartDate;
-    let endDateTime = eventStartDate;
-    const isAllDay = !eventTime;
-    
-    if (eventTime) {
-      startDateTime = `${eventStartDate}T${eventTime}:00`;
-      endDateTime = `${eventStartDate}T${eventTime}:00`;
-    } else {
-      startDateTime = `${eventStartDate}T00:00:00`;
-      endDateTime = `${eventStartDate}T23:59:59`;
-    }
-    
-    const color = priorityLevelToColor[eventLevel] || "success";
-    
-    if (selectedEvent) {
-      // Update existing event
-      setEvents((prevEvents) =>
-        prevEvents.map((event) =>
-          event.id === selectedEvent.id
-            ? {
-                ...event,
-                title: eventTitle,
-                start: startDateTime,
-                end: endDateTime,
-                allDay: isAllDay,
-                extendedProps: { 
-                  calendar: color, 
-                  team: "MAINTENANCE",
-                  eventType: canAddEventForMember ? eventType : "team",
-                  memberId: (canAddEventForMember && eventType === "member") ? selectedMemberId : undefined,
-                },
-              }
-            : event
-        )
-      );
-      toast.success("Cập nhật sự kiện thành công");
-    } else {
-      // Add new event
-      const newEvent: CalendarEvent = {
-        id: Date.now().toString(),
-        title: eventTitle,
-        start: startDateTime,
-        end: endDateTime,
+  const handleAddOrUpdateEvent = async () => {
+    setLoading(true);
+    try {
+      // Tạo datetime từ ngày và giờ
+      let startDateTime = eventStartDate;
+      let endDateTime = eventStartDate;
+      const isAllDay = !eventTime;
+      
+      if (eventTime) {
+        startDateTime = `${eventStartDate}T${eventTime}:00`;
+        endDateTime = `${eventStartDate}T${eventTime}:00`;
+      } else {
+        startDateTime = `${eventStartDate}T00:00:00`;
+        endDateTime = `${eventStartDate}T23:59:59`;
+      }
+      
+      const color = priorityLevelToColor[eventLevel] || "success";
+      
+      const payload: TeamCalendarEventRequestDTO = {
+        title: eventTitle.trim(),
+        startDate: startDateTime,
+        endDate: endDateTime,
+        color: color,
         allDay: isAllDay,
-        extendedProps: { 
-          calendar: color, 
-          team: "MAINTENANCE",
-          eventType: canAddEventForMember ? eventType : "team",
-          memberId: (canAddEventForMember && eventType === "member") ? selectedMemberId : undefined,
-        },
+        team: "MAINTENANCE",
+        eventType: canAddEventForMember ? eventType : "team",
+        memberId: (canAddEventForMember && eventType === "member") ? (selectedMemberId ? parseInt(selectedMemberId) : null) : null,
       };
-      setEvents((prevEvents) => [...prevEvents, newEvent]);
-      toast.success("Thêm sự kiện thành công");
+
+      if (selectedEvent && selectedEvent.extendedProps.eventId) {
+        // Update existing event
+        await updateTeamCalendarEvent(selectedEvent.extendedProps.eventId, payload);
+        toast.success("Cập nhật sự kiện thành công");
+      } else {
+        // Create new event
+        await createTeamCalendarEvent(payload);
+        toast.success("Thêm sự kiện thành công");
+      }
+
+      await loadEvents();
+      setUpdateConfirmOpen(false);
+      closeModal();
+      resetModalFields();
+    } catch (error: any) {
+      console.error("Error saving event:", error);
+      const errorMessage = error?.response?.data?.data || error?.response?.data?.message || error?.message || "Lỗi không xác định";
+      toast.error("Không thể lưu sự kiện: " + errorMessage);
+    } finally {
+      setLoading(false);
     }
-    setUpdateConfirmOpen(false);
-    closeModal();
-    resetModalFields();
   };
 
   const handleDeleteClick = () => {
-    if (!selectedEvent) {
+    // Check permission: chỉ người tạo mới được xóa
+    if (!isCurrentUserCreator()) {
+      toast.error("Bạn không có quyền xóa sự kiện này. Chỉ người tạo sự kiện mới có quyền xóa.");
+      return;
+    }
+
+    if (!selectedEvent || !selectedEvent.extendedProps.eventId) {
       toast.error("Không thể xóa sự kiện này");
       return;
     }
     setDeleteConfirmOpen(true);
   };
 
-  const handleDeleteConfirm = () => {
-    if (!selectedEvent) {
+  const handleDeleteConfirm = async () => {
+    // Check permission again
+    if (!isCurrentUserCreator()) {
+      toast.error("Bạn không có quyền xóa sự kiện này. Chỉ người tạo sự kiện mới có quyền xóa.");
+      setDeleteConfirmOpen(false);
+      return;
+    }
+
+    if (!selectedEvent || !selectedEvent.extendedProps.eventId) {
       toast.error("Không thể xóa sự kiện này");
       setDeleteConfirmOpen(false);
       return;
     }
 
-    setEvents((prevEvents) => prevEvents.filter((event) => event.id !== selectedEvent.id));
-    toast.success("Xóa sự kiện thành công");
-    setDeleteConfirmOpen(false);
-    closeModal();
-    resetModalFields();
+    setLoading(true);
+    try {
+      await deleteTeamCalendarEvent(selectedEvent.extendedProps.eventId);
+      toast.success("Xóa sự kiện thành công");
+      await loadEvents();
+      setDeleteConfirmOpen(false);
+      closeModal();
+      resetModalFields();
+    } catch (error: any) {
+      console.error("Error deleting event:", error);
+      const errorMessage = error?.response?.data?.data || error?.response?.data?.message || error?.message || "Lỗi không xác định";
+      toast.error("Không thể xóa sự kiện: " + errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDeleteCancel = () => {
@@ -421,7 +514,7 @@ const MaintenanceCalendar: React.FC = () => {
             selectable={true}
             select={handleDateSelect}
             eventClick={handleEventClick}
-            eventContent={renderEventContent}
+            eventContent={(eventInfo) => renderEventContent(eventInfo, canAddEventForMember)}
             dayMaxEvents={2}
             moreLinkContent={(arg) => {
               return `Bạn còn ${arg.num}\ncông việc trong ngày`;
@@ -728,7 +821,7 @@ const MaintenanceCalendar: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center gap-3 mt-6 modal-footer sm:justify-end">
-              {selectedEvent && (
+              {selectedEvent && isCurrentUserCreator() && (
                 <button
                   onClick={handleDeleteClick}
                   type="button"
@@ -746,14 +839,16 @@ const MaintenanceCalendar: React.FC = () => {
               >
                 Đóng
               </button>
-              <button
-                onClick={handleSaveClick}
-                type="button"
-                disabled={loading}
-                className="btn btn-success btn-update-event flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? "Đang xử lý..." : selectedEvent ? "Cập nhật" : "Thêm sự kiện"}
-              </button>
+              {(!selectedEvent || isCurrentUserCreator()) && (
+                <button
+                  onClick={handleSaveClick}
+                  type="button"
+                  disabled={loading}
+                  className="btn btn-success btn-update-event flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? "Đang xử lý..." : selectedEvent ? "Cập nhật" : "Thêm sự kiện"}
+                </button>
+              )}
             </div>
           </div>
         </Modal>
@@ -852,10 +947,13 @@ const MaintenanceCalendar: React.FC = () => {
   );
 };
 
-const renderEventContent = (eventInfo: any) => {
+const renderEventContent = (eventInfo: any, isSuperAdmin: boolean) => {
   const colorClass = `fc-bg-${eventInfo.event.extendedProps.calendar.toLowerCase()}`;
-  const originalTitle = eventInfo.event.extendedProps.originalTitle || eventInfo.event.title.replace(/\s*\([^)]+\)$/, "");
+  const originalTitle = eventInfo.event.extendedProps.originalTitle || eventInfo.event.title.replace(/^\[.*?\]\s*/, "").replace(/\s*\([^)]+\)$/, "");
   const createdByName = eventInfo.event.extendedProps.createdByName;
+  const eventType = eventInfo.event.extendedProps.eventType || "team";
+  const isMemberEvent = eventType === "member";
+  const isSuperAdminView = isSuperAdmin;
   
   // Format time giống lịch cá nhân
   const formatEventTime = (event: any) => {
@@ -873,10 +971,19 @@ const renderEventContent = (eventInfo: any) => {
   
   return (
     <div
-      className={`event-fc-color fc-event-main ${colorClass} p-1 rounded-sm`}
+      className={`event-fc-color w-full fc-event-main ${colorClass} p-1 rounded-sm`}
     >
-      <div className="flex items-start">
-        {/* <div className="fc-daygrid-event-dot flex-shrink-0"></div> */}
+      <div className="flex items-start gap-1">
+        {/* Badge phân biệt Team/Cá nhân - chỉ hiển thị cho SuperAdmin */}
+        {isSuperAdminView && (
+          <div className={`flex-shrink-0 mt-0.5 px-1 py-0.5 rounded text-[9px] font-semibold ${
+            isMemberEvent 
+              ? "bg-blue-500 text-white" 
+              : "bg-green-500 text-white"
+          }`}>
+            {isMemberEvent ? "Cá nhân" : "Team"}
+          </div>
+        )}
         <div className="flex-1 flex flex-col min-w-0">
           <div className="fc-event-title text-gray-800">{originalTitle}</div>
           {createdByName && (
