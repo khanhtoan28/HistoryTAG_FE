@@ -9,6 +9,7 @@ import { useModal } from "../../hooks/useModal";
 import PageMeta from "../../components/common/PageMeta";
 import { viLocale } from "../../utils/calendarLocale";
 import toast from "react-hot-toast";
+import { filterUsers, type UserResponseDTO } from "../../api/superadmin.api";
 
 interface CalendarEvent extends EventInput {
   extendedProps: {
@@ -33,6 +34,8 @@ const MaintenanceCalendar: React.FC = () => {
   const [eventLevel, setEventLevel] = useState("");
   const [eventType, setEventType] = useState<"team" | "member">("team");
   const [selectedMemberId, setSelectedMemberId] = useState<string>("");
+  const [teamMembers, setTeamMembers] = useState<UserResponseDTO[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [dateLocked, setDateLocked] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -88,6 +91,25 @@ const MaintenanceCalendar: React.FC = () => {
   };
 
   const canAddEventForMember = isSuperAdmin();
+
+  // Load team members from API
+  useEffect(() => {
+    const loadTeamMembers = async () => {
+      setLoadingMembers(true);
+      try {
+        // Load users from MAINTENANCE team
+        const users = await filterUsers({ team: "MAINTENANCE" });
+        setTeamMembers(users || []);
+      } catch (error) {
+        console.error("Error loading team members:", error);
+        setTeamMembers([]);
+      } finally {
+        setLoadingMembers(false);
+      }
+    };
+
+    loadTeamMembers();
+  }, []);
 
   useEffect(() => {
     // Initialize with some events for Maintenance team
@@ -509,13 +531,19 @@ const MaintenanceCalendar: React.FC = () => {
                   <select
                     value={selectedMemberId}
                     onChange={(e) => setSelectedMemberId(e.target.value)}
-                    className="dark:bg-dark-900 h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+                    disabled={loadingMembers}
+                    className="dark:bg-dark-900 h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <option value="">-- Chọn người --</option>
-                    {/* TODO: Load danh sách người trong team từ API */}
-                    <option value="1">Người dùng 1</option>
-                    <option value="2">Người dùng 2</option>
-                    <option value="3">Người dùng 3</option>
+                    {loadingMembers ? (
+                      <option value="" disabled>Đang tải...</option>
+                    ) : (
+                      teamMembers.map((member) => (
+                        <option key={member.id} value={member.id}>
+                          {member.fullname || member.username || `User #${member.id}`}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
               )}
@@ -848,7 +876,7 @@ const renderEventContent = (eventInfo: any) => {
       className={`event-fc-color fc-event-main ${colorClass} p-1 rounded-sm`}
     >
       <div className="flex items-start">
-        <div className="fc-daygrid-event-dot flex-shrink-0"></div>
+        {/* <div className="fc-daygrid-event-dot flex-shrink-0"></div> */}
         <div className="flex-1 flex flex-col min-w-0">
           <div className="fc-event-title text-gray-800">{originalTitle}</div>
           {createdByName && (
