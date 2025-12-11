@@ -144,24 +144,6 @@ const DeploymentCalendar: React.FC = () => {
     loadTeamMembers();
   }, []);
 
-  useEffect(() => {
-    // Initialize with some events for Deployment team
-    setEvents([
-      {
-        id: "1",
-        title: "Triển khai hệ thống BV A",
-        start: new Date().toISOString().split("T")[0],
-        extendedProps: { calendar: "Primary", team: "DEPLOYMENT" },
-      },
-      {
-        id: "2",
-        title: "Họp team triển khai",
-        start: new Date(Date.now() + 86400000).toISOString().split("T")[0],
-        extendedProps: { calendar: "Success", team: "DEPLOYMENT" },
-      },
-    ]);
-  }, []);
-
   // Check if a date is in the past
   const isDatePast = (dateStr: string): boolean => {
     const today = new Date();
