@@ -107,15 +107,41 @@ const MaintenanceCalendar: React.FC = () => {
     ]);
   }, []);
 
+  // Check if a date is in the past
+  const isDatePast = (dateStr: string): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const date = new Date(dateStr + "T00:00:00");
+    date.setHours(0, 0, 0, 0);
+    return date < today;
+  };
+
   const handleDateSelect = (selectInfo: DateSelectArg) => {
-    resetModalFields();
+    // Block selection of past dates
     const selectedDate = selectInfo.startStr.includes("T") 
       ? selectInfo.startStr.split("T")[0] 
       : selectInfo.startStr;
+    
+    if (isDatePast(selectedDate)) {
+      toast.error("Không thể chọn ngày trong quá khứ");
+      selectInfo.view.calendar.unselect();
+      return;
+    }
+
+    resetModalFields();
     setEventStartDate(selectedDate);
     setEventEndDate(selectedDate);
     setDateLocked(true);
     openModal();
+  };
+
+  // Callback to add CSS class for past dates
+  const dayCellClassNames = (arg: any) => {
+    const dateStr = arg.date.toISOString().split("T")[0];
+    if (isDatePast(dateStr)) {
+      return "fc-day-past";
+    }
+    return "";
   };
 
   const handleEventClick = (clickInfo: EventClickArg) => {
@@ -341,6 +367,22 @@ const MaintenanceCalendar: React.FC = () => {
             Lịch Team Bảo Hành
           </h2>
         </div>
+        <style>{`
+          .fc-day-past {
+            background-color: #f3f4f6 !important;
+            cursor: not-allowed !important;
+          }
+          .fc-day-past .fc-daygrid-day-frame {
+            pointer-events: none;
+          }
+          .fc-day-past .fc-daygrid-day-number {
+            color: #6b7280 !important;
+            opacity: 1 !important;
+          }
+          .fc-day-past.fc-day-today .fc-daygrid-day-number {
+            color: #6b7280 !important;
+          }
+        `}</style>
         <div className="custom-calendar">
           <FullCalendar
             ref={calendarRef}
