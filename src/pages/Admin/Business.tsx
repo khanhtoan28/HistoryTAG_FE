@@ -1136,7 +1136,9 @@ const BusinessPage: React.FC = () => {
               <span className={value ? "text-gray-900" : "text-gray-500"}>
                 {selectedUser ? selectedUser.name : "Tất cả người phụ trách"}
               </span>
-              <span className="text-gray-400">▼</span>
+              <svg className={`w-4 h-4 transition-transform ${openBox ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             </div>
           )}
         </div>
