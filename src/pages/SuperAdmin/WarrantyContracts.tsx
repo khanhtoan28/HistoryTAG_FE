@@ -209,8 +209,9 @@ export default function WarrantyContractsPage() {
     contractCode: "",
     picUserId: undefined,
     hospitalId: undefined,
-    durationYears: 1,
+    durationYears: "",
     yearlyPrice: "",
+    totalPrice: "",
     startDate: null,
     endDate: null,
   });
