@@ -43,21 +43,29 @@ function formatCurrency(amount?: number | null): string {
   }).format(amount);
 }
 
-// Format date time
+// Format date time: HH:mm-dd/MM/yyyy
+// Parse directly from ISO string to avoid timezone conversion issues
 function fmt(dt?: string | null) {
-  if (!dt) return "";
+  if (!dt) return "—";
   try {
+    // Backend trả về LocalDateTime dạng "yyyy-MM-ddTHH:mm:ss" hoặc "yyyy-MM-ddTHH:mm:ss.SSS"
+    // Parse trực tiếp từ string để tránh timezone conversion
+    const match = dt.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$/);
+    if (match) {
+      const [, year, month, day, hours, minutes] = match;
+      return `${hours}:${minutes}-${day}/${month}/${year}`;
+    }
+    // Fallback: thử parse bằng Date nếu format khác
     const d = new Date(dt);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleString("vi-VN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    if (Number.isNaN(d.getTime())) return "—";
+    const hours = String(d.getHours()).padStart(2, "0");
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    return `${hours}:${minutes}-${day}/${month}/${year}`;
   } catch {
-    return "";
+    return "—";
   }
 }
 
@@ -113,9 +121,11 @@ export type WarrantyContractForm = {
   contractCode: string;
   picUserId?: number;
   hospitalId?: number;
-  durationYears: number; // 1, 2, 3, 4, 5, hoặc 7 năm
+  durationYears: string; // Người dùng nhập dạng chuỗi (ví dụ: "1 năm 6 tháng")
   yearlyPrice: number | "";
+  totalPrice: number | ""; // Tổng tiền người dùng nhập
   startDate?: string | null;
+  endDate?: string | null;
 };
 
 type PicUserOption = {
@@ -202,6 +212,7 @@ export default function WarrantyContractsPage() {
     durationYears: 1,
     yearlyPrice: "",
     startDate: null,
+    endDate: null,
   });
   const [yearlyPriceDisplay, setYearlyPriceDisplay] = useState<string>("");
 
@@ -219,19 +230,83 @@ export default function WarrantyContractsPage() {
 
   function fillForm(item: WarrantyContract) {
     const yearlyPrice = typeof item.yearlyPrice === 'number' ? item.yearlyPrice : (item.yearlyPrice ? Number(item.yearlyPrice) : "");
+    
+    // Parse startDate trực tiếp từ ISO string để tránh timezone conversion
+    let startDateForInput: string | null = null;
+    if (item.startDate) {
+      try {
+        // Backend trả về LocalDateTime dạng "yyyy-MM-ddTHH:mm:ss" hoặc "yyyy-MM-ddTHH:mm:ss.SSS"
+        // Parse trực tiếp để tránh timezone conversion
+        const match = item.startDate.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$/);
+        if (match) {
+          const [, year, month, day, hours, minutes] = match;
+          // Format cho datetime-local input: "yyyy-MM-ddTHH:mm"
+          startDateForInput = `${year}-${month}-${day}T${hours}:${minutes}`;
+        } else {
+          // Fallback: thử parse bằng Date nếu format khác
+          const d = new Date(item.startDate);
+          if (!Number.isNaN(d.getTime())) {
+            // Lấy local time để hiển thị đúng
+            const year = String(d.getFullYear());
+            const month = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            const hours = String(d.getHours()).padStart(2, "0");
+            const minutes = String(d.getMinutes()).padStart(2, "0");
+            startDateForInput = `${year}-${month}-${day}T${hours}:${minutes}`;
+          }
+        }
+      } catch {
+        startDateForInput = null;
+      }
+    }
+    
+    // Parse endDate tương tự startDate
+    let endDateForInput: string | null = null;
+    if (item.endDate) {
+      try {
+        const match = item.endDate.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$/);
+        if (match) {
+          const [, year, month, day, hours, minutes] = match;
+          endDateForInput = `${year}-${month}-${day}T${hours}:${minutes}`;
+        } else {
+          const d = new Date(item.endDate);
+          if (!Number.isNaN(d.getTime())) {
+            const year = String(d.getFullYear());
+            const month = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            const hours = String(d.getHours()).padStart(2, "0");
+            const minutes = String(d.getMinutes()).padStart(2, "0");
+            endDateForInput = `${year}-${month}-${day}T${hours}:${minutes}`;
+          }
+        }
+      } catch {
+        endDateForInput = null;
+      }
+    }
+
+    // Parse totalPrice
+    const totalPrice = typeof item.totalPrice === 'number' ? item.totalPrice : (item.totalPrice ? Number(item.totalPrice) : "");
+    
     setForm({
       contractCode: item.contractCode || "",
       picUserId: item.picUser?.id,
       hospitalId: item.hospital?.id,
-      durationYears: item.durationYears || 1,
+      durationYears: item.durationYears ? String(item.durationYears) : "",
       yearlyPrice: yearlyPrice,
-      startDate: item.startDate ? new Date(item.startDate).toISOString().slice(0, 16) : null,
+      totalPrice: totalPrice,
+      startDate: startDateForInput,
+      endDate: endDateForInput,
     });
-    // Set display value
+    // Set display values
     if (yearlyPrice !== '') {
       setYearlyPriceDisplay(formatNumber(yearlyPrice));
     } else {
       setYearlyPriceDisplay('');
+    }
+    if (totalPrice !== '') {
+      setTotalPriceDisplay(formatNumber(totalPrice));
+    } else {
+      setTotalPriceDisplay('');
     }
   }
 
@@ -292,27 +367,9 @@ export default function WarrantyContractsPage() {
     }
   }, [open, form.picUserId, form.hospitalId, picOptions, hospitalOptions]);
 
-  // Tính tổng tiền tự động
-  const totalPrice = useMemo(() => {
-    if (typeof form.yearlyPrice === "number" && form.durationYears) {
-      return form.yearlyPrice * form.durationYears;
-    }
-    return 0;
-  }, [form.yearlyPrice, form.durationYears]);
+  // State cho totalPrice display
+  const [totalPriceDisplay, setTotalPriceDisplay] = useState<string>("");
 
-  // Tính ngày kết thúc tự động
-  const endDate = useMemo(() => {
-    if (!form.startDate || !form.durationYears) return null;
-    try {
-      const start = new Date(form.startDate);
-      if (Number.isNaN(start.getTime())) return null;
-      const end = new Date(start);
-      end.setFullYear(end.getFullYear() + form.durationYears);
-      return end.toISOString().slice(0, 16);
-    } catch {
-      return null;
-    }
-  }, [form.startDate, form.durationYears]);
 
   async function fetchList() {
     setLoading(true);
@@ -381,11 +438,14 @@ export default function WarrantyContractsPage() {
       contractCode: "",
       picUserId: undefined,
       hospitalId: undefined,
-      durationYears: 1,
+      durationYears: "",
       yearlyPrice: "",
+      totalPrice: "",
       startDate: null,
+      endDate: null,
     });
     setYearlyPriceDisplay("");
+    setTotalPriceDisplay("");
     setOpen(true);
   }
 
@@ -463,13 +523,16 @@ export default function WarrantyContractsPage() {
       setError("Bệnh viện không được để trống");
       return;
     }
-    const validDurations = [1, 2, 3, 4, 5, 7];
-    if (!form.durationYears || !validDurations.includes(form.durationYears)) {
-      setError("Thời hạn hợp đồng phải là 1, 2, 3, 4, 5 hoặc 7 năm");
+    if (!form.durationYears || form.durationYears.trim() === "") {
+      setError("Thời hạn hợp đồng không được để trống");
       return;
     }
     if (!form.yearlyPrice || (typeof form.yearlyPrice === "number" && form.yearlyPrice <= 0)) {
       setError("Giá hợp đồng phải lớn hơn 0");
+      return;
+    }
+    if (!form.totalPrice || (typeof form.totalPrice === "number" && form.totalPrice <= 0)) {
+      setError("Tổng tiền phải lớn hơn 0");
       return;
     }
     if (isViewing) return;
@@ -478,13 +541,66 @@ export default function WarrantyContractsPage() {
       return;
     }
 
+    // Convert startDate từ format "yyyy-MM-ddTHH:mm" sang ISO string mà không bị timezone conversion
+    let startDateForPayload: string | null = null;
+    if (form.startDate) {
+      try {
+        // Parse trực tiếp từ format "yyyy-MM-ddTHH:mm" để tránh timezone conversion
+        const match = form.startDate.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+        if (match) {
+          const [, year, month, day, hours, minutes] = match;
+          // Format thành ISO string "yyyy-MM-ddTHH:mm:ss" (không có timezone, backend sẽ parse như LocalDateTime)
+          startDateForPayload = `${year}-${month}-${day}T${hours}:${minutes}:00`;
+        } else {
+          // Fallback: nếu format khác, thử parse bằng Date nhưng giữ nguyên local time
+          const d = new Date(form.startDate);
+          if (!Number.isNaN(d.getTime())) {
+            const year = String(d.getFullYear());
+            const month = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            const hours = String(d.getHours()).padStart(2, "0");
+            const minutes = String(d.getMinutes()).padStart(2, "0");
+            startDateForPayload = `${year}-${month}-${day}T${hours}:${minutes}:00`;
+          }
+        }
+      } catch {
+        startDateForPayload = null;
+      }
+    }
+
+    // Convert endDate tương tự startDate
+    let endDateForPayload: string | null = null;
+    if (form.endDate) {
+      try {
+        const match = form.endDate.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+        if (match) {
+          const [, year, month, day, hours, minutes] = match;
+          endDateForPayload = `${year}-${month}-${day}T${hours}:${minutes}:00`;
+        } else {
+          const d = new Date(form.endDate);
+          if (!Number.isNaN(d.getTime())) {
+            const year = String(d.getFullYear());
+            const month = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            const hours = String(d.getHours()).padStart(2, "0");
+            const minutes = String(d.getMinutes()).padStart(2, "0");
+            endDateForPayload = `${year}-${month}-${day}T${hours}:${minutes}:00`;
+          }
+        }
+      } catch {
+        endDateForPayload = null;
+      }
+    }
+
     const payload: WarrantyContractRequestDTO = {
       contractCode: form.contractCode.trim(),
       picUserId: form.picUserId!,
       hospitalId: form.hospitalId!,
-      durationYears: form.durationYears,
+      durationYears: form.durationYears.trim(), // Gửi dạng string
       yearlyPrice: typeof form.yearlyPrice === "number" ? form.yearlyPrice : 0,
-      startDate: form.startDate ? new Date(form.startDate).toISOString() : null,
+      totalPrice: typeof form.totalPrice === "number" ? form.totalPrice : 0,
+      startDate: startDateForPayload,
+      endDate: endDateForPayload,
     };
 
     // Check nếu đang tạo mới (không phải edit) và bệnh viện đã có hợp đồng
@@ -516,6 +632,15 @@ export default function WarrantyContractsPage() {
     setLoading(true);
     setError(null);
     try {
+      // Kiểm tra token trước khi gửi request
+      const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+      if (!token) {
+        setError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+        toast.error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+        setLoading(false);
+        return;
+      }
+
       if (isEditing) {
         await updateWarrantyContract(editing!.id, payload);
       } else {
@@ -527,8 +652,18 @@ export default function WarrantyContractsPage() {
       await fetchList();
       toast.success(isEditing ? "Cập nhật thành công" : "Tạo thành công");
     } catch (e: any) {
-      setError(e.message || "Lưu thất bại");
-      toast.error(e?.message || "Lưu thất bại");
+      console.error("Error saving warranty contract:", e);
+      const errorMessage = e?.response?.data?.message || e?.message || "Lưu thất bại";
+      if (e?.response?.status === 401 || e?.response?.status === 403) {
+        const msg = e?.response?.status === 401 
+          ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
+          : "Bạn không có quyền thực hiện thao tác này.";
+        setError(msg);
+        toast.error(msg);
+      } else {
+        setError(errorMessage);
+        toast.error(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -541,6 +676,14 @@ export default function WarrantyContractsPage() {
     setError(null);
     
     try {
+      // Kiểm tra token trước khi gửi request
+      const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+      if (!token) {
+        setError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+        toast.error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+        return;
+      }
+
       if (pendingSubmit.isEditing) {
         await updateWarrantyContract(editing!.id, pendingSubmit.payload);
       } else {
@@ -553,8 +696,15 @@ export default function WarrantyContractsPage() {
       setPendingSubmit(null);
       setHospitalNameForConfirm("");
     } catch (e: any) {
-      setError(e.message || "Lưu thất bại");
-      toast.error(e?.message || "Lưu thất bại");
+      console.error("Error saving warranty contract:", e);
+      const errorMessage = e?.response?.data?.message || e?.message || "Lưu thất bại";
+      if (e?.response?.status === 401) {
+        setError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+        toast.error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+      } else {
+        setError(errorMessage);
+        toast.error(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -927,6 +1077,27 @@ export default function WarrantyContractsPage() {
       setYearlyPriceDisplay(formatNumber(form.yearlyPrice));
     } else {
       setYearlyPriceDisplay('');
+    }
+  }
+
+  // Handler cho totalPrice tương tự yearlyPrice
+  function handleTotalPriceChange(value: string) {
+    setTotalPriceDisplay(value);
+    const parsed = parseFormattedNumber(value);
+    setForm((s) => ({ ...s, totalPrice: parsed }));
+  }
+
+  function handleTotalPriceBlur() {
+    if (form.totalPrice !== '' && typeof form.totalPrice === 'number') {
+      setTotalPriceDisplay(formatNumber(form.totalPrice));
+    } else {
+      setTotalPriceDisplay('');
+    }
+  }
+
+  function handleTotalPriceFocus() {
+    if (typeof form.totalPrice === "number") {
+      setTotalPriceDisplay(formatNumber(form.totalPrice));
     }
   }
 
@@ -1490,7 +1661,7 @@ export default function WarrantyContractsPage() {
                         <FiClock className="text-gray-500 text-lg" />
                         <span className="font-semibold text-gray-900">Thời hạn:</span>
                       </div>
-                      <div className="flex-1 text-gray-700">{viewing.durationYears} năm</div>
+                      <div className="flex-1 text-gray-700">{viewing.durationYears}</div>
                     </div>
 
                     <div className="flex items-start gap-4">
@@ -1635,21 +1806,17 @@ export default function WarrantyContractsPage() {
                       <label className="mb-2 block text-sm font-semibold text-gray-700">
                         Thời hạn hợp đồng*
                       </label>
-                      <select
+                      <input
                         required
+                        type="text"
                         className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50"
                         value={form.durationYears}
                         onChange={(e) =>
-                          setForm((s) => ({ ...s, durationYears: Number(e.target.value) }))
+                          setForm((s) => ({ ...s, durationYears: e.target.value }))
                         }
                         disabled={isViewing || !canEdit}
-                      >
-                        {DURATION_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="Ví dụ: 1 năm 6 tháng, 2 năm 3 tháng..."
+                      />
                     </div>
                   </div>
 
@@ -1670,18 +1837,24 @@ export default function WarrantyContractsPage() {
                         disabled={isViewing || !canEdit}
                         placeholder="Nhập số tiền..."
                       />
-                      <p className="mt-1 text-xs text-gray-500">
-                        Giá này là giá cho 1 năm. Tổng tiền sẽ tự động tính = Giá × Thời hạn
-                      </p>
+                      
                     </div>
 
                     <div>
                       <label className="mb-2 block text-sm font-semibold text-gray-700">
-                        Tổng tiền (tự động tính)
+                        Tổng tiền*
                       </label>
-                      <div className="w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-5 py-3 text-sm text-gray-700 font-semibold">
-                        {formatCurrency(totalPrice)}
-                      </div>
+                      <input
+                        required
+                        type="text"
+                        className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50"
+                        value={totalPriceDisplay || formatNumber(form.totalPrice)}
+                        onChange={(e) => handleTotalPriceChange(e.target.value)}
+                        onBlur={handleTotalPriceBlur}
+                        onFocus={handleTotalPriceFocus}
+                        disabled={isViewing || !canEdit}
+                        placeholder="Nhập tổng tiền..."
+                      />
                     </div>
 
                     <div>
@@ -1697,23 +1870,51 @@ export default function WarrantyContractsPage() {
                         }
                         disabled={isViewing || !canEdit}
                       />
-                      <p className="mt-1 text-xs text-gray-500">
-                        {isEditing
-                          ? "Có thể thay đổi thời gian bắt đầu. Ngày kết thúc sẽ tự động cập nhật."
-                          : "Để trống sẽ tự động tạo thời gian hiện tại khi lưu"}
-                      </p>
+                      {form.startDate && (
+                        <div className="mt-2 text-sm text-gray-700 font-medium">
+                          {(() => {
+                            // Parse từ format "yyyy-MM-ddTHH:mm" và format thành "HH:mm-dd/MM/yyyy"
+                            const match = form.startDate.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+                            if (match) {
+                              const [, year, month, day, hours, minutes] = match;
+                              return `${hours}:${minutes}-${day}/${month}/${year}`;
+                            }
+                            // Fallback: dùng hàm fmt
+                            return fmt(form.startDate);
+                          })()}
+                        </div>
+                      )}
+                      
                     </div>
 
                     <div>
                       <label className="mb-2 block text-sm font-semibold text-gray-700">
-                        Ngày kết thúc (tự động tính)
+                        Ngày kết thúc hợp đồng
                       </label>
-                      <div className="w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-5 py-3 text-sm text-gray-700">
-                        {endDate ? fmt(new Date(endDate).toISOString()) : "—"}
-                      </div>
-                      <p className="mt-1 text-xs text-gray-500">
-                        Tự động tính = Ngày bắt đầu + {form.durationYears} năm
-                      </p>
+                      <input
+                        type="datetime-local"
+                        className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50"
+                        value={form.endDate || ""}
+                        onChange={(e) =>
+                          setForm((s) => ({ ...s, endDate: e.target.value || null }))
+                        }
+                        disabled={isViewing || !canEdit}
+                      />
+                      {form.endDate && (
+                        <div className="mt-2 text-sm text-gray-700 font-medium">
+                          {(() => {
+                            // Parse từ format "yyyy-MM-ddTHH:mm" và format thành "HH:mm-dd/MM/yyyy"
+                            const match = form.endDate.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+                            if (match) {
+                              const [, year, month, day, hours, minutes] = match;
+                              return `${hours}:${minutes}-${day}/${month}/${year}`;
+                            }
+                            // Fallback: dùng hàm fmt
+                            return fmt(form.endDate);
+                          })()}
+                        </div>
+                      )}
+                      
                     </div>
                   </div>
 
