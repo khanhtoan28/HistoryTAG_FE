@@ -209,15 +209,25 @@ function fmt(dt?: string | null) {
   try {
     const d = new Date(dt);
     if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleString("vi-VN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
+
+    // Lấy phần giờ: 08:52
+    const time = d.toLocaleTimeString("vi-VN", { 
+      hour: "2-digit", 
       minute: "2-digit",
+      hour12: false // Đảm bảo dùng định dạng 24h
     });
+
+    // Lấy phần ngày: 12/12/2025
+    const date = d.toLocaleDateString("vi-VN", { 
+      year: "numeric", 
+      month: "2-digit", 
+      day: "2-digit" 
+    });
+
+    // Ghép lại
+    return `${time}-${date}`;
   } catch {
-    return "";
+    return "—";
   }
 }
 
@@ -277,12 +287,7 @@ function DetailModal({
             <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
               📋 Chi tiết bệnh viện
             </h2>
-            {/* <button
-              onClick={onClose}
-              className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition"
-            >
-              ✕
-            </button> */}
+          
           </div>
         </div>
 
@@ -319,7 +324,7 @@ function DetailModal({
             />
 
             <Info
-              label="Người phụ trách chính (IT)"
+              label="Phụ trách chính"
               icon={<FiUser />}
               value={
                 item.personInChargeName ? (

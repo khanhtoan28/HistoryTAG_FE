@@ -88,6 +88,31 @@ function getWorkStatusColor(value: string): string {
   return WORK_STATUS_COLORS[value] || "bg-gray-100 text-gray-800 border-gray-200";
 }
 
+// Helper function để format LocalDateTime từ backend (không có timezone)
+// Backend gửi LocalDateTime dạng "2025-11-04T10:54:00.843223" (UTC+7 local time)
+// Không parse qua Date object vì sẽ bị sai timezone
+function formatLocalDateTime(dateTimeStr: string | null | undefined): string {
+  if (!dateTimeStr) return "—";
+  
+  try {
+    // Parse LocalDateTime string từ backend (format: "2025-11-04T10:54:00" hoặc "2025-11-04T10:54:00.843223")
+    const match = dateTimeStr.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.(\d+))?/);
+    if (!match) {
+      // Fallback nếu format không đúng
+      return new Date(dateTimeStr).toLocaleString("vi-VN");
+    }
+    
+    const [, year, month, day, hour, minute] = match;
+    
+    // Format: "hh:mm - dd/mm/yyyy" (không có giây)
+    const formattedDate = `${hour}:${minute} - ${day}/${month}/${year}`;
+    return formattedDate;
+  } catch (error) {
+    console.error("Error formatting date:", error);
+    return dateTimeStr;
+  }
+}
+
 export default function SuperAdminUsers() {
   const [items, setItems] = useState<UserResponseDTO[]>([]);
   const [loading, setLoading] = useState(false);
@@ -639,12 +664,12 @@ export default function SuperAdminUsers() {
 
                 <div className="flex items-start gap-4">
                   <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiCalendar className="text-gray-500" />Tạo lúc:</span></div>
-                  <div className="flex-1 text-gray-700 break-words">{(viewing.createdAt ? new Date(viewing.createdAt).toLocaleString() : "—")}</div>
+                  <div className="flex-1 text-gray-700 break-words">{(viewing.createdAt ? formatLocalDateTime(viewing.createdAt) : "—")}</div>
                 </div>
 
                 <div className="flex items-start gap-4">
                   <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiClock className="text-gray-500" />Cập nhật:</span></div>
-                  <div className="flex-1 text-gray-700 break-words">{(viewing.updatedAt ? new Date(viewing.updatedAt).toLocaleString() : "—")}</div>
+                  <div className="flex-1 text-gray-700 break-words">{(viewing.updatedAt ? formatLocalDateTime(viewing.updatedAt) : "—")}</div>
                 </div>
               </div>
 
