@@ -1717,7 +1717,7 @@ const ImplementSuperTaskPage: React.FC = () => {
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                 {hospital.personInChargeName || "—"}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm align-top">
+                              <td className="px-6 py-6 whitespace-nowrap text-sm align-top">
                                 <div className="flex flex-col items-start gap-1">
                                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                     {acceptedTasks}/{totalTasks} task

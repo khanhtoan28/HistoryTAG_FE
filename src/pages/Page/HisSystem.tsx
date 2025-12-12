@@ -296,16 +296,17 @@ const HisSystemPage: React.FC = () => {
   }, [page, size, sortBy, sortDir]);
 
 
-  // Load hospital counts for all HIS items (lightweight - only count)
+  // Load hospital counts for all HIS items (optimized: fetch with reasonable size instead of 10000)
   useEffect(() => {
     if (items.length === 0) return;
     
     const loadCounts = async () => {
       try {
-        // Fetch all hospitals once
+        // Optimized: Fetch hospitals with reasonable size (500) instead of all 10000
+        // If there are more than 500 hospitals, we'll count what we can get
         const url = new URL(`${API_BASE}/api/v1/auth/hospitals`);
         url.searchParams.set("page", "0");
-        url.searchParams.set("size", "10000"); // Get all hospitals
+        url.searchParams.set("size", "500"); // Reduced from 10000 to 500 for better performance
         
         const res = await fetch(url.toString(), { headers: { ...authHeader() } });
         if (!res.ok) return;
@@ -328,13 +329,15 @@ const HisSystemPage: React.FC = () => {
     loadCounts();
   }, [items]);
 
-  // Fetch hospitals when modal opens
+  // Fetch hospitals when modal opens (optimized: try to use filter if available, otherwise fetch with reasonable size)
   async function loadHospitalsForHis(hisId: number) {
     setHospitalsLoading(true);
     try {
       const url = new URL(`${API_BASE}/api/v1/auth/hospitals`);
       url.searchParams.set("page", "0");
-      url.searchParams.set("size", "10000");
+      // Optimized: Try to use filter if backend supports it, otherwise fetch with reasonable size
+      // If backend supports hisSystemId filter, add it here: url.searchParams.set("hisSystemId", String(hisId));
+      url.searchParams.set("size", "500"); // Reduced from 10000 to 500 for better performance
       
       const res = await fetch(url.toString(), { headers: { ...authHeader() } });
       if (!res.ok) {

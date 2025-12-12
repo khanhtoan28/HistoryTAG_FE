@@ -18,6 +18,7 @@ import {
   type WarrantyContractRequestDTO,
 } from "../../api/warranty.api";
 import { searchHospitals } from "../../api/business.api";
+import { PlusIcon } from "../../icons";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
@@ -177,6 +178,7 @@ export default function WarrantyContractsPage() {
 
   // Filters
   const [qSearch, setQSearch] = useState("");
+  const [debouncedQSearch, setDebouncedQSearch] = useState(""); // Debounced version for API calls
   const [qPicUserId, setQPicUserId] = useState("");
   const [filterStartFrom, setFilterStartFrom] = useState<string>("");
   const [filterStartTo, setFilterStartTo] = useState<string>("");
@@ -186,10 +188,26 @@ export default function WarrantyContractsPage() {
   const dateFilterRef = useRef<HTMLDivElement | null>(null);
   const pendingStartInputRef = useRef<HTMLInputElement | null>(null);
   const pendingEndInputRef = useRef<HTMLInputElement | null>(null);
+  const searchDebounceTimeoutRef = useRef<number | null>(null);
+
+  // Debounce search input: update debouncedQSearch after 300ms of no typing
+  useEffect(() => {
+    if (searchDebounceTimeoutRef.current) {
+      window.clearTimeout(searchDebounceTimeoutRef.current);
+    }
+    searchDebounceTimeoutRef.current = window.setTimeout(() => {
+      setDebouncedQSearch(qSearch);
+    }, 300);
+    return () => {
+      if (searchDebounceTimeoutRef.current) {
+        window.clearTimeout(searchDebounceTimeoutRef.current);
+      }
+    };
+  }, [qSearch]);
 
   useEffect(() => {
     setPage(0);
-  }, [qSearch, qPicUserId, filterStartFrom, filterStartTo]);
+  }, [debouncedQSearch, qPicUserId, filterStartFrom, filterStartTo]);
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<WarrantyContract | null>(null);
@@ -382,7 +400,7 @@ export default function WarrantyContractsPage() {
         sortBy: "id",
         sortDir: "desc",
       };
-      if (qSearch.trim()) params.search = qSearch.trim();
+      if (debouncedQSearch.trim()) params.search = debouncedQSearch.trim();
       if (qPicUserId) params.picUserId = Number(qPicUserId);
       
       // Note: Date filtering will be implemented in backend later
@@ -403,7 +421,7 @@ export default function WarrantyContractsPage() {
 
   useEffect(() => {
     fetchList();
-  }, [page, size, qSearch, qPicUserId, filterStartFrom, filterStartTo]);
+  }, [page, size, debouncedQSearch, qPicUserId, filterStartFrom, filterStartTo]);
 
   // Handle click outside date filter
   useEffect(() => {
@@ -1305,8 +1323,8 @@ export default function WarrantyContractsPage() {
               className="rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md flex items-center gap-2"
               onClick={onCreate}
             >
-              <span>+</span>
-              <span>Thêm hợp đồng bảo hành</span>
+            <PlusIcon style={{ width: 18, height: 18, fill: 'white' }} />
+            <span>Thêm mới</span>
             </button>
           )}
         </div>
@@ -1508,8 +1526,8 @@ export default function WarrantyContractsPage() {
 
                     <div className="mt-3 flex items-center justify-between text-sm text-gray-700">
                       <div className="flex items-center gap-6">
-                        <div>Giá hợp đồng (1 năm): <span className="font-medium">{formatCurrency(item.yearlyPrice)}</span></div>
-                        <div>Tổng tiền: <span className="font-semibold">{formatCurrency(item.totalPrice)}</span></div>
+                        <div>Giá hợp đồng (1 năm): <span className="font-medium whitespace-nowrap">{formatCurrency(item.yearlyPrice)}</span></div>
+                        <div>Tổng tiền: <span className="font-semibold whitespace-nowrap">{formatCurrency(item.totalPrice)}</span></div>
                       </div>
                       <div />
                     </div>
@@ -1680,7 +1698,7 @@ export default function WarrantyContractsPage() {
                         <FiDollarSign className="text-gray-500 text-lg" />
                         <span className="font-semibold text-gray-900">Giá/năm:</span>
                       </div>
-                      <div className="flex-1 text-gray-700 font-medium text-green-600">
+                      <div className="flex-1 text-gray-700 font-medium text-green-600 whitespace-nowrap">
                         {formatCurrency(viewing.yearlyPrice)}
                       </div>
                     </div>
@@ -1690,7 +1708,7 @@ export default function WarrantyContractsPage() {
                         <FiDollarSign className="text-gray-500 text-lg" />
                         <span className="font-semibold text-gray-900">Tổng tiền:</span>
                       </div>
-                      <div className="flex-1 text-gray-700 font-medium text-blue-600">
+                      <div className="flex-1 text-gray-700 font-medium text-blue-600 whitespace-nowrap">
                         {formatCurrency(viewing.totalPrice)}
                       </div>
                     </div>

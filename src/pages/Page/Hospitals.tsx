@@ -413,15 +413,32 @@ export default function HospitalsPage() {
 
   // Filters (server-side)
   const [qName, setQName] = useState("");
+  const [debouncedQName, setDebouncedQName] = useState(""); // Debounced version for API calls
   const [qProvince, setQProvince] = useState("");
   const [qStatus, setQStatus] = useState("");
   const [qPriority, setQPriority] = useState("");
   const [qPersonInCharge, setQPersonInCharge] = useState("");
+  const nameSearchDebounceRef = useRef<number | null>(null);
+  
+  // Debounce name search input: update debouncedQName after 300ms of no typing
+  useEffect(() => {
+    if (nameSearchDebounceRef.current) {
+      window.clearTimeout(nameSearchDebounceRef.current);
+    }
+    nameSearchDebounceRef.current = window.setTimeout(() => {
+      setDebouncedQName(qName);
+    }, 300);
+    return () => {
+      if (nameSearchDebounceRef.current) {
+        window.clearTimeout(nameSearchDebounceRef.current);
+      }
+    };
+  }, [qName]);
   
   // Reset về trang đầu khi filter thay đổi
   useEffect(() => {
     setPage(0);
-  }, [qName, qProvince, qStatus, qPriority, qPersonInCharge]);
+  }, [debouncedQName, qProvince, qStatus, qPriority, qPersonInCharge]);
 
   const [priorityOptions] = useState<EnumOption[]>(PRIORITY_FALLBACK);
   const [statusOptions] = useState<EnumOption[]>(STATUS_FALLBACK);
@@ -928,7 +945,7 @@ export default function HospitalsPage() {
       url.searchParams.set("size", String(size));
       
       // Thêm filter params
-      if (qName.trim()) url.searchParams.set("name", qName.trim());
+      if (debouncedQName.trim()) url.searchParams.set("name", debouncedQName.trim());
       if (qProvince.trim()) url.searchParams.set("province", qProvince.trim());
       if (qStatus.trim()) url.searchParams.set("status", qStatus.trim());
       if (qPriority.trim()) url.searchParams.set("priority", qPriority.trim());
@@ -981,7 +998,7 @@ export default function HospitalsPage() {
 
   useEffect(() => {
     fetchList();
-  }, [page, size, qName, qProvince, qStatus, qPriority, qPersonInCharge]);
+  }, [page, size, debouncedQName, qProvince, qStatus, qPriority, qPersonInCharge]);
 
   // Server đã filter rồi, dùng trực tiếp items
   const filtered = items;
@@ -2477,8 +2494,9 @@ export default function HospitalsPage() {
                                 
                                 if (!cleanedText) return null;
                                 
-                                // Tách theo dấu phẩy hoặc dấu pipe
-                                const separatorPattern = /[,\|]/;
+                                // Tách theo dấu pipe HOẶC dấu phẩy (nhưng chỉ khi sau dấu phẩy KHÔNG phải là số)
+                                // Điều này tránh tách dấu phẩy trong số tiền như "20,000,000 VNĐ"
+                                const separatorPattern = /\||,(?!\d)/;
                                 const parts = cleanedText
                                   .split(separatorPattern)
                                   .map(p => p.trim())
@@ -2665,13 +2683,13 @@ export default function HospitalsPage() {
                                     </div>
                                   )}
                                   {contract.unitPrice && (
-                                    <div>
-                                      <span className="font-medium">Đơn giá:</span> {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.unitPrice)}
+                                    <div className="flex items-start gap-1">
+                                      <span className="font-medium">Đơn giá:</span> <span className="whitespace-nowrap inline-block">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.unitPrice)}</span>
                                     </div>
                                   )}
                                   {contract.totalPrice && (
-                                    <div>
-                                      <span className="font-medium">Tổng giá:</span> {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.totalPrice)}
+                                    <div className="flex items-start gap-1">
+                                      <span className="font-medium">Tổng giá:</span> <span className="whitespace-nowrap inline-block">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.totalPrice)}</span>
                                     </div>
                                   )}
                                   {contract.picUser && (
@@ -2718,13 +2736,13 @@ export default function HospitalsPage() {
                                     </div>
                                   )}
                                   {contract.yearlyPrice && (
-                                    <div>
-                                      <span className="font-medium">Giá hàng năm:</span> {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.yearlyPrice)}
+                                    <div className="flex items-start gap-1">
+                                      <span className="font-medium">Giá hàng năm:</span> <span className="whitespace-nowrap inline-block">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.yearlyPrice)}</span>
                                     </div>
                                   )}
                                   {contract.totalPrice && (
-                                    <div>
-                                      <span className="font-medium">Tổng giá:</span> {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.totalPrice)}
+                                    <div className="flex items-start gap-1">
+                                      <span className="font-medium">Tổng giá:</span> <span className="whitespace-nowrap inline-block">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.totalPrice)}</span>
                                     </div>
                                   )}
                                   {contract.picUser && (

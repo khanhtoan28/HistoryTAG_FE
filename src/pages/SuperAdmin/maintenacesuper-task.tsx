@@ -1229,10 +1229,10 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                               className="hover:bg-gray-50 transition-colors cursor-pointer"
                               onClick={(e) => handleHospitalClick(hospital.label, e)}
                             >
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              <td className="px-6 whitespace-nowrap text-sm text-gray-500">
                                 {hospitalPage * hospitalSize + index + 1}
                               </td>
-                              <td className="px-6 py-4">
+                              <td className="px-6 ">
                                 <div className={`flex gap-3 ${longName ? 'items-start' : 'items-center'}`}>
 
                                   <div className={`text-sm font-medium text-gray-900 break-words max-w-[260px] flex flex-wrap gap-2 ${longName ? 'leading-snug' : ''}`}>
@@ -1250,10 +1250,10 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                                   </div>
                                 </div>
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              <td className="px-6  whitespace-nowrap text-sm text-gray-500">
                                 {hospital.subLabel || "—"}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm align-center">
+                              <td className="px-6 whitespace-nowrap text-sm align-center">
                                 <div className="flex flex-col items-start gap-1">
                                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                     {(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task
@@ -1266,7 +1266,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                                   )}
                                 </div>
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <td className="px-6  whitespace-nowrap text-sm">
                                 <button
                                   onClick={(e) => {
                                     // pass the event so handler can prevent default/stop propagation
