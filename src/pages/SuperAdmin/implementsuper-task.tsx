@@ -10,7 +10,7 @@ import TaskFormModal from "./TaskFormModal";
 import TaskNotes from "../../components/TaskNotes";
 import { isBusinessContractTaskName as isBusinessContractTask } from "../../utils/businessContract";
 
-const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
+const API_ROOT = import.meta.env.VITE_API_URL || "";
 const MIN_LOADING_MS = 2000; // ensure spinner shows at least ~2s for perceived smoothness
 
 function toLocalISOString(date: Date) {

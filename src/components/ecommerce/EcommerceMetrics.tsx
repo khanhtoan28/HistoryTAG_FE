@@ -7,7 +7,7 @@ import {
   BoxIcon,
 } from "../../icons";
 
-const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
+const API_ROOT = import.meta.env.VITE_API_URL || "";
 
 function authHeaders() {
   const token = localStorage.getItem("access_token");

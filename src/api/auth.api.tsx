@@ -180,13 +180,14 @@ export const clearUserStorage = () => {
   const host = window.location.hostname;
   const base = `${name}=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0`;
   
+  // Clear cookies without domain (works for localhost and IP addresses)
   document.cookie = `${base}; Path=/; SameSite=Lax`;
   document.cookie = `${base}; Path=/; SameSite=None; Secure`;
-  document.cookie = `${base}; Path=/; Domain=${host}; SameSite=Lax`;
-  document.cookie = `${base}; Path=/; Domain=${host}; SameSite=None; Secure`;
-  if (host !== "127.0.0.1") {
-    document.cookie = `${base}; Path=/; Domain=127.0.0.1; SameSite=Lax`;
-    document.cookie = `${base}; Path=/; Domain=127.0.0.1; SameSite=None; Secure`;
+  
+  // Clear cookies with domain (only if hostname is not localhost or IP)
+  if (host && host !== "localhost" && !host.match(/^127\.\d+\.\d+\.\d+$/) && !host.match(/^192\.168\./) && !host.match(/^10\./)) {
+    document.cookie = `${base}; Path=/; Domain=${host}; SameSite=Lax`;
+    document.cookie = `${base}; Path=/; Domain=${host}; SameSite=None; Secure`;
   }
 };
 

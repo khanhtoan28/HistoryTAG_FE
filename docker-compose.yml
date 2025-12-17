@@ -1,0 +1,42 @@
+services:
+  # Frontend React
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile  # Dockerfile ở root của Frontend repository
+      args:
+        # ✅ Set empty string để frontend dùng relative path (same origin)
+        # Với Cloudflare Tunnel, frontend và backend cùng domain https://qlcvtagtech.com
+        # Nginx sẽ proxy /api và /ws đến backend container
+        VITE_API_URL: ""
+        VITE_NOTIFICATION_STOMP_URL: ""  # Empty = dùng relative path /ws (code có fallback)
+        VITE_LOGOUT_URL: "/api/v1/auth/logout"  # Relative path (code không có fallback)
+    container_name: tagweb_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      # 🔒 SECURITY: Không expose 443 trong container
+      # SSL nên được xử lý bởi reverse proxy (Nginx host / Traefik) ở ngoài
+      # - "443:443"
+    environment:
+      TZ: Asia/Ho_Chi_Minh  # ⏰ Timezone Việt Nam
+      # ⚠️ LƯU Ý: BACKEND_API_URL trong Nginx là BUILD-TIME, không phải runtime
+      # Nếu đổi backend URL → cần rebuild frontend image
+      # Backend API URL - có thể dùng service name hoặc external URL
+      # Nếu backend trong cùng Docker network → dùng service name
+      # Nếu backend ở ngoài → dùng URL (http://your-server-ip:8080)
+      BACKEND_API_URL: http://backend:8080
+    # 📝 Log rotation để tránh đầy ổ cứng
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - tagweb_shared_network  # Connect vào network chung với Backend
+
+networks:
+  tagweb_shared_network:
+    name: tagweb_shared_network
+    external: true  # Network đã được tạo bởi Backend hoặc tạo thủ công
+

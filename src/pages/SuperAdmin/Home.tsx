@@ -59,7 +59,7 @@ export default function SuperAdminHome() {
   const [hwRows, setHwRows] = useState<Array<{ key: string; label: string; revenue: number; quantity: number; taskCount: number; impl: number; dev: number; maint: number; image?: string }>>([]);
   const [hwLoading, setHwLoading] = useState(false);
   // Employee Performance report states
-  const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
+  const API_ROOT = import.meta.env.VITE_API_URL || "";
   type EmployeePerf = {
     userId?: number | null;
     fullName?: string | null;

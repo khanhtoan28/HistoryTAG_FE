@@ -138,7 +138,7 @@ function statusBadgeClasses(status?: string | null) {
   }
 }
 
-const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
+const API_ROOT = import.meta.env.VITE_API_URL || "";
 const MIN_LOADING_MS = 2000;
 
 // PageClients folder is admin-facing: always use admin API root for tasks

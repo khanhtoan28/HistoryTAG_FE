@@ -210,7 +210,7 @@ export type ImplementationTaskUpdateDTO = Partial<ImplementationTaskRequestDTO>;
 
 type UserInfo = { id?: number; username?: string; team?: string; roles?: string[] } | null;
 
-const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
+const API_ROOT = import.meta.env.VITE_API_URL || "";
 
 // PageClients: admin area — always use admin endpoints
 const apiBase = `${API_ROOT}/api/v1/admin/maintenance/tasks`;
