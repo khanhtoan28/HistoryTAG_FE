@@ -31,6 +31,23 @@ type AgencyForm = {
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
 const BASE = `${API_BASE}/api/v1/superadmin/agencies`;
 
+// ✅ Helper để tạo URL đúng cách (xử lý relative path và absolute URL)
+function createApiUrl(path: string): URL {
+  // 1️⃣ path đã là absolute URL
+  if (/^https?:\/\//i.test(path)) {
+    return new URL(path);
+  }
+
+  // 2️⃣ chỉ dùng API_BASE nếu nó là absolute URL
+  if (API_BASE && /^https?:\/\//i.test(API_BASE)) {
+    return new URL(path, API_BASE);
+  }
+
+  // 3️⃣ fallback an toàn nhất (domain hiện tại)
+  return new URL(path, window.location.origin);
+}
+
+
 function authHeader(): Record<string, string> {
   const token = localStorage.getItem("access_token");
   return token
@@ -170,7 +187,7 @@ export default function AgenciesPage() {
     setLoading(true);
     setError(null);
     try {
-      const url = new URL(BASE);
+      const url = createApiUrl("/api/v1/superadmin/agencies");
       url.searchParams.set("page", String(page));
       url.searchParams.set("size", String(size));
       url.searchParams.set("sortBy", sortBy);

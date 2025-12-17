@@ -60,6 +60,23 @@ const BASES = [
   `${API_BASE}/api/v1/admin/his`,
 ] as const;
 
+// ✅ Helper để tạo URL đúng cách (xử lý relative path và absolute URL)
+function createApiUrl(path: string): URL {
+  // 1. Absolute URL
+  if (/^https?:\/\//i.test(path)) {
+    return new URL(path);
+  }
+
+  // 2. API_BASE chỉ dùng nếu là absolute URL
+  if (API_BASE && /^https?:\/\//i.test(API_BASE)) {
+    return new URL(path, API_BASE);
+  }
+
+  // 3. Fallback: domain hiện tại
+  return new URL(path, window.location.origin);
+}
+
+
 function authHeader(): Record<string, string> {
   const token = localStorage.getItem("access_token");
   return token
@@ -67,12 +84,13 @@ function authHeader(): Record<string, string> {
     : { "Content-Type": "application/json", Accept: "application/json" };
 }
 
-async function fetchWithFallback(inputFactory: (base: string) => string, init?: RequestInit) {
+async function fetchWithFallback(inputFactory: (base: string) => string | URL, init?: RequestInit) {
   let lastError: unknown = null;
   for (const base of BASES) {
     try {
       const url = inputFactory(base);
-      const res = await fetch(url, init);
+      const urlString = url instanceof URL ? url.toString() : url;
+      const res = await fetch(urlString, init);
       if (!res.ok) throw new Error(`${init?.method ?? "GET"} ${res.status}`);
       return res;
     } catch (e) {
@@ -262,7 +280,8 @@ const HisSystemPage: React.FC = () => {
     setError(null);
     try {
       const res = await fetchWithFallback((base) => {
-        const url = new URL(base);
+        // base đã là full path như "/api/v1/superadmin/his" hoặc "http://..."
+        const url = createApiUrl(base);
         url.searchParams.set("search", "");
         url.searchParams.set("page", String(page));
         url.searchParams.set("size", String(size));
@@ -304,7 +323,7 @@ const HisSystemPage: React.FC = () => {
       try {
         // Optimized: Fetch hospitals with reasonable size (500) instead of all 10000
         // If there are more than 500 hospitals, we'll count what we can get
-        const url = new URL(`${API_BASE}/api/v1/auth/hospitals`);
+        const url = createApiUrl("/api/v1/auth/hospitals");
         url.searchParams.set("page", "0");
         url.searchParams.set("size", "500"); // Reduced from 10000 to 500 for better performance
         
@@ -333,7 +352,7 @@ const HisSystemPage: React.FC = () => {
   async function loadHospitalsForHis(hisId: number) {
     setHospitalsLoading(true);
     try {
-      const url = new URL(`${API_BASE}/api/v1/auth/hospitals`);
+      const url = createApiUrl("/api/v1/auth/hospitals");
       url.searchParams.set("page", "0");
       // Optimized: Try to use filter if backend supports it, otherwise fetch with reasonable size
       // If backend supports hisSystemId filter, add it here: url.searchParams.set("hisSystemId", String(hisId));
