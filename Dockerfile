@@ -2,7 +2,8 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN npm config set registry https://registry.npmjs.org/
+RUN npm install --legacy-peer-deps
 COPY . .
 # ⚠️ QUAN TRỌNG: Set VITE_API_URL="" để frontend dùng relative path /api
 # Nginx sẽ proxy /api đến backend container
