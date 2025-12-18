@@ -1573,7 +1573,7 @@ function DetailModal({
 
                     {/* Additional request */}
                     <div className="pt-6 mb-6">
-                        <p className="text-gray-500 mb-2">Yêu cầu bổ sung:</p>
+                        <p className="text-gray-500 mb-2">Nội dung công việc:</p>
                         <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px]">
                             {(() => {
                                 const notes = (item as any).notes || item.additionalRequest || "";

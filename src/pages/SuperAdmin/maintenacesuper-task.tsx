@@ -1703,7 +1703,7 @@ function DetailModal({
           </div>
 
           <div className="pt-6 mb-6">
-            <p className="text-gray-500 mb-2">Ghi chú / Yêu cầu bổ sung:</p>
+            <p className="text-gray-500 mb-2">Nội dung công việc:</p>
             <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 min-h-[60px]">
               {(() => {
                 const notes = item.notes || item.additionalRequest || "";
