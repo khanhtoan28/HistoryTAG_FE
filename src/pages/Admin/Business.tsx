@@ -652,11 +652,12 @@ const BusinessPage: React.FC = () => {
         errors.name = 'Mã hợp đồng đã được sử dụng';
       }
       
-      // If no duplicate found in current items, check all items via API for accuracy
+      // If no duplicate found in current items, check via API with search (optimized: only fetch first 100 matches)
       if (!duplicate) {
         try {
-          const allBusinesses = await getBusinesses({ page: 0, size: 10000 });
-          const allItems = Array.isArray(allBusinesses?.content) ? allBusinesses.content : (Array.isArray(allBusinesses) ? allBusinesses : []);
+          // Use search to find potential duplicates instead of fetching all records
+          const searchResults = await getBusinesses({ page: 0, size: 100, search: trimmedName });
+          const allItems = Array.isArray(searchResults?.content) ? searchResults.content : (Array.isArray(searchResults) ? searchResults : []);
           const duplicateInAll = allItems.find((item: BusinessItem) => {
             // Exclude current editing item if in edit mode
             if (editingId && item.id === editingId) return false;
@@ -727,9 +728,11 @@ const BusinessPage: React.FC = () => {
     const isUpdate = Boolean(editingId);
     
     // Check nếu đang tạo mới (không phải edit) và bệnh viện đã có hợp đồng
+    // Optimized: Only fetch first page to check if hospital has any existing business
     if (!isUpdate && selectedHospitalId) {
       try {
-        const existingBusinesses = await getBusinesses({ page: 0, size: 10000 });
+        // Fetch only first page (10 items) to check if hospital has existing business
+        const existingBusinesses = await getBusinesses({ page: 0, size: 10 });
         const allItems = Array.isArray(existingBusinesses?.content) ? existingBusinesses.content : (Array.isArray(existingBusinesses) ? existingBusinesses : []);
         const hasExisting = allItems.some((item: BusinessItem) => {
           return item.hospital?.id === selectedHospitalId;
@@ -1136,7 +1139,9 @@ const BusinessPage: React.FC = () => {
               <span className={value ? "text-gray-900" : "text-gray-500"}>
                 {selectedUser ? selectedUser.name : "Tất cả người phụ trách"}
               </span>
-              <span className="text-gray-400">▼</span>
+              <svg className={`w-4 h-4 transition-transform ${openBox ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             </div>
           )}
         </div>
@@ -1223,7 +1228,7 @@ const BusinessPage: React.FC = () => {
   }
 
   return (
-    <div className="p-6 relative bg-white">
+    <div className=" relative">
       {/* Toasts */}
       {toast && (
         <div className="fixed top-6 right-6 z-50">
@@ -1584,7 +1589,7 @@ const BusinessPage: React.FC = () => {
       {!pageAllowed ? (
         <div className="text-red-600">Bạn không có quyền truy cập trang này.</div>
       ) : (
-        <div className="mt-6">
+        <div className="mt-10.5">
           {/* Inline form kept for legacy but hidden on modal-enabled UI - keep for fallback */}
           <form onSubmit={handleSubmit} className="hidden space-y-3 mb-6 bg-white/60 p-4 rounded shadow-sm">
             <div>
@@ -1618,7 +1623,7 @@ const BusinessPage: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Số lượng</label>
+              <label className="block text-sm font-medium mb-1">Số lượng Kiosk</label>
               <input
                 type="number"
                 min={1}
@@ -1837,7 +1842,7 @@ const BusinessPage: React.FC = () => {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">Số lượng</label>
+                      <label className="block text-sm font-medium mb-1">Số lượng Kiosk</label>
                       <input
                         type="number"
                         min={1}
@@ -2033,10 +2038,30 @@ const BusinessPage: React.FC = () => {
                           <TrashBinIcon style={{ width: 16, height: 16 }} />
                           <span className="text-sm">Xóa</span>
                         </button>
-                      )}
+                      )}                      
                     </div>
                   </div>
                 ))}
+                {items.length === 0 && (
+                  <div className="py-12 text-center text-gray-400">
+                    <div className="flex flex-col items-center">
+                      <svg
+                        className="mb-3 h-12 w-12 text-gray-300"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="1.5"
+                          d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
+                        />
+                      </svg>
+                      <span className="text-sm">Không có dữ liệu</span>
+                    </div>
+                  </div>
+                )}
               </div>
             <Pagination
               currentPage={currentPage}
@@ -2065,7 +2090,7 @@ const BusinessPage: React.FC = () => {
               <Info label="Người phụ trách" value={<div className="font-medium">{viewItem.picUser?.label ?? '—'}{viewItem.picUser?.subLabel ? <span className="ml-2 text-xs text-gray-500">{viewItem.picUser?.subLabel}</span> : null}</div>} icon={<UserCircleIcon style={{ width: 18, height: 18 }} />} />
               <Info label="Bắt đầu" value={<div className="font-medium">{formatDateShort(viewItem.startDate)}</div>} icon={<CalenderIcon style={{ width: 16, height: 16 }} />} />
               <Info label="Hoàn thành" value={<div className="font-medium">{formatDateShort(viewItem.completionDate)}</div>} icon={<TimeIcon style={{ width: 16, height: 16 }} />} />
-              <Info label="Số lượng" value={<div className="font-medium">{viewItem.quantity ?? '—'}</div>} icon={<BoxIconLine style={{ width: 16, height: 16 }} />} />
+              <Info label="Số lượng Kiosk" value={<div className="font-medium">{viewItem.quantity ?? '—'}</div>} icon={<BoxIconLine style={{ width: 16, height: 16 }} />} />
               <Info label="Đơn giá" value={<div className="font-medium">{viewItem.unitPrice != null ? viewItem.unitPrice.toLocaleString() + ' ₫' : '—'}</div>} icon={<DollarLineIcon style={{ width: 16, height: 16 }} />} />
               <Info label="Thành tiền" value={<div className="font-medium">{viewItem.totalPrice != null ? viewItem.totalPrice.toLocaleString() + ' ₫' : '—'}</div>} icon={<DollarLineIcon style={{ width: 16, height: 16 }} />} />
               <Info label="Hoa hồng của viện" value={<div className="font-medium">{viewItem.commission != null ? (Number(viewItem.commission).toLocaleString() + ' ₫') : '—'} {viewItem.commission != null && viewItem.totalPrice ? `(${((Number(viewItem.commission) / Number(viewItem.totalPrice)) * 100).toFixed(2).replace(/\.00$/,'')}%)` : ''}</div>} icon={<CheckCircleIcon style={{ width: 16, height: 16 }} />} />

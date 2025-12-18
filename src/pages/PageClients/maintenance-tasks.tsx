@@ -210,7 +210,7 @@ export type ImplementationTaskUpdateDTO = Partial<ImplementationTaskRequestDTO>;
 
 type UserInfo = { id?: number; username?: string; team?: string; roles?: string[] } | null;
 
-const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
+const API_ROOT = import.meta.env.VITE_API_URL || "";
 
 // PageClients: admin area — always use admin endpoints
 const apiBase = `${API_ROOT}/api/v1/admin/maintenance/tasks`;
@@ -2442,7 +2442,7 @@ const ImplementationTasksPage: React.FC = () => {
                     ) : showHospitalList ? (
                         // hospital list table
                         <div className="mb-6">
-                            <div className="mb-4 rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-5 shadow-sm">
+                            <div className="mb-6 rounded-2xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-5 shadow-sm">
                                 <div className="flex items-start justify-between gap-4">
                                     <div>
                                         <h3 className="text-lg font-semibold mb-3">Tìm kiếm & Lọc</h3>
@@ -2540,8 +2540,8 @@ const ImplementationTasksPage: React.FC = () => {
                                             </div>
                                         </div>
 
-                                        <div className="mt-3 text-sm text-gray-600 dark:text-gray-300">
-                                            <span>Tổng: <span className="font-semibold text-gray-800 dark:text-gray-100">{loadingHospitals ? '...' : filteredHospitals.length}</span> viện</span>
+                                        <div className="mt-6 mb-0.5 text-sm text-gray-600 dark:text-gray-300">
+                                            <span >Tổng bệnh viện: <span className="font-semibold text-gray-900 dark:text-gray-100">{loadingHospitals ? '...' : filteredHospitals.length}</span> </span>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -2601,8 +2601,8 @@ const ImplementationTasksPage: React.FC = () => {
                                                         .slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize)
                                                         .map((hospital, index) => (
                                                             <tr key={hospital.id || `${hospital.label}-${index}`} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => { setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }}>
-                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospitalPage * hospitalSize + index + 1}</td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                                <td className="px-6  whitespace-nowrap text-sm text-gray-500">{hospitalPage * hospitalSize + index + 1}</td>
+                                                                <td className="px-6  whitespace-nowrap">
                                                                     <div className="flex items-center gap-3">
 
                                                                         <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
@@ -2620,8 +2620,8 @@ const ImplementationTasksPage: React.FC = () => {
                                                                         </div>
                                                                     </div>
                                                                 </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.subLabel || "—"}</td>
-                                                                <td className="px-6 py-4 whitespace-nowrap text-sm align-center">
+                                                                <td className="px-6  whitespace-nowrap text-sm text-gray-500">{hospital.subLabel || "—"}</td>
+                                                                <td className="px-6  whitespace-nowrap text-sm align-center">
                                                                     <div className="flex flex-col items-start gap-1">
                                                                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task</span>
                                                                         {(hospital.nearDueCount ?? 0) > 0 && (
@@ -2632,7 +2632,7 @@ const ImplementationTasksPage: React.FC = () => {
                                                                         )}
                                                                     </div>
                                                                 </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                                <td className="px-6  whitespace-nowrap text-sm">
                                                                     <button onClick={(e) => { e.stopPropagation(); setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }} className="p-6 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition" title="Xem công việc"><AiOutlineEye className="text-lg" /></button>
                                                                 </td>
                                                             </tr>

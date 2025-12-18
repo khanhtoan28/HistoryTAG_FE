@@ -53,7 +53,7 @@ export type ImplementationTaskRequestDTO = {
 
 export type ImplementationTaskUpdateDTO = Partial<ImplementationTaskRequestDTO>;
 
-const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
+const API_ROOT = import.meta.env.VITE_API_URL || "";
 import { FaHospital } from "react-icons/fa";
 import { FiUser, FiLink, FiClock, FiTag } from "react-icons/fi";
 

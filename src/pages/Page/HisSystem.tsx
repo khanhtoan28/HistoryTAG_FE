@@ -153,10 +153,20 @@ function formatDateShort(value?: string | null) {
   if (!value) return "—";
   try {
     const d = new Date(value);
-    const dd = d.getDate();
-    const mm = d.getMonth() + 1;
+    
+    // Kiểm tra nếu ngày không hợp lệ (ví dụ chuỗi rác)
+    if (isNaN(d.getTime())) return "—";
+
+    // Hàm tiện ích để thêm số 0 vào trước nếu cần (ví dụ: 5 -> "05")
+    const pad = (num: number) => num.toString().padStart(2, '0');
+
+    const hh = pad(d.getHours());
+    const min = pad(d.getMinutes());
+    const dd = pad(d.getDate());
+    const mm = pad(d.getMonth() + 1); // Tháng bắt đầu từ 0 nên phải +1
     const yyyy = d.getFullYear();
-    return `${dd}/${mm}/${yyyy}`;
+
+    return `${hh}:${min}-${dd}/${mm}/${yyyy}`;
   } catch {
     return "—";
   }
@@ -286,16 +296,17 @@ const HisSystemPage: React.FC = () => {
   }, [page, size, sortBy, sortDir]);
 
 
-  // Load hospital counts for all HIS items (lightweight - only count)
+  // Load hospital counts for all HIS items (optimized: fetch with reasonable size instead of 10000)
   useEffect(() => {
     if (items.length === 0) return;
     
     const loadCounts = async () => {
       try {
-        // Fetch all hospitals once
+        // Optimized: Fetch hospitals with reasonable size (500) instead of all 10000
+        // If there are more than 500 hospitals, we'll count what we can get
         const url = new URL(`${API_BASE}/api/v1/auth/hospitals`);
         url.searchParams.set("page", "0");
-        url.searchParams.set("size", "10000"); // Get all hospitals
+        url.searchParams.set("size", "500"); // Reduced from 10000 to 500 for better performance
         
         const res = await fetch(url.toString(), { headers: { ...authHeader() } });
         if (!res.ok) return;
@@ -318,13 +329,15 @@ const HisSystemPage: React.FC = () => {
     loadCounts();
   }, [items]);
 
-  // Fetch hospitals when modal opens
+  // Fetch hospitals when modal opens (optimized: try to use filter if available, otherwise fetch with reasonable size)
   async function loadHospitalsForHis(hisId: number) {
     setHospitalsLoading(true);
     try {
       const url = new URL(`${API_BASE}/api/v1/auth/hospitals`);
       url.searchParams.set("page", "0");
-      url.searchParams.set("size", "10000");
+      // Optimized: Try to use filter if backend supports it, otherwise fetch with reasonable size
+      // If backend supports hisSystemId filter, add it here: url.searchParams.set("hisSystemId", String(hisId));
+      url.searchParams.set("size", "500"); // Reduced from 10000 to 500 for better performance
       
       const res = await fetch(url.toString(), { headers: { ...authHeader() } });
       if (!res.ok) {
@@ -834,13 +847,13 @@ const HisSystemPage: React.FC = () => {
               </div>
             ) : isViewing ? (
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <Info stacked label="Tên HIS" icon={<FaHospital />} value={viewing?.name || "—"} />
-                <Info stacked label="Người liên hệ" icon={<FiUser />} value={viewing?.contactPerson || "—"} />
-                <Info stacked label="Email" icon={<FiMail />} value={viewing?.email || "—"} />
-                <Info stacked label="Số điện thoại" icon={<FiPhone />} value={viewing?.phoneNumber || "—"} />
+                <Info label="Tên HIS" icon={<FaHospital />} value={viewing?.name || "—"} />
+                <Info label="Người liên hệ" icon={<FiUser />} value={viewing?.contactPerson || "—"} />
+                <Info label="Email" icon={<FiMail />} value={viewing?.email || "—"} />
+                <Info label="Số điện thoại" icon={<FiPhone />} value={viewing?.phoneNumber || "—"} />
                 {/* Removed Địa chỉ and API URL from view as requested */}
-                <Info stacked label="Tạo lúc" icon={<FiClock />} value={formatDateShort(viewing?.createdAt)} />
-                <Info stacked label="Cập nhật lúc" icon={<FiClock />} value={formatDateShort(viewing?.updatedAt)} />
+                <Info label="Tạo lúc" icon={<FiClock />} value={formatDateShort(viewing?.createdAt)} />
+                <Info label="Cập nhật lúc" icon={<FiClock />} value={formatDateShort(viewing?.updatedAt)} />
 
                 <div className="col-span-1 md:col-span-2 mt-4 pt-2 border-t border-gray-200 flex justify-end">
                   <button className="rounded-xl border-2 border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-700" onClick={() => setOpen(false)}>

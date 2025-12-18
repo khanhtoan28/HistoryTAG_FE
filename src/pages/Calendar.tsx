@@ -23,6 +23,7 @@ interface CalendarEvent extends EventInput {
     eventId?: number;
     color?: string;
     isPast?: boolean;
+    isTeamEvent?: boolean; // Đánh dấu event từ team calendar
   };
 }
 
@@ -109,9 +110,12 @@ const Calendar: React.FC = () => {
         // Event của ngày hôm nay (eventDay === today) sẽ KHÔNG bị đánh dấu là past
         const isPast = eventDay.getTime() < today.getTime();
         
+        // Check if this is a team event (negative ID indicates team event)
+        const isTeamEvent = event.id < 0;
+        
         return {
           id: String(event.id),
-          title: event.title,
+          title: isTeamEvent ? `[Meeting invite] ${event.title}` : event.title, // Prefix để phân biệt
           start: event.startDate,
           end: event.endDate || undefined,
           allDay: isAllDay,
@@ -120,6 +124,7 @@ const Calendar: React.FC = () => {
             color: isPast ? "secondary" : (event.color || "success"), // Dùng "secondary" (xám) nếu đã qua ngày
             eventId: event.id,
             isPast: isPast, // Lưu trạng thái đã qua ngày
+            isTeamEvent: isTeamEvent, // Đánh dấu là team event
           },
         };
       });
@@ -132,23 +137,56 @@ const Calendar: React.FC = () => {
     }
   };
 
+  // Check if a date is in the past
+  const isDatePast = (dateStr: string): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const date = new Date(dateStr + "T00:00:00");
+    date.setHours(0, 0, 0, 0);
+    return date < today;
+  };
+
   const handleDateSelect = (selectInfo: DateSelectArg) => {
-    resetModalFields();
-    // Tự động set ngày khi chọn trên calendar
-    // startStr có format YYYY-MM-DD hoặc YYYY-MM-DDTHH:mm:ss
+    // Block selection of past dates
     const selectedDate = selectInfo.startStr.includes("T") 
       ? selectInfo.startStr.split("T")[0] 
       : selectInfo.startStr;
+    
+    if (isDatePast(selectedDate)) {
+      toast.error("Không thể chọn ngày trong quá khứ");
+      selectInfo.view.calendar.unselect();
+      return;
+    }
+
+    resetModalFields();
+    // Tự động set ngày khi chọn trên calendar
     setEventStartDate(selectedDate);
     setEventEndDate(selectedDate);
     setDateLocked(true); // Khóa ngày khi chọn từ calendar
     openModal();
   };
 
+  // Callback to add CSS class for past dates
+  const dayCellClassNames = (arg: any) => {
+    const dateStr = arg.date.toISOString().split("T")[0];
+    if (isDatePast(dateStr)) {
+      return "fc-day-past";
+    }
+    return "";
+  };
+
   const handleEventClick = (clickInfo: EventClickArg) => {
     const event = clickInfo.event;
-    setSelectedEvent(event as unknown as CalendarEvent);
-    setEventTitle(event.title);
+    const calendarEvent = event as unknown as CalendarEvent;
+    const isTeamEvent = calendarEvent.extendedProps?.isTeamEvent || false;
+    
+    // Nếu là team event, hiển thị thông báo và chỉ cho xem
+
+    
+    setSelectedEvent(calendarEvent);
+    // Remove prefix [Team] nếu có
+    const titleWithoutPrefix = event.title.replace(/^\[Team\]\s*/, "");
+    setEventTitle(titleWithoutPrefix);
     
     // Format ngày tránh timezone issue
     const formatDate = (date: Date | null | undefined): string => {
@@ -181,6 +219,16 @@ const Calendar: React.FC = () => {
   const isSelectedEventPast = (): boolean => {
     if (!selectedEvent || !eventStartDate) return false;
     return isEventPast(eventStartDate);
+  };
+
+  // Check if selected event is a team event (read-only)
+  const isSelectedEventTeamEvent = (): boolean => {
+    return selectedEvent?.extendedProps?.isTeamEvent || false;
+  };
+
+  // Combined check: event is past OR team event (both should be read-only)
+  const isSelectedEventReadOnly = (): boolean => {
+    return isSelectedEventPast() || isSelectedEventTeamEvent();
   };
 
   const validateForm = (): boolean => {
@@ -218,6 +266,12 @@ const Calendar: React.FC = () => {
   };
 
   const handleSaveClick = () => {
+    // Block saving if this is a team event
+    if (selectedEvent?.extendedProps?.isTeamEvent) {
+      toast.error("Không thể chỉnh sửa sự kiện từ lịch team");
+      return;
+    }
+
     // Clear previous errors
     setErrors({});
 
@@ -303,6 +357,18 @@ const Calendar: React.FC = () => {
   };
 
   const handleDeleteClick = () => {
+    // Block delete if this is a team event
+    if (selectedEvent?.extendedProps?.isTeamEvent) {
+      toast.error("Không thể xóa sự kiện từ lịch team");
+      return;
+    }
+
+    // Block delete if event ID is negative (team event)
+    if (selectedEvent && selectedEvent.extendedProps.eventId && selectedEvent.extendedProps.eventId < 0) {
+      toast.error("Không thể xóa sự kiện từ lịch team");
+      return;
+    }
+
     if (!selectedEvent || !selectedEvent.extendedProps.eventId) {
       toast.error("Không thể xóa sự kiện này");
       return;
@@ -311,7 +377,21 @@ const Calendar: React.FC = () => {
   };
 
   const handleDeleteConfirm = async () => {
-    if (!selectedEvent || !selectedEvent.extendedProps.eventId) {
+    // Block delete if this is a team event
+    if (selectedEvent?.extendedProps?.isTeamEvent) {
+      toast.error("Không thể xóa sự kiện từ lịch team");
+      setDeleteConfirmOpen(false);
+      return;
+    }
+
+    // Block delete if event ID is negative (team event)
+    if (selectedEvent && selectedEvent.extendedProps.eventId && selectedEvent.extendedProps.eventId < 0) {
+      toast.error("Không thể xóa sự kiện từ lịch team");
+      setDeleteConfirmOpen(false);
+      return;
+    }
+
+    if (!selectedEvent || !selectedEvent.extendedProps.eventId || selectedEvent.extendedProps.eventId <= 0) {
       toast.error("Không thể xóa sự kiện này");
       setDeleteConfirmOpen(false);
       return;
@@ -398,6 +478,22 @@ const Calendar: React.FC = () => {
             Lịch Cá Nhân
           </h2>
         </div>
+        <style>{`
+          .fc-day-past {
+            background-color: #f3f4f6 !important;
+            cursor: not-allowed !important;
+          }
+          .fc-day-past .fc-daygrid-day-frame {
+            pointer-events: none;
+          }
+          .fc-day-past .fc-daygrid-day-number {
+            color: #6b7280 !important;
+            opacity: 1 !important;
+          }
+          .fc-day-past.fc-day-today .fc-daygrid-day-number {
+            color: #6b7280 !important;
+          }
+        `}</style>
         <div className="custom-calendar">
           <FullCalendar
             ref={calendarRef}
@@ -454,21 +550,15 @@ const Calendar: React.FC = () => {
               </p>
             </div>
             <div className="mt-8">
-              {isSelectedEventPast() && (
-                <div className="mb-4 p-3 bg-gray-100 border border-gray-300 rounded-lg">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    ⚠️ Sự kiện này đã qua ngày. Bạn chỉ có thể xem và xóa, không thể chỉnh sửa.
-                  </p>
-                </div>
-              )}
+              
               <div>
                 <div>
                   <label className={`mb-1.5 block text-sm font-medium ${
-                    isSelectedEventPast() 
+                    isSelectedEventReadOnly() 
                       ? "text-gray-400 dark:text-gray-500" 
                       : "text-gray-700 dark:text-gray-400"
                   }`}>
-                    Tên công việc {!isSelectedEventPast() && <span className="text-red-500">*</span>}
+                    Tên công việc {!isSelectedEventReadOnly() && <span className="text-red-500">*</span>}
                   </label>
                   <input
                     id="event-title"
@@ -481,7 +571,7 @@ const Calendar: React.FC = () => {
                         setErrors({ ...errors, title: undefined });
                       }
                     }}
-                    disabled={isSelectedEventPast()}
+                    disabled={isSelectedEventReadOnly()}
                     className={`dark:bg-dark-900 h-11 w-full rounded-lg border px-4 py-2.5 text-sm shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800 ${
                       isSelectedEventPast()
                         ? "bg-gray-200 border-gray-300 text-gray-500 cursor-not-allowed opacity-70 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-400"
@@ -490,18 +580,18 @@ const Calendar: React.FC = () => {
                         : "bg-transparent border-gray-300 text-gray-800 focus:border-brand-300"
                     }`}
                   />
-                  {errors.title && !isSelectedEventPast() && (
+                  {errors.title && !isSelectedEventReadOnly() && (
                     <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">{errors.title}</p>
                   )}
                 </div>
               </div>
               <div className="mt-6">
                 <label className={`mb-1.5 block text-sm font-medium ${
-                  isSelectedEventPast() 
+                  isSelectedEventReadOnly() 
                     ? "text-gray-400 dark:text-gray-500" 
                     : "text-gray-700 dark:text-gray-400"
                 }`}>
-                  Ngày sự kiện {!isSelectedEventPast() && <span className="text-red-500">*</span>}
+                  Ngày sự kiện {!isSelectedEventReadOnly() && <span className="text-red-500">*</span>}
                 </label>
                 <input
                   id="event-date"
@@ -515,7 +605,7 @@ const Calendar: React.FC = () => {
                       setErrors({ ...errors, startDate: undefined });
                     }
                   }}
-                  disabled={isSelectedEventPast() || dateLocked}
+                  disabled={isSelectedEventReadOnly() || dateLocked}
                   className={`dark:bg-dark-900 h-11 w-full rounded-lg border px-4 py-2.5 text-sm shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800 ${
                     isSelectedEventPast() || dateLocked
                       ? "bg-gray-200 border-gray-300 text-gray-500 cursor-not-allowed opacity-70 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-400"
@@ -524,10 +614,10 @@ const Calendar: React.FC = () => {
                       : "bg-transparent border-gray-300 text-gray-800 focus:border-brand-300"
                   }`}
                 />
-                {errors.startDate && !isSelectedEventPast() && (
+                {errors.startDate && !isSelectedEventReadOnly() && (
                   <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">{errors.startDate}</p>
                 )}
-                {dateLocked && !isSelectedEventPast() && (
+                {dateLocked && !isSelectedEventReadOnly() && (
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                     Ngày đã được chọn từ lịch, không thể thay đổi
                   </p>
@@ -535,7 +625,7 @@ const Calendar: React.FC = () => {
               </div>
               <div className="mt-6">
                 <label className={`mb-1.5 block text-sm font-medium ${
-                  isSelectedEventPast() 
+                  isSelectedEventReadOnly() 
                     ? "text-gray-400 dark:text-gray-500" 
                     : "text-gray-700 dark:text-gray-400"
                 }`}>
@@ -544,8 +634,8 @@ const Calendar: React.FC = () => {
                 <div className="relative">
                   <button
                     type="button"
-                    onClick={() => !isSelectedEventPast() && setShowTimePicker(!showTimePicker)}
-                    disabled={isSelectedEventPast()}
+                    onClick={() => !isSelectedEventReadOnly() && setShowTimePicker(!showTimePicker)}
+                    disabled={isSelectedEventReadOnly()}
                     className={`w-full h-11 rounded-lg border px-4 py-2.5 text-left text-sm shadow-theme-xs focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800 ${
                       isSelectedEventPast()
                         ? "bg-gray-200 border-gray-300 text-gray-500 cursor-not-allowed opacity-70 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-400"
@@ -566,7 +656,7 @@ const Calendar: React.FC = () => {
                     }
                   </button>
                   
-                  {showTimePicker && !isSelectedEventPast() && (
+                  {showTimePicker && !isSelectedEventReadOnly() && (
                     <>
                       <div 
                         className="fixed inset-0 z-40" 
@@ -668,11 +758,11 @@ const Calendar: React.FC = () => {
                         }`}
                       >
                         <label
-                          className={`flex items-center text-sm form-check-label ${
-                            isSelectedEventPast() 
-                              ? "text-gray-400 cursor-not-allowed dark:text-gray-500" 
-                              : "text-gray-700 dark:text-gray-400"
-                          }`}
+                        className={`flex items-center text-sm form-check-label ${
+                          isSelectedEventReadOnly() 
+                            ? "text-gray-400 cursor-not-allowed dark:text-gray-500" 
+                            : "text-gray-700 dark:text-gray-400"
+                        }`}
                           htmlFor={`modal${key}`}
                         >
                           <span className="relative">
@@ -690,7 +780,7 @@ const Calendar: React.FC = () => {
                                   setErrors({ ...errors, eventLevel: undefined });
                                 }
                               }}
-                              disabled={isSelectedEventPast()}
+                              disabled={isSelectedEventReadOnly()}
                             />
                             <span className="flex items-center justify-center w-5 h-5 mr-2 border border-gray-300 rounded-full box dark:border-gray-700">
                               <span
@@ -712,11 +802,11 @@ const Calendar: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center gap-3 mt-6 modal-footer sm:justify-end">
-              {selectedEvent && (
+              {selectedEvent && !isSelectedEventTeamEvent() && (
                 <button
                   onClick={handleDeleteClick}
                   type="button"
-                  disabled={loading}
+                  disabled={loading || isSelectedEventReadOnly()}
                   className="flex w-full justify-center rounded-lg border border-red-300 bg-white px-4 py-2.5 text-sm font-medium text-red-700 hover:bg-red-50 dark:border-red-700 dark:bg-gray-800 dark:text-red-400 dark:hover:bg-red-900/20 sm:w-auto disabled:opacity-50"
                 >
                   Xóa sự kiện
@@ -733,7 +823,7 @@ const Calendar: React.FC = () => {
               <button
                 onClick={handleSaveClick}
                 type="button"
-                disabled={loading || isSelectedEventPast()}
+                disabled={loading || isSelectedEventReadOnly()}
                 className="btn btn-success btn-update-event flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? "Đang xử lý..." : selectedEvent ? "Cập nhật" : "Thêm sự kiện"}
@@ -858,11 +948,11 @@ const renderEventContent = (eventInfo: any) => {
   
   return (
     <div
-      className={`event-fc-color flex flex-col fc-event-main ${colorClass} p-1 rounded-sm ${
+      className={`event-fc-color w-full flex flex-col fc-event-main ${colorClass} p-1 rounded-sm ${
         isPast ? "opacity-70" : ""
       }`}
     >
-      <div className="fc-daygrid-event-dot"></div>
+      {/* <div className="fc-daygrid-event-dot"></div> */}
       <div className="fc-event-title">{eventInfo.event.title}</div>
       {eventTime && <div className="fc-event-time text-xs">{eventTime}</div>}
     </div>

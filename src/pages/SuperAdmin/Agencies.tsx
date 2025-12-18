@@ -38,6 +38,21 @@ function authHeader(): Record<string, string> {
     : { Accept: "application/json" };
 }
 
+function formatDateTime(dateString: string | null | undefined): string {
+  if (!dateString) return "—";
+  try {
+    const date = new Date(dateString);
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${hours}:${minutes}-${day}/${month}/${year}`;
+  } catch {
+    return "—";
+  }
+}
+
 export default function AgenciesPage() {
   const [items, setItems] = useState<Agency[]>([]);
   const [loading, setLoading] = useState(false);
@@ -96,9 +111,9 @@ export default function AgenciesPage() {
       return (
         <div className="flex items-start gap-3">
           {IconCol}
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="min-w-[140px] font-semibold text-gray-800">{label}</div>
-            <div className="mt-2 text-gray-600 text-sm break-words">{value ?? "—"}</div>
+            <div className="mt-2 text-gray-600 text-sm text-left truncate">{value ?? "—"}</div>
           </div>
         </div>
       );
@@ -109,7 +124,7 @@ export default function AgenciesPage() {
         {IconCol}
         <div className="flex-1 flex items-start">
           <div className="min-w-[140px] font-semibold text-gray-800">{label}</div>
-          <div className="text-gray-600 flex-1 text-right break-words">{value ?? "—"}</div>
+          <div className="text-gray-600 flex-1 text-left whitespace-nowrap overflow-hidden text-ellipsis">{value ?? "—"}</div>
         </div>
       </div>
     );
@@ -416,16 +431,16 @@ export default function AgenciesPage() {
             ) : isViewing ? (
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div className="space-y-5">
-                  <Info icon={<FiHash className="w-5 h-5" />} label="Tên đại lý" value={<div className="text-lg font-semibold text-gray-900">{viewing?.name ?? "—"}</div>} />
+                  <Info icon={<FiHash className="w-5 h-5" />} label="Tên đại lý:" value={<div className="text-lg font-semibold text-gray-900">{viewing?.name ?? "—"}</div>} />
                   <Info icon={<FiMapPin className="w-5 h-5" />} label="Địa chỉ" value={viewing?.address ?? "—"} stacked />
                   <Info icon={<FiFileText className="w-5 h-5" />} label="Ghi chú" value={viewing?.notes ?? "—"} stacked />
                 </div>
                 <div className="space-y-5">
-                  <Info icon={<FiUser className="w-5 h-5" />} label="Người liên hệ" value={viewing?.contactPerson ?? "—"} />
-                  <Info icon={<FiPhone className="w-5 h-5" />} label="Điện thoại" value={viewing?.phoneNumber ?? "—"} />
-                  <Info icon={<FiMail className="w-5 h-5" />} label="Email" value={viewing?.email ?? "—"} />
-                  <Info icon={<FiClock className="w-5 h-5" />} label="Ngày tạo" value={viewing?.createdAt ? new Date(viewing.createdAt).toLocaleString() : "—"} />
-                  <Info icon={<FiClock className="w-5 h-5" />} label="Cập nhật" value={viewing?.updatedAt ? new Date(viewing.updatedAt).toLocaleString() : "—"} />
+                  <Info icon={<FiUser className="w-5 h-5" />} label="Người liên hệ:" value={viewing?.contactPerson ?? "—"} />
+                  <Info icon={<FiPhone className="w-5 h-5" />} label="Điện thoại:" value={viewing?.phoneNumber ?? "—"} />
+                  <Info icon={<FiMail className="w-5 h-5" />} label="Email:" value={viewing?.email ?? "—"} />
+                  <Info icon={<FiClock className="w-5 h-5" />} label="Ngày tạo:" value={formatDateTime(viewing?.createdAt)} />
+                  <Info icon={<FiClock className="w-5 h-5" />} label="Cập nhật:" value={formatDateTime(viewing?.updatedAt)} />
                 </div>
                 <div className="col-span-1 md:col-span-2 mt-4 flex items-center justify-end border-t border-gray-200 pt-6">
                   <button type="button" className="rounded-xl border-2 border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400" onClick={closeModal}>Đóng</button>

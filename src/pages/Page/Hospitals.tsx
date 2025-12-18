@@ -209,15 +209,25 @@ function fmt(dt?: string | null) {
   try {
     const d = new Date(dt);
     if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleString("vi-VN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
+
+    // Lấy phần giờ: 08:52
+    const time = d.toLocaleTimeString("vi-VN", { 
+      hour: "2-digit", 
       minute: "2-digit",
+      hour12: false // Đảm bảo dùng định dạng 24h
     });
+
+    // Lấy phần ngày: 12/12/2025
+    const date = d.toLocaleDateString("vi-VN", { 
+      year: "numeric", 
+      month: "2-digit", 
+      day: "2-digit" 
+    });
+
+    // Ghép lại
+    return `${time}-${date}`;
   } catch {
-    return "";
+    return "—";
   }
 }
 
@@ -277,12 +287,7 @@ function DetailModal({
             <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
               📋 Chi tiết bệnh viện
             </h2>
-            {/* <button
-              onClick={onClose}
-              className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition"
-            >
-              ✕
-            </button> */}
+          
           </div>
         </div>
 
@@ -319,7 +324,7 @@ function DetailModal({
             />
 
             <Info
-              label="Người phụ trách chính (IT)"
+              label="Phụ trách chính"
               icon={<FiUser />}
               value={
                 item.personInChargeName ? (
@@ -408,15 +413,32 @@ export default function HospitalsPage() {
 
   // Filters (server-side)
   const [qName, setQName] = useState("");
+  const [debouncedQName, setDebouncedQName] = useState(""); // Debounced version for API calls
   const [qProvince, setQProvince] = useState("");
   const [qStatus, setQStatus] = useState("");
   const [qPriority, setQPriority] = useState("");
   const [qPersonInCharge, setQPersonInCharge] = useState("");
+  const nameSearchDebounceRef = useRef<number | null>(null);
+  
+  // Debounce name search input: update debouncedQName after 300ms of no typing
+  useEffect(() => {
+    if (nameSearchDebounceRef.current) {
+      window.clearTimeout(nameSearchDebounceRef.current);
+    }
+    nameSearchDebounceRef.current = window.setTimeout(() => {
+      setDebouncedQName(qName);
+    }, 300);
+    return () => {
+      if (nameSearchDebounceRef.current) {
+        window.clearTimeout(nameSearchDebounceRef.current);
+      }
+    };
+  }, [qName]);
   
   // Reset về trang đầu khi filter thay đổi
   useEffect(() => {
     setPage(0);
-  }, [qName, qProvince, qStatus, qPriority, qPersonInCharge]);
+  }, [debouncedQName, qProvince, qStatus, qPriority, qPersonInCharge]);
 
   const [priorityOptions] = useState<EnumOption[]>(PRIORITY_FALLBACK);
   const [statusOptions] = useState<EnumOption[]>(STATUS_FALLBACK);
@@ -923,7 +945,7 @@ export default function HospitalsPage() {
       url.searchParams.set("size", String(size));
       
       // Thêm filter params
-      if (qName.trim()) url.searchParams.set("name", qName.trim());
+      if (debouncedQName.trim()) url.searchParams.set("name", debouncedQName.trim());
       if (qProvince.trim()) url.searchParams.set("province", qProvince.trim());
       if (qStatus.trim()) url.searchParams.set("status", qStatus.trim());
       if (qPriority.trim()) url.searchParams.set("priority", qPriority.trim());
@@ -976,7 +998,7 @@ export default function HospitalsPage() {
 
   useEffect(() => {
     fetchList();
-  }, [page, size, qName, qProvince, qStatus, qPriority, qPersonInCharge]);
+  }, [page, size, debouncedQName, qProvince, qStatus, qPriority, qPersonInCharge]);
 
   // Server đã filter rồi, dùng trực tiếp items
   const filtered = items;
@@ -1380,7 +1402,9 @@ export default function HospitalsPage() {
               <span className={value ? "text-gray-900" : "text-gray-500"}>
                 {value || placeholder || "Tất cả tỉnh/thành"}
               </span>
-              <span className="text-gray-400">▼</span>
+              <svg className={`w-4 h-4 transition-transform ${openBox ? 'rotate-180' : ''} text-gray-400`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             </div>
           )}
         </div>
@@ -1556,7 +1580,9 @@ export default function HospitalsPage() {
               <span className={value ? "text-gray-900" : "text-gray-500"}>
                 {selectedUser ? selectedUser.name : "Tất cả người phụ trách"}
               </span>
-              <span className="text-gray-400">▼</span>
+              <svg className={`w-4 h-4 transition-transform ${openBox ? 'rotate-180' : ''} text-gray-400`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             </div>
           )}
         </div>
@@ -2468,8 +2494,9 @@ export default function HospitalsPage() {
                                 
                                 if (!cleanedText) return null;
                                 
-                                // Tách theo dấu phẩy hoặc dấu pipe
-                                const separatorPattern = /[,\|]/;
+                                // Tách theo dấu pipe HOẶC dấu phẩy (nhưng chỉ khi sau dấu phẩy KHÔNG phải là số)
+                                // Điều này tránh tách dấu phẩy trong số tiền như "20,000,000 VNĐ"
+                                const separatorPattern = /\||,(?!\d)/;
                                 const parts = cleanedText
                                   .split(separatorPattern)
                                   .map(p => p.trim())
@@ -2656,13 +2683,13 @@ export default function HospitalsPage() {
                                     </div>
                                   )}
                                   {contract.unitPrice && (
-                                    <div>
-                                      <span className="font-medium">Đơn giá:</span> {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.unitPrice)}
+                                    <div className="flex items-start gap-1">
+                                      <span className="font-medium">Đơn giá:</span> <span className="whitespace-nowrap inline-block">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.unitPrice)}</span>
                                     </div>
                                   )}
                                   {contract.totalPrice && (
-                                    <div>
-                                      <span className="font-medium">Tổng giá:</span> {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.totalPrice)}
+                                    <div className="flex items-start gap-1">
+                                      <span className="font-medium">Tổng giá:</span> <span className="whitespace-nowrap inline-block">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.totalPrice)}</span>
                                     </div>
                                   )}
                                   {contract.picUser && (
@@ -2709,13 +2736,13 @@ export default function HospitalsPage() {
                                     </div>
                                   )}
                                   {contract.yearlyPrice && (
-                                    <div>
-                                      <span className="font-medium">Giá hàng năm:</span> {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.yearlyPrice)}
+                                    <div className="flex items-start gap-1">
+                                      <span className="font-medium">Giá hàng năm:</span> <span className="whitespace-nowrap inline-block">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.yearlyPrice)}</span>
                                     </div>
                                   )}
                                   {contract.totalPrice && (
-                                    <div>
-                                      <span className="font-medium">Tổng giá:</span> {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.totalPrice)}
+                                    <div className="flex items-start gap-1">
+                                      <span className="font-medium">Tổng giá:</span> <span className="whitespace-nowrap inline-block">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.totalPrice)}</span>
                                     </div>
                                   )}
                                   {contract.picUser && (

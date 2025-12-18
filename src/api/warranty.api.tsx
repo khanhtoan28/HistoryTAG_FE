@@ -43,7 +43,7 @@ export type WarrantyContractResponseDTO = {
   contractCode: string;
   picUser?: { id: number; label: string; subLabel?: string; phone?: string | null } | null;
   hospital?: { id: number; label: string } | null;
-  durationYears: number;
+  durationYears: string; // Dạng chuỗi, ví dụ: "1 năm 6 tháng"
   yearlyPrice: number;
   totalPrice: number;
   startDate: string;
@@ -56,9 +56,11 @@ export type WarrantyContractRequestDTO = {
   contractCode: string;
   picUserId: number;
   hospitalId: number;
-  durationYears: number; // 1, 2, hoặc 3
+  durationYears: string; // Dạng chuỗi để nhập "1 năm 6 tháng"
   yearlyPrice: number;
+  totalPrice: number;
   startDate?: string | null;
+  endDate?: string | null;
 };
 
 export async function createWarrantyContract(payload: WarrantyContractRequestDTO) {

@@ -138,7 +138,7 @@ function statusBadgeClasses(status?: string | null) {
   }
 }
 
-const API_ROOT = import.meta.env.VITE_API_URL || "http://localhost:8080";
+const API_ROOT = import.meta.env.VITE_API_URL || "";
 const MIN_LOADING_MS = 2000;
 
 // PageClients folder is admin-facing: always use admin API root for tasks
@@ -1536,11 +1536,11 @@ function FilterToolbar({
           </div>
 
           {picFilter && (
-            <div ref={picFilter.picFilterDropdownRef} className="flex flex-col gap-2 mt-3">
+            <div ref={picFilter.picFilterDropdownRef} className="flex flex-col gap-0 mt-3">
               <div className="relative w-full max-w-[200px]">
                 <button
                   type="button"
-                  className="w-full rounded-full border px-3 py-2 text-sm shadow-sm text-left flex items-center justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition border-gray-200 dark:border-gray-700 dark:bg-gray-900"
+                  className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[180px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 flex items-center justify-between gap-2"
                   onClick={() => picFilter.setPicFilterOpen(!picFilter.picFilterOpen)}
                 >
                   <span className="truncate">
@@ -1617,7 +1617,7 @@ function FilterToolbar({
           )}
 
           {totals && totals.length > 0 && (
-            <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
+            <div className=" flex flex-wrap items-center  text-sm text-gray-600 dark:text-gray-300">
               {totals.map((item) => (
                 <span key={item.label} className="font-normal text-gray-800 dark:text-gray-100">
                   {item.label}{" "}
@@ -3065,7 +3065,7 @@ const ImplementationTasksPage: React.FC = () => {
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.subLabel || "—"}</td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.personInChargeName || "—"}</td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm align-top">
+                                  <td className="px-6 py-6 whitespace-nowrap text-sm align-top">
                                     <div className="flex flex-col items-start gap-1">
                                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task</span>
                                       {(hospital.nearDueCount ?? 0) > 0 && (
