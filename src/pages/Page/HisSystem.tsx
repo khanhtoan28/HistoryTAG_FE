@@ -67,6 +67,20 @@ function authHeader(): Record<string, string> {
     : { "Content-Type": "application/json", Accept: "application/json" };
 }
 
+// ✅ Helper để build URL an toàn (xử lý cả relative và absolute URLs)
+function buildUrl(path: string): URL {
+  // Nếu path đã là absolute URL (có protocol), dùng trực tiếp
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return new URL(path);
+  }
+  // Nếu API_BASE có giá trị, dùng nó làm base
+  if (API_BASE) {
+    return new URL(path, API_BASE);
+  }
+  // Nếu không có API_BASE, dùng window.location.origin làm base
+  return new URL(path, window.location.origin);
+}
+
 // ✅ Helper để chọn API base dựa trên method và canEdit
 function getApiBase(method: string = "GET", canEdit: boolean = false): string {
   // GET requests: luôn dùng admin API (admin thường có thể dùng)
@@ -261,7 +275,7 @@ const HisSystemPage: React.FC = () => {
     try {
       // ✅ GET request: luôn dùng admin API
       const base = getApiBase("GET", false);
-      const url = new URL(base);
+      const url = buildUrl(base);
       url.searchParams.set("search", "");
       url.searchParams.set("page", String(page));
       url.searchParams.set("size", String(size));
@@ -303,7 +317,7 @@ const HisSystemPage: React.FC = () => {
       try {
         // Optimized: Fetch hospitals with reasonable size (500) instead of all 10000
         // If there are more than 500 hospitals, we'll count what we can get
-        const url = new URL(`${API_BASE}/api/v1/auth/hospitals`);
+        const url = buildUrl(`${API_BASE}/api/v1/auth/hospitals`);
         url.searchParams.set("page", "0");
         url.searchParams.set("size", "500"); // Reduced from 10000 to 500 for better performance
         
@@ -332,7 +346,7 @@ const HisSystemPage: React.FC = () => {
   async function loadHospitalsForHis(hisId: number) {
     setHospitalsLoading(true);
     try {
-      const url = new URL(`${API_BASE}/api/v1/auth/hospitals`);
+      const url = buildUrl(`${API_BASE}/api/v1/auth/hospitals`);
       url.searchParams.set("page", "0");
       // Optimized: Try to use filter if backend supports it, otherwise fetch with reasonable size
       // If backend supports hisSystemId filter, add it here: url.searchParams.set("hisSystemId", String(hisId));

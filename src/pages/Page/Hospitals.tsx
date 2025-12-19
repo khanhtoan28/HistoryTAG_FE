@@ -71,6 +71,20 @@ const API_BASE = import.meta.env.VITE_API_URL ?? "";
 const BASE = `${API_BASE}/api/v1/auth/hospitals`; // GET, Search endpoints
 const SUPERADMIN_BASE = `${API_BASE}/api/v1/superadmin/hospitals`; // CREATE, UPDATE, DELETE
 
+// ✅ Helper để build URL an toàn (xử lý cả relative và absolute URLs)
+function buildUrl(path: string): URL {
+  // Nếu path đã là absolute URL (có protocol), dùng trực tiếp
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return new URL(path);
+  }
+  // Nếu API_BASE có giá trị, dùng nó làm base
+  if (API_BASE) {
+    return new URL(path, API_BASE);
+  }
+  // Nếu không có API_BASE, dùng window.location.origin làm base
+  return new URL(path, window.location.origin);
+}
+
 const MIN_LOADING_MS = 800;
 
 function authHeader(): Record<string, string> {
@@ -944,7 +958,7 @@ export default function HospitalsPage() {
     setLoading(true);
     setError(null);
     try {
-      const url = new URL(BASE);
+      const url = buildUrl(BASE);
       url.searchParams.set("page", String(page));
       url.searchParams.set("size", String(size));
       
