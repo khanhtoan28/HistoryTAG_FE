@@ -41,5 +41,53 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// ✅ Response interceptor để handle 401 gracefully và prevent redirect loop
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Chỉ handle 401 errors
+    if (error.response?.status === 401) {
+      const currentPath = window.location.pathname;
+      const isAuthPage = currentPath === '/signin' || 
+                        currentPath === '/signup' || 
+                        currentPath === '/forgot-password' || 
+                        currentPath === '/reset-password';
+      
+      // ✅ Prevent redirect loop: không redirect nếu đang ở trang auth
+      if (!isAuthPage) {
+        // Clear invalid token
+        localStorage.removeItem('access_token');
+        sessionStorage.removeItem('access_token');
+        localStorage.removeItem('token');
+        
+        // Clear other auth-related data
+        localStorage.removeItem('username');
+        localStorage.removeItem('roles');
+        localStorage.removeItem('userId');
+        localStorage.removeItem('user');
+        sessionStorage.removeItem('username');
+        sessionStorage.removeItem('roles');
+        sessionStorage.removeItem('userId');
+        sessionStorage.removeItem('user');
+        
+        // Redirect to login (chỉ khi không ở trang auth)
+        window.location.href = '/signin';
+      }
+      
+      // ✅ Suppress 401 errors cho notification API khi chưa login
+      // Điều này tránh spam console với 401 errors
+      const isNotificationAPI = error.config?.url?.includes('/auth/notifications');
+      if (isNotificationAPI && isAuthPage) {
+        // Return a silent rejection để không log error
+        return Promise.reject({
+          ...error,
+          silent: true, // Flag để caller biết đây là error có thể ignore
+        });
+      }
+    }
+    
+    return Promise.reject(error);
+  }
+);
 
 export default api;

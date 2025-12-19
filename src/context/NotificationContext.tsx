@@ -55,31 +55,87 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   const loadNotifications = async (limit = 50) => {
+    // ✅ Guard: chỉ gọi API khi có token và không ở trang auth
+    const token = getAuthToken();
+    const currentPath = window.location.pathname;
+    const isAuthPage = currentPath === '/signin' || 
+                      currentPath === '/signup' || 
+                      currentPath === '/forgot-password' || 
+                      currentPath === '/reset-password';
+    
+    if (!token || isAuthPage) {
+      return;
+    }
+    
     try {
       const safeLimit = Math.min(limit, MAX_NOTIFICATIONS);
       const list = await apiGetNotifications(safeLimit);
       // console.debug("[NotificationContext] loadNotifications got:", Array.isArray(list) ? list.length : typeof list);
       setNotifications(clampList(list || []));
-    } catch {
-      // ignore
+    } catch (error: any) {
+      // ✅ Ignore silent errors (401 khi chưa login)
+      if (error?.silent) return;
+      // ignore other errors
     }
   };
 
   const loadUnread = async () => {
+    // ✅ Guard: chỉ gọi API khi có token và không ở trang auth
+    const token = getAuthToken();
+    const currentPath = window.location.pathname;
+    const isAuthPage = currentPath === '/signin' || 
+                      currentPath === '/signup' || 
+                      currentPath === '/forgot-password' || 
+                      currentPath === '/reset-password';
+    
+    if (!token || isAuthPage) {
+      return;
+    }
+    
     try {
       const c = await apiGetUnreadCount();
       // console.debug("[NotificationContext] loadUnread got:", c);
       setUnreadCount(c || 0);
-    } catch {
-      // ignore
+    } catch (error: any) {
+      // ✅ Ignore silent errors (401 khi chưa login)
+      if (error?.silent) return;
+      // ignore other errors
     }
   };
 
   const markAsRead = async (id: number) => {
+    // ✅ Guard: chỉ gọi API khi có token và không ở trang auth
+    const token = getAuthToken();
+    const currentPath = window.location.pathname;
+    const isAuthPage = currentPath === '/signin' || 
+                      currentPath === '/signup' || 
+                      currentPath === '/forgot-password' || 
+                      currentPath === '/reset-password';
+    
+    if (!token || isAuthPage) {
+      // Vẫn update UI optimistically ngay cả khi không có token
+      setNotifications((prev) => {
+        const nxt = prev.map((n) => (n.id === id ? { ...n, read: true } : n));
+        return nxt;
+      });
+      setUnreadCount((c) => Math.max(0, c - 1));
+      return;
+    }
+    
     try {
       await apiMarkAsRead(id);
-    } catch {
-      // ignore server error but still update UI optimistically
+    } catch (error: any) {
+      // ✅ Ignore silent errors (401 khi chưa login)
+      if (error?.silent) {
+        // Vẫn update UI optimistically
+        setNotifications((prev) => {
+          const nxt = prev.map((n) => (n.id === id ? { ...n, read: true } : n));
+          return nxt;
+        });
+        setUnreadCount((c) => Math.max(0, c - 1));
+        return;
+      }
+      // ignore other server errors but still update UI optimistically
     }
     setNotifications((prev) => {
       const nxt = prev.map((n) => (n.id === id ? { ...n, read: true } : n));
@@ -151,12 +207,22 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     // console.log("[NotificationContext] useEffect started");
     
     const currentToken = getAuthToken();
-    if (!currentToken) {
-      // console.log("[NotificationContext] No token, skipping load");
+    const currentPath = window.location.pathname;
+    const isAuthPage = currentPath === '/signin' || 
+                      currentPath === '/signup' || 
+                      currentPath === '/forgot-password' || 
+                      currentPath === '/reset-password';
+    
+    // ✅ Không gọi API nếu:
+    // 1. Không có token
+    // 2. Đang ở trang auth (login/signup/forgot-password)
+    if (!currentToken || isAuthPage) {
+      // console.log("[NotificationContext] No token or on auth page, skipping load");
       clearNotifications();
       return;
     }
     
+    // ✅ Chỉ gọi API khi có token VÀ không ở trang auth
     // initial load
     loadUnread();
     loadNotifications(20);
