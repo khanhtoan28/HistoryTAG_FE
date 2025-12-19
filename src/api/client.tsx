@@ -15,8 +15,8 @@ export function getAuthToken(): string | null {
     || localStorage.getItem("token");
 }
 
-// ✅ Helper để check xem token có expired không
-function isTokenExpired(token: string): boolean {
+// ✅ Helper để check xem token có expired không (export để dùng chung)
+export function isTokenExpired(token: string): boolean {
   try {
     const parts = token.split('.');
     if (parts.length < 2) return true;

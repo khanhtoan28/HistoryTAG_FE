@@ -2033,6 +2033,32 @@ const ImplementationTasksPage: React.FC = () => {
             try {
                 // Skip if modal is open or component unmounted
                 if (!mounted || pendingOpen) return;
+                
+                // ✅ Check token before polling
+                const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+                if (!token) {
+                    window.clearInterval(timer);
+                    return;
+                }
+                
+                // ✅ Check token expired
+                try {
+                    const parts = token.split('.');
+                    if (parts.length >= 2) {
+                        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+                        const exp = payload.exp;
+                        if (exp && Date.now() >= exp * 1000) {
+                            // Token expired - stop polling
+                            window.clearInterval(timer);
+                            return;
+                        }
+                    }
+                } catch {
+                    // If parse fails, stop polling to be safe
+                    window.clearInterval(timer);
+                    return;
+                }
+                
                 fetchPendingTasks();
             } catch (err) {
                 console.debug('Polling fetchPendingTasks failed', err);

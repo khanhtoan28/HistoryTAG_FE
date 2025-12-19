@@ -546,7 +546,51 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       if (!connected) {
         // console.log("[NotificationContext] No realtime connection, falling back to polling");
         loadUnread();
+        
+        // ✅ Polling với guard để không poll khi token expired hoặc ở auth page
         pollInterval = window.setInterval(() => {
+          const currentToken = getAuthToken();
+          const currentPath = window.location.pathname;
+          const isAuthPage = currentPath === '/signin' || 
+                            currentPath === '/signup' || 
+                            currentPath === '/forgot-password' || 
+                            currentPath === '/reset-password';
+          
+          // ✅ Stop polling nếu không có token hoặc ở trang auth
+          if (!currentToken || isAuthPage) {
+            if (pollInterval) {
+              window.clearInterval(pollInterval);
+              pollInterval = null;
+            }
+            return;
+          }
+          
+          // ✅ Check token expired trước khi poll
+          try {
+            if (currentToken) {
+              const parts = currentToken.split('.');
+              if (parts.length >= 2) {
+                const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+                const exp = payload.exp;
+                if (exp && Date.now() >= exp * 1000) {
+                  // Token expired - stop polling
+                  if (pollInterval) {
+                    window.clearInterval(pollInterval);
+                    pollInterval = null;
+                  }
+                  return;
+                }
+              }
+            }
+          } catch {
+            // If parse fails, stop polling to be safe
+            if (pollInterval) {
+              window.clearInterval(pollInterval);
+              pollInterval = null;
+            }
+            return;
+          }
+          
           loadUnread();
         }, 10000);
       } else {
