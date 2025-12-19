@@ -140,7 +140,21 @@ const BusinessCalendar: React.FC = () => {
         if (isSuperAdmin) {
           // ✅ SUPERADMIN: dùng superadmin API
           const users = await filterUsers({ team: "SALES" });
-          setTeamMembers(users || []);
+          // ✅ Map để đảm bảo đầy đủ required fields (username là required)
+          const mappedUsers = (users || []).map((u: any) => ({
+            id: u.id,
+            username: u.username ?? `user_${u.id}`, // Required field
+            fullname: u.fullname ?? u.label ?? null,
+            email: u.email ?? u.subLabel ?? null,
+            phone: u.phone ?? null,
+            status: u.status ?? null,
+            avatar: u.avatar ?? null,
+            address: u.address ?? null,
+            department: u.department ?? null,
+            team: u.team ?? null,
+            roles: u.roles ?? null,
+          }));
+          setTeamMembers(mappedUsers);
         } else {
           // ✅ ADMIN: dùng admin API để search users theo team
           const API_BASE = import.meta.env.VITE_API_URL ?? "";
