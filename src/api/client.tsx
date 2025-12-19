@@ -14,10 +14,62 @@ export function getAuthToken(): string | null {
     || sessionStorage.getItem("access_token")
     || localStorage.getItem("token");
 }
+
+// ✅ Helper để check xem token có expired không
+function isTokenExpired(token: string): boolean {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return true;
+    
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    const exp = payload.exp; // JWT exp claim (Unix timestamp in seconds)
+    
+    if (!exp) return false; // Không có exp claim, assume valid
+    
+    // Convert to milliseconds và check
+    const expirationTime = exp * 1000;
+    const now = Date.now();
+    
+    // ✅ Token expired nếu thời gian hiện tại > expiration time
+    return now >= expirationTime;
+  } catch {
+    // Nếu không parse được, assume expired để an toàn
+    return true;
+  }
+}
+
+// ✅ Helper để clear tất cả auth data
+function clearAllAuthData() {
+  // Clear localStorage
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('token');
+  localStorage.removeItem('username');
+  localStorage.removeItem('roles');
+  localStorage.removeItem('userId');
+  localStorage.removeItem('user');
+  
+  // Clear sessionStorage
+  sessionStorage.removeItem('access_token');
+  sessionStorage.removeItem('token');
+  sessionStorage.removeItem('username');
+  sessionStorage.removeItem('roles');
+  sessionStorage.removeItem('userId');
+  sessionStorage.removeItem('user');
+  
+  // ✅ Clear cookie (quan trọng!)
+  document.cookie = 'access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  document.cookie = 'access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=qlcvtagtech.com;';
+  
+  // Clear axios default headers
+  delete api.defaults.headers.common['Authorization'];
+}
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   withCredentials: true,
 });
+
+// ✅ Flag để prevent multiple redirects khi nhiều requests cùng bị 401
+let isRedirecting = false;
 
 // ✅ Helper để check xem user có phải SUPERADMIN không
 function isSuperAdminUser(): boolean {
@@ -82,9 +134,35 @@ api.interceptors.request.use((config) => {
     // Điều này ngăn chặn việc gửi cookie access_token cũ (hết hạn) đến server
     config.withCredentials = false;
   } else {
-    // Chỉ thêm token nếu KHÔNG phải là API public
+    // ✅ Chỉ thêm token nếu KHÔNG phải là API public
     const token = getAuthToken();
     if (token) {
+      // ✅ Check token expired TRƯỚC KHI gửi request
+      if (isTokenExpired(token)) {
+        // Token đã hết hạn → clear và redirect ngay (chỉ 1 lần)
+        if (!isRedirecting) {
+          isRedirecting = true;
+          clearAllAuthData();
+          const currentPath = window.location.pathname;
+          const isAuthPage = currentPath === '/signin' || 
+                            currentPath === '/signup' || 
+                            currentPath === '/forgot-password' || 
+                            currentPath === '/reset-password';
+          
+          if (!isAuthPage) {
+            window.location.href = '/signin';
+          }
+        }
+        
+        // Reject request với expired token
+        return Promise.reject({
+          message: 'TOKEN_EXPIRED',
+          config,
+          silent: true,
+        }) as any;
+      }
+      
+      // Token hợp lệ → thêm vào header
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -106,23 +184,12 @@ api.interceptors.response.use(
                         currentPath === '/reset-password';
       
       // ✅ Prevent redirect loop: không redirect nếu đang ở trang auth
-      if (!isAuthPage) {
-        // Clear invalid token
-        localStorage.removeItem('access_token');
-        sessionStorage.removeItem('access_token');
-        localStorage.removeItem('token');
+      if (!isAuthPage && !isRedirecting) {
+        isRedirecting = true;
+        // ✅ Clear tất cả auth data (localStorage, sessionStorage, cookie, axios headers)
+        clearAllAuthData();
         
-        // Clear other auth-related data
-        localStorage.removeItem('username');
-        localStorage.removeItem('roles');
-        localStorage.removeItem('userId');
-        localStorage.removeItem('user');
-        sessionStorage.removeItem('username');
-        sessionStorage.removeItem('roles');
-        sessionStorage.removeItem('userId');
-        sessionStorage.removeItem('user');
-        
-        // Redirect to login (chỉ khi không ở trang auth)
+        // Redirect to login (chỉ khi không ở trang auth và chưa redirect)
         window.location.href = '/signin';
       }
       
