@@ -154,11 +154,12 @@ const MaintenanceCalendar: React.FC = () => {
           });
           if (res.ok) {
             const data = await res.json();
-            // Map từ EntitySelectDTO format sang UserResponseDTO format
+            // ✅ Map từ EntitySelectDTO format sang UserResponseDTO format với đầy đủ required fields
             const users = Array.isArray(data) ? data.map((u: any) => ({
               id: u.id,
-              fullname: u.label,
-              email: u.subLabel,
+              username: u.label?.toLowerCase().replace(/\s+/g, '_') || `user_${u.id}`, // Generate username từ label hoặc fallback
+              fullname: u.label || null,
+              email: u.subLabel || null,
             })) : [];
             setTeamMembers(users);
           } else {
