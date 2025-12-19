@@ -95,7 +95,7 @@ export default function NotificationDropdown() {
       <Dropdown
         isOpen={isOpen}
         onClose={closeDropdown}
-        className="absolute right-0 mt-[10px] flex h-[420px] w-[360px] max-w-[90vw] flex-col rounded-2xl border border-gray-200 bg-white p-2 shadow-theme-lg dark:border-gray-800 dark:bg-gray-dark sm:w-[420px] lg:w-[420px]"
+        className="top-full mt-2 flex h-[420px] w-[320px] max-w-[calc(100vw-2rem)] flex-col rounded-2xl border border-gray-200 bg-white p-2 shadow-theme-lg dark:border-gray-800 dark:bg-gray-dark sm:w-[380px] lg:w-[420px] z-[100] !right-auto left-0 origin-top-left"
       >
         <div className="flex items-center justify-between pb-3 mb-3 border-b border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-3">
@@ -142,7 +142,7 @@ export default function NotificationDropdown() {
             <li key={n.id}>
               <DropdownItem
                 onItemClick={() => handleItemClick(n)}
-                className={`flex gap-3 rounded-lg border-b border-gray-100 p-2 px-3 py-2 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5 ${n.read ? "bg-white" : "bg-gray-50"}`}
+                className={`flex gap-3 rounded-lg border-b border-gray-100 p-2 px-3 py-2.5 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5 ${n.read ? "bg-white" : "bg-gray-50"}`}
               >
                 <div className="flex-shrink-0">
                   {n.actorAvatar ? (
@@ -169,17 +169,23 @@ export default function NotificationDropdown() {
                   )}
                 </div>
 
-                <span className="block">
-                  <span className="mb-1.5 block text-sm text-gray-600 dark:text-gray-300 space-x-1">
-                    <span className="font-medium text-gray-800 dark:text-white/90">{n.actorName ? `${n.actorName} ` : ""}{n.title}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="mb-1.5 block text-sm text-gray-600 dark:text-gray-300">
+                    <span className="font-medium text-gray-800 dark:text-white/90 break-words">{n.actorName ? `${n.actorName} ` : ""}{n.title}</span>
                   </span>
 
-                  <span className="flex items-center gap-2 text-gray-500 text-xs dark:text-gray-400">
-                    <span className="truncate max-w-[160px]">{n.message}</span>
-                    <span className="w-1 h-1 bg-gray-400 rounded-full"></span>
-                    <span className="text-xs">{new Date(n.createdAt).toLocaleString()}</span>
-                  </span>
-                </span>
+                  <div className="flex items-start gap-2 text-gray-500 text-xs dark:text-gray-400">
+                    <span className="flex-1 break-words line-clamp-2">{n.message}</span>
+                    <span className="flex-shrink-0 w-1 h-1 mt-1.5 bg-gray-400 rounded-full"></span>
+                    <span className="flex-shrink-0 text-xs whitespace-nowrap">{new Date(n.createdAt).toLocaleString('vi-VN', { 
+                      day: '2-digit', 
+                      month: '2-digit', 
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}</span>
+                  </div>
+                </div>
               </DropdownItem>
             </li>
           ))}
