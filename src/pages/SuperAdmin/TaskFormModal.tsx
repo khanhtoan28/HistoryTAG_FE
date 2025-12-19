@@ -632,8 +632,8 @@ export default function TaskFormModal({
 
         try {
             setSubmitting(true);
-            console.log('Submitting with PICs:', picOpts.map(p => ({ id: p.id, name: p.name })));
-            console.log('Payload additionalRequest:', payload.additionalRequest);
+            // console.log('Submitting with PICs:', picOpts.map(p => ({ id: p.id, name: p.name })));
+            // console.log('Payload additionalRequest:', payload.additionalRequest);
             await onSubmit(payload, initial?.id);
             // Không hiển thị toast ở đây vì handleSubmit trong implementsuper-task.tsx đã có toast rồi
             onClose();
@@ -718,12 +718,12 @@ export default function TaskFormModal({
                                                                     const newPic = { ...selected, _uid: `pic-${Date.now()}-${selected.id}-${Math.random().toString(36).substring(2, 9)}` };
                                                                     setPicOpts((prev) => {
                                                                         const updated = [...prev, newPic];
-                                                                        console.log('Added PIC:', selected.name, 'Total PICs:', updated.length);
+                                                                        // console.log('Added PIC:', selected.name, 'Total PICs:', updated.length);
                                                                         return updated;
                                                                     });
                                                                     setCurrentPicInput(null);
                                                                 } else {
-                                                                    console.log('PIC already selected:', selected.name);
+                                                                    // console.log('PIC already selected:', selected.name);
                                                                 }
                                                             }
                                                         }}

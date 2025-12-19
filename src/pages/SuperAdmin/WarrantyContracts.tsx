@@ -643,7 +643,7 @@ export default function WarrantyContractsPage() {
         }
       } catch (e) {
         setLoading(false);
-        console.warn("Failed to check existing warranty contracts, proceeding anyway", e);
+        // console.warn("Failed to check existing warranty contracts, proceeding anyway", e);
       }
     }
 

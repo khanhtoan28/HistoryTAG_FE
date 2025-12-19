@@ -1068,7 +1068,7 @@ function DetailModal({
         const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
 
         if (res.status === 401) {
-          console.warn('Admin batch API returned 401');
+          // console.warn('Admin batch API returned 401');
           setNeedRelogin(true);
           // fallback to User-<id>
           setPicNames(picIds.map((id) => ({ id, name: id === item.picDeploymentId && item.picDeploymentName ? item.picDeploymentName : `User-${id}` })));
@@ -1076,7 +1076,7 @@ function DetailModal({
         }
 
         if (!res.ok) {
-          console.warn(`Admin batch API returned ${res.status}`);
+          // console.warn(`Admin batch API returned ${res.status}`);
           // fallback per-id
           setPicNames(picIds.map((id) => ({ id, name: id === item.picDeploymentId && item.picDeploymentName ? item.picDeploymentName : `User-${id}` })));
           return;
@@ -1137,7 +1137,7 @@ function DetailModal({
           signal: controller.signal,
         });
         if (!res.ok) {
-          console.warn("GET my notes failed", res.status);
+          // console.warn("GET my notes failed", res.status);
           return;
         }
         const payload = await res.json();
@@ -1183,7 +1183,7 @@ function DetailModal({
           signal: controller.signal,
         });
         if (!res.ok) {
-          console.warn("GET all notes failed", res.status);
+          // console.warn("GET all notes failed", res.status);
           return;
         }
         const payload = await res.json();
@@ -2359,7 +2359,7 @@ const ImplementationTasksPage: React.FC = () => {
           pendingTasksFromBusiness = Array.isArray(pendingList) ? pendingList : [];
         }
       } catch (err) {
-        console.warn('Failed to fetch pending tasks:', err);
+        // console.warn('Failed to fetch pending tasks:', err);
       }
 
       // Count hidden (pending Business) tasks per hospital from hiddenItems

@@ -101,11 +101,11 @@ export default function SignInForm() {
         if (data.userId != null) {
           const profile = await getUserAccount(Number(data.userId));
           storage.setItem("user", JSON.stringify(profile));
-          console.log("User profile fetched and stored:", profile.team, profile.roles);
+          // console.log("User profile fetched and stored:", profile.team, profile.roles);
           await loadNotifications(20);
         }
       } catch (err) {
-        console.warn("Could not fetch user profile after sign-in:", err);
+        // console.warn("Could not fetch user profile after sign-in:", err);
       }
 
       toast.success("Đăng nhập thành công!");

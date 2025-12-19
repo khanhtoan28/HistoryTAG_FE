@@ -398,7 +398,7 @@ const BusinessPage: React.FC = () => {
         listForTotals = finalWithPhones;
       } catch (e) {
         // ignore phone enrichment failures
-        console.warn('Failed to enrich hospitals with phone', e);
+        // console.warn('Failed to enrich hospitals with phone', e);
       }
       const fallbackTotal = res?.totalElements ?? (Array.isArray(res) ? res.length : content.length);
       setTotalItems(fallbackTotal);
@@ -465,7 +465,7 @@ const BusinessPage: React.FC = () => {
           }));
       } catch (err) {
         // ignore if superadmin endpoint not accessible
-        console.warn('Failed to fetch superadmin users for PIC options', err);
+        // console.warn('Failed to fetch superadmin users for PIC options', err);
       }
 
       const mergedMap = new Map<number, { id: number; label: string; subLabel?: string; phone?: string | null }>();
@@ -668,7 +668,7 @@ const BusinessPage: React.FC = () => {
           }
         } catch (err) {
           // If API fails, rely on items check only
-          console.warn('Failed to check duplicate contract code via API', err);
+          // console.warn('Failed to check duplicate contract code via API', err);
         }
       }
     }
@@ -721,7 +721,7 @@ const BusinessPage: React.FC = () => {
     // commission is entered directly as amount
     if (commission !== '') {
       const commissionValue = Number(commission);
-      console.log('Submitting commission:', commission, 'As number:', commissionValue);
+      // console.log('Submitting commission:', commission, 'As number:', commissionValue);
       payload.commission = commissionValue;
     }
 
@@ -766,7 +766,7 @@ const BusinessPage: React.FC = () => {
           return;
         }
       } catch (e) {
-        console.warn("Failed to check existing business contracts, proceeding anyway", e);
+        // console.warn("Failed to check existing business contracts, proceeding anyway", e);
       }
     }
     

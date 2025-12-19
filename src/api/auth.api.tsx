@@ -198,10 +198,10 @@ export const logout = async () => {
   try {
     await api.get("/api/v1/auth/logout", { withCredentials: true });
   } catch (e) {
-    console.warn("Logout API error:", e);
+    // console.warn("Logout API error:", e);
   } finally {
     clearUserStorage();
-    console.log("User data cleared after logout");
+    // console.log("User data cleared after logout");
   }
 };
 

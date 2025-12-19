@@ -15,23 +15,6 @@ type Hardware = HardwareResponseDTO;
 // API config
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
-// ✅ Helper để tạo URL đúng cách (xử lý relative path và absolute URL)
-function createApiUrl(path: string): URL {
-  // 1️⃣ path đã là absolute URL
-  if (/^https?:\/\//i.test(path)) {
-    return new URL(path);
-  }
-
-  // 2️⃣ chỉ dùng API_BASE nếu nó là absolute URL
-  if (API_BASE && /^https?:\/\//i.test(API_BASE)) {
-    return new URL(path, API_BASE);
-  }
-
-  // 3️⃣ fallback an toàn nhất
-  return new URL(path, window.location.origin);
-}
-
-
 function authHeader(): Record<string, string> {
   const token = localStorage.getItem("access_token");
   return token
@@ -229,7 +212,7 @@ export default function HardwarePage() {
     const loadCounts = async () => {
       try {
         // Fetch all hospitals once
-        const url = createApiUrl("/api/v1/auth/hospitals");
+        const url = new URL(`${API_BASE}/api/v1/auth/hospitals`);
         url.searchParams.set("page", "0");
         url.searchParams.set("size", "10000"); // Get all hospitals
         
@@ -258,7 +241,7 @@ export default function HardwarePage() {
   async function loadHospitalsForHardware(hardwareId: number) {
     setHospitalsLoading(true);
     try {
-      const url = createApiUrl("/api/v1/auth/hospitals");
+      const url = new URL(`${API_BASE}/api/v1/auth/hospitals`);
       url.searchParams.set("page", "0");
       url.searchParams.set("size", "10000");
       

@@ -126,7 +126,7 @@ export async function getWarrantyPicOptions() {
         phone: item?.phone ? String(item.phone).trim() : null,
       }));
     } catch (err) {
-      console.warn('Failed to fetch business PIC options', err);
+      // console.warn('Failed to fetch business PIC options', err);
     }
 
     // Lấy tất cả users và filter SUPERADMIN
@@ -157,7 +157,7 @@ export async function getWarrantyPicOptions() {
           phone: user?.phone ? String(user.phone).trim() : null,
         }));
     } catch (err) {
-      console.warn('Failed to fetch superadmin users for PIC options', err);
+      // console.warn('Failed to fetch superadmin users for PIC options', err);
     }
 
     // Merge và loại bỏ trùng lặp

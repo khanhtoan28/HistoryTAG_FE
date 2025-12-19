@@ -73,23 +73,6 @@ const SUPERADMIN_BASE = `${API_BASE}/api/v1/superadmin/hospitals`; // CREATE, UP
 
 const MIN_LOADING_MS = 800;
 
-// ✅ Helper để tạo URL đúng cách (xử lý relative path và absolute URL)
-function createApiUrl(path: string): URL {
-  // 1. path là absolute URL
-  if (/^https?:\/\//i.test(path)) {
-    return new URL(path);
-  }
-
-  // 2. chỉ dùng API_BASE nếu là absolute URL
-  if (API_BASE && /^https?:\/\//i.test(API_BASE)) {
-    return new URL(path, API_BASE);
-  }
-
-  // 3. fallback an toàn nhất
-  return new URL(path, window.location.origin);
-}
-
-
 function authHeader(): Record<string, string> {
   const token = localStorage.getItem("access_token");
   return token
@@ -957,7 +940,7 @@ export default function HospitalsPage() {
     setLoading(true);
     setError(null);
     try {
-      const url = createApiUrl("/api/v1/auth/hospitals");
+      const url = new URL(BASE);
       url.searchParams.set("page", String(page));
       url.searchParams.set("size", String(size));
       
@@ -968,14 +951,14 @@ export default function HospitalsPage() {
       if (qPriority.trim()) url.searchParams.set("priority", qPriority.trim());
       if (qPersonInCharge.trim()) url.searchParams.set("personInChargeId", qPersonInCharge.trim());
       
-      console.log("🔍 Fetching hospitals with filters:", {
-        name: qName,
-        province: qProvince,
-        status: qStatus,
-        priority: qPriority,
-        personInCharge: qPersonInCharge,
-        url: url.toString()
-      });
+      // console.log("🔍 Fetching hospitals with filters:", {
+      //   name: qName,
+      //   province: qProvince,
+      //   status: qStatus,
+      //   priority: qPriority,
+      //   personInCharge: qPersonInCharge,
+      //   url: url.toString()
+      // });
       
       const res = await fetch(url.toString(), { headers: { ...authHeader() } });
       if (!res.ok) throw new Error(`GET failed ${res.status}`);
@@ -1109,7 +1092,7 @@ export default function HospitalsPage() {
         setHasContracts(foundContracts);
       }
     } catch (e) {
-      console.warn("Không thể kiểm tra hợp đồng:", e);
+      // console.warn("Không thể kiểm tra hợp đồng:", e);
       setHasContracts(false);
     } finally {
       setCheckingContracts(false);

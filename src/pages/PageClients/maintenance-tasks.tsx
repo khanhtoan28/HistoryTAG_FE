@@ -1286,7 +1286,7 @@ function TaskFormModal({
 
                                                                 // Nếu data lỗi chỉ có ID mà không có tên => Bỏ qua luôn cho sạch
                                                                 if (!displayName) {
-                                                                    console.log("Selected item has no display name, ignoring");
+                                                                    // console.log("Selected item has no display name, ignoring");
                                                                     setCurrentPicInput(null);
                                                                     return;
                                                                 }

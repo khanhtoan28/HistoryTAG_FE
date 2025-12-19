@@ -90,7 +90,7 @@ export default function SuperAdminHome() {
         const deps = Array.from(new Set(uList.map((u: any) => (u?.department ?? null)).filter(Boolean))).sort();
         if (mounted) setDepartments(deps as string[]);
       } catch (err) {
-        console.warn('Failed to load departments', err);
+        // console.warn('Failed to load departments', err);
       }
     })();
     return () => { mounted = false; };
@@ -532,7 +532,7 @@ export default function SuperAdminHome() {
         const teams = Array.from(new Set(uList.map((u) => u.team).filter(Boolean))).sort() as string[];
         if (mounted) setAvailableTeams(teams);
       } catch (err) {
-        console.warn('Failed to load teams', err);
+        // console.warn('Failed to load teams', err);
         if (mounted) setAvailableTeams([]);
       }
     })();
@@ -654,7 +654,7 @@ export default function SuperAdminHome() {
         });
         setProfileUsers(Array.from(userMap.values()));
       } catch (err) {
-        console.warn('load users for team failed', err);
+        // console.warn('load users for team failed', err);
         setProfileUsers([]);
       }
 
@@ -813,7 +813,7 @@ export default function SuperAdminHome() {
         hwList.forEach((h: any) => { map[String(h.id)] = (h.name ?? h.hardwareName ?? h.label ?? String(h.id)); });
         setHardwareMap(map);
       } catch (err) {
-        console.warn('hardware map load failed', err);
+        // console.warn('hardware map load failed', err);
         setHardwareMap({});
       }
 

@@ -197,13 +197,13 @@ export default function SuperAdminUsers() {
 
   function fillForm(user: UserResponseDTO) {
     // Debug current roles from BE
-    console.log("[Users] fillForm roles raw:", user.roles);
+    // console.log("[Users] fillForm roles raw:", user.roles);
     const normalizedRoles =
       user.roles?.map((r: any) => {
         const name = (r.roleName ?? r.roleType ?? "").toString();
         return name.replace(/^ROLE_/i, "").toUpperCase();
       }) || [];
-    console.log("[Users] fillForm roles normalized:", normalizedRoles);
+    // console.log("[Users] fillForm roles normalized:", normalizedRoles);
     setForm({
       username: user.username || "",
       email: user.email || "",
@@ -315,8 +315,8 @@ export default function SuperAdminUsers() {
 
     // Debug: Check if token exists
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
-    console.log("Current token exists:", !!token);
-    console.log("Current user roles:", localStorage.getItem("roles") || sessionStorage.getItem("roles"));
+    // console.log("Current token exists:", !!token);
+    // console.log("Current user roles:", localStorage.getItem("roles") || sessionStorage.getItem("roles"));
 
     setLoading(true);
     try {

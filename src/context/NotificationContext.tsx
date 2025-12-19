@@ -385,7 +385,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           if (parsed && typeof parsed === "object") finalData = parsed;
         }
       } catch (e) {
-        console.warn("[NotificationContext] error normalizing payload.data:", e);
+        // console.warn("[NotificationContext] error normalizing payload.data:", e);
       }
 
       // If finalData still contains a data string, try parse recursively

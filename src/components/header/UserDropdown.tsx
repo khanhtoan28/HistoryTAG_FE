@@ -84,7 +84,7 @@ export default function UserDropdown() {
       });
 
       if (!res.ok) {
-        console.warn("Logout failed:", await res.text());
+        // console.warn("Logout failed:", await res.text());
       }
     } catch (e) {
       console.error("Logout error:", e);
