@@ -543,7 +543,8 @@ export default function HospitalsPage() {
   const searchHardwares = useMemo(
     () => async (term: string) => {
       try {
-        const url = `${API_BASE}/api/v1/superadmin/hardware/search?search=${encodeURIComponent(term)}`;
+        // ✅ Dùng /api/v1/admin thay vì /api/v1/superadmin để admin thường cũng có thể dùng
+        const url = `${API_BASE}/api/v1/admin/hardware/search?search=${encodeURIComponent(term)}`;
         const res = await fetch(url, { headers: { ...authHeader() }, credentials: "include" } as any);
         if (!res.ok) return [];
         const list = await res.json();
@@ -559,27 +560,28 @@ export default function HospitalsPage() {
   const searchItUsers = useMemo(
     () => async (term: string) => {
       try {
+        // ✅ Dùng /api/v1/admin thay vì /api/v1/superadmin để admin thường cũng có thể dùng
         const params = new URLSearchParams({
           department: "IT",
-          status: "true",
         });
         if (term && term.trim()) {
-          params.set("fullName", term.trim());
+          params.set("name", term.trim()); // admin API dùng "name" thay vì "fullName"
         }
-        const res = await fetch(`${API_BASE}/api/v1/superadmin/users/filter?${params.toString()}`, {
+        const res = await fetch(`${API_BASE}/api/v1/admin/users/search?${params.toString()}`, {
           headers: { ...authHeader() },
           credentials: "include",
         } as any);
         if (!res.ok) return [];
         const list = await res.json();
         const array = Array.isArray(list) ? list : [];
+        // ✅ Map từ EntitySelectDTO format (id, label, subLabel) sang ITUserOption
         return array
           .map((u: any) => ({
             id: Number(u.id),
-            name: String(u.fullname ?? u.username ?? u.email ?? u.id),
-            username: u.username ?? undefined,
-            email: u.email ?? null,
-            phone: u.phone ?? null,
+            name: String(u.label ?? u.name ?? u.id),
+            username: undefined, // admin API không trả về username
+            email: u.subLabel ?? null, // subLabel là email trong admin API
+            phone: null, // admin API không trả về phone
           }))
           .filter((u: ITUserOption) => Number.isFinite(u.id) && u.name);
       } catch (e) {
@@ -832,7 +834,8 @@ export default function HospitalsPage() {
     let alive = true;
     (async () => {
       try {
-        const url = `${API_BASE}/api/v1/superadmin/his?page=0&size=200`;
+        // ✅ Dùng /api/v1/admin thay vì /api/v1/superadmin để admin thường cũng có thể dùng
+        const url = `${API_BASE}/api/v1/admin/his?page=0&size=200`;
         const res = await fetch(url, { headers: { ...authHeader() } });
         if (!res.ok) return;
         const data = await res.json();
@@ -887,24 +890,25 @@ export default function HospitalsPage() {
     let alive = true;
     (async () => {
       try {
+        // ✅ Dùng /api/v1/admin thay vì /api/v1/superadmin để admin thường cũng có thể dùng
         const params = new URLSearchParams({
           department: "IT",
-          status: "true",
         });
-        const res = await fetch(`${API_BASE}/api/v1/superadmin/users/filter?${params.toString()}`, {
+        const res = await fetch(`${API_BASE}/api/v1/admin/users/search?${params.toString()}`, {
           headers: { ...authHeader() },
           credentials: "include",
         } as any);
         if (!res.ok) return;
         const list = await res.json();
         const array = Array.isArray(list) ? list : [];
+        // ✅ Map từ EntitySelectDTO format (id, label, subLabel) sang ITUserOption
         const mapped = array
           .map((u: any) => ({
             id: Number(u.id),
-            name: String(u.fullname ?? u.username ?? u.email ?? u.id),
-            username: u.username ?? undefined,
-            email: u.email ?? null,
-            phone: u.phone ? String(u.phone) : null,
+            name: String(u.label ?? u.name ?? u.id),
+            username: undefined, // admin API không trả về username
+            email: u.subLabel ?? null, // subLabel là email trong admin API
+            phone: null, // admin API không trả về phone
           }))
           .filter((u: ITUserOption) => Number.isFinite(u.id) && u.name);
         if (alive) setItUserOptions(mapped);
@@ -1078,7 +1082,8 @@ export default function HospitalsPage() {
 
     // Kiểm tra xem bệnh viện có hợp đồng (BusinessProject) không
     try {
-      const businessUrl = `${API_BASE}/api/v1/superadmin/business?search=${encodeURIComponent(hospital.name)}&page=0&size=50`;
+      // ✅ Dùng /api/v1/admin thay vì /api/v1/superadmin để admin thường cũng có thể dùng
+      const businessUrl = `${API_BASE}/api/v1/admin/business?search=${encodeURIComponent(hospital.name)}&page=0&size=50`;
       const businessRes = await fetch(businessUrl, {
         headers: { ...authHeader() },
       });

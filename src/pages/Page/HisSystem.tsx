@@ -55,10 +55,10 @@ interface SpringPage<T> {
 // ===================== Config & helpers ===================== //
 // ⚠️ Fix env access for Vite-based projects
 const API_BASE = import.meta.env.VITE_API_URL ?? ""; // same-origin if not set
-const BASES = [
-  `${API_BASE}/api/v1/superadmin/his`,
-  `${API_BASE}/api/v1/admin/his`,
-] as const;
+// ✅ Dùng admin API cho GET requests (admin thường có thể dùng)
+const ADMIN_BASE = `${API_BASE}/api/v1/admin/his`;
+// ✅ Chỉ dùng superadmin API cho CREATE/UPDATE/DELETE (khi canEdit = true)
+const SUPERADMIN_BASE = `${API_BASE}/api/v1/superadmin/his`;
 
 function authHeader(): Record<string, string> {
   const token = localStorage.getItem("access_token");
@@ -67,20 +67,18 @@ function authHeader(): Record<string, string> {
     : { "Content-Type": "application/json", Accept: "application/json" };
 }
 
-async function fetchWithFallback(inputFactory: (base: string) => string, init?: RequestInit) {
-  let lastError: unknown = null;
-  for (const base of BASES) {
-    try {
-      const url = inputFactory(base);
-      const res = await fetch(url, init);
-      if (!res.ok) throw new Error(`${init?.method ?? "GET"} ${res.status}`);
-      return res;
-    } catch (e) {
-      lastError = e;
-      continue;
-    }
+// ✅ Helper để chọn API base dựa trên method và canEdit
+function getApiBase(method: string = "GET", canEdit: boolean = false): string {
+  // GET requests: luôn dùng admin API (admin thường có thể dùng)
+  if (method === "GET") {
+    return ADMIN_BASE;
   }
-  throw lastError ?? new Error("All endpoints failed");
+  // Write operations (POST, PUT, DELETE): chỉ dùng superadmin API nếu canEdit = true
+  if (canEdit && (method === "POST" || method === "PUT" || method === "DELETE")) {
+    return SUPERADMIN_BASE;
+  }
+  // Fallback: dùng admin API
+  return ADMIN_BASE;
 }
 
 function validate(values: HisRequestDTO) {
@@ -261,15 +259,16 @@ const HisSystemPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchWithFallback((base) => {
-        const url = new URL(base);
-        url.searchParams.set("search", "");
-        url.searchParams.set("page", String(page));
-        url.searchParams.set("size", String(size));
-        url.searchParams.set("sortBy", String(sortBy));
-        url.searchParams.set("sortDir", sortDir);
-        return url.toString();
-      }, { headers: { ...authHeader() } });
+      // ✅ GET request: luôn dùng admin API
+      const base = getApiBase("GET", false);
+      const url = new URL(base);
+      url.searchParams.set("search", "");
+      url.searchParams.set("page", String(page));
+      url.searchParams.set("size", String(size));
+      url.searchParams.set("sortBy", String(sortBy));
+      url.searchParams.set("sortDir", sortDir);
+      const res = await fetch(url.toString(), { headers: { ...authHeader() } });
+      if (!res.ok) throw new Error(`GET ${res.status}`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setItems(data);
@@ -550,7 +549,10 @@ const HisSystemPage: React.FC = () => {
     setViewing(null);
     setIsModalLoading(true);
     try {
-      const res = await fetchWithFallback((base) => `${base}/${h.id}`, { headers: { ...authHeader() } });
+      // ✅ GET request: luôn dùng admin API
+      const base = getApiBase("GET", false);
+      const res = await fetch(`${base}/${h.id}`, { headers: { ...authHeader() } });
+      if (!res.ok) throw new Error(`GET ${res.status}`);
       const detail = (await res.json()) as HisResponseDTO;
       setEditing(detail);
       setForm({
@@ -578,7 +580,10 @@ const HisSystemPage: React.FC = () => {
     setOpen(true);
     setIsModalLoading(true);
     try {
-      const res = await fetchWithFallback((base) => `${base}/${h.id}`, { headers: { ...authHeader() } });
+      // ✅ GET request: luôn dùng admin API
+      const base = getApiBase("GET", false);
+      const res = await fetch(`${base}/${h.id}`, { headers: { ...authHeader() } });
+      if (!res.ok) throw new Error(`GET ${res.status}`);
       const detail = (await res.json()) as HisResponseDTO;
       setViewing(detail);
       setForm({
@@ -608,8 +613,10 @@ const HisSystemPage: React.FC = () => {
     if (!confirm("Xóa HIS này?")) return;
     setLoading(true);
     try {
-      // @ts-ignore
-      await fetchWithFallback((base) => `${base}/${id}`, { method: "DELETE", headers: { ...authHeader() } });
+      // ✅ DELETE request: chỉ dùng superadmin API nếu canEdit = true
+      const base = getApiBase("DELETE", canEdit);
+      const res = await fetch(`${base}/${id}`, { method: "DELETE", headers: { ...authHeader() } });
+      if (!res.ok) throw new Error(`DELETE ${res.status}`);
       // adjust page when last item removed
       if (items.length === 1 && page > 0) setPage((p) => p - 1);
       await fetchList();
@@ -637,12 +644,15 @@ const HisSystemPage: React.FC = () => {
     }
     try {
       const method = isEditing ? "PUT" : "POST";
-      // @ts-ignore
-      await fetchWithFallback((base) => (isEditing ? `${base}/${editing!.id}` : base), {
+      // ✅ POST/PUT request: chỉ dùng superadmin API nếu canEdit = true
+      const base = getApiBase(method, canEdit);
+      const url = isEditing ? `${base}/${editing!.id}` : base;
+      const res = await fetch(url, {
         method,
         headers: { ...authHeader() },
         body: JSON.stringify(form),
       });
+      if (!res.ok) throw new Error(`${method} ${res.status}`);
       // if not thrown, res.ok already ensured by fetchWithFallback
       setOpen(false);
       setEditing(null);

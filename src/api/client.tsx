@@ -19,7 +19,59 @@ const api = axios.create({
   withCredentials: true,
 });
 
+// ✅ Helper để check xem user có phải SUPERADMIN không
+function isSuperAdminUser(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    // Check pathname
+    if (window.location.pathname.startsWith('/superadmin')) return true;
+    // Check roles from localStorage/sessionStorage
+    const roles = JSON.parse(localStorage.getItem('roles') || sessionStorage.getItem('roles') || '[]');
+    if (Array.isArray(roles) && roles.some((r: unknown) => {
+      if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
+      if (r && typeof r === 'object') {
+        const rr = r as Record<string, unknown>;
+        const rn = rr.roleName ?? rr.role_name ?? rr.role;
+        return typeof rn === 'string' && rn.toUpperCase() === 'SUPERADMIN';
+      }
+      return false;
+    })) {
+      return true;
+    }
+    // Check JWT token
+    const token = getAuthToken();
+    if (token) {
+      try {
+        const parts = token.split('.');
+        if (parts.length >= 2) {
+          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+          const maybeRoles = payload.roles || payload.authorities || payload.role || payload.realm_access && payload.realm_access.roles;
+          if (Array.isArray(maybeRoles) && maybeRoles.some((r: unknown) => typeof r === 'string' && (r as string).toUpperCase() === 'SUPERADMIN')) {
+            return true;
+          }
+        }
+      } catch {
+        // ignore decode errors
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
 api.interceptors.request.use((config) => {
+  // ✅ Chặn superadmin API calls từ ADMIN users (chặn từ gốc)
+  const isSuperAdminAPI = config.url?.includes('/api/v1/superadmin/');
+  if (isSuperAdminAPI && !isSuperAdminUser()) {
+    // Reject ngay từ client, không gửi request đến server
+    return Promise.reject({
+      message: 'FORBIDDEN_CLIENT: ADMIN users cannot access SUPERADMIN endpoints',
+      config,
+      silent: true, // Flag để không log error spam
+    }) as any;
+  }
+
   // ✅ Không gửi token cho các API public (đăng nhập, đăng ký, quên mật khẩu, etc.)
   // Điều này tránh lỗi 401 khi token hết hạn hoặc invalid trên Server
   // Pattern matching: bắt tất cả các path bắt đầu bằng /api/v1/public/

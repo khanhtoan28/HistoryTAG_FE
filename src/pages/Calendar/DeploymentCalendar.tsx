@@ -130,9 +130,41 @@ const DeploymentCalendar: React.FC = () => {
     const loadTeamMembers = async () => {
       setLoadingMembers(true);
       try {
-        // Load users from DEPLOYMENT team
-        const users = await filterUsers({ team: "DEPLOYMENT" });
-        setTeamMembers(users || []);
+        // ✅ Check if user is SUPERADMIN before calling superadmin API
+        const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
+        const roles = rolesStr ? JSON.parse(rolesStr) : [];
+        const isSuperAdmin = Array.isArray(roles) && roles.some((r: string) => 
+          r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin"
+        );
+
+        if (isSuperAdmin) {
+          // ✅ SUPERADMIN: dùng superadmin API
+          const users = await filterUsers({ team: "DEPLOYMENT" });
+          setTeamMembers(users || []);
+        } else {
+          // ✅ ADMIN: dùng admin API để search users theo team
+          const API_BASE = import.meta.env.VITE_API_URL ?? "";
+          const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+          const params = new URLSearchParams({ team: "DEPLOYMENT" });
+          const res = await fetch(`${API_BASE}/api/v1/admin/users/search?${params.toString()}`, {
+            headers: {
+              Authorization: token ? `Bearer ${token}` : "",
+              Accept: "application/json",
+            },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            // Map từ EntitySelectDTO format sang UserResponseDTO format
+            const users = Array.isArray(data) ? data.map((u: any) => ({
+              id: u.id,
+              fullname: u.label,
+              email: u.subLabel,
+            })) : [];
+            setTeamMembers(users);
+          } else {
+            setTeamMembers([]);
+          }
+        }
       } catch (error) {
         console.error("Error loading team members:", error);
         setTeamMembers([]);

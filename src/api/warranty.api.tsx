@@ -1,11 +1,14 @@
 import api, { getAuthToken } from './client';
 import { getAllUsers } from './superadmin.api';
 
-function getBase() {
-  if (typeof window === 'undefined') return '/api/v1/admin';
+// ✅ Helper để check xem user có phải SUPERADMIN không
+function isSuperAdmin(): boolean {
+  if (typeof window === 'undefined') return false;
   try {
-    if (window.location.pathname.startsWith('/superadmin')) return '/api/v1/superadmin';
-    const roles = JSON.parse(localStorage.getItem('roles') || '[]');
+    // Check pathname
+    if (window.location.pathname.startsWith('/superadmin')) return true;
+    // Check roles from localStorage/sessionStorage
+    const roles = JSON.parse(localStorage.getItem('roles') || sessionStorage.getItem('roles') || '[]');
     if (Array.isArray(roles) && roles.some((r: unknown) => {
       if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
       if (r && typeof r === 'object') {
@@ -15,8 +18,9 @@ function getBase() {
       }
       return false;
     })) {
-      return '/api/v1/superadmin';
+      return true;
     }
+    // Check JWT token
     const token = getAuthToken();
     if (token) {
       try {
@@ -25,16 +29,32 @@ function getBase() {
           const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
           const maybeRoles = payload.roles || payload.authorities || payload.role || payload.realm_access && payload.realm_access.roles;
           if (Array.isArray(maybeRoles) && maybeRoles.some((r: unknown) => typeof r === 'string' && (r as string).toUpperCase() === 'SUPERADMIN')) {
-            return '/api/v1/superadmin';
+            return true;
           }
         }
       } catch {
-        // ignore
+        // ignore decode errors
       }
     }
   } catch {
     // ignore
   }
+  return false;
+}
+
+function getBase(method: string = 'GET', canManage: boolean = false) {
+  // ✅ GET requests: luôn dùng admin API (admin thường có thể xem)
+  if (method === 'GET') {
+    return '/api/v1/admin';
+  }
+  // ✅ Write operations (POST, PUT, DELETE): chỉ dùng superadmin API nếu canManage = true
+  if (canManage && (method === 'POST' || method === 'PUT' || method === 'DELETE')) {
+    // Double check: chỉ dùng superadmin API nếu thực sự là superadmin
+    if (isSuperAdmin()) {
+      return '/api/v1/superadmin';
+    }
+  }
+  // Fallback: dùng admin API
   return '/api/v1/admin';
 }
 
@@ -63,26 +83,27 @@ export type WarrantyContractRequestDTO = {
   endDate?: string | null;
 };
 
-export async function createWarrantyContract(payload: WarrantyContractRequestDTO) {
-  const base = getBase();
+export async function createWarrantyContract(payload: WarrantyContractRequestDTO, canManage: boolean = false) {
+  const base = getBase('POST', canManage);
   const res = await api.post(`${base}/warranty-contracts`, payload);
   return res.data;
 }
 
-export async function updateWarrantyContract(id: number, payload: WarrantyContractRequestDTO) {
-  const base = getBase();
+export async function updateWarrantyContract(id: number, payload: WarrantyContractRequestDTO, canManage: boolean = false) {
+  const base = getBase('PUT', canManage);
   const res = await api.put(`${base}/warranty-contracts/${id}`, payload);
   return res.data;
 }
 
-export async function deleteWarrantyContract(id: number) {
-  const base = getBase();
+export async function deleteWarrantyContract(id: number, canManage: boolean = false) {
+  const base = getBase('DELETE', canManage);
   const res = await api.delete(`${base}/warranty-contracts/${id}`);
   return res.data;
 }
 
 export async function getWarrantyContractById(id: number): Promise<WarrantyContractResponseDTO> {
-  const base = getBase();
+  // ✅ GET request: luôn dùng admin API
+  const base = getBase('GET', false);
   const res = await api.get(`${base}/warranty-contracts/${id}`);
   return res.data;
 }
@@ -96,7 +117,8 @@ export async function getWarrantyContracts(params: {
   page?: number;
   size?: number;
 } = {}) {
-  const base = getBase();
+  // ✅ GET request: luôn dùng admin API
+  const base = getBase('GET', false);
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value === undefined || value === null) return;
@@ -112,7 +134,8 @@ export async function getWarrantyContracts(params: {
 // Helper để lấy danh sách người phụ trách (SUPERADMIN và phòng kinh doanh)
 export async function getWarrantyPicOptions() {
   try {
-    const base = getBase();
+    // ✅ GET request: luôn dùng admin API
+    const base = getBase('GET', false);
     
     // Lấy business users từ API business pic options
     let businessOptions: Array<{ id: number; label: string; subLabel?: string; phone?: string | null }> = [];
@@ -129,35 +152,38 @@ export async function getWarrantyPicOptions() {
       // console.warn('Failed to fetch business PIC options', err);
     }
 
-    // Lấy tất cả users và filter SUPERADMIN
+    // ✅ Lấy tất cả users và filter SUPERADMIN - CHỈ GỌI KHI USER LÀ SUPERADMIN
     let superAdminOptions: Array<{ id: number; label: string; subLabel?: string; phone?: string | null }> = [];
-    try {
-      const res = await getAllUsers({ page: 0, size: 200 });
-      const content = Array.isArray(res?.content)
-        ? res.content
-        : Array.isArray(res)
-        ? res
-        : [];
-      superAdminOptions = content
-        .filter((user: any) => {
-          const roles = user?.roles;
-          if (!roles) return false;
-          const roleArr = Array.isArray(roles) ? roles : [];
-          return roleArr.some((r: any) => {
-            if (!r) return false;
-            if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
-            const roleName = r.roleName ?? r.role_name ?? r.role;
-            return typeof roleName === 'string' && roleName.toUpperCase() === 'SUPERADMIN';
-          });
-        })
-        .map((user: any) => ({
-          id: Number(user?.id ?? 0),
-          label: String(user?.fullname ?? user?.fullName ?? user?.username ?? user?.email ?? `User #${user?.id ?? ''}`),
-          subLabel: user?.email ? String(user.email) : undefined,
-          phone: user?.phone ? String(user.phone).trim() : null,
-        }));
-    } catch (err) {
-      // console.warn('Failed to fetch superadmin users for PIC options', err);
+    // ✅ Guard: chỉ gọi getAllUsers() nếu user là SUPERADMIN
+    if (isSuperAdmin()) {
+      try {
+        const res = await getAllUsers({ page: 0, size: 200 });
+        const content = Array.isArray(res?.content)
+          ? res.content
+          : Array.isArray(res)
+          ? res
+          : [];
+        superAdminOptions = content
+          .filter((user: any) => {
+            const roles = user?.roles;
+            if (!roles) return false;
+            const roleArr = Array.isArray(roles) ? roles : [];
+            return roleArr.some((r: any) => {
+              if (!r) return false;
+              if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
+              const roleName = r.roleName ?? r.role_name ?? r.role;
+              return typeof roleName === 'string' && roleName.toUpperCase() === 'SUPERADMIN';
+            });
+          })
+          .map((user: any) => ({
+            id: Number(user?.id ?? 0),
+            label: String(user?.fullname ?? user?.fullName ?? user?.username ?? user?.email ?? `User #${user?.id ?? ''}`),
+            subLabel: user?.email ? String(user.email) : undefined,
+            phone: user?.phone ? String(user.phone).trim() : null,
+          }));
+      } catch (err) {
+        // console.warn('Failed to fetch superadmin users for PIC options', err);
+      }
     }
 
     // Merge và loại bỏ trùng lặp

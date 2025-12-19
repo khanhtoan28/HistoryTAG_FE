@@ -512,7 +512,7 @@ export default function WarrantyContractsPage() {
     setPendingDeleteId(null);
     setLoading(true);
     try {
-      await deleteWarrantyContract(idToDelete);
+      await deleteWarrantyContract(idToDelete, canEdit);
       await fetchList();
       if (isViewing && viewing?.id === idToDelete) closeModal();
       toast.success("Xóa thành công");
@@ -661,9 +661,9 @@ export default function WarrantyContractsPage() {
       }
 
       if (isEditing) {
-        await updateWarrantyContract(editing!.id, payload);
+        await updateWarrantyContract(editing!.id, payload, canEdit);
       } else {
-        await createWarrantyContract(payload);
+        await createWarrantyContract(payload, canEdit);
       }
 
       closeModal();
@@ -704,9 +704,9 @@ export default function WarrantyContractsPage() {
       }
 
       if (pendingSubmit.isEditing) {
-        await updateWarrantyContract(editing!.id, pendingSubmit.payload);
+        await updateWarrantyContract(editing!.id, pendingSubmit.payload, canEdit);
       } else {
-        await createWarrantyContract(pendingSubmit.payload);
+        await createWarrantyContract(pendingSubmit.payload, canEdit);
       }
       closeModal();
       setPage(0);

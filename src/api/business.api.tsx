@@ -1,7 +1,8 @@
 import api, { getAuthToken } from './client';
 
 export async function searchHardware(q = '') {
-  const base = getBase();
+  // ✅ GET request: luôn dùng admin API
+  const base = getBase('GET', false);
   try {
     const res = await api.get(`${base}/hardware/search?search=${encodeURIComponent(q)}`);
     const data = res.data;
@@ -26,7 +27,8 @@ export async function searchHardware(q = '') {
 }
 
 export async function searchHospitals(q = '') {
-  const base = getBase();
+  // ✅ GET request: luôn dùng admin API
+  const base = getBase('GET', false);
   try {
     const res = await api.get(`${base}/hospitals/search?name=${encodeURIComponent(q)}`);
     return res.data; // expects array of { id, label }
@@ -36,13 +38,14 @@ export async function searchHospitals(q = '') {
   }
 }
 
-function getBase() {
-  if (typeof window === 'undefined') return '/api/v1/admin';
+// ✅ Helper để check xem user có phải SUPERADMIN không
+function isSuperAdmin(): boolean {
+  if (typeof window === 'undefined') return false;
   try {
-    // prefer pathname detection
-    if (window.location.pathname.startsWith('/superadmin')) return '/api/v1/superadmin';
-    // fallback: if roles contain SUPERADMIN
-    const roles = JSON.parse(localStorage.getItem('roles') || '[]');
+    // Check pathname
+    if (window.location.pathname.startsWith('/superadmin')) return true;
+    // Check roles from localStorage/sessionStorage
+    const roles = JSON.parse(localStorage.getItem('roles') || sessionStorage.getItem('roles') || '[]');
     if (Array.isArray(roles) && roles.some((r: unknown) => {
       if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
       if (r && typeof r === 'object') {
@@ -52,9 +55,9 @@ function getBase() {
       }
       return false;
     })) {
-      return '/api/v1/superadmin';
+      return true;
     }
-    // fallback 2: try to decode JWT token and inspect claims for roles/authorities
+    // Check JWT token
     const token = getAuthToken();
     if (token) {
       try {
@@ -63,7 +66,7 @@ function getBase() {
           const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
           const maybeRoles = payload.roles || payload.authorities || payload.role || payload.realm_access && payload.realm_access.roles;
           if (Array.isArray(maybeRoles) && maybeRoles.some((r: unknown) => typeof r === 'string' && (r as string).toUpperCase() === 'SUPERADMIN')) {
-            return '/api/v1/superadmin';
+            return true;
           }
         }
       } catch {
@@ -73,23 +76,40 @@ function getBase() {
   } catch {
     // ignore
   }
+  return false;
+}
+
+function getBase(method: string = 'GET', canManage: boolean = false) {
+  // ✅ GET requests: luôn dùng admin API (admin thường có thể xem)
+  if (method === 'GET') {
+    return '/api/v1/admin';
+  }
+  // ✅ Write operations (POST, PUT, DELETE): chỉ dùng superadmin API nếu canManage = true
+  if (canManage && (method === 'POST' || method === 'PUT' || method === 'DELETE')) {
+    // Double check: chỉ dùng superadmin API nếu thực sự là superadmin
+    if (isSuperAdmin()) {
+      return '/api/v1/superadmin';
+    }
+  }
+  // Fallback: dùng admin API
   return '/api/v1/admin';
 }
 
-export async function createBusiness(payload: Record<string, unknown>) {
-  const base = getBase();
+export async function createBusiness(payload: Record<string, unknown>, canManage: boolean = false) {
+  const base = getBase('POST', canManage);
   const res = await api.post(`${base}/business`, payload);
   return res.data;
 }
 
-export async function updateBusiness(id: number, payload: Record<string, unknown>) {
-  const base = getBase();
+export async function updateBusiness(id: number, payload: Record<string, unknown>, canManage: boolean = false) {
+  const base = getBase('PUT', canManage);
   const res = await api.put(`${base}/business/${id}`, payload);
   return res.data;
 }
 
 export async function getBusinesses(params = {}) {
-  const base = getBase();
+  // ✅ GET request: luôn dùng admin API
+  const base = getBase('GET', false);
   const query = new URLSearchParams();
   Object.entries(params as Record<string, unknown>).forEach(([key, value]) => {
     if (value === undefined || value === null) return;
@@ -104,13 +124,15 @@ export async function getBusinesses(params = {}) {
 }
 
 export async function getBusinessById(id: number) {
-  const base = getBase();
+  // ✅ GET request: luôn dùng admin API
+  const base = getBase('GET', false);
   const res = await api.get(`${base}/business/${id}`);
   return res.data;
 }
 
 export async function getHardwareById(id: number) {
-  const base = getBase();
+  // ✅ GET request: luôn dùng admin API
+  const base = getBase('GET', false);
   try {
     const res = await api.get(`${base}/hardware/${id}`);
     return res.data;
@@ -121,20 +143,22 @@ export async function getHardwareById(id: number) {
   }
 }
 
-export async function deleteBusiness(id: number) {
-  const base = getBase();
+export async function deleteBusiness(id: number, canManage: boolean = false) {
+  const base = getBase('DELETE', canManage);
   const res = await api.delete(`${base}/business/${id}`);
   return res.data;
 }
 
 export async function getBusinessPicOptions() {
-  const base = getBase();
+  // ✅ GET request: luôn dùng admin API
+  const base = getBase('GET', false);
   const res = await api.get(`${base}/business/pic-options`);
   return res.data;
 }
 
 export async function getMonthlySalesStats(year?: number) {
-  const base = getBase();
+  // ✅ GET request: luôn dùng admin API
+  const base = getBase('GET', false);
   const query = year ? `?year=${year}` : '';
   const res = await api.get(`${base}/business/monthly-stats${query}`);
   return res.data;

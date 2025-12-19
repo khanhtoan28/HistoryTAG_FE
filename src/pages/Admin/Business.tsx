@@ -437,35 +437,39 @@ const BusinessPage: React.FC = () => {
           }))
         : [];
 
+      // ✅ Lấy tất cả users và filter SUPERADMIN - CHỈ GỌI KHI USER LÀ SUPERADMIN
       let superAdminOptions: Array<{ id: number; label: string; subLabel?: string }> = [];
-      try {
-        const res = await getAllUsers({ page: 0, size: 200 });
-        const content = Array.isArray(res?.content)
-          ? res.content
-          : Array.isArray(res)
-          ? res
-          : [];
-        superAdminOptions = content
-          .filter((user: any) => {
-            const roles = user?.roles;
-            if (!roles) return false;
-            const roleArr = Array.isArray(roles) ? roles : [];
-            return roleArr.some((r: any) => {
-              if (!r) return false;
-              if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
-              const roleName = r.roleName ?? r.role_name ?? r.role;
-              return typeof roleName === 'string' && roleName.toUpperCase() === 'SUPERADMIN';
-            });
-          })
-          .map((user: any) => ({
-            id: Number(user?.id ?? 0),
-            label: String(user?.fullname ?? user?.fullName ?? user?.username ?? user?.email ?? `User #${user?.id ?? ''}`),
-            subLabel: user?.email ? String(user.email) : undefined,
-            phone: user?.phone ? String(user.phone).trim() : null,
-          }));
-      } catch (err) {
-        // ignore if superadmin endpoint not accessible
-        // console.warn('Failed to fetch superadmin users for PIC options', err);
+      // ✅ Guard: chỉ gọi getAllUsers() nếu user là SUPERADMIN
+      if (isSuperAdmin) {
+        try {
+          const res = await getAllUsers({ page: 0, size: 200 });
+          const content = Array.isArray(res?.content)
+            ? res.content
+            : Array.isArray(res)
+            ? res
+            : [];
+          superAdminOptions = content
+            .filter((user: any) => {
+              const roles = user?.roles;
+              if (!roles) return false;
+              const roleArr = Array.isArray(roles) ? roles : [];
+              return roleArr.some((r: any) => {
+                if (!r) return false;
+                if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
+                const roleName = r.roleName ?? r.role_name ?? r.role;
+                return typeof roleName === 'string' && roleName.toUpperCase() === 'SUPERADMIN';
+              });
+            })
+            .map((user: any) => ({
+              id: Number(user?.id ?? 0),
+              label: String(user?.fullname ?? user?.fullName ?? user?.username ?? user?.email ?? `User #${user?.id ?? ''}`),
+              subLabel: user?.email ? String(user.email) : undefined,
+              phone: user?.phone ? String(user.phone).trim() : null,
+            }));
+        } catch (err) {
+          // ignore if superadmin endpoint not accessible
+          // console.warn('Failed to fetch superadmin users for PIC options', err);
+        }
       }
 
       const mergedMap = new Map<number, { id: number; label: string; subLabel?: string; phone?: string | null }>();
@@ -791,9 +795,9 @@ const BusinessPage: React.FC = () => {
     try {
       if (isUpdate) {
         if (!editingId) throw new Error('Không xác định được ID để cập nhật');
-        await updateBusiness(editingId, payload);
+        await updateBusiness(editingId, payload, canManage);
       } else {
-        await createBusiness(payload);
+        await createBusiness(payload, canManage);
       }
       setToast({ message: successMessage ?? (isUpdate ? 'Cập nhật thành công' : 'Tạo thành công'), type: 'success' });
       setName('');
@@ -1023,7 +1027,7 @@ const BusinessPage: React.FC = () => {
     setPendingDeleteId(null);
     setDeletingId(idToDelete);
     try {
-      await deleteBusiness(idToDelete);
+      await deleteBusiness(idToDelete, canManage);
       setToast({ message: 'Đã xóa', type: 'success' });
       await loadList();
     } catch (e) { console.error(e); setToast({ message: 'Xóa thất bại', type: 'error' }); }
