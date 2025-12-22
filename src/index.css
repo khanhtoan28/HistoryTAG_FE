@@ -376,6 +376,19 @@ body {
     display: none;
     -webkit-appearance: none;
   }
+
+  /* ✅ Ẩn icon mắt mặc định của browser cho password input */
+  /* Chrome / Edge */
+  input[type="password"]::-webkit-credentials-auto-fill-button {
+    visibility: hidden;
+    position: absolute;
+    right: 0;
+  }
+
+  /* Edge */
+  input[type="password"]::-ms-reveal {
+    display: none;
+  }
 }
 
 .tableCheckbox:checked ~ span span {

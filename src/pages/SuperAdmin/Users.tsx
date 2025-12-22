@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { FaRegUser } from "react-icons/fa";
 import { FiImage, FiMail, FiPhone, FiMapPin, FiUsers, FiBriefcase, FiClock, FiCalendar, FiUser, FiInfo } from "react-icons/fi";
+import { EyeIcon, EyeCloseIcon } from "../../icons";
 import axios from "axios";
 import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
@@ -133,6 +134,10 @@ export default function SuperAdminUsers() {
   const [editing, setEditing] = useState<UserResponseDTO | null>(null);
   const [viewing, setViewing] = useState<UserResponseDTO | null>(null);
   const [isModalLoading, setIsModalLoading] = useState(false);
+  
+  // ✅ Password visibility toggle
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
 
   const [form, setForm] = useState<UserForm>({
@@ -385,10 +390,10 @@ export default function SuperAdminUsers() {
       setError("Họ và tên không được để trống");
       return;
     }
-    if (!form.address.trim()) {
-      setError("Địa chỉ không được để trống");
-      return;
-    }
+    // if (!form.address.trim()) {
+    //   setError("Địa chỉ không được để trống");
+    //   return;
+    // }
     if (!isEditing && form.roles.length === 0) {
       setError("Vai trò không được để trống");
       return;
@@ -435,7 +440,10 @@ export default function SuperAdminUsers() {
       }
 
       closeModal();
-      setPage(0);
+      // ✅ Chỉ reset về trang 0 khi tạo mới, còn khi cập nhật thì giữ nguyên trang hiện tại
+      if (!isEditing) {
+        setPage(0);
+      }
       await fetchList();
     } catch (error: unknown) {
       const msg = getErrorMessage(error, "Lưu thất bại");
@@ -472,7 +480,7 @@ export default function SuperAdminUsers() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <select
+            {/* <select
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
@@ -482,8 +490,8 @@ export default function SuperAdminUsers() {
                   Sắp xếp theo: {k}
                 </option>
               ))}
-            </select>
-            <select
+            </select> */}
+            {/* <select
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
               value={sortDir}
               onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
@@ -500,9 +508,9 @@ export default function SuperAdminUsers() {
               <option value={10}>10 / trang</option>
               <option value={20}>20 / trang</option>
               <option value={50}>50 / trang</option>
-            </select>
+            </select> */}
             <button
-              className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100"
+              className="absolute right-20 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100"
               onClick={onCreate}
             >
               + Thêm người dùng
@@ -728,12 +736,41 @@ export default function SuperAdminUsers() {
                       <>
                         <div>
                           <label className="mb-1 block text-sm font-medium">Mật khẩu <span className="text-red-500">*</span></label>
-                          <input required type="password" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.password} onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))} disabled={isViewing} minLength={8} />
+                          <div className="relative">
+                            <input required type={showPassword ? "text" : "password"} autoComplete="new-password" className="w-full rounded-lg border border-gray-300 px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.password} onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))} disabled={isViewing} minLength={8} />
+                            <button
+                              type="button"
+                              onClick={() => setShowPassword(!showPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
+                              aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                            >
+                              {showPassword ? (
+                                <EyeIcon className="fill-gray-500 size-5" />
+                              ) : (
+                                <EyeCloseIcon className="fill-gray-500 size-5" />
+                              )}
+                            </button>
+                          </div>
                           <p className="mt-1 text-xs text-gray-500">Tối thiểu 8 ký tự</p>
                         </div>
                         <div>
                           <label className="mb-1 block text-sm font-medium">Xác nhận mật khẩu <span className="text-red-500">*</span></label>
-                          <input required type="password" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.confirmPassword} onChange={(e) => setForm((s) => ({ ...s, confirmPassword: e.target.value }))} disabled={isViewing} minLength={8} />
+                          <div className="relative">
+                            <input required type={showConfirmPassword ? "text" : "password"} autoComplete="new-password" className="w-full rounded-lg border border-gray-300 px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.confirmPassword} onChange={(e) => setForm((s) => ({ ...s, confirmPassword: e.target.value }))} disabled={isViewing} minLength={8} />
+                            <button
+                              type="button"
+                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                              disabled={isViewing}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                              aria-label={showConfirmPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                            >
+                              {showConfirmPassword ? (
+                                <EyeIcon className="fill-gray-500 size-5" />
+                              ) : (
+                                <EyeCloseIcon className="fill-gray-500 size-5" />
+                              )}
+                            </button>
+                          </div>
                         </div>
                       </>
                     )}
@@ -751,8 +788,8 @@ export default function SuperAdminUsers() {
 
                   <div className="space-y-3">
                     <div>
-                      <label className="mb-1 block text-sm font-medium">Địa chỉ <span className="text-red-500">*</span></label>
-                      <textarea required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" rows={3} value={form.address} onChange={(e) => setForm((s) => ({ ...s, address: e.target.value }))} disabled={isViewing} />
+                      <label className="mb-1 text-sm font-medium">Địa chỉ</label>
+                      <textarea  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" rows={3} value={form.address} onChange={(e) => setForm((s) => ({ ...s, address: e.target.value }))} disabled={isViewing} />
                     </div>
 
                     <div>

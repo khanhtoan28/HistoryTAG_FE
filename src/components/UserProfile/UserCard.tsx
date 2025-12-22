@@ -22,6 +22,18 @@ interface UserCardProps {
   onDelete: (id: number) => void;
 }
 
+// ✅ Map department sang tiếng Việt (đồng bộ với Users.tsx)
+const DEPARTMENT_LABELS: Record<string, string> = {
+  IT: "Công nghệ thông tin",
+  ACCOUNTING: "Kế toán",
+  BUSINESS: "Kinh doanh",
+};
+
+function getDepartmentLabel(value: string | null | undefined): string {
+  if (!value) return "Chưa cập nhật";
+  return DEPARTMENT_LABELS[value] || value;
+}
+
 const UserCard: React.FC<UserCardProps> = ({ user, onView, onEdit, onToggleLock, onDelete }) => {
   return (
     <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
@@ -97,7 +109,7 @@ const UserCard: React.FC<UserCardProps> = ({ user, onView, onEdit, onToggleLock,
             <span className="text-indigo-600 font-semibold text-xs">📍</span>
           </div>
           <div className="min-w-0 flex-1 text-center">
-            <p className="text-gray-600 truncate text-xs leading-tight">{user.department || "Chưa cập nhật"}</p>
+            <p className="text-gray-600 truncate text-xs leading-tight">{getDepartmentLabel(user.department)}</p>
           </div>
         </div>
 
