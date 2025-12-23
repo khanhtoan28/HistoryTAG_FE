@@ -88,6 +88,23 @@ export async function updateUserAccount(userId: number, payload: UserUpdateReque
   return data;
 }
 
+// =====================================
+// 🔹 Đổi mật khẩu
+// =====================================
+export type ChangePasswordRequestDTO = {
+  oldPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+};
+
+export async function changePassword(userId: number, payload: ChangePasswordRequestDTO) {
+  const url = `/api/v1/auth/change-password`;
+  const { data } = await api.post(url, payload, {
+    params: { userId },
+    headers: { "Content-Type": "application/json" },
+  });
+  return data;
+}
 
 function setCookie(
   name: string,

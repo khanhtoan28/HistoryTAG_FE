@@ -5,7 +5,7 @@ import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
 // removed unused icons import (use react-icons instead)
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
-import { FiMapPin, FiPhone, FiUser, FiClock, FiTag, FiImage, FiMap, FiDownload } from "react-icons/fi";
+import { FiMapPin, FiPhone, FiUser, FiClock, FiTag, FiImage, FiMap, FiDownload, FiFile } from "react-icons/fi";
 import { RiHistoryLine } from "react-icons/ri";
 import { FaHospitalAlt } from "react-icons/fa";
 import toast from "react-hot-toast";
@@ -26,7 +26,7 @@ export type Hospital = {
   deadline?: string | null;
   completionDate?: string | null;
   notes?: string | null;
-  imageUrl?: string | null;
+  apiFileUrl?: string | null;
   priority?: string | null;
   updatedAt?: string | null;
   assignedUserIds?: number[];
@@ -51,8 +51,8 @@ export type HospitalForm = {
   hardwareName?: string;
   projectStatus: string;
   notes?: string;
-  imageFile?: File | null;
-  imageUrl?: string | null;
+  apiFile?: File | null;
+  apiFileUrl?: string | null;
   priority: string;
   // assignedUserIds removed from Hospital form UI; assignment managed elsewhere
   personInChargeId?: number;
@@ -356,19 +356,22 @@ function DetailModal({
             <Info label="Cập nhật lúc" icon={<FiClock />} value={fmt(item.updatedAt)} />
           </div>
 
-          {/* Image */}
-          {item.imageUrl && (
+          {/* API File */}
+          {item.apiFileUrl && (
             <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
-              <p className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Ảnh bệnh viện:</p>
-              <div className="rounded-xl overflow-hidden">
-                <img
-                  src={item.imageUrl}
-                  alt="Ảnh bệnh viện"
-                  className="max-w-full h-auto object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
-                />
+              <p className="font-semibold text-gray-900 dark:text-gray-100 mb-2">File API bệnh viện:</p>
+              <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-4">
+                <a
+                  href={item.apiFileUrl}
+                  download
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 text-blue-700 hover:text-blue-800 transition-colors"
+                >
+                  <FiDownload className="w-5 h-5" />
+                  <span className="font-medium">Tải file API</span>
+                </a>
+                <p className="mt-2 text-xs text-gray-600 dark:text-gray-400 break-all">{item.apiFileUrl}</p>
               </div>
             </div>
           )}
@@ -510,8 +513,8 @@ export default function HospitalsPage() {
     projectStatus: "IN_PROGRESS",
   // Project dates are now managed by BusinessProject (master)
     notes: "",
-    imageFile: null,
-    imageUrl: null,
+    apiFile: null,
+    apiFileUrl: null,
   priority: "P2",
     personInChargeId: undefined,
     personInChargeName: "",
@@ -544,8 +547,8 @@ export default function HospitalsPage() {
       projectStatus: h.projectStatus ?? "IN_PROGRESS",
   // project dates are managed by BusinessProject
       notes: h.notes ?? "",
-      imageFile: null,
-      imageUrl: (h.imageUrl && h.imageUrl.trim()) ? h.imageUrl : null,
+      apiFile: null,
+      apiFileUrl: (h.apiFileUrl && h.apiFileUrl.trim()) ? h.apiFileUrl : null,
       priority: h.priority ?? "P2",
       // assignedUserIds removed from form; we don't populate it here
       personInChargeId: h.personInChargeId ?? undefined,
@@ -1037,8 +1040,8 @@ export default function HospitalsPage() {
       projectStatus: "IN_PROGRESS",
   // project dates are managed by BusinessProject
       notes: "",
-      imageFile: null,
-      imageUrl: null,
+      apiFile: null,
+      apiFileUrl: null,
       priority: "P2",
       // assignedUserIds removed from form
       personInChargeId: undefined,
@@ -1277,7 +1280,7 @@ export default function HospitalsPage() {
     projectStatus: form.projectStatus,
   // project dates are handled by BusinessProject; do not send from Hospital
     notes: form.notes?.trim() || undefined,
-    imageFile: form.imageFile || undefined,
+    apiFile: form.apiFile || undefined,
     priority: form.priority,
     personInChargeId: form.personInChargeId ?? undefined,
     // assignedUserIds intentionally not sent from Hospital form
@@ -2140,52 +2143,53 @@ export default function HospitalsPage() {
                 {/* RIGHT */}
                 <div className="space-y-3">
                   <div>
-                    <label className="mb-1 block text-sm font-medium">Ảnh bệnh viện</label>
+                    <label className="mb-1 block text-sm font-medium">File API bệnh viện</label>
                     
-                    {/* Preview ảnh hiện tại hoặc ảnh mới chọn */}
-                    {(form.imageUrl || form.imageFile) && (
-                      <div className="mb-3 relative">
-                        <div className="relative group">
-                          <img
-                            src={form.imageFile ? URL.createObjectURL(form.imageFile) : (form.imageUrl ?? undefined)}
-                            alt="Ảnh bệnh viện"
-                            className="w-full h-48 object-cover rounded-lg border-2 border-gray-200 shadow-sm"
-                            onError={(e) => {
-                              console.error("Image load error:", form.imageUrl);
-                              (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                            onLoad={(e) => {
-                              // Cleanup object URL when image loads (for new files)
-                              if (form.imageFile) {
-                                const img = e.target as HTMLImageElement;
-                                const oldSrc = img.src;
-                                // URL will be cleaned up when component unmounts or file changes
-                              }
-                            }}
-                          />
-                          {form.imageFile && (
+                    {/* Hiển thị file API hiện tại hoặc file mới chọn */}
+                    {(form.apiFileUrl || form.apiFile) && (
+                      <div className="mb-3 p-4 border-2 border-blue-200 bg-blue-50 rounded-lg">
+                        {form.apiFile ? (
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <FiFile className="w-6 h-6 text-blue-600 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-blue-800 truncate">{form.apiFile.name}</p>
+                                <p className="text-xs text-blue-600">
+                                  {(form.apiFile.size / 1024 / 1024).toFixed(2)} MB
+                                </p>
+                              </div>
+                            </div>
                             <button
                               type="button"
                               onClick={() => {
-                                // Cleanup object URL before removing file
-                                const img = document.querySelector('img[alt="Ảnh bệnh viện"]') as HTMLImageElement;
-                                if (img && img.src.startsWith('blob:')) {
-                                  URL.revokeObjectURL(img.src);
-                                }
-                                setForm((s) => ({ ...s, imageFile: null }));
+                                setForm((s) => ({ ...s, apiFile: null }));
                               }}
-                              className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 shadow-lg"
-                              title="Xóa ảnh đã chọn"
+                              className="ml-3 text-red-500 hover:text-red-700 transition-colors"
+                              title="Xóa file đã chọn"
                             >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                               </svg>
                             </button>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {form.imageFile ? "Ảnh mới đã chọn" : "Ảnh hiện tại"}
-                        </p>
+                          </div>
+                        ) : form.apiFileUrl ? (
+                          <div className="flex items-center gap-3">
+                            <FiFile className="w-6 h-6 text-blue-600 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <a
+                                href={form.apiFileUrl}
+                                download
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm font-medium text-blue-700 hover:text-blue-800 transition-colors inline-flex items-center gap-1"
+                              >
+                                <FiDownload className="w-4 h-4" />
+                                Tải file API hiện tại
+                              </a>
+                              <p className="text-xs text-gray-600 mt-1 break-all">{form.apiFileUrl}</p>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     )}
 
@@ -2193,23 +2197,23 @@ export default function HospitalsPage() {
                     <div className="relative">
                       <input
                         type="file"
-                        accept="image/*"
-                        id="hospital-image-input"
+                        accept=".pdf,.zip,.json,.doc,.docx,.txt,.xlsx,.xls"
+                        id="hospital-api-file-input"
                         className="hidden"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            if (file.size > 10 * 1024 * 1024) {
-                              toast.error("File ảnh không được vượt quá 10MB");
+                            if (file.size > 50 * 1024 * 1024) {
+                              toast.error("File API không được vượt quá 50MB");
                               return;
                             }
-                            setForm((s) => ({ ...s, imageFile: file }));
+                            setForm((s) => ({ ...s, apiFile: file }));
                           }
                         }}
                         disabled={isViewing || !canEdit}
                       />
                       <label
-                        htmlFor="hospital-image-input"
+                        htmlFor="hospital-api-file-input"
                         onDragEnter={(e) => {
                           if (!isViewing && canEdit) {
                             e.preventDefault();
@@ -2230,14 +2234,18 @@ export default function HospitalsPage() {
                             e.preventDefault();
                             setIsDragging(false);
                             const file = e.dataTransfer.files[0];
-                            if (file && file.type.startsWith('image/')) {
-                              if (file.size > 10 * 1024 * 1024) {
-                                toast.error("File ảnh không được vượt quá 10MB");
+                            if (file) {
+                              const allowedTypes = ['.pdf', '.zip', '.json', '.doc', '.docx', '.txt', '.xlsx', '.xls'];
+                              const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+                              if (!allowedTypes.includes(fileExtension)) {
+                                toast.error("Vui lòng chọn file hợp lệ (PDF, ZIP, JSON, DOC, DOCX, TXT, XLSX, XLS)");
                                 return;
                               }
-                              setForm((s) => ({ ...s, imageFile: file }));
-                            } else {
-                              toast.error("Vui lòng chọn file ảnh");
+                              if (file.size > 50 * 1024 * 1024) {
+                                toast.error("File API không được vượt quá 50MB");
+                                return;
+                              }
+                              setForm((s) => ({ ...s, apiFile: file }));
                             }
                           }
                         }}
@@ -2250,28 +2258,14 @@ export default function HospitalsPage() {
                         }`}
                       >
                         <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                          <FiImage className={`w-10 h-10 mb-3 ${isDragging ? 'text-blue-500' : 'text-gray-400'}`} />
+                          <FiFile className={`w-10 h-10 mb-3 ${isDragging ? 'text-blue-500' : 'text-gray-400'}`} />
                           <p className="mb-2 text-sm text-gray-500">
-                            <span className="font-semibold">Click để chọn ảnh</span> hoặc kéo thả vào đây
+                            <span className="font-semibold">Click để chọn file API</span> hoặc kéo thả vào đây
                           </p>
-                          <p className="text-xs text-gray-500">PNG, JPG, GIF (MAX. 10MB)</p>
+                          <p className="text-xs text-gray-500">PDF, ZIP, JSON, DOC, DOCX, TXT, XLSX, XLS (MAX. 50MB)</p>
                         </div>
                       </label>
                     </div>
-                    
-                    {form.imageFile && (
-                      <div className="mt-2 flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-lg">
-                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-green-800 truncate">{form.imageFile.name}</p>
-                          <p className="text-xs text-green-600">
-                            {(form.imageFile.size / 1024 / 1024).toFixed(2)} MB
-                          </p>
-                        </div>
-                      </div>
-                    )}
                   </div>
 
                   <div>
