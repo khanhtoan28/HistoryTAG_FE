@@ -1756,7 +1756,7 @@ export default function HospitalsPage() {
             </button>
           </div>
           <div className="mt-6 flex items-center justify-between">
-            <p className="text-sm text-gray-600">Tổng: <span className="font-semibold text-gray-900">{totalElements}</span></p>
+            <p className="text-sm text-gray-600">Tổng: <span className="font-semibold text-blue-800">{totalElements}</span></p>
             <div className="flex items-center gap-3">
               {canEdit && (
                 <button className={`rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md`} onClick={onCreate}> + Thêm bệnh viện</button>
@@ -1840,7 +1840,7 @@ export default function HospitalsPage() {
                         <div className="flex items-center gap-3">
                           <h4
                             title={h.name}
-                            className="text-lg font-semibold text-gray-900 group-hover:text-blue-800 break-words whitespace-normal"
+                            className="text-lg font-semibold text-blue-800 group-hover:text-blue-800 break-words whitespace-normal"
                           >
                             {h.name}
                           </h4>
@@ -2436,7 +2436,7 @@ export default function HospitalsPage() {
                                 {item.eventDate ? new Date(item.eventDate).toLocaleString("vi-VN") : "—"}
                               </span>
                             </div>
-                            <h4 className="font-semibold text-gray-900 mb-1">{item.description.replace(/task/gi, 'công việc')}</h4>
+                            <h4 className="font-semibold text-blue-800 mb-1">{item.description.replace(/task/gi, 'công việc')}</h4>
                             {item.performedBy && (
                               <p className="text-sm text-gray-600 mb-2">
                                 Người thực hiện: <span className="font-medium">{item.performedBy}</span>

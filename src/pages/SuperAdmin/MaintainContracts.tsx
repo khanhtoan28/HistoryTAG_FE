@@ -8,15 +8,15 @@ import { FiUser, FiClock, FiCalendar, FiDollarSign, FiFileText } from "react-ico
 import { FaHospitalAlt } from "react-icons/fa";
 import toast from "react-hot-toast";
 import {
-  createWarrantyContract,
-  updateWarrantyContract,
-  deleteWarrantyContract,
-  getWarrantyContractById,
-  getWarrantyContracts,
-  getWarrantyPicOptions,
-  type WarrantyContractResponseDTO,
-  type WarrantyContractRequestDTO,
-} from "../../api/warranty.api";
+  createMaintainContract,
+  updateMaintainContract,
+  deleteMaintainContract,
+  getMaintainContractById,
+  getMaintainContracts,
+  getMaintainContractPicOptions,
+  type MaintainContractResponseDTO,
+  type MaintainContractRequestDTO,
+} from "../../api/maintain.api";
 import { searchHospitals } from "../../api/business.api";
 import { PlusIcon } from "../../icons";
 
@@ -116,7 +116,7 @@ function normalizeDateForEnd(value?: string | null) {
   return value;
 }
 
-export type WarrantyContract = WarrantyContractResponseDTO;
+export type WarrantyContract = MaintainContractResponseDTO;
 
 export type WarrantyContractForm = {
   contractCode: string;
@@ -150,7 +150,7 @@ const DURATION_OPTIONS = [
   { value: 7, label: "7 năm" },
 ];
 
-export default function WarrantyContractsPage() {
+export default function MaintainContractsPage() {
   // Determine if current user can perform write actions
   // Allow SUPERADMIN or team CUSTOMER_SERVICE
   const canEdit = (() => {
@@ -230,7 +230,7 @@ export default function WarrantyContractsPage() {
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [confirmCreateOpen, setConfirmCreateOpen] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState<{
-    payload: WarrantyContractRequestDTO;
+    payload: MaintainContractRequestDTO;
     isEditing: boolean;
   } | null>(null);
   const [hospitalNameForConfirm, setHospitalNameForConfirm] = useState<string>("");
@@ -354,7 +354,7 @@ export default function WarrantyContractsPage() {
     let alive = true;
     (async () => {
       try {
-        const options = await getWarrantyPicOptions();
+        const options = await getMaintainContractPicOptions();
         if (alive) setPicOptions(options);
       } catch (e) {
         console.error("Failed to load pic options:", e);
@@ -420,7 +420,7 @@ export default function WarrantyContractsPage() {
       // Note: Date filtering will be implemented in backend later
       // For now, date filter UI is shown but filtering is done client-side if needed
 
-      const data = await getWarrantyContracts(params);
+      const data = await getMaintainContracts(params);
       setItems(data.content || []);
       setTotalElements(data.totalElements || 0);
       setTotalPages(data.totalPages || 0);
@@ -453,7 +453,7 @@ export default function WarrantyContractsPage() {
     setIsModalLoading(true);
     setError(null);
     try {
-      const data = await getWarrantyContractById(id);
+      const data = await getMaintainContractById(id);
       return data;
     } catch (e: any) {
       setError(e.message || "Lỗi tải chi tiết");
@@ -526,7 +526,7 @@ export default function WarrantyContractsPage() {
     setPendingDeleteId(null);
     setLoading(true);
     try {
-      await deleteWarrantyContract(idToDelete, canEdit);
+      await deleteMaintainContract(idToDelete, canEdit);
       await fetchList();
       if (isViewing && viewing?.id === idToDelete) closeModal();
       toast.success("Xóa thành công");
@@ -625,7 +625,7 @@ export default function WarrantyContractsPage() {
       }
     }
 
-    const payload: WarrantyContractRequestDTO = {
+    const payload: MaintainContractRequestDTO = {
       contractCode: form.contractCode.trim(),
       picUserId: form.picUserId!,
       hospitalId: form.hospitalId!,
@@ -640,7 +640,7 @@ export default function WarrantyContractsPage() {
     if (!isEditing && form.hospitalId) {
       try {
         setLoading(true);
-        const existingContracts = await getWarrantyContracts({ hospitalId: form.hospitalId, page: 0, size: 1 });
+        const existingContracts = await getMaintainContracts({ hospitalId: form.hospitalId, page: 0, size: 1 });
         setLoading(false);
         const hasExisting = (existingContracts.content && existingContracts.content.length > 0) || 
                            (Array.isArray(existingContracts) && existingContracts.length > 0);
@@ -675,9 +675,9 @@ export default function WarrantyContractsPage() {
       }
 
       if (isEditing) {
-        await updateWarrantyContract(editing!.id, payload, canEdit);
+        await updateMaintainContract(editing!.id, payload, canEdit);
       } else {
-        await createWarrantyContract(payload, canEdit);
+        await createMaintainContract(payload, canEdit);
       }
 
       closeModal();
@@ -718,9 +718,9 @@ export default function WarrantyContractsPage() {
       }
 
       if (pendingSubmit.isEditing) {
-        await updateWarrantyContract(editing!.id, pendingSubmit.payload, canEdit);
+        await updateMaintainContract(editing!.id, pendingSubmit.payload, canEdit);
       } else {
-        await createWarrantyContract(pendingSubmit.payload, canEdit);
+        await createMaintainContract(pendingSubmit.payload, canEdit);
       }
       closeModal();
       setPage(0);

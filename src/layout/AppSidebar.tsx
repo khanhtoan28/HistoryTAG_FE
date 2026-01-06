@@ -75,7 +75,7 @@ const navItems: NavItem[] = [
     name: "Phòng CSKH",
     icon: <BoxIconLine />,
     subItems: [
-      { name: "Hợp đồng bảo trì", path: "/admin/warranty-contracts", pro: false },
+      { name: "Hợp đồng bảo trì", path: "/admin/maintain-contracts", pro: false },
     ],
   },
 ];

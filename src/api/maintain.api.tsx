@@ -58,7 +58,7 @@ function getBase(method: string = 'GET', canManage: boolean = false) {
   return '/api/v1/admin';
 }
 
-export type WarrantyContractResponseDTO = {
+export type MaintainContractResponseDTO = {
   id: number;
   contractCode: string;
   picUser?: { id: number; label: string; subLabel?: string; phone?: string | null } | null;
@@ -72,7 +72,7 @@ export type WarrantyContractResponseDTO = {
   updatedAt?: string | null;
 };
 
-export type WarrantyContractRequestDTO = {
+export type MaintainContractRequestDTO = {
   contractCode: string;
   picUserId: number;
   hospitalId: number;
@@ -83,32 +83,32 @@ export type WarrantyContractRequestDTO = {
   endDate?: string | null;
 };
 
-export async function createWarrantyContract(payload: WarrantyContractRequestDTO, canManage: boolean = false) {
+export async function createMaintainContract(payload: MaintainContractRequestDTO, canManage: boolean = false) {
   const base = getBase('POST', canManage);
-  const res = await api.post(`${base}/warranty-contracts`, payload);
+  const res = await api.post(`${base}/maintain-contracts`, payload);
   return res.data;
 }
 
-export async function updateWarrantyContract(id: number, payload: WarrantyContractRequestDTO, canManage: boolean = false) {
+export async function updateMaintainContract(id: number, payload: MaintainContractRequestDTO, canManage: boolean = false) {
   const base = getBase('PUT', canManage);
-  const res = await api.put(`${base}/warranty-contracts/${id}`, payload);
+  const res = await api.put(`${base}/maintain-contracts/${id}`, payload);
   return res.data;
 }
 
-export async function deleteWarrantyContract(id: number, canManage: boolean = false) {
+export async function deleteMaintainContract(id: number, canManage: boolean = false) {
   const base = getBase('DELETE', canManage);
-  const res = await api.delete(`${base}/warranty-contracts/${id}`);
+  const res = await api.delete(`${base}/maintain-contracts/${id}`);
   return res.data;
 }
 
-export async function getWarrantyContractById(id: number): Promise<WarrantyContractResponseDTO> {
+export async function getMaintainContractById(id: number): Promise<MaintainContractResponseDTO> {
   // ✅ GET request: luôn dùng admin API
   const base = getBase('GET', false);
-  const res = await api.get(`${base}/warranty-contracts/${id}`);
+  const res = await api.get(`${base}/maintain-contracts/${id}`);
   return res.data;
 }
 
-export async function getWarrantyContracts(params: {
+export async function getMaintainContracts(params: {
   search?: string;
   hospitalId?: number;
   picUserId?: number;
@@ -126,13 +126,13 @@ export async function getWarrantyContracts(params: {
     query.append(key, String(value));
   });
   const qs = query.toString();
-  const url = qs ? `${base}/warranty-contracts?${qs}` : `${base}/warranty-contracts`;
+  const url = qs ? `${base}/maintain-contracts?${qs}` : `${base}/maintain-contracts`;
   const res = await api.get(url);
   return res.data;
 }
 
 // Helper để lấy danh sách người phụ trách (SUPERADMIN và phòng kinh doanh)
-export async function getWarrantyPicOptions() {
+export async function getMaintainContractPicOptions() {
   try {
     // ✅ GET request: luôn dùng admin API
     const base = getBase('GET', false);
@@ -156,33 +156,33 @@ export async function getWarrantyPicOptions() {
     let superAdminOptions: Array<{ id: number; label: string; subLabel?: string; phone?: string | null }> = [];
     // ✅ Guard: chỉ gọi getAllUsers() nếu user là SUPERADMIN
     if (isSuperAdmin()) {
-    try {
-      const res = await getAllUsers({ page: 0, size: 200 });
-      const content = Array.isArray(res?.content)
-        ? res.content
-        : Array.isArray(res)
-        ? res
-        : [];
-      superAdminOptions = content
-        .filter((user: any) => {
-          const roles = user?.roles;
-          if (!roles) return false;
-          const roleArr = Array.isArray(roles) ? roles : [];
-          return roleArr.some((r: any) => {
-            if (!r) return false;
-            if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
-            const roleName = r.roleName ?? r.role_name ?? r.role;
-            return typeof roleName === 'string' && roleName.toUpperCase() === 'SUPERADMIN';
-          });
-        })
-        .map((user: any) => ({
-          id: Number(user?.id ?? 0),
-          label: String(user?.fullname ?? user?.fullName ?? user?.username ?? user?.email ?? `User #${user?.id ?? ''}`),
-          subLabel: user?.email ? String(user.email) : undefined,
-          phone: user?.phone ? String(user.phone).trim() : null,
-        }));
-    } catch (err) {
-      // console.warn('Failed to fetch superadmin users for PIC options', err);
+      try {
+        const res = await getAllUsers({ page: 0, size: 200 });
+        const content = Array.isArray(res?.content)
+          ? res.content
+          : Array.isArray(res)
+          ? res
+          : [];
+        superAdminOptions = content
+          .filter((user: any) => {
+            const roles = user?.roles;
+            if (!roles) return false;
+            const roleArr = Array.isArray(roles) ? roles : [];
+            return roleArr.some((r: any) => {
+              if (!r) return false;
+              if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
+              const roleName = r.roleName ?? r.role_name ?? r.role;
+              return typeof roleName === 'string' && roleName.toUpperCase() === 'SUPERADMIN';
+            });
+          })
+          .map((user: any) => ({
+            id: Number(user?.id ?? 0),
+            label: String(user?.fullname ?? user?.fullName ?? user?.username ?? user?.email ?? `User #${user?.id ?? ''}`),
+            subLabel: user?.email ? String(user.email) : undefined,
+            phone: user?.phone ? String(user.phone).trim() : null,
+          }));
+      } catch (err) {
+        // console.warn('Failed to fetch superadmin users for PIC options', err);
       }
     }
 
@@ -202,8 +202,9 @@ export async function getWarrantyPicOptions() {
 
     return merged;
   } catch (err) {
-    console.error('getWarrantyPicOptions failed', err);
+    console.error('getMaintainContractPicOptions failed', err);
     return [];
   }
 }
+
 
