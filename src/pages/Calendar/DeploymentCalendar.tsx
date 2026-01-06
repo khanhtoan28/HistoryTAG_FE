@@ -139,7 +139,7 @@ const DeploymentCalendar: React.FC = () => {
 
         if (isSuperAdmin) {
           // ✅ SUPERADMIN: dùng superadmin API
-          const users = await filterUsers({ team: "DEPLOYMENT" });
+        const users = await filterUsers({ team: "DEPLOYMENT" });
           // ✅ Map để đảm bảo đầy đủ required fields (username là required)
           const mappedUsers = (users || []).map((u: any) => ({
             id: u.id,

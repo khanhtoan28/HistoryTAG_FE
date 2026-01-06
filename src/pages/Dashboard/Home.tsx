@@ -4,7 +4,8 @@ import StatisticsChart from "../../components/ecommerce/StatisticsChart";
 import RecentOrders from "../../components/ecommerce/RecentOrders";
 import DemographicCard from "../../components/ecommerce/DemographicCard";
 import PageMeta from "../../components/common/PageMeta";
-
+import TetCelebration from "../../components/common/TetCelebration";
+import FlowerFall from "../../components/common/FlowerFall";
 export default function Home() {
   return (
     <>
@@ -12,6 +13,8 @@ export default function Home() {
         title="Quản lý công việc | TAGTECH"
         description=""
       />
+      <FlowerFall />
+      <TetCelebration />
       <div className="grid grid-cols-12 gap-4 md:gap-6">
         <div className="col-span-12">
           <EcommerceMetrics />

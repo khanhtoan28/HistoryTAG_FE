@@ -404,13 +404,16 @@ function DetailModal({
 }
 
 export default function HospitalsPage() {
-  // Determine if current user can perform write actions (SUPERADMIN)
+  // Determine if current user can perform write actions (SUPERADMIN or ADMIN)
   const canEdit = (() => {
     try {
       const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
       if (!rolesStr) return false;
       const roles = JSON.parse(rolesStr);
-      return Array.isArray(roles) && roles.some((r: string) => r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin");
+      return Array.isArray(roles) && roles.some((r: string) => 
+        r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin" || 
+        r === "ADMIN" || r === "Admin"
+      );
     } catch (e) {
       return false;
     }
@@ -2405,9 +2408,9 @@ export default function HospitalsPage() {
                         "MAINTENANCE_ACCEPTED_HOSPITAL": "Bảo trì tiếp nhận bệnh viện",
                         "MAINTENANCE_TASK_CREATED": "Bảo trì tạo công việc",
                         "MAINTENANCE_TASK_STATUS_CHANGED": "Thay đổi trạng thái bảo trì",
-                        "WARRANTY_CONTRACT_CREATED": "Tạo hợp đồng bảo hành",
-                        "WARRANTY_CONTRACT_UPDATED": "Cập nhật hợp đồng bảo hành",
-                        "WARRANTY_CONTRACT_DELETED": "Xóa hợp đồng bảo hành",
+                        "WARRANTY_CONTRACT_CREATED": "Tạo hợp đồng bảo trì",
+                        "WARRANTY_CONTRACT_UPDATED": "Cập nhật hợp đồng bảo trì",
+                        "WARRANTY_CONTRACT_DELETED": "Xóa hợp đồng bảo trì",
                       };
                       return map[type] || type;
                     };
@@ -2734,7 +2737,7 @@ export default function HospitalsPage() {
                     <div>
                       <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                        Hợp đồng bảo hành ({contractsData.warrantyContracts.length})
+                        Hợp đồng bảo trì ({contractsData.warrantyContracts.length})
                       </h4>
                       <div className="space-y-3">
                         {contractsData.warrantyContracts.map((contract: any) => (

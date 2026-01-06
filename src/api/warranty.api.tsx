@@ -156,33 +156,33 @@ export async function getWarrantyPicOptions() {
     let superAdminOptions: Array<{ id: number; label: string; subLabel?: string; phone?: string | null }> = [];
     // ✅ Guard: chỉ gọi getAllUsers() nếu user là SUPERADMIN
     if (isSuperAdmin()) {
-      try {
-        const res = await getAllUsers({ page: 0, size: 200 });
-        const content = Array.isArray(res?.content)
-          ? res.content
-          : Array.isArray(res)
-          ? res
-          : [];
-        superAdminOptions = content
-          .filter((user: any) => {
-            const roles = user?.roles;
-            if (!roles) return false;
-            const roleArr = Array.isArray(roles) ? roles : [];
-            return roleArr.some((r: any) => {
-              if (!r) return false;
-              if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
-              const roleName = r.roleName ?? r.role_name ?? r.role;
-              return typeof roleName === 'string' && roleName.toUpperCase() === 'SUPERADMIN';
-            });
-          })
-          .map((user: any) => ({
-            id: Number(user?.id ?? 0),
-            label: String(user?.fullname ?? user?.fullName ?? user?.username ?? user?.email ?? `User #${user?.id ?? ''}`),
-            subLabel: user?.email ? String(user.email) : undefined,
-            phone: user?.phone ? String(user.phone).trim() : null,
-          }));
-      } catch (err) {
-        // console.warn('Failed to fetch superadmin users for PIC options', err);
+    try {
+      const res = await getAllUsers({ page: 0, size: 200 });
+      const content = Array.isArray(res?.content)
+        ? res.content
+        : Array.isArray(res)
+        ? res
+        : [];
+      superAdminOptions = content
+        .filter((user: any) => {
+          const roles = user?.roles;
+          if (!roles) return false;
+          const roleArr = Array.isArray(roles) ? roles : [];
+          return roleArr.some((r: any) => {
+            if (!r) return false;
+            if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
+            const roleName = r.roleName ?? r.role_name ?? r.role;
+            return typeof roleName === 'string' && roleName.toUpperCase() === 'SUPERADMIN';
+          });
+        })
+        .map((user: any) => ({
+          id: Number(user?.id ?? 0),
+          label: String(user?.fullname ?? user?.fullName ?? user?.username ?? user?.email ?? `User #${user?.id ?? ''}`),
+          subLabel: user?.email ? String(user.email) : undefined,
+          phone: user?.phone ? String(user.phone).trim() : null,
+        }));
+    } catch (err) {
+      // console.warn('Failed to fetch superadmin users for PIC options', err);
       }
     }
 

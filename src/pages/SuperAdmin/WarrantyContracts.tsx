@@ -152,14 +152,28 @@ const DURATION_OPTIONS = [
 
 export default function WarrantyContractsPage() {
   // Determine if current user can perform write actions
+  // Allow SUPERADMIN or team CUSTOMER_SERVICE
   const canEdit = (() => {
     try {
+      // Check SUPERADMIN role
       const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
-      if (!rolesStr) return false;
-      const roles = JSON.parse(rolesStr);
-      return Array.isArray(roles) && roles.some((r: string) => 
-        r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin"
-      );
+      if (rolesStr) {
+        const roles = JSON.parse(rolesStr);
+        const isSuperAdmin = Array.isArray(roles) && roles.some((r: string) => 
+          r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin"
+        );
+        if (isSuperAdmin) return true;
+      }
+
+      // Check CUSTOMER_SERVICE team from user object
+      const userStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        const userTeam = user?.team ? String(user.team).toUpperCase() : null;
+        if (userTeam === "CUSTOMER_SERVICE") return true;
+      }
+
+      return false;
     } catch (e) {
       return false;
     }
@@ -498,7 +512,7 @@ export default function WarrantyContractsPage() {
 
   function onDelete(id: number) {
     if (!canEdit) {
-      toast.error("Bạn không có quyền xóa hợp đồng bảo hành");
+      toast.error("Bạn không có quyền xóa hợp đồng bảo trì");
       return;
     }
     setPendingDeleteId(id);
@@ -1310,14 +1324,14 @@ export default function WarrantyContractsPage() {
   return (
     <>
       <PageMeta
-        title="Hợp đồng bảo hành | TAGTECH"
-        description="Quản lý hợp đồng bảo hành: danh sách, tìm kiếm, tạo, sửa, xóa"
+        title="Hợp đồng bảo trì | TAGTECH"
+        description="Quản lý hợp đồng bảo trì: danh sách, tìm kiếm, tạo, sửa, xóa"
       />
 
       <div className="space-y-10">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-extrabold mb-0">Hợp đồng bảo hành</h1>
+          <h1 className="text-3xl font-extrabold mb-0">Hợp đồng bảo trì</h1>
           {canEdit && (
             <button
               className="rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md flex items-center gap-2"
@@ -1487,7 +1501,7 @@ export default function WarrantyContractsPage() {
         </ComponentCard>
 
         {/* Card list */}
-        <ComponentCard title="Danh sách hợp đồng bảo hành">
+        <ComponentCard title="Danh sách hợp đồng bảo trì">
           <div className="space-y-4">
             {items.map((item) => (
               <div
@@ -1519,7 +1533,7 @@ export default function WarrantyContractsPage() {
                           {item.picUser?.subLabel ? <span className="ml-2 text-xs text-gray-500">{item.picUser?.subLabel}</span> : null}
                         </div>
                       </div>
-                      <div>Thời hạn hợp đồng: <div className="font-medium text-gray-800">{item.durationYears} năm</div></div>
+                      <div>Thời hạn hợp đồng: <div className="font-medium text-gray-800">{item.durationYears} </div></div>
                       <div>Thời gian bắt đầu hợp đồng: <div className="font-medium text-gray-800">{fmtDate(item.startDate) || '—'}</div></div>
                       <div>Ngày kết thúc hợp đồng: <div className="font-medium text-gray-800">{fmtDate(item.endDate) || '—'}</div></div>
                     </div>
@@ -1621,7 +1635,7 @@ export default function WarrantyContractsPage() {
               <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-6 py-4">
                 <div className="flex justify-between items-center">
                   <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                    📋 Chi tiết hợp đồng bảo hành
+                    📋 Chi tiết hợp đồng bảo trì
                   </h2>
                 </div>
               </div>
@@ -1753,7 +1767,7 @@ export default function WarrantyContractsPage() {
             <div className="sticky top-0 z-20 bg-white rounded-t-3xl px-8 pt-8 pb-4 border-b border-gray-200">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-2xl font-bold text-gray-900">
-                  {isEditing ? "Cập nhật hợp đồng bảo hành" : "Thêm hợp đồng bảo hành"}
+                  {isEditing ? "Cập nhật hợp đồng bảo trì" : "Thêm hợp đồng bảo trì"}
                 </h3>
               </div>
             </div>
@@ -2004,7 +2018,7 @@ export default function WarrantyContractsPage() {
                     </h3>
                     <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
                       <p className="text-sm text-orange-700">
-                        Bệnh viện <span className="font-bold">"{hospitalNameForConfirm}"</span> đã có hợp đồng bảo hành. Bạn có muốn tạo thêm hợp đồng mới không?
+                        Bệnh viện <span className="font-bold">"{hospitalNameForConfirm}"</span> đã có hợp đồng bảo trì. Bạn có muốn tạo thêm hợp đồng mới không?
                       </p>
                     </div>
                   </div>
@@ -2054,11 +2068,11 @@ export default function WarrantyContractsPage() {
                   </div>
                   <div className="flex-1">
                     <h3 className="text-lg font-bold text-gray-900 mb-1">
-                      Xác nhận xóa hợp đồng bảo hành
+                      Xác nhận xóa hợp đồng bảo trì
                     </h3>
                     <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
                       <p className="text-sm text-red-700">
-                        Bạn có chắc chắn muốn xóa hợp đồng bảo hành này? Hành động này không thể hoàn tác.
+                        Bạn có chắc chắn muốn xóa hợp đồng bảo trì này? Hành động này không thể hoàn tác.
                       </p>
                     </div>
                   </div>

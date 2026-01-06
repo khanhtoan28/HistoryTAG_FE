@@ -48,7 +48,7 @@ export type UserUpdateRequestDTO = {
   workStatus?: string;
   workStatusDate?: string | null;
   department?: "IT" | "ACCOUNTING" | "BUSINESS" | null;
-  team?: "DEV" | "DEPLOYMENT" | "MAINTENANCE" | "SALES" | null;
+  team?: "DEV" | "DEPLOYMENT" | "MAINTENANCE" | "SALES" | "CUSTOMER_SERVICE" | null;
   roles?: string[];
   businessProjectId?: number | null;
 };

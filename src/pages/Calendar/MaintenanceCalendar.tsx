@@ -139,7 +139,7 @@ const MaintenanceCalendar: React.FC = () => {
 
         if (isSuperAdmin) {
           // ✅ SUPERADMIN: dùng superadmin API
-          const users = await filterUsers({ team: "MAINTENANCE" });
+        const users = await filterUsers({ team: "MAINTENANCE" });
           // ✅ Map để đảm bảo đầy đủ required fields (username là required)
           const mappedUsers = (users || []).map((u: any) => ({
             id: u.id,
@@ -520,13 +520,13 @@ const MaintenanceCalendar: React.FC = () => {
   return (
     <>
       <PageMeta
-        title="Lịch Team Bảo Hành | TailAdmin"
-        description="Lịch làm việc của team bảo hành"
+        title="Lịch Team bảo trì | TailAdmin"
+        description="Lịch làm việc của team bảo trì"
       />
       <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
-            Lịch Team Bảo Hành
+            Lịch Team bảo trì
           </h2>
         </div>
         <style>{`

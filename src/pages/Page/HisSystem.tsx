@@ -276,11 +276,11 @@ const HisSystemPage: React.FC = () => {
       // ✅ GET request: luôn dùng admin API
       const base = getApiBase("GET", false);
       const url = buildUrl(base);
-      url.searchParams.set("search", "");
-      url.searchParams.set("page", String(page));
-      url.searchParams.set("size", String(size));
-      url.searchParams.set("sortBy", String(sortBy));
-      url.searchParams.set("sortDir", sortDir);
+        url.searchParams.set("search", "");
+        url.searchParams.set("page", String(page));
+        url.searchParams.set("size", String(size));
+        url.searchParams.set("sortBy", String(sortBy));
+        url.searchParams.set("sortDir", sortDir);
       const res = await fetch(url.toString(), { headers: { ...authHeader() } });
       if (!res.ok) throw new Error(`GET ${res.status}`);
       const data = await res.json();

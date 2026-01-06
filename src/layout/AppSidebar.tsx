@@ -39,7 +39,7 @@ const navItems: NavItem[] = [
       { name: "Lịch cá nhân", path: "/calendar", pro: false },
       { name: "Lịch phòng kinh doanh", path: "/calendar/business", pro: false },
       { name: "Lịch team triển khai", path: "/calendar/deployment", pro: false },
-      { name: "Lịch team bảo hành", path: "/calendar/maintenance", pro: false },
+      { name: "Lịch team bảo trì", path: "/calendar/maintenance", pro: false },
     ],
   },
   // {
@@ -60,7 +60,7 @@ const navItems: NavItem[] = [
     icon: <TaskIcon />,
     subItems: [
       { name: "Công việc triển khai", path: "/implementation-tasks", pro: false },
-      { name: "Công việc DEV", path: "/dev-tasks", pro: false },
+      // { name: "Công việc DEV", path: "/dev-tasks", pro: false },
       { name: "Công việc bảo trì", path: "/maintenance-tasks", pro: false },
     ],
   },
@@ -69,7 +69,13 @@ const navItems: NavItem[] = [
     icon: <BoxIconLine />,
     subItems: [
       { name: "Hợp đồng kinh doanh", path: "/admin/business", pro: false },
-      { name: "Hợp đồng bảo hành", path: "/admin/warranty-contracts", pro: false },
+    ],
+  },
+  {
+    name: "Phòng CSKH",
+    icon: <BoxIconLine />,
+    subItems: [
+      { name: "Hợp đồng bảo trì", path: "/admin/warranty-contracts", pro: false },
     ],
   },
 ];
@@ -166,7 +172,7 @@ const AppSidebar: React.FC = () => {
         { name: "Lịch cá nhân", path: "/calendar", pro: false },
         { name: "Lịch phòng kinh doanh", path: "/calendar/business", pro: false },
         { name: "Lịch team triển khai", path: "/calendar/deployment", pro: false },
-        { name: "Lịch team bảo hành", path: "/calendar/maintenance", pro: false },
+        { name: "Lịch team bảo trì", path: "/calendar/maintenance", pro: false },
       ];
     }
 
@@ -185,7 +191,7 @@ const AppSidebar: React.FC = () => {
 
     // Add maintenance calendar for MAINTENANCE team
     if (userTeam === "MAINTENANCE") {
-      items.push({ name: "Lịch team bảo hành", path: "/calendar/maintenance", pro: false });
+      items.push({ name: "Lịch team bảo trì", path: "/calendar/maintenance", pro: false });
     }
 
     return items;

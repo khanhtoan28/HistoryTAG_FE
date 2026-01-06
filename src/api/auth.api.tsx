@@ -174,6 +174,9 @@ export async function resetPassword(data: ResetPasswordPayload) {
 // Clear all user data from storage
 // ==========================
 export const clearUserStorage = () => {
+  // Get userId before clearing (to remove user-specific Tet flag)
+  const userId = localStorage.getItem("userId") || sessionStorage.getItem("userId");
+  
   // Clear localStorage
   localStorage.removeItem("access_token");
   localStorage.removeItem("token");
@@ -182,6 +185,14 @@ export const clearUserStorage = () => {
   localStorage.removeItem("roles");
   localStorage.removeItem("user");
   localStorage.removeItem("userId");
+  
+  // Clear Tet celebration flag for this user (if userId exists)
+  if (userId) {
+    localStorage.removeItem(`tetCelebrationShown_${userId}`);
+  }
+  
+  // Also clear old format flag (backward compatibility)
+  localStorage.removeItem("tetCelebrationShown");
   
   // Clear sessionStorage
   sessionStorage.removeItem("access_token");

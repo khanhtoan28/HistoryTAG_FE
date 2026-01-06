@@ -41,7 +41,7 @@ type UserForm = {
 
 const ROLE_OPTIONS = ["USER", "ADMIN", "SUPERADMIN"]; // Match backend RoleType enum
 const DEPARTMENT_OPTIONS = ["IT", "ACCOUNTING", "BUSINESS"] as const;
-const TEAM_OPTIONS = ["DEV", "DEPLOYMENT", "MAINTENANCE", "SALES"] as const;
+const TEAM_OPTIONS = ["DEV", "DEPLOYMENT", "MAINTENANCE", "SALES", "CUSTOMER_SERVICE"] as const;
 const WORK_STATUS_OPTIONS = ["ACTIVE", "INACTIVE", "ON_LEAVE", "TERMINATED"] as const;
 
 // Mapping để hiển thị tiếng Việt
@@ -56,6 +56,7 @@ const TEAM_LABELS: Record<string, string> = {
   DEPLOYMENT: "Triển khai",
   MAINTENANCE: "Bảo trì",
   SALES: "Kinh doanh",
+  CUSTOMER_SERVICE: "Chăm sóc khách hàng"
 };
 
 const WORK_STATUS_LABELS: Record<string, string> = {
@@ -442,7 +443,7 @@ export default function SuperAdminUsers() {
       closeModal();
       // ✅ Chỉ reset về trang 0 khi tạo mới, còn khi cập nhật thì giữ nguyên trang hiện tại
       if (!isEditing) {
-        setPage(0);
+      setPage(0);
       }
       await fetchList();
     } catch (error: unknown) {

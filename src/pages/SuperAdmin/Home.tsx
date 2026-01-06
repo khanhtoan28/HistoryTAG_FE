@@ -10,6 +10,10 @@ import { getBusinesses } from "../../api/business.api";
 import { getAuthToken } from "../../api/client";
 import toast from "react-hot-toast";
 import Pagination from "../../components/common/Pagination";
+import TetCelebration from "../../components/common/TetCelebration";
+import FlowerFall from "../../components/common/FlowerFall";
+
+
 // ExcelJS is heavy; import dynamically inside export functions to reduce initial bundle size
 
 function StatCard({ title, value, icon, color }: { title: string; value: string | number; icon?: React.ReactNode; color?: string }) {
@@ -2064,6 +2068,9 @@ export default function SuperAdminHome() {
   return (
     <>
       <PageMeta title="Quản lý công việc | TAGTECH" description="" />
+      <FlowerFall />
+
+      <TetCelebration />
 
       <div className="space-y-6">
         <header className="relative overflow-hidden rounded-2xl p-6 text-white shadow-md">

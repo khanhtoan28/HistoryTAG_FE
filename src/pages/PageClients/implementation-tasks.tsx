@@ -1801,7 +1801,7 @@ const ImplementationTasksPage: React.FC = () => {
     </button>
   ) : (
     <button
-      disabled
+      hidden
       className="rounded-xl bg-gray-200 text-gray-500 px-5 py-2 shadow-sm"
       title="Không có quyền"
       type="button"

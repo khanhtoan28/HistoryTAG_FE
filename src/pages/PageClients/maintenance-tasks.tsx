@@ -2481,11 +2481,11 @@ const ImplementationTasksPage: React.FC = () => {
                                                 onChange={(e) => { setHospitalSearch(e.target.value); setHospitalPage(0); }}
                                             />
                                             <select
-                                                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[180px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                                                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[200px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
                                                 value={hospitalStatusFilter}
                                                 onChange={(e) => { setHospitalStatusFilter(e.target.value); setHospitalPage(0); }}
                                             >
-                                                <option value="">— Tất cả —</option>
+                                                <option value="">— Trạng thái —</option>
                                                 <option value="accepted">Có nghiệm thu</option>
                                                 <option value="incomplete">Chưa nghiệm thu hết</option>
                                                 <option value="unaccepted">Chưa có nghiệm thu</option>
