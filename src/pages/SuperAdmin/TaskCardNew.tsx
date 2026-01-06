@@ -190,7 +190,7 @@ export default function TaskCardNew({
           <div className="flex items-start justify-between">
             <div className="min-w-0">
               <div className="flex items-center gap-3 flex-wrap">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
+                <h3 className="text-lg font-semibold text-blue-800 dark:text-gray-100 truncate">
                   { task.name}
                 </h3>
 

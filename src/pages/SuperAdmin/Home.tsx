@@ -2102,7 +2102,7 @@ export default function SuperAdminHome() {
           <main className="col-span-12 xl:col-span-8 space-y-6">
             
             <section className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900">Quản lý nhanh</h2>
+              <h2 className="text-lg font-semibold text-blue-800">Quản lý nhanh</h2>
               <p className="text-sm text-gray-500 mt-1">Các hành động thường dùng được gom lại để bạn thao tác nhanh.</p>
 
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -2203,7 +2203,7 @@ export default function SuperAdminHome() {
         {/* Full-width Business Report placed below the grid */}
         <section className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100 w-full">
           <div className="max-w-full">
-            <h2 className="text-lg font-semibold text-gray-900">Báo cáo Kinh doanh</h2>
+            <h2 className="text-lg font-semibold text-blue-800">Báo cáo Kinh doanh</h2>
             <p className="text-sm text-gray-500 mt-1">Doanh thu & hoa hồng theo dự án. Lọc theo khoảng thời gian.</p>
 
             <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2294,7 +2294,7 @@ export default function SuperAdminHome() {
           <div className="max-w-full">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Báo cáo Hiệu suất Nhân viên</h2>
+                <h2 className="text-lg font-semibold text-blue-800">Báo cáo Hiệu suất Nhân viên</h2>
               </div>
             </div>
 
@@ -2399,7 +2399,7 @@ export default function SuperAdminHome() {
           <div className="max-w-full">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Báo cáo chi tiết theo Team</h2>
+                <h2 className="text-lg font-semibold text-blue-800">Báo cáo chi tiết theo Team</h2>
               </div>
               <div className="flex items-center gap-2">
                 
@@ -3183,7 +3183,7 @@ export default function SuperAdminHome() {
           <div className="max-w-full">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Báo cáo Phần cứng</h2>
+                <h2 className="text-lg font-semibold text-blue-800">Báo cáo Phần cứng</h2>
                 <p className="text-sm text-gray-500 mt-1">Sản phẩm bán chạy & mức độ sử dụng (top theo doanh thu)</p>
               </div>
               <div className="flex items-center gap-3">

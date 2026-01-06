@@ -1484,7 +1484,7 @@ export default function MaintainContractsPage() {
           </div>
           <div className="mt-4 text-sm font-semibold text-gray-700">
             Tổng hợp đồng:
-            <span className="ml-1 text-gray-900">{totalElements}</span>
+            <span className="ml-1 text-blue-800">{totalElements}</span>
           </div>
           {(filterStartFrom || filterStartTo) && (
             <div className="mt-2 text-xs text-gray-500">
@@ -1518,7 +1518,7 @@ export default function MaintainContractsPage() {
                 <div className="flex-1">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-lg font-semibold text-gray-900">{item.hospital?.label ?? '—'}</div>
+                      <div className="text-lg font-semibold text-blue-800">{item.hospital?.label ?? '—'}</div>
                       <div className="text-sm">
                         <span className="text-gray-500">Mã hợp đồng: </span>
                         <span className="font-medium text-blue-600">{item.contractCode ?? '—'}</span>

@@ -2670,7 +2670,7 @@ export default function HospitalsPage() {
                   {/* Business Contracts */}
                   {contractsData.businessContracts.length > 0 && (
                     <div>
-                      <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                      <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-blue-500"></span>
                         Hợp đồng kinh doanh ({contractsData.businessContracts.length})
                       </h4>
@@ -2735,7 +2735,7 @@ export default function HospitalsPage() {
                   {/* Warranty Contracts */}
                   {contractsData.warrantyContracts.length > 0 && (
                     <div>
-                      <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                      <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-green-500"></span>
                         Hợp đồng bảo trì ({contractsData.warrantyContracts.length})
                       </h4>

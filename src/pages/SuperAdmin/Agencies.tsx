@@ -446,7 +446,7 @@ export default function AgenciesPage() {
               <div>
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <div className="space-y-5">
-                    <Info icon={<FiHash className="w-5 h-5" />} label="Tên đại lý:" value={<div className="text-lg font-semibold text-gray-900">{viewing?.name ?? "—"}</div>} />
+                    <Info icon={<FiHash className="w-5 h-5" />} label="Tên đại lý:" value={<div className="text-lg font-semibold text-blue-800">{viewing?.name ?? "—"}</div>} />
                     <Info icon={<FiMapPin className="w-5 h-5" />} label="Địa chỉ:" value={viewing?.address ?? "—"} />
                     <Info icon={<FiClock className="w-5 h-5" />} label="Cập nhật:" value={formatDateTime(viewing?.updatedAt)} />
                   </div>

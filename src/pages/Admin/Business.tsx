@@ -82,6 +82,7 @@ const BusinessPage: React.FC = () => {
   const [statusValue, setStatusValue] = useState<string>('CARING');
   const [startDateValue, setStartDateValue] = useState<string>('');
   const [completionDateValue, setCompletionDateValue] = useState<string>('');
+  const [warrantyEndDateValue, setWarrantyEndDateValue] = useState<string>('');
   const [originalStatus, setOriginalStatus] = useState<string>('CARING');
   const [statusConfirmOpen, setStatusConfirmOpen] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState<{ payload: Record<string, unknown>; isUpdate: boolean; successMessage?: string } | null>(null);
@@ -106,6 +107,7 @@ const BusinessPage: React.FC = () => {
     status?: string | null;
     startDate?: string | null;
     completionDate?: string | null;
+    warrantyEndDate?: string | null;
     createdAt?: string | null;
     bankName?: string | null;
     bankContactPerson?: string | null;
@@ -309,6 +311,7 @@ const BusinessPage: React.FC = () => {
         // accept multiple possible keys for start/completion
         const start = (c['startDate'] ?? c['start_date'] ?? c['start'] ?? c['startDateTime']) as string | undefined | null;
         const completion = (c['completionDate'] ?? c['finishDate'] ?? c['completion_date'] ?? c['finish_date'] ?? c['finishDate']) as string | undefined | null;
+        const warrantyEnd = (c['warrantyEndDate'] ?? c['warranty_end_date']) as string | undefined | null;
         const created = (c['createdAt'] ?? c['created_at']) as string | undefined | null;
         const picRaw = c['picUser'] ?? c['pic_user'] ?? null;
         let picUser: BusinessItem['picUser'] = null;
@@ -331,6 +334,7 @@ const BusinessPage: React.FC = () => {
           quantity: qty != null ? Number(String(qty)) : null,
           startDate: start ?? null,
           completionDate: completion ?? null,
+          warrantyEndDate: warrantyEnd ?? null,
           createdAt: created ?? null,
           picUser,
           bankName: c['bankName'] ?? c['bank_name'] ?? null,
@@ -717,6 +721,7 @@ const BusinessPage: React.FC = () => {
       completionDate: toLocalDateTimeStr(completionDateValue),
       // some backends use 'finishDate' instead of 'completionDate' — include both to be safe
       finishDate: toLocalDateTimeStr(completionDateValue),
+      warrantyEndDate: toLocalDateTimeStr(warrantyEndDateValue),
       picUserId: selectedPicId ?? null,
       bankName: bankName?.trim() || null,
       bankContactPerson: bankContactPerson?.trim() || null,
@@ -982,6 +987,8 @@ const BusinessPage: React.FC = () => {
       const remoteStart = (res.startDate ?? (res as unknown as Record<string, unknown>)['start_date'] ?? (res as unknown as Record<string, unknown>)['startDateTime']) as string | undefined | null;
       setStartDateValue(remoteStart ? (remoteStart.length === 16 ? remoteStart : remoteStart.substring(0, 16)) : '');
       setCompletionDateValue(remoteCompletion ? (remoteCompletion.length === 16 ? remoteCompletion : remoteCompletion.substring(0, 16)) : '');
+      const remoteWarrantyEnd = (res.warrantyEndDate ?? (res as Record<string, unknown>)['warranty_end_date']) as string | undefined | null;
+      setWarrantyEndDateValue(remoteWarrantyEnd ? (remoteWarrantyEnd.length === 16 ? remoteWarrantyEnd : remoteWarrantyEnd.substring(0, 16)) : '');
       // Load commission directly as amount
       if (res.commission != null) {
         setCommission(Number(res.commission));
@@ -1262,7 +1269,7 @@ const BusinessPage: React.FC = () => {
         >
           <div className="absolute inset-0 bg-black/40" />
           <div className="relative w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-gray-900">Xác nhận chuyển trạng thái</h3>
+            <h3 className="text-lg font-semibold text-blue-800">Xác nhận chuyển trạng thái</h3>
             <p className="mt-3 text-sm text-red-600">
               Bạn có muốn chuyển trạng thái sang ký hợp đồng và chuyển sang phòng triển khai không?
             </p>
@@ -1414,6 +1421,7 @@ const BusinessPage: React.FC = () => {
               setStatusValue('CARING');
               setStartDateValue(nowDateTimeLocal());
               setCompletionDateValue('');
+              setWarrantyEndDateValue('');
               setCommission('');
         setCommissionDisplay('');
               setFieldErrors({});
@@ -1575,7 +1583,7 @@ const BusinessPage: React.FC = () => {
         </div>
         <div className="mt-4 text-sm font-semibold text-gray-700">
           Tổng hợp đồng:
-          <span className="ml-1 text-gray-900">{totalItems}</span>
+          <span className="ml-1 text-blue-800">{totalItems}</span>
         </div>
         {(filterStartFrom || filterStartTo) && (
           <div className="mt-2 text-xs text-gray-500">
@@ -1964,6 +1972,21 @@ const BusinessPage: React.FC = () => {
                       />
                       {fieldErrors.completionDateValue && <div className="mt-1 text-sm text-red-600">{fieldErrors.completionDateValue}</div>}
                     </div>
+
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium mb-1">Ngày hết hạn bảo hành</label>
+                      <input
+                        type="datetime-local"
+                        value={warrantyEndDateValue}
+                        onChange={(e) => setWarrantyEndDateValue(e.target.value)}
+                        className="w-full rounded border px-3 py-2"
+                      />
+                      {warrantyEndDateValue && (
+                        <div className="mt-1 text-sm text-gray-700">
+                          {formatDateShort(warrantyEndDateValue)}
+                        </div>
+                      )}
+                    </div>
                   </div>
                       <div className="flex items-center gap-3 justify-between">
                     <div className="text-sm text-gray-600">Thành tiền: <span className="font-semibold">{computeTotal() > 0 ? computeTotal().toLocaleString() + ' ₫' : '—'}</span></div>
@@ -1991,7 +2014,7 @@ const BusinessPage: React.FC = () => {
                     <div className="flex-1">
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                          <div className="text-lg font-semibold text-gray-900">{it.hospital?.label ?? '—'}</div>
+                          <div className="text-lg font-semibold text-blue-800">{it.hospital?.label ?? '—'}</div>
                           <div className="text-sm">
                             <span className="text-gray-500">Mã hợp đồng: </span>
                             <span className="font-medium text-blue-600">{it.name ?? '—'}</span>
@@ -2094,6 +2117,7 @@ const BusinessPage: React.FC = () => {
               <Info label="Người phụ trách" value={<div className="font-medium">{viewItem.picUser?.label ?? '—'}{viewItem.picUser?.subLabel ? <span className="ml-2 text-xs text-gray-500">{viewItem.picUser?.subLabel}</span> : null}</div>} icon={<UserCircleIcon style={{ width: 18, height: 18 }} />} />
               <Info label="Bắt đầu" value={<div className="font-medium">{formatDateShort(viewItem.startDate)}</div>} icon={<CalenderIcon style={{ width: 16, height: 16 }} />} />
               <Info label="Hoàn thành" value={<div className="font-medium">{formatDateShort(viewItem.completionDate)}</div>} icon={<TimeIcon style={{ width: 16, height: 16 }} />} />
+              <Info label="Hết hạn bảo hành" value={<div className="font-medium">{formatDateShort(viewItem.warrantyEndDate)}</div>} icon={<TimeIcon style={{ width: 16, height: 16 }} />} />
               <Info label="Số lượng Kiosk" value={<div className="font-medium">{viewItem.quantity ?? '—'}</div>} icon={<BoxIconLine style={{ width: 16, height: 16 }} />} />
               <Info label="Đơn giá" value={<div className="font-medium">{viewItem.unitPrice != null ? viewItem.unitPrice.toLocaleString() + ' ₫' : '—'}</div>} icon={<DollarLineIcon style={{ width: 16, height: 16 }} />} />
               <Info label="Thành tiền" value={<div className="font-medium">{viewItem.totalPrice != null ? viewItem.totalPrice.toLocaleString() + ' ₫' : '—'}</div>} icon={<DollarLineIcon style={{ width: 16, height: 16 }} />} />

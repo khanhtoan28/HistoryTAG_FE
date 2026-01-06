@@ -711,7 +711,7 @@ export default function SuperAdminUsers() {
           <div className="relative z-10 w-full max-w-5xl rounded-2xl bg-white shadow-xl max-h-[90vh] flex flex-col">
             <div className="sticky top-0 z-20 bg-white rounded-t-2xl px-6 pt-6 pb-4 border-b border-gray-200">
               <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">{isEditing ? "Cập nhật người dùng" : "Thêm người dùng"}</h3>
+                <h3 className="text-lg font-semibold text-blue-800">{isEditing ? "Cập nhật người dùng" : "Thêm người dùng"}</h3>
                 <button className="rounded-md p-1 hover:bg-gray-100" onClick={closeModal}>✕</button>
               </div>
             </div>
