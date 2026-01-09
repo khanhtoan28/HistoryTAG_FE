@@ -585,10 +585,10 @@ const ImplementSuperTaskPage: React.FC = () => {
     setLoadingHospitals(true);
     setError(null);
     try {
-      // Fetch hospitals with transfer status (new endpoint)
+      // Fetch hospital summaries from new optimized endpoint (backend calculates all metrics)
       const headers = authHeaders();
-      console.debug("[fetchHospitalsWithTasks] Authorization header", headers.Authorization ? "present" : "missing");
-      const res = await fetch(`${API_ROOT}/api/v1/superadmin/implementation/tasks/hospitals/with-status`, {
+      console.debug("[fetchHospitalsWithTasks] Using summary endpoint - Authorization header", headers.Authorization ? "present" : "missing");
+      const res = await fetch(`${API_ROOT}/api/v1/superadmin/implementation/tasks/hospitals/summary`, {
         method: "GET",
         headers,
         credentials: "include",
@@ -597,159 +597,12 @@ const ImplementSuperTaskPage: React.FC = () => {
         if (res.status === 401) {
           throw new Error(`Unauthorized (401): Token may be expired or invalid. Please login again.`);
         }
-        throw new Error(`Failed to fetch hospitals: ${res.status}`);
+        throw new Error(`Failed to fetch hospital summaries: ${res.status}`);
       }
-      const hospitals = await res.json();
+      const summaries = await res.json();
+      const summariesArray = Array.isArray(summaries) ? summaries : [];
 
-      // Parse task count from subLabel (format: "Province - X tasks" or "X tasks")
-      const baseList = (Array.isArray(hospitals) ? hospitals : []).map((hospital: { id: number; label: string; subLabel?: string; taskCount?: number; transferredToMaintenance?: boolean; acceptedByMaintenance?: boolean; personInChargeName?: string | null; personInChargeId?: number | null }) => {
-        let taskCount = Number(hospital.taskCount ?? 0);
-        let province = hospital.subLabel || "";
-
-        if (!taskCount && hospital.subLabel) {
-          const match =
-            typeof hospital.subLabel === "string"
-              ? hospital.subLabel.match(/(\d+)\s+tasks?/i)
-              : null;
-          if (match) {
-            taskCount = parseInt(match[1], 10);
-            province = hospital.subLabel.replace(/\s*-\s*\d+\s+tasks?/i, "").trim();
-          }
-        }
-
-        return {
-          ...hospital,
-          subLabel: province, // Keep only province without task count
-          taskCount: taskCount,
-          visibleTaskCount: taskCount,
-          hiddenTaskCount: 0,
-          hiddenPendingCount: 0,
-          hiddenAcceptedCount: 0,
-          nearDueCount: 0, // Initialize to 0 - will be calculated in augment()
-          overdueCount: 0, // Initialize to 0 - will be calculated in augment()
-          transferredCount: 0,
-          personInChargeName: (hospital as { personInChargeName?: string | null })?.personInChargeName ?? null,
-          personInChargeId: (hospital as { personInChargeId?: number | null })?.personInChargeId ?? null,
-          // Use transfer status from backend
-          allTransferred: Boolean(hospital.transferredToMaintenance),
-          allAccepted: Boolean(hospital.acceptedByMaintenance),
-        };
-      });
-
-      const personInChargeLookup = new Map<string, { id: number | null; name: string | null }>();
-      baseList.forEach((hospital) => {
-        if (!hospital) return;
-        const name = (hospital.personInChargeName ?? "").trim();
-        const id = hospital.personInChargeId ?? null;
-        if (hospital.id != null) {
-          personInChargeLookup.set(`id-${hospital.id}`, { id, name: name || null });
-        }
-        if (hospital.label) {
-          personInChargeLookup.set(`name-${hospital.label}`, { id, name: name || null });
-        }
-      });
-
-      // Fetch all tasks (limited) to compute near due/overdue per hospital
-      const allParams = new URLSearchParams({ page: "0", size: "2000", sortBy: "id", sortDir: "asc" });
-      const allRes = await fetch(`${apiBase}?${allParams.toString()}`, { method: 'GET', headers: authHeaders(), credentials: 'include' });
-      const allPayload = allRes.ok ? await allRes.json() : [];
-      const allItems = Array.isArray(allPayload?.content) ? allPayload.content : Array.isArray(allPayload) ? allPayload : [];
-
-      const businessTransferStatus = new Map<string, { hasGeneratedTask: boolean; hasTransfer: boolean; pending: number; accepted: boolean }>();
-      const makeHospitalKey = (hospitalId: number | null | undefined, hospitalName: string) => {
-        if (hospitalId != null && !Number.isNaN(Number(hospitalId))) return `id-${Number(hospitalId)}`;
-        return `name-${hospitalName}`;
-      };
-
-      for (const raw of allItems as unknown as PendingTask[]) {
-        const hospitalName = (raw.hospitalName || "").toString().trim();
-        const hospitalId = typeof raw.hospitalId === "number" ? raw.hospitalId : raw.hospitalId != null ? Number(raw.hospitalId) : null;
-        if (!hospitalName) continue;
-        const key = makeHospitalKey(hospitalId, hospitalName);
-        const received = Boolean(raw.receivedById || raw.receivedByName);
-        const businessName = isBusinessContractTask(raw?.name);
-        const placeholder = raw.readOnlyForDeployment === true || businessName;
-        const pending =
-          (!received && raw.readOnlyForDeployment === true) ||
-          (!received && businessName);
-        if (!placeholder && !pending) continue;
-        const entry =
-          businessTransferStatus.get(key) || {
-            hasGeneratedTask: false,
-            hasTransfer: false,
-            pending: 0,
-            accepted: false,
-          };
-        if (placeholder) entry.hasGeneratedTask = true;
-        if (raw.readOnlyForDeployment === true) entry.hasTransfer = true;
-        if (pending) entry.pending += 1;
-        if (received && placeholder) entry.accepted = true;
-        businessTransferStatus.set(key, entry);
-      }
-
-      // Exclude Business-created placeholder tasks from hospital summaries
-      const visibleItems = (allItems as PendingTask[]).filter((it) => {
-        const received = Boolean((it as PendingTask).receivedById || (it as PendingTask).receivedByName);
-        if (it.readOnlyForDeployment === true && !received) return false;
-        if (isBusinessContractTask(it?.name) && !received) return false;
-        return true;
-      });
-
-      // Aggregate by hospitalName from visibleItems (đã filter pending)
-      const today = new Date();
-      const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-      const acc = new Map<string, { id: number | null; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number; transferredCount: number; acceptedByMaintenanceCount: number }>();
-      for (const it of visibleItems as unknown as PendingTask[]) {
-        const name = (it.hospitalName || "").toString().trim() || "—";
-        const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
-        const key = hospitalId != null ? `id-${hospitalId}` : `name-${name}`;
-        const current = acc.get(key) || { id: hospitalId, label: name, subLabel: "", taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0, transferredCount: 0, acceptedByMaintenanceCount: 0 };
-        if (current.id == null && hospitalId != null) current.id = hospitalId;
-        if (!current.label && name) current.label = name;
-        current.taskCount += 1;
-        const taskStatus = String((it as PendingTask)?.status || '').trim().toUpperCase();
-        if (taskStatus === 'COMPLETED') current.acceptedCount += 1;
-        // Count transferred tasks
-        if ((it as PendingTask).transferredToMaintenance === true) {
-          current.transferredCount += 1;
-        }
-        // Count tasks accepted by maintenance (readOnlyForDeployment = true means maintenance accepted)
-        if ((it as PendingTask).readOnlyForDeployment === true && (it as PendingTask).transferredToMaintenance === true) {
-          current.acceptedByMaintenanceCount += 1;
-        }
-        // Count near due / overdue for non-completed
-        const deadline = (it as PendingTask).deadline;
-        if (taskStatus !== 'COMPLETED' && deadline) {
-          const d = new Date(deadline);
-          if (!Number.isNaN(d.getTime())) {
-            d.setHours(0, 0, 0, 0);
-            const dayDiff = Math.round((d.getTime() - startToday) / (24 * 60 * 60 * 1000));
-            // Quá hạn: deadline đã qua (dayDiff < 0)
-            if (dayDiff < 0) current.overdueCount += 1;
-            // Sắp đến hạn: hôm nay hoặc trong 3 ngày tới (0 <= dayDiff <= 3)
-            if (dayDiff >= 0 && dayDiff <= 3) current.nearDueCount += 1;
-          }
-        }
-        acc.set(key, current);
-      }
-
-      const picAggregation = new Map<string, { ids: Set<string>; names: Set<string> }>();
-      const makePicKey = (id: number | null | undefined, name: string) => (id != null ? `id-${id}` : `name-${name}`);
-      for (const it of visibleItems as unknown as PendingTask[]) {
-        const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
-        const hospitalName = (it.hospitalName || "").toString().trim();
-        if (!hospitalName) continue;
-        const key = makePicKey(hospitalId, hospitalName);
-        const entry = picAggregation.get(key) || { ids: new Set<string>(), names: new Set<string>() };
-        const picId = (it as { picDeploymentId?: number | null }).picDeploymentId;
-        if (picId != null) entry.ids.add(String(picId));
-        const picName = (it as PendingTask).picDeploymentName;
-        if (picName && picName.trim()) entry.names.add(picName.trim());
-        picAggregation.set(key, entry);
-      }
-
-      // Merge baseList (có transfer status từ endpoint) với task counts từ aggregation
-      // Chỉ hiển thị các bệnh viện có task đã được tiếp nhận
+      // Preserve previous acceptance state to maintain UI consistency
       const previousAcceptanceMap = new Map<string, { acceptedFromBusiness: boolean; allAccepted: boolean; allTransferred: boolean }>();
       for (const item of hospitalsWithTasks) {
         const key =
@@ -765,95 +618,70 @@ const ImplementSuperTaskPage: React.FC = () => {
           });
       }
 
-      const withCompleted = baseList
-        .map((h) => {
-          const hospitalId = h.id ?? null;
-          const hospitalName = h.label;
-          const keyById = hospitalId != null ? `id-${hospitalId}` : null;
-          const keyByName = `name-${hospitalName}`;
-          const aggregated = (keyById && acc.get(keyById)) || acc.get(keyByName);
-          const visibleTaskCount = aggregated?.taskCount ?? 0;
-          const picInfoById = keyById ? picAggregation.get(keyById) : undefined;
-          const picInfoByName = picAggregation.get(keyByName);
-          const mergedIds = new Set<string>([
-            ...((picInfoById?.ids ?? new Set<string>()) as Set<string>),
-            ...((picInfoByName?.ids ?? new Set<string>()) as Set<string>),
-          ]);
-          const mergedNames = new Set<string>([
-            ...((picInfoById?.names ?? new Set<string>()) as Set<string>),
-            ...((picInfoByName?.names ?? new Set<string>()) as Set<string>),
-          ]);
-          const businessInfo =
-            (keyById && businessTransferStatus.get(keyById)) ||
-            businessTransferStatus.get(keyByName);
-          const hiddenPendingCount = businessInfo?.pending ?? 0;
-          const hiddenTaskCount = hiddenPendingCount;
-          const hiddenAcceptedCount = 0;
-          const totalTaskCount = visibleTaskCount + hiddenTaskCount;
-          const acceptedVisible = aggregated?.acceptedCount ?? 0;
-          const totalAcceptedCount = acceptedVisible + hiddenAcceptedCount;
+      // Map backend summary DTO to frontend format
+      const mapped = summariesArray
+        .map((s: {
+          hospitalId?: number | null;
+          hospitalName?: string | null;
+          province?: string | null;
+          taskCount?: number;
+          acceptedCount?: number;
+          nearDueCount?: number;
+          overdueCount?: number;
+          transferredCount?: number;
+          pendingPlaceholderCount?: number;
+          hasBusinessPlaceholder?: boolean;
+          acceptedFromBusiness?: boolean;
+          transferredToMaintenance?: boolean;
+          acceptedByMaintenance?: boolean;
+          personInChargeName?: string | null;
+          personInChargeId?: number | null;
+        }) => {
+          const taskCount = Number(s.taskCount ?? 0);
+          const pendingPlaceholder = Number(s.pendingPlaceholderCount ?? 0);
+          const visibleTaskCount = Math.max(0, taskCount - pendingPlaceholder);
+          const hospitalId = s.hospitalId ?? null;
+          const hospitalName = (s.hospitalName || "").trim() || "—";
+          const key = hospitalId != null ? `id-${hospitalId}` : `name-${hospitalName}`;
+          const previous = previousAcceptanceMap.get(key);
+
+          // Preserve acceptance state if taskCount is 0 (no tasks yet but was previously accepted from business)
           const acceptedFromBusiness =
-            visibleTaskCount === 0 && Boolean(businessInfo?.accepted);
-          const mapped = {
-            ...h,
-            taskCount: totalTaskCount,
-            visibleTaskCount,
-            hiddenTaskCount,
-            hiddenPendingCount,
-            hiddenAcceptedCount,
-            acceptedCount: totalAcceptedCount,
-            nearDueCount: aggregated?.nearDueCount ?? 0,
-            overdueCount: aggregated?.overdueCount ?? 0,
-            picDeploymentIds: Array.from(mergedIds),
-            picDeploymentNames: Array.from(mergedNames),
-            acceptedFromBusiness,
-            hasBusinessPlaceholder:
-              Boolean(businessInfo?.hasGeneratedTask) || hiddenTaskCount > 0,
-            personInChargeName:
-              ((keyById && personInChargeLookup.get(keyById)?.name) ||
-                personInChargeLookup.get(keyByName)?.name ||
-                h.personInChargeName ||
-                null),
-            personInChargeId:
-              ((keyById && personInChargeLookup.get(keyById)?.id) ||
-                personInChargeLookup.get(keyByName)?.id ||
-                h.personInChargeId ||
-                null),
-          };
-          return mapped;
-        })
-        .filter((h) => h.taskCount > 0 || h.acceptedFromBusiness); // Hiển thị bệnh viện có task hoặc đã tiếp nhận từ phòng KD
+            Boolean(s.acceptedFromBusiness) ||
+            ((taskCount === 0) && Boolean(previous?.acceptedFromBusiness));
 
-      const mergedWithPersistentAcceptance = withCompleted.map((item) => {
-        const key =
-          item.id != null && !Number.isNaN(Number(item.id))
-            ? `id-${Number(item.id)}`
-            : `name-${item.label}`;
-        const previous = key ? previousAcceptanceMap.get(key) : undefined;
-        const acceptedFromBusiness =
-          item.acceptedFromBusiness ||
-          ((item.taskCount ?? 0) === 0 && Boolean(previous?.acceptedFromBusiness));
-        const allAccepted =
-          item.allAccepted || Boolean(previous?.allAccepted);
-        const allTransferred =
-          item.allTransferred || Boolean(previous?.allTransferred);
-        if (
-          acceptedFromBusiness !== item.acceptedFromBusiness ||
-          allAccepted !== item.allAccepted ||
-          allTransferred !== item.allTransferred
-        ) {
+          const allAccepted =
+            Boolean(s.acceptedByMaintenance) || Boolean(previous?.allAccepted);
+          const allTransferred =
+            Boolean(s.transferredToMaintenance) || Boolean(previous?.allTransferred);
+
           return {
-            ...item,
-            acceptedFromBusiness,
-            allAccepted,
+            id: hospitalId,
+            label: hospitalName,
+            subLabel: (s.province || "").trim(),
+            taskCount,
+            visibleTaskCount,
+            hiddenTaskCount: pendingPlaceholder,
+            hiddenPendingCount: pendingPlaceholder,
+            hiddenAcceptedCount: 0,
+            acceptedCount: Number(s.acceptedCount ?? 0),
+            nearDueCount: Number(s.nearDueCount ?? 0),
+            overdueCount: Number(s.overdueCount ?? 0),
+            transferredCount: Number(s.transferredCount ?? 0),
+            personInChargeName: s.personInChargeName ?? null,
+            personInChargeId: s.personInChargeId ?? null,
             allTransferred,
+            allAccepted,
+            acceptedFromBusiness,
+            hasBusinessPlaceholder: Boolean(s.hasBusinessPlaceholder) || pendingPlaceholder > 0,
+            picDeploymentIds: [] as string[], // PIC aggregation would require additional query - can be added later if needed
+            picDeploymentNames: [] as string[],
           };
-        }
-        return item;
-      });
+        })
+        .filter((h: any) => h.taskCount > 0 || h.acceptedFromBusiness); // Show hospitals with tasks or previously accepted from business
 
-      // Transfer status is already set from backend response, but we need to handle pending transfers
-      for (const item of mergedWithPersistentAcceptance) {
+      // Handle pending transfers (maintain existing logic for transfer state persistence)
+      for (const item of mapped) {
         try {
           const idKey = (item.id ?? null) as number | null;
           const labelKey = (item.label || '').toString().trim();
@@ -876,7 +704,7 @@ const ImplementSuperTaskPage: React.FC = () => {
         }
       }
 
-      setHospitalsWithTasks(mergedWithPersistentAcceptance);
+      setHospitalsWithTasks(mapped as any);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg || "Lỗi tải danh sách bệnh viện");

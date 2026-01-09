@@ -99,6 +99,8 @@ const BusinessPage: React.FC = () => {
   const [bankName, setBankName] = useState<string>('');
   const [bankContactPerson, setBankContactPerson] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
+  const [attachments, setAttachments] = useState<Array<{ url: string; fileName: string }>>([]);
+  const [uploadingFile, setUploadingFile] = useState<boolean>(false);
   type BusinessItem = {
     id: number;
     name?: string;
@@ -120,6 +122,7 @@ const BusinessPage: React.FC = () => {
     bankName?: string | null;
     bankContactPerson?: string | null;
     notes?: string | null;
+    attachments?: Array<{ url: string; fileName: string }>;
     implementationCompleted?: boolean | null;
   };
 
@@ -367,6 +370,7 @@ const BusinessPage: React.FC = () => {
           bankName: c['bankName'] ?? c['bank_name'] ?? null,
           bankContactPerson: c['bankContactPerson'] ?? c['bank_contact_person'] ?? null,
           notes: c['notes'] ?? null,
+          attachments: Array.isArray(c['attachments']) ? c['attachments'] : [],
           implementationCompleted: Boolean(c['implementationCompleted']),
         } as BusinessItem;
       });
@@ -830,6 +834,7 @@ const BusinessPage: React.FC = () => {
       unitPrice: finalUnitPrice,
       unitPriceNet: unitPriceNet !== '' ? Number(unitPriceNet) : null,
       notes: notes?.trim() || null,
+      attachmentUrls: attachments.map(a => a.url),
     };
     // Optional warranty start date (only send when enabled)
     if (warrantyEnabled && warrantyStartDateValue && warrantyStartDateValue.trim() !== '') {
@@ -937,6 +942,8 @@ const BusinessPage: React.FC = () => {
       setStartDateValue(nowDateTimeLocal());
       setBankName('');
       setBankContactPerson('');
+      setNotes('');
+      setAttachments([]);
       setEditingId(null);
       setShowModal(false);
       // reload the first page so the new item is visible
@@ -982,6 +989,89 @@ const BusinessPage: React.FC = () => {
         return newErrors;
       });
     }
+  }
+
+  // Upload multiple files (Word/Excel)
+  async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const allowedExtensions = ['.doc', '.docx', '.xls', '.xlsx'];
+    const maxSize = 50 * 1024 * 1024; // 50MB per file
+    
+    // Validate all files first
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+      
+      if (!allowedExtensions.includes(fileExtension)) {
+        setToast({ message: `File "${file.name}": Chỉ hỗ trợ Word (.doc, .docx) hoặc Excel (.xls, .xlsx)`, type: 'error' });
+        event.target.value = '';
+        return;
+      }
+
+      if (file.size > maxSize) {
+        setToast({ message: `File "${file.name}": Kích thước vượt quá 50MB`, type: 'error' });
+        event.target.value = '';
+        return;
+      }
+    }
+
+    setUploadingFile(true);
+    try {
+      const API_ROOT = import.meta.env.VITE_API_URL || '';
+      const token =
+        localStorage.getItem('access_token') ||
+        sessionStorage.getItem('access_token') ||
+        localStorage.getItem('token');
+
+      const newAttachments: Array<{ url: string; fileName: string }> = [];
+
+      // Upload files one by one
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${API_ROOT}/api/v1/admin/business/upload-attachment`, {
+          method: 'POST',
+          headers: token
+            ? {
+                Authorization: `Bearer ${token}`,
+              }
+            : undefined,
+          credentials: 'include',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Upload file "${file.name}" thất bại: ${response.status}`);
+        }
+
+        const data = await response.json();
+        newAttachments.push({
+          url: data.url,
+          fileName: data.fileName || file.name,
+        });
+      }
+
+      // Add new files to existing attachments
+      setAttachments(prev => [...prev, ...newAttachments]);
+      setToast({ message: `Upload thành công ${newAttachments.length} file`, type: 'success' });
+    } catch (err: unknown) {
+      console.error('Upload file error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Lỗi upload file';
+      setToast({ message: errorMessage, type: 'error' });
+    } finally {
+      setUploadingFile(false);
+      event.target.value = ''; // Reset input
+    }
+  }
+  
+  // Remove attachment
+  function handleRemoveAttachment(index: number) {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
   }
 
   // when status is changed in the modal, handle auto-complete for CONTRACTED
@@ -1203,6 +1293,7 @@ const BusinessPage: React.FC = () => {
       setBankName(res.bankName ?? '');
       setBankContactPerson(res.bankContactPerson ?? '');
       setNotes(res.notes ?? '');
+      setAttachments(Array.isArray(res.attachments) ? res.attachments : []);
       setFieldErrors({});
       setPendingSubmit(null);
       setStatusConfirmOpen(false);
@@ -1625,6 +1716,7 @@ const BusinessPage: React.FC = () => {
               setBankName('');
               setBankContactPerson('');
               setNotes('');
+              setAttachments([]);
               setShowModal(true);
             }}
             className="rounded-xl border px-6 py-3 text-sm font-medium text-white transition-all flex items-center gap-2 border-blue-500 bg-blue-500 hover:bg-blue-600 hover:shadow-md"
@@ -2232,6 +2324,55 @@ const BusinessPage: React.FC = () => {
                     </div>
 
                     <div className="col-span-2">
+                      <label className="block text-sm font-medium mb-1">File đính kèm (Word/Excel)</label>
+                      <div className="space-y-2">
+                        <input
+                          type="file"
+                          accept=".doc,.docx,.xls,.xlsx"
+                          multiple
+                          onChange={handleFileUpload}
+                          disabled={uploadingFile || saving}
+                          className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                        {uploadingFile && (
+                          <div className="text-sm text-gray-600">Đang upload file...</div>
+                        )}
+                        {attachments.length > 0 && (
+                          <div className="space-y-2">
+                            {attachments.map((attachment, index) => (
+                              <div key={index} className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded">
+                                <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span className="flex-1 text-sm text-gray-700 truncate" title={attachment.fileName}>
+                                  {attachment.fileName}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => window.open(attachment.url, '_blank')}
+                                  className="text-sm text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap"
+                                  title="Mở file trong tab mới"
+                                >
+                                  Mở
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveAttachment(index)}
+                                  className="text-sm text-red-600 hover:text-red-800 font-medium whitespace-nowrap"
+                                  title="Xóa file"
+                                  disabled={uploadingFile || saving}
+                                >
+                                  Xóa
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <p className="text-xs text-gray-500">Hỗ trợ nhiều file Word (.doc, .docx) hoặc Excel (.xls, .xlsx), mỗi file tối đa 50MB</p>
+                      </div>
+                    </div>
+
+                    <div className="col-span-2">
                       <label className="inline-flex items-center gap-2 text-sm font-medium">
                         <input
                           type="checkbox"
@@ -2334,7 +2475,25 @@ const BusinessPage: React.FC = () => {
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 justify-between">
                     <div className="text-sm text-gray-600">Thành tiền: <span className="font-semibold">{computeTotal() > 0 ? computeTotal().toLocaleString() + ' ₫' : '—'}</span></div>
                     <div className="flex items-center gap-3">
-                      <button type="button" onClick={() => { if (!saving) { setShowModal(false); setEditingId(null); setFieldErrors({}); } }} className="px-4 py-2 border rounded hover:bg-gray-50 transition">Hủy</button>
+                      <button 
+                        type="button" 
+                        onClick={() => { 
+                          if (!saving) { 
+                            const wasEditing = Boolean(editingId);
+                            setShowModal(false); 
+                            setEditingId(null); 
+                            setFieldErrors({});
+                            // Clear attachments when canceling create mode (not edit mode)
+                            // In edit mode, attachments are loaded from server, so we reload them when reopening
+                            if (!wasEditing) {
+                              setAttachments([]);
+                            }
+                          } 
+                        }} 
+                        className="px-4 py-2 border rounded hover:bg-gray-50 transition"
+                      >
+                        Hủy
+                      </button>
                       <button type="submit" form="business-form" disabled={saving} className={`px-4 py-2 rounded text-white transition ${saving ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>{saving ? 'Đang lưu...' : (editingId ? 'Cập nhật' : 'Lưu')}</button>
                     </div>
                   </div>
@@ -2564,6 +2723,53 @@ const BusinessPage: React.FC = () => {
                   <div className="bg-gray-50 rounded-lg p-4">
                     <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Ghi chú</h4>
                     <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{viewItem.notes}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Attachments Section - Full Width */}
+              {viewItem.attachments && viewItem.attachments.length > 0 && (
+                <div className="mt-5 pt-4 border-t border-gray-200">
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                      File đính kèm ({viewItem.attachments.length})
+                    </h4>
+                    <div className="space-y-2">
+                      {viewItem.attachments.map((attachment, index) => (
+                        <div key={index} className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                          <svg className="w-6 h-6 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-gray-900 truncate" title={attachment.fileName}>
+                              {attachment.fileName || `File ${index + 1}`}
+                            </div>
+                            <div className="text-xs text-gray-500">Word/Excel</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => window.open(attachment.url, '_blank')}
+                            className="px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors whitespace-nowrap"
+                          >
+                            Mở file
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const link = document.createElement('a');
+                              link.href = attachment.url;
+                              link.download = attachment.fileName || `attachment-${index + 1}`;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }}
+                            className="px-3 py-1.5 text-sm font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded transition-colors whitespace-nowrap"
+                          >
+                            Tải xuống
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
