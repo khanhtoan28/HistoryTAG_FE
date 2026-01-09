@@ -257,6 +257,9 @@ export type ImplementationTaskResponseDTO = {
   name: string;
   hospitalId: number | null;
   hospitalName?: string | null;
+  businessProjectId?: number | null;
+  businessProjectName?: string | null;
+  fromBusinessContract?: boolean | null;
   picDeploymentId: number | null;
   picDeploymentName?: string | null;
   picDeploymentIds?: number[] | null;

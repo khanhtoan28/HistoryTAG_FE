@@ -1251,7 +1251,8 @@ const ImplementSuperTaskPage: React.FC = () => {
 
   useEffect(() => {
     const id = window.setTimeout(() => {
-      if (hospitalQuery && hospitalQuery.trim().length > 0) {
+      // Chỉ search khi user nhập ít nhất 2 ký tự để tránh load quá nhiều dữ liệu
+      if (hospitalQuery && hospitalQuery.trim().length >= 2) {
         fetchHospitalOptions(hospitalQuery.trim());
       } else {
         setHospitalOptions([]);
@@ -2063,11 +2064,19 @@ const ImplementSuperTaskPage: React.FC = () => {
                     return visible.map((row, idx) => {
                       // For SuperAdmin we still allow editing/deleting of regular tasks.
                       const displayed = row as ImplTask;
+                      const fromBusiness =
+                        Boolean((row as any).fromBusinessContract) ||
+                        Boolean((row as any).businessProjectId) ||
+                        isBusinessContractTask(
+                          typeof (row as any)?.name === "string"
+                            ? (row as any).name
+                            : String((row as any)?.name ?? "")
+                        );
                       return (
                         <TaskCard
                           key={row.id}
                           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                          task={displayed as any}
+                          task={{ ...(displayed as any), fromBusinessContract: fromBusiness } as any}
                           idx={idx}
                           animate={enableItemAnimation}
                           // open detail as view-only
@@ -2086,21 +2095,96 @@ const ImplementSuperTaskPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Pagination controls */}
-          <div className="mt-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <button className="px-3 py-1 border rounded" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page <= 0}>Prev</button>
-              <span>Trang {page + 1}{totalCount ? ` / ${Math.max(1, Math.ceil(totalCount / size))}` : ""}</span>
-              <button className="px-3 py-1 border rounded" onClick={() => setPage((p) => p + 1)} disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)}>Next</button>
+          {/* Pagination controls - same style as maintenance tasks */}
+          <div className="mt-4 flex items-center justify-between py-3">
+            <div className="text-sm text-gray-600">
+              {totalCount === null || totalCount === 0 ? (
+                <span>Hiển thị 0 trong tổng số 0 mục</span>
+              ) : (
+                (() => {
+                  const from = page * size + 1;
+                  const to = Math.min((page + 1) * size, totalCount);
+                  return <span>Hiển thị {from} đến {to} trong tổng số {totalCount} mục</span>;
+                })()
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm">Số hàng:</label>
-              <select value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="border rounded px-2 py-1">
-                <option value="5">5</option>
-                <option value="10">10</option>
-                <option value="20">20</option>
-                <option value="50">50</option>
-              </select>
+
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Hiển thị:</label>
+                <select
+                  value={String(size)}
+                  onChange={(e) => {
+                    setSize(Number(e.target.value));
+                    setPage(0);
+                  }}
+                  className="border rounded px-2 py-1 text-sm"
+                >
+                  <option value="5">5</option>
+                  <option value="10">10</option>
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+
+              <div className="inline-flex items-center gap-1">
+                <button
+                  onClick={() => setPage(0)}
+                  disabled={page <= 0}
+                  className="px-2 py-1 border rounded text-sm disabled:opacity-50"
+                  title="Đầu"
+                >
+                  «
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page <= 0}
+                  className="px-2 py-1 border rounded text-sm disabled:opacity-50"
+                  title="Trước"
+                >
+                  ‹
+                </button>
+
+                {(() => {
+                  const total = Math.max(1, Math.ceil((totalCount || 0) / size));
+                  const pages: number[] = [];
+                  const start = Math.max(1, page + 1 - 2);
+                  const end = Math.min(total, start + 4);
+                  for (let i = start; i <= end; i++) pages.push(i);
+                  return pages.map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p - 1)}
+                      className={`px-3 py-1 border rounded text-sm ${
+                        page + 1 === p ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ));
+                })()}
+
+                <button
+                  onClick={() =>
+                    setPage((p) =>
+                      Math.min(Math.max(0, Math.ceil((totalCount || 0) / size) - 1), p + 1),
+                    )
+                  }
+                  disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)}
+                  className="px-2 py-1 border rounded text-sm disabled:opacity-50"
+                  title="Tiếp"
+                >
+                  ›
+                </button>
+                <button
+                  onClick={() => setPage(Math.max(0, Math.ceil((totalCount || 0) / size) - 1))}
+                  disabled={totalCount !== null && (page + 1) * size >= (totalCount || 0)}
+                  className="px-2 py-1 border rounded text-sm disabled:opacity-50"
+                  title="Cuối"
+                >
+                  »
+                </button>
+              </div>
             </div>
           </div>
         </>

@@ -38,13 +38,15 @@ import DevSuperTaskPage from "./pages/SuperAdmin/devsupertask";
 import MaintenanceSuperTaskPage from "./pages/SuperAdmin/maintenacesuper-task";
 import AllNotificationsPage from "./pages/Notifications/AllNotificationsPage";
 import BusinessPage from "./pages/Admin/Business";
-import MaintainContractsPage from "./pages/SuperAdmin/MaintainContracts";
+import MaintainContractsPage from "./pages/CustomerCare/MaintainContracts";
+import HospitalCareList from "./pages/CustomerCare/HospitalCareList";
+import HospitalDetailView from "./pages/CustomerCare/HospitalDetailView";
 
 // Protected Route Component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
   
-  if (!token) {
+  if (!token) { 
     return <Navigate to="/signin" replace />;
   }
   
@@ -138,6 +140,9 @@ export default function App() {
             <Route path="/superadmin/calendar/business" element={<BusinessCalendar />} />
             <Route path="/superadmin/calendar/deployment" element={<DeploymentCalendar />} />
             <Route path="/superadmin/calendar/maintenance" element={<MaintenanceCalendar />} />
+            <Route path="/superadmin/hospital-care" element={<HospitalCareList />} />
+            <Route path="/superadmin/hospital-care/:id" element={<HospitalDetailView />} />
+
           </Route>
 
           {/* Dashboard Layout - Protected */}
@@ -147,6 +152,8 @@ export default function App() {
             {/* Admin - Business department */}
             <Route path="/admin/business" element={<BusinessPage />} />
             <Route path="/admin/maintain-contracts" element={<MaintainContractsPage />} />
+            <Route path="/admin/hospital-care" element={<HospitalCareList />} />
+            <Route path="/admin/hospital-care/:id" element={<HospitalDetailView />} />
 
             {/* Others Page */}
             <Route path="/profile" element={<UserProfiles />} />

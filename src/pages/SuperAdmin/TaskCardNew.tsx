@@ -4,6 +4,7 @@
 import { AiOutlineEdit, AiOutlineDelete, AiOutlineEye } from "react-icons/ai";
 import { FaTasks } from "react-icons/fa";
 import { ImplementationTaskResponseDTO } from "../PageClients/implementation-tasks";
+import { isBusinessContractTaskName as isBusinessContractTask } from "../../utils/businessContract";
 
 // 🔹 Base type chung cho cả Implementation và Maintenance tasks
 type BaseTask = {
@@ -162,9 +163,18 @@ export default function TaskCardNew({
   const headerAlignClass = titleIsLong ? "items-start" : "items-center";
   const iconOffsetClass = titleIsLong ? "mt-0.5" : "";
 
+  const fromBusiness =
+    Boolean((task as any)?.fromBusinessContract) ||
+    Boolean((task as any)?.businessProjectId) ||
+    isBusinessContractTask(taskTitle);
+
   return (
     <div
-      className="group relative w-full rounded-2xl bg-white dark:bg-gray-900 px-6 py-5 shadow-sm transition-all border border-gray-100 dark:border-gray-800 hover:border-blue-200 hover:shadow-lg"
+      className={`group relative w-full rounded-2xl bg-white dark:bg-gray-900 px-6 py-5 shadow-sm transition-all border ${
+        fromBusiness
+          ? "border-purple-300 dark:border-purple-600 ring-1 ring-purple-200/70"
+          : "border-gray-100 dark:border-gray-800 hover:border-blue-200"
+      } hover:shadow-lg`}
       style={style}
     >
       {leadingTopLeft && (
@@ -176,7 +186,11 @@ export default function TaskCardNew({
         {/* Left badge + icon */}
         <div className="flex items-center gap-3">
           <div className="flex flex-col items-center">
-            <div className="w-12 h-12 rounded-md bg-gray-50 dark:bg-blue-800 border flex items-center justify-center text-sm font-semibold text-gray-700 dark:text-gray-200">
+            <div className={`w-12 h-12 rounded-md border flex items-center justify-center text-sm font-semibold ${
+              fromBusiness
+                ? "bg-purple-50 border-purple-300 text-purple-800 dark:bg-purple-900 dark:border-purple-500 dark:text-purple-100"
+                : "bg-gray-50 dark:bg-blue-800 border-gray-200 text-gray-700 dark:text-gray-200"
+            }`}>
               {orderLabel}
             </div>
           </div>

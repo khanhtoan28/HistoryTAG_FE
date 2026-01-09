@@ -29,7 +29,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
-    name: "Bảng điều khiển",
+    name: "Dashboard",
     subItems: [{ name: "Báo cáo tổng quan", path: "/home", pro: false }],
   },
   {
@@ -56,6 +56,15 @@ const navItems: NavItem[] = [
     ],
   },
   {
+    name: "Phòng kinh doanh",
+    icon: <BoxIconLine />,
+    subItems: [
+      { name: "Hợp đồng kinh doanh", path: "/admin/business", pro: false },
+      { name: "Hợp đồng bảo trì", path: "/admin/maintain-contracts", pro: false },
+
+    ],
+  },
+  {
     name: "Công việc",
     icon: <TaskIcon />,
     subItems: [
@@ -64,18 +73,12 @@ const navItems: NavItem[] = [
       { name: "Công việc bảo trì", path: "/maintenance-tasks", pro: false },
     ],
   },
-  {
-    name: "Phòng kinh doanh",
-    icon: <BoxIconLine />,
-    subItems: [
-      { name: "Hợp đồng kinh doanh", path: "/admin/business", pro: false },
-    ],
-  },
+  
   {
     name: "Phòng CSKH",
     icon: <BoxIconLine />,
     subItems: [
-      { name: "Hợp đồng bảo trì", path: "/admin/maintain-contracts", pro: false },
+      { name: "Chăm sóc khách hàng", path: "/admin/hospital-care", pro: false },
     ],
   },
 ];

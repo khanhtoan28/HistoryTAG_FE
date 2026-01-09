@@ -363,25 +363,25 @@ export default function MaintainContractsPage() {
     return () => { alive = false; };
   }, []);
 
-  // Load hospital options khi mở modal hoặc khi cần cho filter
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const options = await searchHospitals("");
-        if (alive) {
-          const mapped = Array.isArray(options) ? options.map((h: any) => ({
-            id: Number(h.id),
-            label: String(h.label || h.name || h.id),
-          })) : [];
-          setHospitalOptions(mapped);
-        }
-      } catch (e) {
-        console.error("Failed to load hospitals:", e);
-      }
-    })();
-    return () => { alive = false; };
-  }, []);
+  // KHÔNG load tất cả bệnh viện khi mount - chỉ load khi user search
+  // useEffect(() => {
+  //   let alive = true;
+  //   (async () => {
+  //     try {
+  //       const options = await searchHospitals("");
+  //       if (alive) {
+  //         const mapped = Array.isArray(options) ? options.map((h: any) => ({
+  //           id: Number(h.id),
+  //           label: String(h.label || h.name || h.id),
+  //         })) : [];
+  //         setHospitalOptions(mapped);
+  //       }
+  //     } catch (e) {
+  //       console.error("Failed to load hospitals:", e);
+  //     }
+  //   })();
+  //   return () => { alive = false; };
+  // }, []);
 
   // Set selected values khi mở modal với dữ liệu
   useEffect(() => {
@@ -931,7 +931,11 @@ export default function MaintainContractsPage() {
     const [highlight, setHighlight] = useState(-1);
 
     useEffect(() => {
-      if (!q.trim()) return;
+      // Chỉ search khi user nhập ít nhất 2 ký tự để tránh load quá nhiều dữ liệu
+      if (!q.trim() || q.trim().length < 2) {
+        setOptions([]);
+        return;
+      }
       let alive = true;
       const t = setTimeout(async () => {
         setLoadingBox(true);
@@ -948,21 +952,22 @@ export default function MaintainContractsPage() {
       };
     }, [q, fetchOptions]);
 
-    useEffect(() => {
-      let alive = true;
-      if (openBox && options.length === 0 && !q.trim()) {
-        (async () => {
-          setLoadingBox(true);
-          try {
-            const res = await fetchOptions("");
-            if (alive) setOptions(res);
-          } finally {
-            if (alive) setLoadingBox(false);
-          }
-        })();
-      }
-      return () => { alive = false; };
-    }, [openBox, fetchOptions]);
+    // KHÔNG load tất cả khi mở dropdown - chỉ load khi user nhập ít nhất 2 ký tự
+    // useEffect(() => {
+    //   let alive = true;
+    //   if (openBox && options.length === 0 && !q.trim()) {
+    //     (async () => {
+    //       setLoadingBox(true);
+    //       try {
+    //         const res = await fetchOptions("");
+    //         if (alive) setOptions(res);
+    //       } finally {
+    //         if (alive) setLoadingBox(false);
+    //       }
+    //     })();
+    //   }
+    //   return () => { alive = false; };
+    // }, [openBox, fetchOptions]);
 
     const searchHospitalsWrapped = useMemo(
       () => async (term: string) => {
@@ -1049,11 +1054,12 @@ export default function MaintainContractsPage() {
           )}
           {openBox && !disabled && (
             <div className="absolute z-[110] mt-1 max-h-56 w-full overflow-auto rounded-xl border border-gray-200 bg-white shadow-lg">
-              {loadingBox && <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>}
-              {!loadingBox && options.length === 0 && (
-                <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>
+              {options.length === 0 && (
+                <div className="px-3 py-2 text-sm text-gray-500">
+                  {q.trim().length < 2 ? "Nhập ít nhất 2 ký tự để tìm kiếm" : "Không tìm thấy"}
+                </div>
               )}
-              {!loadingBox &&
+              {options.length > 0 &&
                 options.map((opt, idx) => (
                   <div
                     key={opt.id}
@@ -1767,7 +1773,7 @@ export default function MaintainContractsPage() {
             <div className="sticky top-0 z-20 bg-white rounded-t-3xl px-8 pt-8 pb-4 border-b border-gray-200">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-2xl font-bold text-gray-900">
-                  {isEditing ? "Cập nhật hợp đồng bảo trì" : "Thêm hợp đồng bảo trì"}
+                  {isEditing ? "Cập nhật hợp đồng bảo trì" : "Tạo hợp đồng bảo trì"}
                 </h3>
               </div>
             </div>

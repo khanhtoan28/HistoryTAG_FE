@@ -477,8 +477,13 @@ function RemoteSelect({
     const [options, setOptions] = useState<Array<{ id: number; name: string }>>([]);
     const [highlight, setHighlight] = useState<number>(-1);
 
-    // debounce search
+    // debounce search - chỉ search khi user nhập ít nhất 2 ký tự
     useEffect(() => {
+        // Chỉ search khi user nhập ít nhất 2 ký tự để tránh load quá nhiều dữ liệu
+        if (!q.trim() || q.trim().length < 2) {
+            setOptions([]);
+            return;
+        }
         let alive = true;
         const t = setTimeout(async () => {
             setLoading(true);
@@ -500,22 +505,23 @@ function RemoteSelect({
         };
     }, [q, fetchOptions, excludeIds]);
 
-    useEffect(() => {
-        if (open) {
-            // preload lần đầu
-            if (!options.length && !q.trim()) {
-                (async () => {
-                    setLoading(true);
-                    try {
-                        const res = await fetchOptions("");
-                        setOptions(res);
-                    } finally {
-                        setLoading(false);
-                    }
-                })();
-            }
-        }
-    }, [open]); // eslint-disable-line
+    // KHÔNG preload khi mở dropdown - chỉ load khi user nhập ít nhất 2 ký tự
+    // useEffect(() => {
+    //     if (open) {
+    //         // preload lần đầu
+    //         if (!options.length && !q.trim()) {
+    //             (async () => {
+    //                 setLoading(true);
+    //                 try {
+    //                     const res = await fetchOptions("");
+    //                     setOptions(res);
+    //                 } finally {
+    //                     setLoading(false);
+    //                 }
+    //             })();
+    //         }
+    //     }
+    // }, [open]); // eslint-disable-line
 
     return (
         <Field label={label} required={required}>
@@ -568,13 +574,12 @@ function RemoteSelect({
                         className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
                         onMouseLeave={() => setHighlight(-1)}
                     >
-                        {loading && (
-                            <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>
+                        {options.length === 0 && (
+                            <div className="px-3 py-2 text-sm text-gray-500">
+                                {q.trim().length < 2 ? "Nhập ít nhất 2 ký tự để tìm kiếm" : "Không tìm thấy"}
+                            </div>
                         )}
-                        {!loading && options.length === 0 && (
-                            <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>
-                        )}
-                        {!loading &&
+                        {options.length > 0 &&
                             options.map((opt, idx) => (
                                 <div
                                     key={opt.id}

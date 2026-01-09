@@ -60,6 +60,15 @@ const navItems: NavItem[] = [
     ],
   },
   {
+    name: "Phòng Kinh doanh",
+    icon: <BoxIconLine />,
+    subItems: [
+      { name: "Hợp đồng kinh doanh", path: "/superadmin/business", pro: false },
+      { name: "Hợp đồng bảo trì", path: "/superadmin/maintain-contracts", pro: false },
+
+    ],
+  },
+  {
     name: "Công việc",
     icon: <TaskIcon />,
     subItems: [
@@ -68,19 +77,13 @@ const navItems: NavItem[] = [
       { name: "Công việc Bảo Trì", path: "/superadmin/maintenance-tasks", pro: false },
     ],
   },
-  {
-    name: "Phòng Kinh doanh",
-    icon: <BoxIconLine />,
-    subItems: [
-      { name: "Hợp đồng kinh doanh", path: "/superadmin/business", pro: false },
-      // { name: "Hợp đồng bảo trì", path: "/superadmin/warranty-contracts", pro: false },
-    ],
-  },
+  
   {
     name: "Phòng CSKH",
     icon: <BoxIconLine />,
     subItems: [
-      { name: "Hợp đồng bảo trì", path: "/superadmin/maintain-contracts", pro: false },
+      { name: "Chăm sóc khách hàng", path: "/superadmin/hospital-care", pro: false },
+      // { name: "Viện có hợp đồng", path: "/superadmin/hospitals-with-contracts", pro: false },
     ],
   },
 ];

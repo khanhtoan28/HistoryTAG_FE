@@ -29,6 +29,9 @@ export type ImplementationTaskResponseDTO = {
   name: string;
   hospitalId: number | null;
   hospitalName?: string | null;
+  businessProjectId?: number | null;
+  businessProjectName?: string | null;
+  fromBusinessContract?: boolean | null;
   picDeploymentId: number | null;
   picDeploymentIds?: number[] | null;
   picDeploymentName?: string | null;
@@ -352,7 +355,11 @@ function RemoteSelect({
   }
 
   useEffect(() => {
-    if (!q.trim()) return;
+    // Chỉ search khi user nhập ít nhất 2 ký tự để tránh load quá nhiều dữ liệu
+    if (!q.trim() || q.trim().length < 2) {
+      setOptions([]);
+      return;
+    }
     let alive = true;
     const t = setTimeout(async () => {
       setLoading(true);
@@ -369,24 +376,24 @@ function RemoteSelect({
     };
   }, [q, fetchOptions]);
 
-  // Preload options when opened without typing
-  useEffect(() => {
-    let alive = true;
-    if (open && options.length === 0 && !q.trim()) {
-      (async () => {
-        setLoading(true);
-        try {
-          const res = await fetchOptions("");
-          if (alive) setOptions(res);
-        } finally {
-          if (alive) setLoading(false);
-        }
-      })();
-    }
-    return () => {
-      alive = false;
-    };
-  }, [open]);
+  // KHÔNG preload khi mở dropdown - chỉ load khi user nhập ít nhất 2 ký tự
+  // useEffect(() => {
+  //   let alive = true;
+  //   if (open && options.length === 0 && !q.trim()) {
+  //     (async () => {
+  //       setLoading(true);
+  //       try {
+  //         const res = await fetchOptions("");
+  //         if (alive) setOptions(res);
+  //       } finally {
+  //         if (alive) setLoading(false);
+  //       }
+  //     })();
+  //   }
+  //   return () => {
+  //     alive = false;
+  //   };
+  // }, [open]);
 
   return (
     <Field label={label} required={required}>
@@ -437,11 +444,12 @@ function RemoteSelect({
             className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
             onMouseLeave={() => setHighlight(-1)}
           >
-            {loading && <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>}
-            {!loading && filteredOptions.length === 0 && (
-              <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>
+            {filteredOptions.length === 0 && (
+              <div className="px-3 py-2 text-sm text-gray-500">
+                {q.trim().length < 2 ? "Nhập ít nhất 2 ký tự để tìm kiếm" : "Không tìm thấy"}
+              </div>
             )}
-            {!loading &&
+            {filteredOptions.length > 0 &&
               filteredOptions.map((opt, idx) => (
                 <div
                   key={opt.id}
@@ -487,6 +495,9 @@ function TaskFormModal({
   onSubmit: (payload: ImplementationTaskRequestDTO, id?: number) => Promise<void>;
   userTeam: string;
 }) {
+  const fromBusinessContract =
+    Boolean((initial as any)?.fromBusinessContract) ||
+    Boolean((initial as any)?.businessProjectId);
   const searchHospitals = useMemo(
     () => async (term: string) => {
       const url = `${API_ROOT}/api/v1/admin/hospitals/search?name=${encodeURIComponent(term)}`;
@@ -818,6 +829,7 @@ function TaskFormModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Field label="Tên công việc" required>
                 <TextInput
+                  disabled={fromBusinessContract}
                   value={model.name}
                   onChange={(e) => setModel((s) => ({ ...s, name: e.target.value }))}
                   placeholder="Nhập tên công việc"
@@ -831,7 +843,7 @@ function TaskFormModal({
                 fetchOptions={searchHospitals}
                 value={hospitalOpt}
                 onChange={setHospitalOpt}
-                disabled={lockHospital}
+                disabled={fromBusinessContract || lockHospital}
               />
 
               <div className="col-span-2">
