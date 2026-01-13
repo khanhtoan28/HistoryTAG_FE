@@ -1,0 +1,845 @@
+import React, { useState, useMemo, useEffect } from "react";
+import {
+  FiPlus,
+  FiEdit2,
+  FiTrash2,
+  FiSearch,
+  FiFilter,
+  FiX,
+  FiSave,
+  FiAlertTriangle,
+  FiClock,
+  FiUser,
+  FiCheckCircle,
+  FiFileText,
+  FiEye,
+  FiTag
+} from "react-icons/fi";
+import { Ticket } from "./GeneralInfor";
+import {
+  getHospitalTickets,
+  createHospitalTicket,
+  updateHospitalTicket,
+  deleteHospitalTicket,
+  type TicketResponseDTO,
+  type TicketRequestDTO
+} from "../../../api/ticket.api";
+import toast from "react-hot-toast";
+
+interface TicketsTabProps {
+  tickets?: Ticket[];
+  onTicketsChange?: (tickets: Ticket[]) => void;
+  hospitalId?: number;
+}
+
+const statusConfig: Record<string, { label: string; bgColor: string; textColor: string }> = {
+  CHUA_XU_LY: { label: "Chưa xử lý", bgColor: "bg-gray-100", textColor: "text-gray-700" },
+  DANG_XU_LY: { label: "Đang xử lý", bgColor: "bg-blue-100", textColor: "text-blue-700" },
+  HOAN_THANH: { label: "Hoàn thành", bgColor: "bg-green-100", textColor: "text-green-700" }
+};
+
+const priorityConfig: Record<string, { bgColor: string; textColor: string; icon: React.ReactElement }> = {
+  "Cao": {
+    bgColor: "bg-red-100",
+    textColor: "text-red-700",
+    icon: <FiAlertTriangle className="h-3.5 w-3.5" />
+  },
+  "Trung bình": {
+    bgColor: "bg-amber-100",
+    textColor: "text-amber-700",
+    icon: <FiClock className="h-3.5 w-3.5" />
+  },
+  "Thấp": {
+    bgColor: "bg-green-100",
+    textColor: "text-green-700",
+    icon: <FiCheckCircle className="h-3.5 w-3.5" />
+  }
+};
+
+const priorityOptions: Ticket["priority"][] = ["Cao", "Trung bình", "Thấp"];
+
+export default function TicketsTab({
+  tickets = [],
+  onTicketsChange,
+  hospitalId
+}: TicketsTabProps) {
+  const [localTickets, setLocalTickets] = useState<Ticket[]>(tickets);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showTicketModal, setShowTicketModal] = useState(false);
+  const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
+  const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Load tickets from API when hospitalId is available
+  useEffect(() => {
+    if (hospitalId) {
+      loadTickets();
+    }
+  }, [hospitalId]);
+
+  // Sync localTickets with tickets prop
+  useEffect(() => {
+    setLocalTickets(tickets);
+  }, [tickets]);
+
+  const loadTickets = async () => {
+    if (!hospitalId) return;
+    
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getHospitalTickets(hospitalId);
+      // Convert API response to Ticket format và sắp xếp theo createdAt giảm dần (mới nhất trước)
+      const convertedTickets: Ticket[] = data.map((item: TicketResponseDTO) => ({
+        id: item.ticketCode || `#TK-${item.id}`,
+        issue: item.issue,
+        priority: item.priority,
+        status: item.status,
+        pic: item.pic || '',
+        createdAt: item.createdAt || undefined,
+        timeElapsed: item.status === "HOAN_THANH" ? undefined : calculateTimeElapsed(item.createdAt || undefined)
+      }))
+      .sort((a, b) => {
+        // Sắp xếp theo createdAt giảm dần (mới nhất trước)
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+      setLocalTickets(convertedTickets);
+      if (onTicketsChange) {
+        onTicketsChange(convertedTickets);
+      }
+    } catch (err: any) {
+      console.error("Error loading tickets:", err);
+      setError(err?.response?.data?.message || err?.message || "Không thể tải danh sách tickets");
+      toast.error(err?.response?.data?.message || err?.message || "Không thể tải danh sách tickets");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const [ticketForm, setTicketForm] = useState<Omit<Ticket, "id" | "timeElapsed">>({
+    issue: "",
+    priority: "Trung bình",
+    createdAt: new Date().toISOString(),
+    pic: "",
+    status: "DANG_XU_LY"
+  });
+
+  // Filter tickets
+  const filteredTickets = useMemo(() => {
+    return localTickets.filter(ticket => {
+      const matchesSearch =
+        ticket.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        ticket.issue.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        ticket.pic.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesStatus = statusFilter === "all" || ticket.status === statusFilter;
+      const matchesPriority = priorityFilter === "all" || ticket.priority === priorityFilter;
+
+      return matchesSearch && matchesStatus && matchesPriority;
+    });
+  }, [localTickets, searchQuery, statusFilter, priorityFilter]);
+
+  // Calculate time elapsed from createdAt
+  const calculateTimeElapsed = (createdAt?: string): string => {
+    if (!createdAt) return "Chưa có";
+    
+    const now = new Date();
+    const created = new Date(createdAt);
+    const diffMs = now.getTime() - created.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffDays > 0) {
+      return `${diffDays} ngày`;
+    } else if (diffHours > 0) {
+      const mins = diffMins % 60;
+      return mins > 0 ? `${diffHours}h ${mins}p` : `${diffHours}h`;
+    } else {
+      return `${diffMins}p`;
+    }
+  };
+
+  // Stats
+  const stats = useMemo(() => {
+    const notStarted = localTickets.filter(t => t.status === "CHUA_XU_LY").length;
+    const inProgress = localTickets.filter(t => t.status === "DANG_XU_LY").length;
+    const completed = localTickets.filter(t => t.status === "HOAN_THANH").length;
+    const highPriority = localTickets.filter(t => t.priority === "Cao").length;
+
+    return { notStarted, inProgress, completed, highPriority };
+  }, [localTickets]);
+
+  const handleAddTicket = () => {
+    setEditingTicket(null);
+    setTicketForm({
+      issue: "",
+      priority: "Trung bình",
+      createdAt: new Date().toISOString(),
+      pic: "",
+      status: "CHUA_XU_LY"
+    });
+    setShowTicketModal(true);
+  };
+
+  const handleEditTicket = (ticket: Ticket) => {
+    setEditingTicket(ticket);
+    setTicketForm({
+      issue: ticket.issue,
+      priority: ticket.priority,
+      createdAt: ticket.createdAt || new Date().toISOString(),
+      pic: ticket.pic,
+      status: ticket.status
+    });
+    setShowTicketModal(true);
+  };
+
+  const handleViewTicket = (ticket: Ticket) => {
+    setViewingTicket(ticket);
+  };
+
+  const handleDeleteTicket = async (ticketId: string) => {
+    if (!confirm("Bạn có chắc chắn muốn xóa ticket này?")) {
+      return;
+    }
+
+    if (!hospitalId) {
+      // Fallback: local delete if no hospitalId
+      const updatedTickets = localTickets.filter(t => t.id !== ticketId);
+      setLocalTickets(updatedTickets);
+      onTicketsChange?.(updatedTickets);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      // Extract numeric ID from ticketCode (e.g., "#TK-123" -> 123)
+      const numericId = parseInt(ticketId.replace(/[^\d]/g, ''));
+      if (isNaN(numericId)) {
+        throw new Error("Invalid ticket ID");
+      }
+
+      await deleteHospitalTicket(hospitalId, numericId, false);
+      toast.success("Xóa ticket thành công");
+      // Reload tickets after delete
+      await loadTickets();
+    } catch (err: any) {
+      console.error("Error deleting ticket:", err);
+      setError(err?.response?.data?.message || err?.message || "Không thể xóa ticket");
+      toast.error(err?.response?.data?.message || err?.message || "Không thể xóa ticket");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveTicket = async () => {
+    if (!ticketForm.issue.trim()) {
+      toast.error("Vui lòng điền vấn đề");
+      return;
+    }
+
+    if (!hospitalId) {
+      // Fallback: local save if no hospitalId
+      let updatedTickets: Ticket[];
+      if (editingTicket) {
+        const updatedTicket = {
+          ...ticketForm,
+          id: editingTicket.id,
+          timeElapsed: ticketForm.status === "HOAN_THANH" ? undefined : calculateTimeElapsed(ticketForm.createdAt)
+        };
+        updatedTickets = localTickets.map(t =>
+          t.id === editingTicket.id ? updatedTicket : { ...t, timeElapsed: t.status === "HOAN_THANH" ? undefined : calculateTimeElapsed(t.createdAt) }
+        );
+      } else {
+        const newTicket: Ticket = {
+          ...ticketForm,
+          id: `#TK-${Date.now()}`,
+          timeElapsed: calculateTimeElapsed(ticketForm.createdAt)
+        };
+        updatedTickets = [...localTickets.map(t => ({ ...t, timeElapsed: t.status === "HOAN_THANH" ? undefined : calculateTimeElapsed(t.createdAt) })), newTicket];
+      }
+      setLocalTickets(updatedTickets);
+      onTicketsChange?.(updatedTickets);
+      setShowTicketModal(false);
+      setEditingTicket(null);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const payload: TicketRequestDTO = {
+        issue: ticketForm.issue.trim(),
+        priority: ticketForm.priority,
+        status: ticketForm.status,
+        picName: ticketForm.pic.trim() || null,
+        picUserId: null // TODO: Map pic name to user ID if needed
+      };
+
+      if (editingTicket) {
+        // Extract numeric ID from ticketCode (e.g., "#TK-123" -> 123)
+        const numericId = parseInt(editingTicket.id.replace(/[^\d]/g, ''));
+        if (isNaN(numericId)) {
+          throw new Error("Invalid ticket ID");
+        }
+        await updateHospitalTicket(hospitalId, numericId, payload, false);
+        toast.success("Cập nhật ticket thành công");
+      } else {
+        await createHospitalTicket(hospitalId, payload, false);
+        toast.success("Tạo ticket thành công");
+      }
+
+      // Reload tickets after save
+      await loadTickets();
+      setShowTicketModal(false);
+      setEditingTicket(null);
+    } catch (err: any) {
+      console.error("Error saving ticket:", err);
+      setError(err?.response?.data?.message || err?.message || "Không thể lưu ticket");
+      toast.error(err?.response?.data?.message || err?.message || "Không thể lưu ticket");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCloseTicketModal = () => {
+    setShowTicketModal(false);
+    setEditingTicket(null);
+  };
+
+  const handleCloseViewModal = () => {
+    setViewingTicket(null);
+  };
+
+  return (
+    <div className="space-y-6 w-full max-w-full overflow-x-hidden">
+      {/* Error message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm dark:bg-red-900/20 dark:border-red-800 dark:text-red-400">
+          {error}
+        </div>
+      )}
+
+      {/* Loading state */}
+      {loading && localTickets.length === 0 && (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-500 dark:text-gray-400">Đang tải...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Đang xử lý</p>
+              <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">{stats.inProgress}</p>
+            </div>
+            <FiClock className="h-8 w-8 text-blue-500" />
+          </div>
+        </div>
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">Chưa xử lý</p>
+              <p className="text-2xl font-bold text-gray-700 dark:text-gray-300">{stats.notStarted}</p>
+            </div>
+            <FiFileText className="h-8 w-8 text-gray-500" />
+          </div>
+        </div>
+        <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-green-600 dark:text-green-400 font-medium">Hoàn thành</p>
+              <p className="text-2xl font-bold text-green-700 dark:text-green-300">{stats.completed}</p>
+            </div>
+            <FiCheckCircle className="h-8 w-8 text-green-500" />
+          </div>
+        </div>
+        <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4 border border-amber-200 dark:border-amber-800">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">Ưu tiên cao</p>
+              <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">{stats.highPriority}</p>
+            </div>
+            <FiTag className="h-8 w-8 text-amber-500" />
+          </div>
+        </div>
+      </div>
+
+      {/* Header với search và filter */}
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+        <div className="flex-1 flex gap-3 items-center">
+          {/* Search */}
+          <div className="relative flex-1 max-w-md">
+            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+              <FiSearch className="h-4 w-4 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              placeholder="Tìm kiếm theo ID, vấn đề, người phụ trách..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 bg-white text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+            />
+          </div>
+
+          {/* Filter Toggle */}
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition ${
+              showFilters || statusFilter !== "all" || priorityFilter !== "all"
+                ? "bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-300"
+                : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300"
+            }`}
+          >
+            <FiFilter className="h-4 w-4" />
+            Lọc
+          </button>
+        </div>
+
+        {/* Add Button */}
+        <button
+          onClick={handleAddTicket}
+          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition shrink-0"
+        >
+          <FiPlus className="h-4 w-4" />
+          Tạo ticket mới
+        </button>
+      </div>
+
+      {/* Filters Panel */}
+      {showFilters && (
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Status Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Trạng thái
+              </label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+              >
+                <option value="all">Tất cả</option>
+                <option value="DANG_XU_LY">Đang xử lý</option>
+                <option value="QUA_SLA">Quá SLA</option>
+                <option value="HOAN_THANH">Hoàn thành</option>
+              </select>
+            </div>
+
+            {/* Priority Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Mức độ ưu tiên
+              </label>
+              <select
+                value={priorityFilter}
+                onChange={(e) => setPriorityFilter(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+              >
+                <option value="all">Tất cả</option>
+                <option value="Cao">Cao</option>
+                <option value="Trung bình">Trung bình</option>
+                <option value="Thấp">Thấp</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tickets Table */}
+      <div className="w-full overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700" style={{ maxWidth: '100%' }}>
+        <table className="min-w-[1200px] divide-y divide-gray-200 dark:divide-gray-700" style={{ width: 'max-content' }}>
+          <thead className="bg-gray-50 dark:bg-gray-800">
+            <tr>
+              <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
+                Ticket ID
+              </th>
+              <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
+                Vấn đề
+              </th>
+              <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
+                Ưu tiên
+              </th>
+              <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
+                Trạng thái
+              </th>
+              <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
+                Thời gian chờ
+              </th>
+              <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
+                Người phụ trách
+              </th>
+              <th className="py-3 px-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
+                Thao tác
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-900 dark:divide-gray-700">
+            {filteredTickets.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="py-12 text-center">
+                  <FiFileText className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+                  <p className="text-gray-500 dark:text-gray-400">
+                    {searchQuery || statusFilter !== "all" || priorityFilter !== "all"
+                      ? "Không tìm thấy ticket nào"
+                      : "Chưa có ticket nào"}
+                  </p>
+                </td>
+              </tr>
+            ) : (
+              filteredTickets.map((ticket) => {
+                const isHighPriority = ticket.priority === "Cao";
+  return (
+                  <tr
+                    key={ticket.id}
+                    className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+                  >
+                    <td className="py-3 px-4">
+                      <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                        {ticket.id}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="text-sm text-gray-700 dark:text-gray-300 max-w-xs">
+                        <p className="truncate">{ticket.issue}</p>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+                          priorityConfig[ticket.priority]?.bgColor
+                        } ${priorityConfig[ticket.priority]?.textColor}`}
+                      >
+                        {priorityConfig[ticket.priority]?.icon}
+                        {ticket.priority}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
+                          statusConfig[ticket.status]?.bgColor
+                        } ${statusConfig[ticket.status]?.textColor}`}
+                      >
+                        {statusConfig[ticket.status]?.label}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300">
+                        <FiClock className={`h-4 w-4 ${
+                          ticket.status === "HOAN_THANH" ? "text-green-500" : 
+                          (ticket.timeElapsed && ticket.timeElapsed.includes("ngày") && parseInt(ticket.timeElapsed) > 3) ? "text-amber-500" : 
+                          "text-gray-400"
+                        }`} />
+                        <span className={
+                          ticket.status === "HOAN_THANH" ? "text-green-600 font-medium" :
+                          (ticket.timeElapsed && ticket.timeElapsed.includes("ngày") && parseInt(ticket.timeElapsed) > 3) ? "text-amber-600 font-medium" :
+                          ""
+                        }>
+                          {ticket.status === "HOAN_THANH" ? "Đã hoàn thành" : 
+                           (ticket.timeElapsed || calculateTimeElapsed(ticket.createdAt))}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <FiUser className="h-4 w-4 text-gray-400" />
+                        {ticket.pic}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleViewTicket(ticket)}
+                          className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition dark:hover:bg-blue-900/20"
+                          title="Xem chi tiết"
+                        >
+                          <FiEye className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleEditTicket(ticket)}
+                          className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition dark:hover:bg-blue-900/20"
+                          title="Sửa"
+                        >
+                          <FiEdit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTicket(ticket.id)}
+                          className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition dark:hover:bg-red-900/20"
+                          title="Xóa"
+                        >
+                          <FiTrash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Ticket Modal (Add/Edit) */}
+      {showTicketModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto dark:bg-gray-800">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                {editingTicket ? "Sửa ticket" : "Tạo ticket mới"}
+              </h3>
+              <button
+                onClick={handleCloseTicketModal}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
+              >
+                <FiX className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveTicket();
+              }}
+              className="p-6 space-y-4"
+            >
+              {/* Vấn đề */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Vấn đề / Mô tả <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={ticketForm.issue}
+                  onChange={(e) => setTicketForm({ ...ticketForm, issue: e.target.value })}
+                  placeholder="Mô tả chi tiết vấn đề..."
+                  rows={4}
+                  className="w-full rounded-lg border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Mức độ ưu tiên */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Mức độ ưu tiên <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={ticketForm.priority}
+                    onChange={(e) =>
+                      setTicketForm({ ...ticketForm, priority: e.target.value as Ticket["priority"] })
+                    }
+                    className="w-full rounded-lg border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+                    required
+                  >
+                    {priorityOptions.map((priority) => (
+                      <option key={priority} value={priority}>
+                        {priority}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Trạng thái */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Trạng thái <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={ticketForm.status}
+                    onChange={(e) =>
+                      setTicketForm({ ...ticketForm, status: e.target.value as Ticket["status"] })
+                    }
+                    className="w-full rounded-lg border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+                    required
+                  >
+                    <option value="CHUA_XU_LY">Chưa xử lý</option>
+                    <option value="DANG_XU_LY">Đang xử lý</option>
+                    <option value="HOAN_THANH">Hoàn thành</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Ngày tạo */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Ngày tạo
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={ticketForm.createdAt ? new Date(ticketForm.createdAt).toISOString().slice(0, 16) : ""}
+                    onChange={(e) => setTicketForm({ ...ticketForm, createdAt: e.target.value ? new Date(e.target.value).toISOString() : new Date().toISOString() })}
+                    className="w-full rounded-lg border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+
+                {/* Người phụ trách */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Người phụ trách <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={ticketForm.pic}
+                    onChange={(e) => setTicketForm({ ...ticketForm, pic: e.target.value })}
+                    placeholder="Tên người phụ trách"
+                    className="w-full rounded-lg border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+                    
+                  />
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={handleCloseTicketModal}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition"
+                >
+                  <FiSave className="h-4 w-4" />
+                  Lưu
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* View Ticket Modal */}
+      {viewingTicket && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full dark:bg-gray-800">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Chi tiết Ticket
+              </h3>
+              <button
+                onClick={handleCloseViewModal}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
+              >
+                <FiX className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  Ticket ID
+                </label>
+                <p className="text-base font-semibold text-blue-600 dark:text-blue-400">
+                  {viewingTicket.id}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  Vấn đề
+                </label>
+                <p className="text-base text-gray-900 dark:text-white">
+                  {viewingTicket.issue}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Mức độ ưu tiên
+                  </label>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-medium ${
+                      priorityConfig[viewingTicket.priority]?.bgColor
+                    } ${priorityConfig[viewingTicket.priority]?.textColor}`}
+                  >
+                    {priorityConfig[viewingTicket.priority]?.icon}
+                    {viewingTicket.priority}
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Trạng thái
+                  </label>
+                  <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${
+                      statusConfig[viewingTicket.status]?.bgColor
+                    } ${statusConfig[viewingTicket.status]?.textColor}`}
+                  >
+                    {statusConfig[viewingTicket.status]?.label}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Thời gian chờ
+                  </label>
+                  <div className="flex items-center gap-2 text-base text-gray-900 dark:text-white">
+                    <FiClock className="h-4 w-4 text-gray-400" />
+                    {viewingTicket.status === "HOAN_THANH" ? "Đã hoàn thành" : (viewingTicket.timeElapsed || calculateTimeElapsed(viewingTicket.createdAt))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Ngày tạo
+                  </label>
+                  <div className="text-base text-gray-900 dark:text-white">
+                    {viewingTicket.createdAt ? new Date(viewingTicket.createdAt).toLocaleString("vi-VN") : "Chưa có"}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Người phụ trách
+                  </label>
+                  <div className="flex items-center gap-2 text-base text-gray-900 dark:text-white">
+                    <FiUser className="h-4 w-4 text-gray-400" />
+                    {viewingTicket.pic}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={handleCloseViewModal}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                >
+                  Đóng
+                </button>
+                <button
+                  onClick={() => {
+                    handleCloseViewModal();
+                    handleEditTicket(viewingTicket);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition"
+                >
+                  <FiEdit2 className="h-4 w-4" />
+                  Chỉnh sửa
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

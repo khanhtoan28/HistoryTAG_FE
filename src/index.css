@@ -167,11 +167,13 @@
 }
 html {
   scrollbar-gutter: stable;
+  overflow-x: hidden;
 }
 
 /* fallback cho trình duyệt chưa hỗ trợ */
 body {
   overflow-y: scroll;
+  overflow-x: hidden;
 }
 /*
   The default border color has changed to `currentColor` in Tailwind CSS v4,
@@ -344,11 +346,13 @@ table, td, th {
 }
 html {
   scrollbar-gutter: stable;
+  overflow-x: hidden;
 }
 
 /* fallback cho trình duyệt chưa hỗ trợ */
 body {
   overflow-y: scroll;
+  overflow-x: hidden;
 }
 @utility custom-scrollbar {
   &::-webkit-scrollbar {

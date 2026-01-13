@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { searchHardware, searchHospitals, createBusiness, getBusinesses, updateBusiness, deleteBusiness, getBusinessById, getHardwareById, getBusinessPicOptions } from '../../api/business.api';
 import { getAllUsers } from '../../api/superadmin.api';
 import api from '../../api/client';
+import { toast as hotToast } from 'react-hot-toast';
 import {
   PlusIcon,
   PencilIcon,
@@ -86,8 +87,8 @@ const BusinessPage: React.FC = () => {
   const [warrantyEnabled, setWarrantyEnabled] = useState<boolean>(false);
   const [warrantyStartDateValue, setWarrantyStartDateValue] = useState<string>('');
   const [warrantyEndDateValue, setWarrantyEndDateValue] = useState<string>('');
-  const [warrantyDurationYears, setWarrantyDurationYears] = useState<number | ''>('');
-  const [warrantyDurationMonths, setWarrantyDurationMonths] = useState<number | ''>('');
+  const [warrantyDuration, setWarrantyDuration] = useState<string>('');
+  const [isWarrantyEndDateManuallyEdited, setIsWarrantyEndDateManuallyEdited] = useState(false);
   const [originalStatus, setOriginalStatus] = useState<string>('CARING');
   const [statusConfirmOpen, setStatusConfirmOpen] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState<{ payload: Record<string, unknown>; isUpdate: boolean; successMessage?: string } | null>(null);
@@ -462,22 +463,35 @@ const BusinessPage: React.FC = () => {
     return v ? (v.length === 16 ? `${v}:00` : v) : undefined;
   }
 
-  // Helper: Tính ngày kết thúc từ ngày bắt đầu + số năm + số tháng
-  function calculateWarrantyEndDate(startDate: string, years: number | '', months: number | ''): string {
-    if (!startDate || (!years && !months)) return '';
+  // Parse duration string để lấy số năm và số tháng
+  function parseWarrantyDuration(duration: string): { years: number; months: number } {
+    if (!duration || !duration.trim()) return { years: 0, months: 0 };
+    
+    // Tìm số năm: "1 năm", "2 năm", etc.
+    const yearMatch = duration.match(/(\d+)\s*năm/i);
+    const years = yearMatch ? parseInt(yearMatch[1], 10) : 0;
+    
+    // Tìm số tháng: "6 tháng", "3 tháng", etc.
+    const monthMatch = duration.match(/(\d+)\s*tháng/i);
+    const months = monthMatch ? parseInt(monthMatch[1], 10) : 0;
+    
+    return { years, months };
+  }
+
+  // Helper: Tính ngày kết thúc từ ngày bắt đầu + duration string
+  function calculateWarrantyEndDate(startDate: string, duration: string): string {
+    if (!startDate || !duration || !duration.trim()) return '';
+    
+    const { years, months } = parseWarrantyDuration(duration);
+    if (years === 0 && months === 0) return '';
     
     try {
       const start = new Date(startDate);
       if (isNaN(start.getTime())) return '';
       
-      const totalYears = years !== '' ? Number(years) : 0;
-      const totalMonths = months !== '' ? Number(months) : 0;
-      
-      if (totalYears === 0 && totalMonths === 0) return '';
-      
       const end = new Date(start);
-      end.setFullYear(start.getFullYear() + totalYears);
-      end.setMonth(start.getMonth() + totalMonths);
+      end.setFullYear(start.getFullYear() + years);
+      end.setMonth(start.getMonth() + months);
       
       // Format về datetime-local format (YYYY-MM-DDTHH:mm)
       const yyyy = end.getFullYear();
@@ -494,13 +508,23 @@ const BusinessPage: React.FC = () => {
 
   // Tự động tính ngày kết thúc khi thay đổi ngày bắt đầu hoặc duration
   useEffect(() => {
-    if (warrantyEnabled && warrantyStartDateValue && (warrantyDurationYears !== '' || warrantyDurationMonths !== '')) {
-      const calculatedEndDate = calculateWarrantyEndDate(warrantyStartDateValue, warrantyDurationYears, warrantyDurationMonths);
+    // Chỉ tự động tính nếu người dùng chưa chỉnh sửa endDate thủ công
+    if (isWarrantyEndDateManuallyEdited) return;
+    
+    if (warrantyEnabled && warrantyStartDateValue && warrantyDuration && warrantyDuration.trim()) {
+      const calculatedEndDate = calculateWarrantyEndDate(warrantyStartDateValue, warrantyDuration);
       if (calculatedEndDate) {
         setWarrantyEndDateValue(calculatedEndDate);
       }
     }
-  }, [warrantyEnabled, warrantyStartDateValue, warrantyDurationYears, warrantyDurationMonths]);
+  }, [warrantyEnabled, warrantyStartDateValue, warrantyDuration, isWarrantyEndDateManuallyEdited]);
+
+  // Reset flag khi modal đóng hoặc warrantyEnabled thay đổi
+  useEffect(() => {
+    if (!showModal || !warrantyEnabled) {
+      setIsWarrantyEndDateManuallyEdited(false);
+    }
+  }, [showModal, warrantyEnabled]);
 
   async function loadBusinessPicOptions() {
     try {
@@ -787,9 +811,9 @@ const BusinessPage: React.FC = () => {
       if (!warrantyStartDateValue || warrantyStartDateValue.trim() === '') {
         errors.warrantyStartDateValue = 'Vui lòng nhập ngày bắt đầu bảo hành';
       }
-      // Chỉ require ngày kết thúc nếu không có duration (năm/tháng)
+      // Chỉ require ngày kết thúc nếu không có duration
       if (!warrantyEndDateValue || warrantyEndDateValue.trim() === '') {
-        if (warrantyDurationYears === '' && warrantyDurationMonths === '') {
+        if (!warrantyDuration || !warrantyDuration.trim()) {
           errors.warrantyEndDateValue = 'Vui lòng nhập ngày hết hạn bảo hành hoặc thời hạn bảo hành';
         }
       }
@@ -937,8 +961,7 @@ const BusinessPage: React.FC = () => {
       setWarrantyEnabled(false);
       setWarrantyStartDateValue('');
       setWarrantyEndDateValue('');
-      setWarrantyDurationYears('');
-      setWarrantyDurationMonths('');
+      setWarrantyDuration('');
       setStartDateValue(nowDateTimeLocal());
       setBankName('');
       setBankContactPerson('');
@@ -950,9 +973,49 @@ const BusinessPage: React.FC = () => {
       setCurrentPage(0);
       await loadList(0, itemsPerPage);
       await loadBusinessPicOptions();
-    } catch (err: unknown) {
-      console.error(err);
-      setToast({ message: 'Lỗi khi lưu dữ liệu', type: 'error' });
+    } catch (err: any) {
+      console.error('Error saving business:', err);
+      console.error('Error response:', err?.response);
+      console.error('Error response data:', err?.response?.data);
+      
+      // Lấy message lỗi từ API response - thử nhiều cách
+      let errorMessage = 'Lỗi khi lưu dữ liệu';
+      
+      if (err?.response?.data) {
+        const data = err.response.data;
+        // Thử các trường có thể chứa message
+        errorMessage = data.message 
+          || data.data 
+          || data.error 
+          || (typeof data === 'string' ? data : JSON.stringify(data));
+      } else if (err?.message) {
+        errorMessage = err.message;
+      }
+      
+      // Log để debug
+      console.log('Extracted error message:', errorMessage);
+      
+      // Hiển thị toast notification ở góc phải trên để không bị che bởi modal
+      // Sử dụng hotToast.error với position top-right và z-index cao
+      hotToast.error(errorMessage, {
+        duration: 6000,
+        position: 'top-right',
+        style: {
+          background: '#fee2e2',
+          color: '#991b1b',
+          padding: '16px 20px',
+          borderRadius: '8px',
+          fontSize: '14px',
+          fontWeight: '500',
+          maxWidth: '600px',
+          zIndex: 100004, // Cao hơn modal (z-[110] = 110) và Toaster default
+          boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
+        },
+        className: 'business-error-toast',
+      });
+      
+      // Giữ lại toast cũ để tương thích (nếu có UI hiển thị toast cũ)
+      setToast({ message: errorMessage, type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -1257,9 +1320,10 @@ const BusinessPage: React.FC = () => {
       setWarrantyEnabled(Boolean(normalizedWarrantyStart || normalizedWarrantyEnd));
       setWarrantyStartDateValue(normalizedWarrantyStart);
       setWarrantyEndDateValue(normalizedWarrantyEnd);
+      // Reset flag khi load dữ liệu edit (ngày kết thúc từ server không phải chỉnh sửa thủ công)
+      setIsWarrantyEndDateManuallyEdited(false);
       // Reset duration khi load data (người dùng có thể nhập lại nếu muốn)
-      setWarrantyDurationYears('');
-      setWarrantyDurationMonths('');
+      setWarrantyDuration('');
       // Load commission directly as amount
       if (res.commission != null) {
         setCommission(Number(res.commission));
@@ -1704,8 +1768,7 @@ const BusinessPage: React.FC = () => {
               setWarrantyEnabled(false);
               setWarrantyStartDateValue('');
               setWarrantyEndDateValue('');
-              setWarrantyDurationYears('');
-              setWarrantyDurationMonths('');
+              setWarrantyDuration('');
               setCommission('');
         setCommissionDisplay('');
               setFieldErrors({});
@@ -2384,8 +2447,7 @@ const BusinessPage: React.FC = () => {
                             if (!checked) {
                               setWarrantyStartDateValue('');
                               setWarrantyEndDateValue('');
-                              setWarrantyDurationYears('');
-                              setWarrantyDurationMonths('');
+                              setWarrantyDuration('');
                               clearFieldError('warrantyStartDateValue');
                               clearFieldError('warrantyEndDateValue');
                             }
@@ -2406,6 +2468,8 @@ const BusinessPage: React.FC = () => {
                             onChange={(e) => {
                               setWarrantyStartDateValue(e.target.value);
                               clearFieldError('warrantyStartDateValue');
+                              // Reset flag khi ngày bắt đầu thay đổi để tự động tính lại
+                              setIsWarrantyEndDateManuallyEdited(false);
                             }}
                             className={`w-full rounded border px-3 py-2 ${fieldErrors.warrantyStartDateValue ? 'border-red-500' : ''}`}
                           />
@@ -2413,42 +2477,18 @@ const BusinessPage: React.FC = () => {
                         </div>
                         <div className="col-span-2">
                           <label className="block text-sm font-medium mb-1">Thời hạn bảo hành</label>
-                          <div className="flex items-center gap-2">
-                            <div className="w-20">
-                              <input
-                                type="number"
-                                min="0"
-                                value={warrantyDurationYears === '' ? '' : warrantyDurationYears}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setWarrantyDurationYears(val === '' ? '' : Number(val));
-                                  clearFieldError('warrantyEndDateValue');
-                                }}
-                                placeholder="0"
-                                className="w-full rounded border px-3 py-2"
-                              />
-                            </div>
-                            <span className="text-sm text-gray-600 whitespace-nowrap">năm</span>
-                            <div className="w-20">
-                              <input
-                                type="number"
-                                min="0"
-                                max="11"
-                                value={warrantyDurationMonths === '' ? '' : warrantyDurationMonths}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  const numVal = val === '' ? '' : Number(val);
-                                  if (numVal === '' || (numVal >= 0 && numVal <= 11)) {
-                                    setWarrantyDurationMonths(numVal);
-                                    clearFieldError('warrantyEndDateValue');
-                                  }
-                                }}
-                                placeholder="0"
-                                className="w-full rounded border px-3 py-2"
-                              />
-                            </div>
-                            <span className="text-sm text-gray-600 whitespace-nowrap">tháng</span>
-                          </div>
+                          <input
+                            type="text"
+                            value={warrantyDuration}
+                            onChange={(e) => {
+                              setWarrantyDuration(e.target.value);
+                              clearFieldError('warrantyEndDateValue');
+                              // Reset flag khi thời hạn thay đổi để tự động tính lại
+                              setIsWarrantyEndDateManuallyEdited(false);
+                            }}
+                            placeholder="Ví dụ: 1 năm 6 tháng ..."
+                            className="w-50% rounded border px-3 py-2"
+                          />
                           <p className="text-xs text-gray-500 mt-1">Nhập thời hạn để tự động tính ngày kết thúc</p>
                         </div>
                         <div>
@@ -2459,11 +2499,16 @@ const BusinessPage: React.FC = () => {
                             onChange={(e) => {
                               setWarrantyEndDateValue(e.target.value);
                               clearFieldError('warrantyEndDateValue');
+                              // Đánh dấu là người dùng đã chỉnh sửa thủ công
+                              setIsWarrantyEndDateManuallyEdited(true);
                             }}
                             min={warrantyStartDateValue || undefined}
                             className={`w-full rounded border px-3 py-2 ${fieldErrors.warrantyEndDateValue ? 'border-red-500' : ''}`}
                           />
                           {fieldErrors.warrantyEndDateValue && <div className="mt-1 text-sm text-red-600">{fieldErrors.warrantyEndDateValue}</div>}
+                          {!isWarrantyEndDateManuallyEdited && warrantyStartDateValue && warrantyDuration && warrantyDuration.trim() && (
+                            <p className="mt-1 text-xs text-gray-500">Tự động tính từ ngày bắt đầu và thời hạn</p>
+                          )}
                         </div>
                       </>
                     )}
@@ -2483,6 +2528,8 @@ const BusinessPage: React.FC = () => {
                             setShowModal(false); 
                             setEditingId(null); 
                             setFieldErrors({});
+                            // Reset flag khi đóng modal
+                            setIsWarrantyEndDateManuallyEdited(false);
                             // Clear attachments when canceling create mode (not edit mode)
                             // In edit mode, attachments are loaded from server, so we reload them when reopening
                             if (!wasEditing) {

@@ -1306,7 +1306,10 @@ export default function HospitalsPage() {
       }
 
       closeModal();
-      setPage(0); // Reset trang 1
+      // Chỉ reset về trang 1 khi tạo mới, giữ nguyên trang hiện tại khi sửa
+      if (!isEditing) {
+        setPage(0); // Reset trang 1 chỉ khi tạo mới
+      }
       await fetchList();
       toast.success(isEditing ? "Cập nhật thành công" : "Tạo thành công");
     } catch (e: any) {

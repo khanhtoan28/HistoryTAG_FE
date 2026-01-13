@@ -40,7 +40,8 @@ import AllNotificationsPage from "./pages/Notifications/AllNotificationsPage";
 import BusinessPage from "./pages/Admin/Business";
 import MaintainContractsPage from "./pages/CustomerCare/MaintainContracts";
 import HospitalCareList from "./pages/CustomerCare/HospitalCareList";
-import HospitalDetailView from "./pages/CustomerCare/HospitalDetailView";
+import HospitalDetailView from "./pages/CustomerCare/View/HospitalDetailView";
+import HospitalDetail from "./pages/CustomerCare/HospitalDetail";
 
 // Protected Route Component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -82,11 +83,11 @@ export default function App() {
   };
 
   return (
-    <div className="font-outfit">
+    <div className="font-outfit overflow-x-hidden w-full max-w-full">
       <Toaster
         position="top-right"
         containerStyle={{
-          zIndex: 100002,
+          zIndex: 100003,
         }}
         toastOptions={{
           duration: 3000,
@@ -96,7 +97,7 @@ export default function App() {
             padding: '16px',
             borderRadius: '8px',
             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-            zIndex: 100002,
+            zIndex: 100003,
           },
           success: {
             iconTheme: {
@@ -109,6 +110,7 @@ export default function App() {
               primary: '#ef4444',
               secondary: '#fff',
             },
+            duration: 6000, // Lỗi hiển thị lâu hơn
           },
         }}
       />
@@ -141,7 +143,7 @@ export default function App() {
             <Route path="/superadmin/calendar/deployment" element={<DeploymentCalendar />} />
             <Route path="/superadmin/calendar/maintenance" element={<MaintenanceCalendar />} />
             <Route path="/superadmin/hospital-care" element={<HospitalCareList />} />
-            <Route path="/superadmin/hospital-care/:id" element={<HospitalDetailView />} />
+            <Route path="/superadmin/hospital-care/:id" element={<HospitalDetail />} />
 
           </Route>
 
@@ -153,7 +155,7 @@ export default function App() {
             <Route path="/admin/business" element={<BusinessPage />} />
             <Route path="/admin/maintain-contracts" element={<MaintainContractsPage />} />
             <Route path="/admin/hospital-care" element={<HospitalCareList />} />
-            <Route path="/admin/hospital-care/:id" element={<HospitalDetailView />} />
+            <Route path="/admin/hospital-care/:id" element={<HospitalDetail />} />
 
             {/* Others Page */}
             <Route path="/profile" element={<UserProfiles />} />

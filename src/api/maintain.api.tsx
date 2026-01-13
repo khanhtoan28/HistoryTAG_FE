@@ -61,26 +61,35 @@ function getBase(method: string = 'GET', canManage: boolean = false) {
 export type MaintainContractResponseDTO = {
   id: number;
   contractCode: string;
+  type: "Bảo trì (Maintenance)" | "Bảo hành (Warranty)";
   picUser?: { id: number; label: string; subLabel?: string; phone?: string | null } | null;
   hospital?: { id: number; label: string } | null;
+  careId?: number; // ID của CustomerCareHospital
   durationYears: string; // Dạng chuỗi, ví dụ: "1 năm 6 tháng"
   yearlyPrice: number;
   totalPrice: number;
   startDate: string;
   endDate: string;
+  status: "DANG_HOAT_DONG" | "SAP_HET_HAN" | "HET_HAN" | "DA_GIA_HAN";
+  linkedContract?: string | null; // Mã hợp đồng liên kết (ví dụ: "HD-2024-002")
+  linkedContractId?: number | null; // ID hợp đồng liên kết
+  daysLeft?: number | null; // Số ngày còn lại (có thể âm nếu quá hạn)
   createdAt?: string | null;
   updatedAt?: string | null;
 };
 
 export type MaintainContractRequestDTO = {
   contractCode: string;
+  type: "Bảo trì (Maintenance)" | "Bảo hành (Warranty)";
   picUserId: number;
   hospitalId: number;
+  careId?: number; // ID của CustomerCareHospital - bắt buộc khi tạo từ customer care page
   durationYears: string; // Dạng chuỗi để nhập "1 năm 6 tháng"
   yearlyPrice: number;
   totalPrice: number;
   startDate?: string | null;
   endDate?: string | null;
+  linkedContractId?: number | null; // ID hợp đồng liên kết (nếu có)
 };
 
 export async function createMaintainContract(payload: MaintainContractRequestDTO, canManage: boolean = false) {
@@ -111,6 +120,7 @@ export async function getMaintainContractById(id: number): Promise<MaintainContr
 export async function getMaintainContracts(params: {
   search?: string;
   hospitalId?: number;
+  careId?: number; // Filter by CustomerCareHospital ID
   picUserId?: number;
   sortBy?: string;
   sortDir?: string;
