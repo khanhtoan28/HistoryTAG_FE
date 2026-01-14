@@ -37,13 +37,14 @@ interface Contract {
   status: "SAP_HET_HAN" | "DA_GIA_HAN" | "HET_HAN" | "DANG_HOAT_DONG";
   expiryDate?: string;
   daysLeft?: number;
+  kioskQuantity?: number | null;
 }
 
 interface Hospital {
   id: number;
   careId: number; // ID của care task
   name: string;
-  status: "sap_het_han" | "qua_han" | "da_gia_han" | "dang_hoat_dong" | "dang_bao_tri" | "mat_khach";
+  status: "sap_het_han" | "qua_han" | "da_gia_han" | "dang_hoat_dong";
   priority: "HIGH" | "MEDIUM" | "LOW";
   expiryDate: string;
   daysLeft: number;
@@ -58,8 +59,6 @@ interface Hospital {
   createdById?: number; // ID người thêm
   targetDate?: string; // Ngày mục tiêu
   contracts?: Contract[]; // Thêm contracts để tính trạng thái tự động
-  isMaintenance?: boolean; // Flag cho trạng thái "Đang bảo trì"
-  isLostCustomer?: boolean; // Flag cho trạng thái "Mất khách"
   careType?: string; // Loại chăm sóc
   reason?: string; // Lý do
   notes?: string; // Ghi chú
@@ -143,57 +142,47 @@ function convertApiResponseToHospital(apiData: CustomerCareResponseDTO): Hospita
  * Tính trạng thái dịch vụ của bệnh viện dựa trên hợp đồng
  * Logic: Ưu tiên hiển thị vấn đề cần xử lý gấp nhất
  */
-function calculateHospitalStatus(hospital: Hospital): Hospital["status"] {
-  // 1. Trạng thái đặc biệt (set thủ công)
-  if (hospital.isLostCustomer) return "mat_khach";
-  if (hospital.isMaintenance) return "dang_bao_tri";
-  
-  // 2. Nếu không có contracts, dùng status hiện tại (fallback)
+function calculateHospitalStatus(hospital: Hospital): Hospital["status"] | null {
+  // 1. Nếu không có contracts, không thể xác định trạng thái -> trả về null
+  // (sẽ chỉ hiển thị trong tab "Tất cả", không hiển thị trong các tab khác)
   if (!hospital.contracts || hospital.contracts.length === 0) {
-    return hospital.status;
+    return null;
   }
   
-  // 3. Lọc hợp đồng đang active
-  const activeContracts = hospital.contracts.filter(
-    contract => contract.status === "DANG_HOAT_DONG" || contract.status === "SAP_HET_HAN"
+  // 2. Ưu tiên kiểm tra hợp đồng quá hạn trước (quan trọng nhất)
+  const expiredContracts = hospital.contracts.filter(
+    contract => contract.status === "HET_HAN" || (contract.daysLeft !== undefined && contract.daysLeft < 0)
   );
+  if (expiredContracts.length > 0) {
+    return "qua_han";
+  }
   
-  if (activeContracts.length === 0) {
-    // Không có hợp đồng active, kiểm tra hợp đồng đã hết hạn
-    const expiredContracts = hospital.contracts.filter(
-      contract => contract.status === "HET_HAN" || (contract.daysLeft !== undefined && contract.daysLeft < 0)
-    );
-    if (expiredContracts.length > 0) return "qua_han";
-    
-    // Kiểm tra hợp đồng đã gia hạn
-    const renewedContracts = hospital.contracts.filter(
-      contract => contract.status === "DA_GIA_HAN"
-    );
-    if (renewedContracts.length > 0) return "da_gia_han";
-    
+  // 3. Kiểm tra hợp đồng sắp hết hạn (ưu tiên cao)
+  const expiringContracts = hospital.contracts.filter(
+    contract => contract.status === "SAP_HET_HAN" || (contract.daysLeft !== undefined && contract.daysLeft > 0 && contract.daysLeft <= 30)
+  );
+  if (expiringContracts.length > 0) {
+    return "sap_het_han";
+  }
+  
+  // 4. Kiểm tra hợp đồng đã gia hạn
+  const renewedContracts = hospital.contracts.filter(
+    contract => contract.status === "DA_GIA_HAN"
+  );
+  if (renewedContracts.length > 0) {
+    return "da_gia_han";
+  }
+  
+  // 5. Kiểm tra hợp đồng đang hoạt động
+  const activeContracts = hospital.contracts.filter(
+    contract => contract.status === "DANG_HOAT_DONG"
+  );
+  if (activeContracts.length > 0) {
     return "dang_hoat_dong";
   }
   
-  // 4. Lấy hợp đồng sắp hết hạn gần nhất
-  const sorted = [...activeContracts].sort((a, b) => {
-    const daysA = a.daysLeft ?? Infinity;
-    const daysB = b.daysLeft ?? Infinity;
-    return daysA - daysB;
-  });
-  
-  const nextExpiring = sorted[0];
-  
-  // 5. Xác định trạng thái dựa trên hợp đồng sắp hết hạn
-  if (nextExpiring.daysLeft !== undefined) {
-    if (nextExpiring.daysLeft < 0) return "qua_han";
-    if (nextExpiring.daysLeft <= 30) return "sap_het_han";
-  }
-  
-  if (nextExpiring.status === "DA_GIA_HAN") return "da_gia_han";
-  if (nextExpiring.status === "SAP_HET_HAN") return "sap_het_han";
-  if (nextExpiring.status === "DANG_HOAT_DONG") return "dang_hoat_dong";
-  
-  return "dang_hoat_dong";
+  // 6. Nếu không có hợp đồng nào khớp, không thể xác định trạng thái
+  return null;
 }
 
 const statusConfig: Record<Hospital["status"], { label: string; bgColor: string; textColor: string }> = {
@@ -201,8 +190,6 @@ const statusConfig: Record<Hospital["status"], { label: string; bgColor: string;
   qua_han: { label: "Quá hạn", bgColor: "bg-red-100", textColor: "text-red-700" },
   da_gia_han: { label: "Đã gia hạn", bgColor: "bg-green-100", textColor: "text-green-700" },
   dang_hoat_dong: { label: "Đang hoạt động", bgColor: "bg-blue-100", textColor: "text-blue-700" },
-  dang_bao_tri: { label: "Đang bảo trì", bgColor: "bg-purple-100", textColor: "text-purple-700" },
-  mat_khach: { label: "Mất khách", bgColor: "bg-gray-100", textColor: "text-gray-700" },
 };
 
 const formatCurrency = (amount: number): string => {
@@ -221,7 +208,7 @@ const priorityConfig: Record<"HIGH" | "MEDIUM" | "LOW", { label: string; bgColor
 };
 
 // ===================== TAB CONFIG =====================
-type TabKey = "all" | "dang_bao_tri" | "sap_het_han" | "qua_han" | "da_gia_han" | "mat_khach";
+type TabKey = "all" | "sap_het_han" | "qua_han" | "da_gia_han" | "dang_hoat_dong";
 
 interface Tab {
   key: TabKey;
@@ -230,11 +217,10 @@ interface Tab {
 
 const tabs: Tab[] = [
   { key: "all", label: "Tất cả" },
-  { key: "dang_bao_tri", label: "Đang bảo trì" },
   { key: "sap_het_han", label: "Sắp hết hạn" },
   { key: "qua_han", label: "Quá hạn" },
   { key: "da_gia_han", label: "Đã gia hạn" },
-  { key: "mat_khach", label: "Mất khách" },
+  { key: "dang_hoat_dong", label: "Đang hoạt động" },
 ];
 
 // ===================== COMPONENT =====================
@@ -295,7 +281,7 @@ export default function HospitalCareList() {
           ? data.map(convertApiResponseToHospital)
           : [];
 
-        // Fetch contracts cho tất cả hospitals để tính tổng giá trị
+        // Fetch contracts cho tất cả hospitals để tính tổng giá trị và trạng thái
         const hospitalsWithContracts = await Promise.all(
           convertedHospitals.map(async (hospital) => {
             try {
@@ -321,13 +307,73 @@ export default function HospitalCareList() {
                 return sum + price;
               }, 0);
               
+              // Convert contracts từ API format sang Contract format
+              const contracts: Contract[] = contractsData.map((c: any) => {
+                // Format endDate từ LocalDateTime (yyyy-MM-ddTHH:mm:ss) sang dd/MM/yyyy
+                let expiryDate = "";
+                if (c.endDate) {
+                  try {
+                    const [datePart] = c.endDate.split('T');
+                    if (datePart) {
+                      const [year, month, day] = datePart.split('-');
+                      expiryDate = `${day}/${month}/${year}`;
+                    }
+                  } catch {
+                    // Fallback: thử parse bằng Date
+                    try {
+                      const d = new Date(c.endDate);
+                      if (!Number.isNaN(d.getTime())) {
+                        const day = String(d.getDate()).padStart(2, "0");
+                        const month = String(d.getMonth() + 1).padStart(2, "0");
+                        const year = d.getFullYear();
+                        expiryDate = `${day}/${month}/${year}`;
+                      }
+                    } catch {}
+                  }
+                }
+                
+                // Extract year từ startDate
+                let year = new Date().getFullYear();
+                if (c.startDate) {
+                  try {
+                    const [datePart] = c.startDate.split('T');
+                    if (datePart) {
+                      year = parseInt(datePart.split('-')[0], 10);
+                    }
+                  } catch {
+                    try {
+                      const d = new Date(c.startDate);
+                      if (!Number.isNaN(d.getTime())) {
+                        year = d.getFullYear();
+                      }
+                    } catch {}
+                  }
+                }
+                
+                return {
+                  id: String(c.id || ""),
+                  code: c.contractCode || "",
+                  type: c.type || "Bảo trì (Maintenance)",
+                  year,
+                  value: formatCurrency(c.totalPrice || 0),
+                  status: c.status || "DANG_HOAT_DONG",
+                  expiryDate,
+                  daysLeft: c.daysLeft !== undefined && c.daysLeft !== null ? c.daysLeft : undefined,
+                  kioskQuantity: c.kioskQuantity || null,
+                };
+              });
+              
               return {
                 ...hospital,
                 contractValue: totalValue,
+                contracts, // Lưu contracts để calculateHospitalStatus có thể sử dụng
               };
             } catch (err) {
               console.warn(`Could not fetch contracts for hospital ${hospital.careId}:`, err);
-              return hospital; // Giữ nguyên nếu không fetch được
+              return {
+                ...hospital,
+                contracts: [], // Trả về mảng rỗng nếu không fetch được
+              };
             }
           })
         );
@@ -353,27 +399,36 @@ export default function HospitalCareList() {
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {
       all: totalItems,
-      dang_bao_tri: 0,
       sap_het_han: 0,
       qua_han: 0,
       da_gia_han: 0,
-      mat_khach: 0,
+      dang_hoat_dong: 0,
     };
     hospitals.forEach((h) => {
       const calculatedStatus = calculateHospitalStatus(h);
-      counts[calculatedStatus] = (counts[calculatedStatus] || 0) + 1;
+      if (calculatedStatus !== null) {
+        counts[calculatedStatus] = (counts[calculatedStatus] || 0) + 1;
+      }
     });
     return counts;
   }, [hospitals, totalItems]);
 
   // Filter hospitals với trạng thái được tính tự động (client-side filtering for tabs)
   const filteredHospitals = useMemo(() => {
-    return hospitals.map(h => ({
-      ...h,
-      status: calculateHospitalStatus(h) // Tính trạng thái tự động từ contracts
-    })).filter((h) => {
+    return hospitals.map(h => {
+      const calculatedStatus = calculateHospitalStatus(h);
+      return {
+        ...h,
+        status: calculatedStatus || "dang_hoat_dong", // Dùng "dang_hoat_dong" làm fallback cho display
+        _calculatedStatus: calculatedStatus // Lưu status đã tính để filter
+      };
+    }).filter((h) => {
       // Tab filter (client-side)
-      if (activeTab !== "all" && h.status !== activeTab) return false;
+      // Nếu không có hợp đồng (_calculatedStatus = null), chỉ hiển thị trong tab "Tất cả"
+      if (activeTab !== "all") {
+        if (h._calculatedStatus === null) return false;
+        if (h._calculatedStatus !== activeTab) return false;
+      }
       // PIC filter (client-side)
       if (picFilter && !h.pic.name.toLowerCase().includes(picFilter.toLowerCase())) return false;
       // Date filter (client-side)
@@ -656,7 +711,10 @@ export default function HospitalCareList() {
                     Liên hệ cuối
                   </th>
                   <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
-                    Số Kiosk
+                    Số Kiosk KD
+                  </th>
+                  <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                    Số Kiosk BT
                   </th>
                   
                   <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
@@ -682,7 +740,7 @@ export default function HospitalCareList() {
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                 {loading ? (
                   <tr>
-                    <td colSpan={10} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={11} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
                       <div className="flex items-center justify-center gap-2">
                         <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
                         <span>Đang tải dữ liệu...</span>
@@ -691,13 +749,13 @@ export default function HospitalCareList() {
                   </tr>
                 ) : error ? (
                   <tr>
-                    <td colSpan={10} className="px-3 py-12 text-center text-red-500 dark:text-red-400">
+                    <td colSpan={11} className="px-3 py-12 text-center text-red-500 dark:text-red-400">
                       {error}
                     </td>
                   </tr>
                 ) : paginatedHospitals.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={11} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
                       Không tìm thấy bệnh viện nào
                     </td>
                   </tr>
@@ -757,9 +815,23 @@ export default function HospitalCareList() {
                           )}
                         </td>
 
-                        {/* Số Kiosk */}
+                        {/* Số Kiosk KD */}
                         <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-700 dark:text-gray-300">
                           {hospital.kioskCount}
+                        </td>
+
+                        {/* Số Kiosk BT */}
+                        <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-700 dark:text-gray-300">
+                          {(() => {
+                            if (!hospital.contracts || hospital.contracts.length === 0) return "-";
+                            const totalKioskBT = hospital.contracts
+                              .filter((c: Contract) => c.type === "Bảo trì (Maintenance)")
+                              .reduce((sum: number, c: Contract) => {
+                                const kioskQty = c.kioskQuantity || 0;
+                                return sum + kioskQty;
+                              }, 0);
+                            return totalKioskBT > 0 ? totalKioskBT.toLocaleString('vi-VN') : "-";
+                          })()}
                         </td>
 
                         {/* Tickets */}

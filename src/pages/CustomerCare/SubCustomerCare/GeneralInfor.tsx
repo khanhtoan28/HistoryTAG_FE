@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { FiPlus, FiAlertTriangle, FiCheckCircle, FiShield, FiTool, FiRefreshCw, FiExternalLink, FiClock, FiPhoneCall, FiSend, FiUser, FiMail, FiFileText } from "react-icons/fi";
+import { FiPlus, FiAlertTriangle, FiCheckCircle, FiShield, FiTool, FiRefreshCw, FiExternalLink, FiClock, FiPhoneCall, FiSend, FiUser, FiMail, FiFileText, FiMessageCircle } from "react-icons/fi";
 
 export interface Contract {
   id: string;
@@ -12,6 +12,8 @@ export interface Contract {
   startDate?: string;
   expiryDate?: string;
   daysLeft?: number;
+  picUser?: { id: number; label: string; subLabel?: string; phone?: string | null } | null;
+  kioskQuantity?: number | null;
 }
 
 export interface Ticket {
@@ -28,7 +30,7 @@ export interface CareActivity {
   id: number;
   date: string;
   timeAgo: string;
-  type: "call" | "email" | "visit" | "note";
+  type: "call" | "email" | "visit" | "note" | "zalo" | "cong_van";
   title: string;
   description: string;
   outcome?: "POSITIVE" | "NEUTRAL" | "NEGATIVE";
@@ -339,6 +341,10 @@ export default function ContractsTab({
                       <FiSend className="h-4 w-4" />
                     ) : item.type === "visit" ? (
                       <FiUser className="h-4 w-4" />
+                    ) : item.type === "zalo" ? (
+                      <FiMessageCircle className="h-4 w-4" />
+                    ) : item.type === "cong_van" ? (
+                      <FiFileText className="h-4 w-4" />
                     ) : (
                       <FiFileText className="h-4 w-4" />
                     )}
@@ -371,6 +377,8 @@ export default function ContractsTab({
                       {item.type === "email" && <FiMail className="h-4 w-4 inline-block mr-1.5 text-purple-600" />}
                       {item.type === "visit" && <FiUser className="h-4 w-4 inline-block mr-1.5 text-green-600" />}
                       {item.type === "note" && <FiFileText className="h-4 w-4 inline-block mr-1.5 text-gray-600" />}
+                      {item.type === "zalo" && <FiMessageCircle className="h-4 w-4 inline-block mr-1.5 text-indigo-600" />}
+                      {item.type === "cong_van" && <FiFileText className="h-4 w-4 inline-block mr-1.5 text-orange-600" />}
                       {item.title}
                     </h4>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">

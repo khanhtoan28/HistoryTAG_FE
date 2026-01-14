@@ -319,6 +319,7 @@ export default function MaintainContractsPage() {
       durationYears: item.durationYears ? String(item.durationYears) : "",
       yearlyPrice: yearlyPrice,
       totalPrice: totalPrice,
+      kioskQuantity: item.kioskQuantity || "",
       startDate: startDateForInput,
       endDate: endDateForInput,
     });
@@ -465,6 +466,7 @@ export default function MaintainContractsPage() {
       hospitalId: undefined,
       durationYears: "",
       yearlyPrice: "",
+      kioskQuantity: "",
       totalPrice: "",
       startDate: null,
       endDate: null,
@@ -625,6 +627,7 @@ export default function MaintainContractsPage() {
       durationYears: form.durationYears.trim(), // Gửi dạng string
       yearlyPrice: typeof form.yearlyPrice === "number" ? form.yearlyPrice : 0,
       totalPrice: typeof form.totalPrice === "number" ? form.totalPrice : 0,
+      kioskQuantity: form.kioskQuantity && typeof form.kioskQuantity === "number" ? form.kioskQuantity : (form.kioskQuantity === "" ? null : Number(form.kioskQuantity)),
       startDate: startDateForPayload,
       endDate: endDateForPayload,
       // careId không có trong trang này, backend sẽ tự tìm từ hospitalId

@@ -59,6 +59,7 @@ export async function getAllUsers(params: {
   size?: number;
   sortBy?: string;
   sortDir?: string;
+  search?: string;
 }) {
   const { data } = await api.get("/api/v1/superadmin/users", { params });
   return data;

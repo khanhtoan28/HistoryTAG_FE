@@ -5,7 +5,8 @@ import TaskNotes from "../../components/TaskNotes";
 import { AiOutlineEye } from "react-icons/ai";
 import toast from "react-hot-toast";
 import { FaHospital } from "react-icons/fa";
-import { FiUser, FiLink, FiClock, FiTag, FiCheckCircle } from "react-icons/fi";
+import { FiUser, FiLink, FiClock, FiTag, FiCheckCircle, FiX } from "react-icons/fi";
+import TicketsTab from "../../pages/CustomerCare/SubCustomerCare/TicketsTab";
 
 // Helper function để parse PIC IDs từ additionalRequest
 function parsePicIdsFromAdditionalRequest(additionalRequest?: string | null, picDeploymentId?: number | null): number[] {
@@ -1698,6 +1699,9 @@ const ImplementationTasksPage: React.FC = () => {
     const [hospitalSortDir, setHospitalSortDir] = useState<string>("asc");
     const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
     const [bulkCompleting, setBulkCompleting] = useState(false);
+    const [showTicketsModal, setShowTicketsModal] = useState(false);
+    const [selectedHospitalIdForTickets, setSelectedHospitalIdForTickets] = useState<number | null>(null);
+    const [selectedHospitalNameForTickets, setSelectedHospitalNameForTickets] = useState<string | null>(null);
 
     // Click outside to close PIC filter dropdown
     useEffect(() => {
@@ -2624,7 +2628,7 @@ const ImplementationTasksPage: React.FC = () => {
                                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
                                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/Thành phố</th>
                                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượng task</th>
-                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
+                                                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="bg-white divide-y divide-gray-200">
@@ -2632,27 +2636,31 @@ const ImplementationTasksPage: React.FC = () => {
                                                         .slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize)
                                                         .map((hospital, index) => (
                                                             <tr key={hospital.id || `${hospital.label}-${index}`} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => { setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }}>
-                                                                <td className="px-6  whitespace-nowrap text-sm text-gray-500">{hospitalPage * hospitalSize + index + 1}</td>
-                                                                <td className="px-6  whitespace-nowrap">
-                                                                    <div className="flex items-center gap-3">
-
-                                                                        <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
-                                                                            <span>{hospital.label}</span>
-                                                                            {hospital.fromDeployment && !hospital.acceptedByMaintenance && (
-                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">
-                                                                                    Từ triển khai
-                                                                                </span>
-                                                                            )}
-                                                                            {hospital.fromDeployment && hospital.acceptedByMaintenance && (
-                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
-                                                                                    Nhận từ triển khai
-                                                                                </span>
-                                                                            )}
-                                                                        </div>
-                                                                    </div>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospitalPage * hospitalSize + index + 1}</td>
+                                                                <td className="px-6 py-4">
+                                                                    {(() => {
+                                                                        const longName = (hospital.label || "").length > 32;
+                                                                        return (
+                                                                            <div className={`flex gap-3 ${longName ? 'items-start' : 'items-center'}`}>
+                                                                                <div className={`text-sm font-medium text-gray-900 break-words max-w-[260px] flex flex-wrap gap-2 ${longName ? 'leading-snug' : ''}`}>
+                                                                                    <span>{hospital.label}</span>
+                                                                                    {hospital.fromDeployment && !hospital.acceptedByMaintenance && (
+                                                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">
+                                                                                            Từ triển khai
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {hospital.fromDeployment && hospital.acceptedByMaintenance && (
+                                                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                                                                                            Nhận từ triển khai
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })()}
                                                                 </td>
-                                                                <td className="px-6  whitespace-nowrap text-sm text-gray-500">{hospital.subLabel || "—"}</td>
-                                                                <td className="px-6  whitespace-nowrap text-sm align-center">
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.subLabel || "—"}</td>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm align-center">
                                                                     <div className="flex flex-col items-start gap-1">
                                                                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task</span>
                                                                         {(hospital.nearDueCount ?? 0) > 0 && (
@@ -2663,8 +2671,55 @@ const ImplementationTasksPage: React.FC = () => {
                                                                         )}
                                                                     </div>
                                                                 </td>
-                                                                <td className="px-6  whitespace-nowrap text-sm">
-                                                                    <button onClick={(e) => { e.stopPropagation(); setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }} className="p-6 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition" title="Xem công việc"><AiOutlineEye className="text-lg" /></button>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                                    <div className="flex items-center justify-center gap-1">
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                setSelectedHospital(hospital.label);
+                                                                                setShowHospitalList(false);
+                                                                                setPage(0);
+                                                                            }}
+                                                                            className="p-1.5 rounded-lg text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition"
+                                                                            title="Xem công việc"
+                                                                        >
+                                                                            <AiOutlineEye className="h-4 w-4" />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={async (e) => {
+                                                                                e.stopPropagation();
+                                                                                // hospital.id từ summary API chính là hospitalId thực sự từ bảng hospitals
+                                                                                // Chỉ resolve lại nếu hospital.id không hợp lệ (số âm hoặc <= 0)
+                                                                                let finalHospitalId: number | null = null;
+                                                                                
+                                                                                if (hospital.id && hospital.id > 0) {
+                                                                                    // Dùng trực tiếp hospital.id vì nó đã là hospitalId thực sự từ summary API
+                                                                                    finalHospitalId = hospital.id;
+                                                                                    console.log("Using hospital.id directly:", finalHospitalId, "for hospital:", hospital.label);
+                                                                                } else {
+                                                                                    // Fallback: resolve từ tên nếu hospital.id không hợp lệ
+                                                                                    console.log("hospital.id is invalid, resolving from name:", hospital.id);
+                                                                                    const resolvedId = await resolveHospitalIdByName(hospital.label);
+                                                                                    if (resolvedId) {
+                                                                                        finalHospitalId = resolvedId;
+                                                                                        console.log("Resolved hospitalId:", finalHospitalId, "for hospital:", hospital.label);
+                                                                                    }
+                                                                                }
+                                                                                
+                                                                                if (finalHospitalId && finalHospitalId > 0) {
+                                                                                    setSelectedHospitalIdForTickets(finalHospitalId);
+                                                                                    setSelectedHospitalNameForTickets(hospital.label);
+                                                                                    setShowTicketsModal(true);
+                                                                                } else {
+                                                                                    toast.error("Không thể tìm thấy ID bệnh viện hợp lệ");
+                                                                                }
+                                                                            }}
+                                                                            className="rounded-lg p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 transition"
+                                                                            title="Xem danh sách tickets"
+                                                                        >
+                                                                            <FiTag className="h-4 w-4" />
+                                                                        </button>
+                                                                    </div>
                                                                 </td>
                                                             </tr>
                                                         ))}
@@ -2907,6 +2962,36 @@ const ImplementationTasksPage: React.FC = () => {
             })()}
 
             <DetailModal open={detailOpen} onClose={() => setDetailOpen(false)} item={detailItem} />
+
+            {/* Tickets Modal */}
+            {showTicketsModal && selectedHospitalIdForTickets && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="absolute inset-0 bg-black/50" onClick={() => setShowTicketsModal(false)} />
+                    <div className="relative z-[121] w-full max-w-6xl rounded-2xl bg-white shadow-2xl border border-gray-200 dark:bg-gray-800 dark:border-gray-700 max-h-[90vh] overflow-y-auto">
+                        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                Tickets của {selectedHospitalNameForTickets || hospitalsWithTasks.find(h => h.id === selectedHospitalIdForTickets)?.label || "Bệnh viện"}
+                            </h3>
+                            <button
+                                onClick={() => {
+                                    setShowTicketsModal(false);
+                                    setSelectedHospitalIdForTickets(null);
+                                    setSelectedHospitalNameForTickets(null);
+                                }}
+                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
+                            >
+                                <FiX className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="p-6">
+                            <TicketsTab 
+                                key={selectedHospitalIdForTickets} 
+                                hospitalId={selectedHospitalIdForTickets} 
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -70,6 +70,7 @@ export type MaintainContractResponseDTO = {
   totalPrice: number;
   startDate: string;
   endDate: string;
+  kioskQuantity?: number | null; // Số lượng kiosk
   status: "DANG_HOAT_DONG" | "SAP_HET_HAN" | "HET_HAN" | "DA_GIA_HAN";
   linkedContract?: string | null; // Mã hợp đồng liên kết (ví dụ: "HD-2024-002")
   linkedContractId?: number | null; // ID hợp đồng liên kết
@@ -87,6 +88,7 @@ export type MaintainContractRequestDTO = {
   durationYears: string; // Dạng chuỗi để nhập "1 năm 6 tháng"
   yearlyPrice: number;
   totalPrice: number;
+  kioskQuantity?: number | null; // Số lượng kiosk
   startDate?: string | null;
   endDate?: string | null;
   linkedContractId?: number | null; // ID hợp đồng liên kết (nếu có)

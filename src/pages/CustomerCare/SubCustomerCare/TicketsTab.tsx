@@ -30,6 +30,7 @@ interface TicketsTabProps {
   tickets?: Ticket[];
   onTicketsChange?: (tickets: Ticket[]) => void;
   hospitalId?: number;
+  useTicketsProp?: boolean; // Flag để phân biệt: true = dùng tickets prop, false/undefined = load từ API
 }
 
 const statusConfig: Record<string, { label: string; bgColor: string; textColor: string }> = {
@@ -61,7 +62,8 @@ const priorityOptions: Ticket["priority"][] = ["Cao", "Trung bình", "Thấp"];
 export default function TicketsTab({
   tickets = [],
   onTicketsChange,
-  hospitalId
+  hospitalId,
+  useTicketsProp = false // Mặc định không dùng tickets prop, load từ API
 }: TicketsTabProps) {
   const [localTickets, setLocalTickets] = useState<Ticket[]>(tickets);
   const [loading, setLoading] = useState(false);
@@ -74,25 +76,20 @@ export default function TicketsTab({
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
 
-  // Load tickets from API when hospitalId is available
-  useEffect(() => {
-    if (hospitalId) {
-      loadTickets();
+  // Load tickets function - wrap in useCallback để tránh recreate mỗi lần render
+  const loadTickets = React.useCallback(async () => {
+    if (!hospitalId) {
+      console.warn("TicketsTab: hospitalId is missing");
+      setLocalTickets([]);
+      return;
     }
-  }, [hospitalId]);
-
-  // Sync localTickets with tickets prop
-  useEffect(() => {
-    setLocalTickets(tickets);
-  }, [tickets]);
-
-  const loadTickets = async () => {
-    if (!hospitalId) return;
     
+    console.log("TicketsTab: Loading tickets for hospitalId:", hospitalId, "Type:", typeof hospitalId);
     setLoading(true);
     setError(null);
     try {
       const data = await getHospitalTickets(hospitalId);
+      console.log("TicketsTab: Received tickets data:", data, "Length:", data?.length);
       // Convert API response to Ticket format và sắp xếp theo createdAt giảm dần (mới nhất trước)
       const convertedTickets: Ticket[] = data.map((item: TicketResponseDTO) => ({
         id: item.ticketCode || `#TK-${item.id}`,
@@ -109,18 +106,66 @@ export default function TicketsTab({
         const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return dateB - dateA;
       });
+      console.log("TicketsTab: Converted tickets:", convertedTickets);
       setLocalTickets(convertedTickets);
       if (onTicketsChange) {
         onTicketsChange(convertedTickets);
       }
     } catch (err: any) {
-      console.error("Error loading tickets:", err);
+      console.error("TicketsTab: Error loading tickets:", err);
+      console.error("TicketsTab: Error details:", {
+        message: err?.message,
+        response: err?.response?.data,
+        status: err?.response?.status,
+        hospitalId
+      });
       setError(err?.response?.data?.message || err?.message || "Không thể tải danh sách tickets");
       toast.error(err?.response?.data?.message || err?.message || "Không thể tải danh sách tickets");
     } finally {
       setLoading(false);
     }
-  };
+  }, [hospitalId, onTicketsChange]);
+
+  // Load tickets logic:
+  // - Nếu useTicketsProp = true: dùng tickets prop (không load từ API)
+  // - Nếu useTicketsProp = false/undefined và có hospitalId: load từ API
+  useEffect(() => {
+    console.log("TicketsTab: useEffect triggered, hospitalId:", hospitalId, "useTicketsProp:", useTicketsProp, "tickets.length:", tickets.length);
+    
+    // Nếu useTicketsProp = true, dùng tickets prop (không load từ API)
+    if (useTicketsProp) {
+      console.log("TicketsTab: Using tickets prop, syncing with localTickets");
+      const ticketsStr = JSON.stringify(tickets);
+      const localStr = JSON.stringify(localTickets);
+      if (ticketsStr !== localStr) {
+        console.log("TicketsTab: Syncing localTickets with tickets prop");
+        setLocalTickets(tickets);
+      }
+      return; // Không load từ API
+    }
+    
+    // Nếu useTicketsProp = false/undefined và có hospitalId, load từ API
+    if (hospitalId) {
+      console.log("TicketsTab: hospitalId is valid, calling loadTickets()");
+      loadTickets();
+    } else {
+      console.log("TicketsTab: hospitalId is missing or invalid, clearing tickets");
+      setLocalTickets([]);
+      setLoading(false);
+    }
+  }, [hospitalId, loadTickets, useTicketsProp]); // Bỏ tickets và localTickets khỏi dependency để tránh infinite loop
+
+  // Sync tickets prop một cách riêng biệt khi useTicketsProp = true
+  useEffect(() => {
+    if (useTicketsProp && tickets) {
+      const ticketsStr = JSON.stringify(tickets);
+      const localStr = JSON.stringify(localTickets);
+      if (ticketsStr !== localStr) {
+        console.log("TicketsTab: Syncing localTickets with tickets prop (separate effect)");
+        setLocalTickets(tickets);
+      }
+    }
+  }, [tickets, useTicketsProp]); // Chỉ sync khi tickets prop thay đổi và useTicketsProp = true
 
   const [ticketForm, setTicketForm] = useState<Omit<Ticket, "id" | "timeElapsed">>({
     issue: "",
@@ -488,7 +533,16 @@ export default function TicketsTab({
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-900 dark:divide-gray-700">
-            {filteredTickets.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={7} className="py-12 text-center">
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+                    <p className="text-gray-500 dark:text-gray-400">Đang tải tickets...</p>
+                  </div>
+                </td>
+              </tr>
+            ) : filteredTickets.length === 0 ? (
               <tr>
                 <td colSpan={7} className="py-12 text-center">
                   <FiFileText className="h-12 w-12 mx-auto text-gray-300 mb-4" />

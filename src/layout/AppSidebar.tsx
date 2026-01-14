@@ -60,7 +60,7 @@ const navItems: NavItem[] = [
     icon: <BoxIconLine />,
     subItems: [
       { name: "Hợp đồng kinh doanh", path: "/admin/business", pro: false },
-      { name: "Hợp đồng bảo trì", path: "/admin/maintain-contracts", pro: false },
+      // { name: "Hợp đồng bảo trì", path: "/admin/maintain-contracts", pro: false },
 
     ],
   },
@@ -201,15 +201,23 @@ const AppSidebar: React.FC = () => {
   };
 
   // Create filtered nav items
-  const filteredNavItems = navItems.map((item) => {
-    if (item.name === "Lịch" && item.subItems) {
-      return {
-        ...item,
-        subItems: getCalendarMenuItems(),
-      };
-    }
-    return item;
-  });
+  const filteredNavItems = navItems
+    .filter((item) => {
+      // Chỉ hiển thị menu "Phòng CSKH" cho user thuộc phòng kinh doanh hoặc SuperAdmin
+      if (item.name === "Phòng CSKH") {
+        return isSuperAdmin || userDepartment === "BUSINESS";
+      }
+      return true;
+    })
+    .map((item) => {
+      if (item.name === "Lịch" && item.subItems) {
+        return {
+          ...item,
+          subItems: getCalendarMenuItems(),
+        };
+      }
+      return item;
+    });
 
   // Kiểm tra xem đường dẫn hiện tại có trùng khớp hay không
   const isActive = useCallback(

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { FaRegUser } from "react-icons/fa";
 import { FiImage, FiMail, FiPhone, FiMapPin, FiUsers, FiBriefcase, FiClock, FiCalendar, FiUser, FiInfo } from "react-icons/fi";
 import { EyeIcon, EyeCloseIcon } from "../../icons";
@@ -130,6 +130,8 @@ export default function SuperAdminUsers() {
 
   // Filters
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState(""); // Debounced version for API calls
+  const searchDebounceRef = useRef<number | null>(null);
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<UserResponseDTO | null>(null);
@@ -244,11 +246,38 @@ export default function SuperAdminUsers() {
     }
   }
 
+  // Debounce search input: update debouncedSearch after 300ms of no typing
+  useEffect(() => {
+    if (searchDebounceRef.current) {
+      window.clearTimeout(searchDebounceRef.current);
+    }
+    searchDebounceRef.current = window.setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => {
+      if (searchDebounceRef.current) {
+        window.clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, [search]);
+
+  // Reset to page 0 when search changes
+  useEffect(() => {
+    if (page !== 0) {
+      setPage(0);
+    }
+  }, [debouncedSearch]);
+
   const fetchList = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getAllUsers({ page, size, sortBy, sortDir });
+      const params: any = { page, size, sortBy, sortDir };
+      // Chỉ gửi search parameter khi có giá trị (không rỗng)
+      if (debouncedSearch && debouncedSearch.trim().length > 0) {
+        params.search = debouncedSearch.trim();
+      }
+      const data = await getAllUsers(params);
       setItems(data.content || data);
       setTotalItems(data.totalElements || data.length || 0);
       setTotalPages(data.totalPages || Math.ceil((data.totalElements || data.length || 0) / size));
@@ -259,7 +288,7 @@ export default function SuperAdminUsers() {
     } finally {
       setLoading(false);
     }
-  }, [page, size, sortBy, sortDir]);
+  }, [page, size, sortBy, sortDir, debouncedSearch]);
 
   useEffect(() => {
     void fetchList();
@@ -455,17 +484,6 @@ export default function SuperAdminUsers() {
     }
   }
 
-  const filtered = useMemo(() => {
-    if (!search) return items;
-    const lowerSearch = search.toLowerCase();
-    return items.filter(
-      (item) =>
-        item.username?.toLowerCase().includes(lowerSearch) ||
-        item.email?.toLowerCase().includes(lowerSearch) ||
-        item.fullname?.toLowerCase().includes(lowerSearch) ||
-        item.phone?.toLowerCase().includes(lowerSearch)
-    );
-  }, [items, search]);
 
   return (
     <>
@@ -519,7 +537,7 @@ export default function SuperAdminUsers() {
           </div>
           <div className="mt-4">
             <p className="text-sm text-gray-500">
-              Tổng: <span className="font-medium text-gray-700">{filtered.length}</span>
+              Tổng: <span className="font-medium text-gray-700">{totalItems}</span>
             </p>
           </div>
         </ComponentCard>
@@ -535,7 +553,7 @@ export default function SuperAdminUsers() {
               ))
             ) : (
               <>
-                {filtered.map((user, idx) => (
+                {items.map((user, idx) => (
                   <div key={user.id} className="opacity-0 fadeIn" style={{ animationDelay: `${idx * 0.1}s` }}>
                     <UserCard
                       user={user}
@@ -547,7 +565,7 @@ export default function SuperAdminUsers() {
                   </div>
                 ))}
 
-                {filtered.length === 0 && (
+                {items.length === 0 && !loading && (
                   <div className="col-span-full text-center py-12">
                     <p className="text-gray-500">Không có dữ liệu</p>
                   </div>

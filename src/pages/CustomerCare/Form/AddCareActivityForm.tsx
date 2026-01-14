@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { FiX, FiSave, FiPhoneCall, FiMail, FiUser, FiFileText } from "react-icons/fi";
 
 export interface CareActivityFormData {
-  type: "call" | "email" | "visit" | "note";
+  type: "call" | "email" | "visit" | "note" | "zalo" | "cong_van";
   date: string;
   title: string;
   description: string;
@@ -20,7 +20,9 @@ export function convertActivityFormDataToDTO(formData: CareActivityFormData): an
     "visit": "VISIT",
     "note": "NOTE",
     "meeting": "MEETING",
-    "sms": "SMS"
+    "sms": "SMS",
+    "zalo": "ZALO",
+    "cong_van": "CONG_VAN"
   };
   
   const activityType = typeMap[formData.type.toLowerCase()] || formData.type.toUpperCase();
@@ -57,7 +59,9 @@ export function convertActivityFormDataToUpdateDTO(formData: CareActivityFormDat
     "visit": "VISIT",
     "note": "NOTE",
     "meeting": "MEETING",
-    "sms": "SMS"
+    "sms": "SMS",
+    "zalo": "ZALO",
+    "cong_van": "CONG_VAN"
   };
   
   const activityType = typeMap[formData.type.toLowerCase()] || formData.type.toUpperCase();
@@ -84,7 +88,7 @@ interface CareActivity {
   id: number;
   date: string;
   timeAgo: string;
-  type: "call" | "email" | "visit" | "note";
+  type: "call" | "email" | "visit" | "note" | "zalo" | "cong_van";
   title: string;
   description: string;
   outcome?: "POSITIVE" | "NEUTRAL" | "NEGATIVE";
@@ -293,6 +297,8 @@ export default function AddCareActivityForm({
               <option value="email">✉️ Gửi email</option>
               <option value="visit">👤 Gặp mặt</option>
               <option value="note">📝 Ghi chú</option>
+              <option value="zalo">💬 Zalo</option>
+              <option value="cong_van">📄 Công văn</option>
             </select>
           </div>
 

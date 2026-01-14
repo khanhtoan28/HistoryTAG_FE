@@ -14,7 +14,8 @@ import {
   FiExternalLink,
   FiCalendar,
   FiDollarSign,
-  FiFileText
+  FiFileText,
+  FiUser
 } from "react-icons/fi";
 import { Contract } from "./GeneralInfor";
 import MaintainContractForm, { type WarrantyContractForm } from "../Form/MaintainContractForm";
@@ -309,6 +310,7 @@ export default function ContractsTab({
       durationYears: "",
       yearlyPrice: "",
       totalPrice: "",
+      kioskQuantity: "",
       startDate: null,
       endDate: null,
     });
@@ -404,6 +406,7 @@ export default function ContractsTab({
         durationYears: contractDetail.durationYears || '',
         yearlyPrice: contractDetail.yearlyPrice || '',
         totalPrice: contractDetail.totalPrice || '',
+        kioskQuantity: contractDetail.kioskQuantity || '',
         startDate: startDateFormatted,
         endDate: endDateFormatted,
       });
@@ -443,6 +446,7 @@ export default function ContractsTab({
         durationYears: '',
         yearlyPrice: '',
         totalPrice: '',
+        kioskQuantity: '',
         startDate: null,
         endDate: null,
       });
@@ -496,6 +500,8 @@ export default function ContractsTab({
           startDate: c.startDate ? new Date(c.startDate).toLocaleDateString('vi-VN') : undefined,
           expiryDate: c.endDate ? new Date(c.endDate).toLocaleDateString('vi-VN') : undefined,
           daysLeft: c.daysLeft,
+          picUser: c.picUser || null,
+          kioskQuantity: c.kioskQuantity || null,
         }));
         onContractsChange(updatedContracts);
       } else {
@@ -545,6 +551,7 @@ export default function ContractsTab({
         durationYears: contractDetail.durationYears || '',
         yearlyPrice: contractDetail.yearlyPrice || '',
         totalPrice: contractDetail.totalPrice || '',
+        kioskQuantity: contractDetail.kioskQuantity || '',
         startDate: startDateFormatted,
         endDate: null, // Sẽ được tính tự động dựa trên durationYears
       });
@@ -789,6 +796,7 @@ export default function ContractsTab({
         durationYears: form.durationYears.trim(),
         yearlyPrice: yearlyPriceNum,
         totalPrice: totalPriceNum,
+        kioskQuantity: form.kioskQuantity && typeof form.kioskQuantity === "number" ? form.kioskQuantity : (form.kioskQuantity === "" ? null : Number(form.kioskQuantity)),
         startDate: formatDateTimeForBackend(form.startDate),
         endDate: formatDateTimeForBackend(form.endDate),
         linkedContractId: renewingContractId || null, // Link với hợp đồng gốc nếu đang gia hạn
@@ -834,6 +842,8 @@ export default function ContractsTab({
           startDate: c.startDate ? new Date(c.startDate).toLocaleDateString('vi-VN') : undefined,
           expiryDate: c.endDate ? new Date(c.endDate).toLocaleDateString('vi-VN') : undefined,
           daysLeft: c.daysLeft,
+          picUser: c.picUser || null,
+          kioskQuantity: c.kioskQuantity || null,
         }));
         onContractsChange(updatedContracts);
       }
@@ -1017,7 +1027,9 @@ export default function ContractsTab({
               <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
                 Loại Hợp Đồng
               </th>
-              
+              <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
+                Số kiosk
+              </th>
               <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
                 Giá Trị
               </th>
@@ -1031,6 +1043,9 @@ export default function ContractsTab({
                 Trạng Thái
               </th>
               <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
+                Người phụ trách
+              </th>
+              <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
                 Liên Kết
               </th>
               <th className="py-3 px-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
@@ -1041,7 +1056,7 @@ export default function ContractsTab({
           <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-900 dark:divide-gray-700">
             {filteredContracts.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-12 text-center">
+                <td colSpan={11} className="py-12 text-center">
                   <FiFileText className="h-12 w-12 mx-auto text-gray-300 mb-4" />
                   <p className="text-gray-500 dark:text-gray-400">
                     {searchQuery || statusFilter !== "all" || typeFilter !== "all"
@@ -1086,7 +1101,12 @@ export default function ContractsTab({
                         {contract.type}
                       </div>
                     </td>
-                    
+                    <td className="py-3 px-4 text-sm text-gray-700 dark:text-gray-300">
+                      {contract.kioskQuantity !== null && contract.kioskQuantity !== undefined 
+                        ? contract.kioskQuantity.toLocaleString('vi-VN')
+                        : <span className="text-gray-400">-</span>
+                      }
+                    </td>
                     <td className="py-3 px-4 text-sm text-gray-700 dark:text-gray-300">
                       {contract.value}
                     </td>
@@ -1128,6 +1148,21 @@ export default function ContractsTab({
                         )}
                         {statusConfig[contract.status]?.label}
                       </span>
+                    </td>
+                    <td className="py-3 px-4 text-sm text-gray-700 dark:text-gray-300">
+                      {contract.picUser?.label ? (
+                        <div className="flex items-center gap-2">
+                          <FiUser className="h-4 w-4 text-gray-400" />
+                          <div>
+                            <div className="font-medium">{contract.picUser.label}</div>
+                            {contract.picUser.subLabel && (
+                              <div className="text-xs text-gray-500">{contract.picUser.subLabel}</div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       {contract.linkedContract ? (

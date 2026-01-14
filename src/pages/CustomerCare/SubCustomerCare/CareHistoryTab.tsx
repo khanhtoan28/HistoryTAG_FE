@@ -1,12 +1,12 @@
 import { useState, useMemo } from "react";
-import { FiPlus, FiPhoneCall, FiSend, FiUser, FiMail, FiFileText, FiEdit2, FiTrash2, FiCalendar, FiX } from "react-icons/fi";
+import { FiPlus, FiPhoneCall, FiSend, FiUser, FiMail, FiFileText, FiEdit2, FiTrash2, FiCalendar, FiX, FiMessageCircle } from "react-icons/fi";
 import AddCareActivityForm, { CareActivityFormData } from "../Form/AddCareActivityForm";
 
 export interface CareActivity {
   id: number;
   date: string;
   timeAgo: string;
-  type: "call" | "email" | "visit" | "note";
+  type: "call" | "email" | "visit" | "note" | "zalo" | "cong_van";
   title: string;
   description: string;
   outcome?: "POSITIVE" | "NEUTRAL" | "NEGATIVE";
@@ -176,6 +176,10 @@ export default function CareHistoryTab({
                   <FiSend className="h-4 w-4" />
                 ) : item.type === "visit" ? (
                   <FiUser className="h-4 w-4" />
+                ) : item.type === "zalo" ? (
+                  <FiMessageCircle className="h-4 w-4" />
+                ) : item.type === "cong_van" ? (
+                  <FiFileText className="h-4 w-4" />
                 ) : (
                   <FiFileText className="h-4 w-4" />
                 )}
@@ -245,6 +249,8 @@ export default function CareHistoryTab({
                   {item.type === "email" && <FiMail className="h-4 w-4 inline-block mr-1.5 text-purple-600" />}
                   {item.type === "visit" && <FiUser className="h-4 w-4 inline-block mr-1.5 text-green-600" />}
                   {item.type === "note" && <FiFileText className="h-4 w-4 inline-block mr-1.5 text-gray-600" />}
+                  {item.type === "zalo" && <FiMessageCircle className="h-4 w-4 inline-block mr-1.5 text-indigo-600" />}
+                  {item.type === "cong_van" && <FiFileText className="h-4 w-4 inline-block mr-1.5 text-orange-600" />}
                   {item.title}
                 </h4>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">

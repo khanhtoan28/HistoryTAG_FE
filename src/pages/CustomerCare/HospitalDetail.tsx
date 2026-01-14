@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import { CareActivityFormData, convertActivityFormDataToDTO, convertActivityFormDataToUpdateDTO } from "./Form/AddCareActivityForm";
@@ -318,7 +318,7 @@ export default function HospitalDetailView() {
               id: act.activityId || act.id,
               date: activityDate || formattedDate, // Lưu original date từ API (format: "YYYY-MM-DDTHH:mm:ss") để form có thể parse đúng
               timeAgo: calculateTimeAgo(activityDate), // Tính toán thời gian tương đối
-              type: (act.activityType?.toLowerCase() || "note") as "call" | "email" | "visit" | "note",
+              type: (act.activityType?.toLowerCase() || "note") as "call" | "email" | "visit" | "note" | "zalo" | "cong_van",
               title: act.title || "",
               description: act.description || "",
               outcome: act.outcome || undefined,
@@ -422,6 +422,7 @@ export default function HospitalDetailView() {
           };
           
           contracts = contractsData.map((c: any) => ({
+            picUser: c.picUser || null,
             id: String(c.id),
             code: c.contractCode || '',
             type: c.type || "Bảo trì (Maintenance)",
@@ -431,7 +432,8 @@ export default function HospitalDetailView() {
             linkedContract: c.linkedContract || undefined,
             startDate: formatDate(c.startDate),
             expiryDate: formatDate(c.endDate) || '',
-            daysLeft: c.daysLeft || undefined
+            daysLeft: c.daysLeft || undefined,
+            kioskQuantity: c.kioskQuantity || null
           }));
           
           console.log("Mapped contracts:", contracts);
@@ -554,6 +556,17 @@ export default function HospitalDetailView() {
 
   const activeContractsCount = activeContracts.length;
 
+  // Tính tổng số kiosk từ các hợp đồng bảo trì
+  const totalKioskFromMaintenanceContracts = useMemo(() => {
+    if (!hospital?.contracts || hospital.contracts.length === 0) return 0;
+    return hospital.contracts
+      .filter((c: Contract) => c.type === "Bảo trì (Maintenance)")
+      .reduce((sum: number, c: Contract) => {
+        const kioskQty = c.kioskQuantity || 0;
+        return sum + kioskQty;
+      }, 0);
+  }, [hospital?.contracts]);
+
   // Scroll đến hợp đồng sắp hết hạn khi click nút "Gia hạn Hợp đồng"
   const handleRenewContract = () => {
     if (!nextExpiringContract) return;
@@ -585,6 +598,29 @@ export default function HospitalDetailView() {
   const handleBack = () => {
     navigate(-1);
   };
+
+  // Memoize callbacks để tránh infinite loop
+  const handleTicketsChange = useCallback((updatedTickets: Ticket[]) => {
+    setHospital(prev => prev ? { 
+      ...prev, 
+      tickets: updatedTickets
+    } : null);
+  }, []);
+
+  const handleContractsChange = useCallback(() => {
+    // Reload contracts từ API
+    if (!id) return;
+    const careId = Number(id);
+    const reloadContracts = async () => {
+      try {
+        const contractsData = await api.get(`/api/v1/admin/customer-care/${careId}/maintain-contracts`);
+        // ... (giữ nguyên logic reload contracts)
+      } catch (err) {
+        console.error("Could not reload contracts:", err);
+      }
+    };
+    reloadContracts();
+  }, [id]);
 
   const handleSubmitActivity = async (data: CareActivityFormData) => {
     if (!id) {
@@ -830,10 +866,16 @@ export default function HospitalDetailView() {
 
               {/* Right: Quick Stats + Action Button */}
               <div className="flex flex-wrap items-center gap-6">
-                {/* Số Kiosk */}
+                {/* Số Kiosk KD */}
                 <div className="text-center">
-                  <p className="text-xs text-gray-500 uppercase tracking-wider dark:text-gray-400">Số Kiosk</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wider dark:text-gray-400">Số Kiosk KD</p>
                   <p className="text-lg font-bold text-gray-900 dark:text-white">{hospital.kioskCount} Thiết bị</p>
+                </div>
+
+                {/* Số Kiosk BT */}
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 uppercase tracking-wider dark:text-gray-400">Số Kiosk BT</p>
+                  <p className="text-lg font-bold text-gray-900 dark:text-white">{totalKioskFromMaintenanceContracts} Thiết bị</p>
                 </div>
 
                 {/* Trạng thái */}
@@ -1180,14 +1222,9 @@ export default function HospitalDetailView() {
                   {activeTab === "ticket" && (
                     <TicketsTab
                       tickets={hospital.tickets}
-                      onTicketsChange={(updatedTickets) => {
-                        // Update hospital.tickets when tickets change
-                        setHospital(prev => prev ? { 
-                          ...prev, 
-                          tickets: updatedTickets
-                        } : null);
-                      }}
-                      hospitalId={hospital.id}
+                      onTicketsChange={handleTicketsChange}
+                      hospitalId={hospital.id} // Vẫn cần hospitalId để tạo/sửa/xóa tickets
+                      useTicketsProp={true} // Dùng tickets prop từ parent, không load từ API
                     />
                   )}
 

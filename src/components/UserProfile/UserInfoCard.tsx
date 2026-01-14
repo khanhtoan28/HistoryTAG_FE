@@ -26,6 +26,7 @@ const VN_TEAM: Record<string, string> = {
   DEPLOYMENT: "Triển Khai",
   MAINTENANCE: "Bảo Hành, Bảo Trì",
   SALES: "Kinh Doanh",
+  CUSTOMER_SERVICE: "Chăm sóc khách hàng",
 };
 
 export default function UserInfoCard() {
@@ -35,6 +36,33 @@ export default function UserInfoCard() {
   const userId = useMemo(() => {
     const s = localStorage.getItem("userId");
     return s ? Number(s) : undefined;
+  }, []);
+
+  // Check if user is admin (not superadmin)
+  const isAdmin = useMemo(() => {
+    try {
+      const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
+      if (rolesStr) {
+        const roles = JSON.parse(rolesStr);
+        if (Array.isArray(roles)) {
+          return roles.some((r: unknown) => {
+            if (typeof r === "string") {
+              return r.toUpperCase() === "ADMIN" && r.toUpperCase() !== "SUPERADMIN";
+            }
+            if (r && typeof r === "object") {
+              const roleName = (r as Record<string, unknown>).roleName || (r as Record<string, unknown>).role_name || (r as Record<string, unknown>).role;
+              if (typeof roleName === "string") {
+                return roleName.toUpperCase() === "ADMIN" && roleName.toUpperCase() !== "SUPERADMIN";
+              }
+            }
+            return false;
+          });
+        }
+      }
+    } catch {
+      // ignore parsing errors
+    }
+    return false;
   }, []);
 
   const [user, setUser] = useState<UserResponseDTO | null>(null);
@@ -153,10 +181,14 @@ export default function UserInfoCard() {
     try {
       // ✅ Gửi address và phone (kể cả empty string) để backend có thể xử lý xóa
       // Backend sẽ set address về "Chưa cập nhật" nếu nhận empty string
+      // ✅ Admin không thể thay đổi department và team
       const payloadToSend = {
         ...form,
         address: form.address?.trim() ?? "",
         phone: form.phone?.trim() ?? "",
+        // Nếu là admin, giữ nguyên department và team từ user hiện tại
+        department: isAdmin ? (user?.department as any) ?? null : form.department,
+        team: isAdmin ? (user?.team as any) ?? null : form.team,
       };
       const updated = await updateUserAccount(userId, payloadToSend);
       setUser((prev) => ({ ...prev, ...updated }));
@@ -415,30 +447,39 @@ export default function UserInfoCard() {
                     <div className="col-span-2 lg:col-span-1">
                       <Label>Phòng ban</Label>
                       <select
-                        className="w-full rounded-lg border px-3 py-2"
+                        className={`w-full rounded-lg border px-3 py-2 ${isAdmin ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                         value={form.department ?? ""}
                         onChange={onChange("department")}
+                        disabled={isAdmin}
                       >
                         <option value="">-- Chọn phòng ban --</option>
                         <option value="IT">Phòng Kỹ Thuật</option>
                         <option value="ACCOUNTING">Phòng Kế Toán</option>
                         <option value="BUSINESS">Phòng Kinh Doanh</option>
                       </select>
+                      {isAdmin && (
+                        <p className="mt-1 text-xs text-gray-500">Admin không thể thay đổi phòng ban</p>
+                      )}
                     </div>
 
                     <div className="col-span-2 lg:col-span-1">
                       <Label>Team</Label>
                       <select
-                        className="w-full rounded-lg border px-3 py-2"
+                        className={`w-full rounded-lg border px-3 py-2 ${isAdmin ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                         value={form.team ?? ""}
                         onChange={onChange("team")}
+                        disabled={isAdmin}
                       >
                         <option value="">-- Chọn team --</option>
                         <option value="DEV">Team Lập Trình Viên</option>
                         <option value="DEPLOYMENT">Team Triển Khai</option>
                         <option value="MAINTENANCE">Team Bảo Hành, Bảo Trì</option>
                         <option value="SALES">Team Kinh Doanh</option>
+                        <option value="CUSTOMER_SERVICE">Team Chăm sóc khách hàng</option>
                       </select>
+                      {isAdmin && (
+                        <p className="mt-1 text-xs text-gray-500">Admin không thể thay đổi team</p>
+                      )}
                     </div>
                   </div>
                 </div>

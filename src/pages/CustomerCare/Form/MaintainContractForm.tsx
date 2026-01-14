@@ -58,6 +58,7 @@ export type WarrantyContractForm = {
   totalPrice: number | "";
   startDate?: string | null;
   endDate?: string | null;
+  kioskQuantity?: number | "";
 };
 
 // Component RemoteSelect cho Pic User
@@ -799,6 +800,27 @@ export default function MaintainContractForm({
                     onFocus={handleTotalPriceFocus}
                     disabled={isViewing || !canEdit}
                     placeholder="Nhập tổng tiền..."
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                    Số lượng kiosk
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50"
+                    value={form.kioskQuantity === "" ? "" : form.kioskQuantity || ""}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setForm((s) => ({
+                        ...s,
+                        kioskQuantity: value === "" ? "" : (value ? parseInt(value, 10) || "" : "")
+                      }));
+                    }}
+                    disabled={isViewing || !canEdit}
+                    placeholder="Nhập số lượng kiosk..."
                   />
                 </div>
 
