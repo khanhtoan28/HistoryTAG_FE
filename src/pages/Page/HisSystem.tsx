@@ -124,6 +124,8 @@ function errMsg(err: unknown, fallback = "Lỗi xảy ra") {
 // Helper functions for status colors
 function getStatusBg(status?: string | null): string {
   switch (status) {
+    case "NOT_DEPLOYED":
+      return "bg-gray-400";
     case "IN_PROGRESS":
       return "bg-orange-500";
     case "COMPLETED":
@@ -150,6 +152,8 @@ function getStatusColor(status?: string | null): string {
 
 function getStatusLabel(status?: string | null): string {
   switch (status) {
+    case "NOT_DEPLOYED":
+      return "Chưa triển khai";
     case "IN_PROGRESS":
       return "Đang thực hiện";
     case "COMPLETED":

@@ -125,6 +125,7 @@ const PRIORITY_FALLBACK: EnumOption[] = [
 ];
 
 const STATUS_FALLBACK: EnumOption[] = [
+  { name: "NOT_DEPLOYED", displayName: "Chưa triển khai" },
   { name: "IN_PROGRESS", displayName: "Đang thực hiện" },
   { name: "COMPLETED", displayName: "Hoàn thành" },
   { name: "ISSUE", displayName: "Gặp sự cố" },
@@ -153,6 +154,8 @@ function disp(map: Record<string, string>, key?: string | null) {
 // Hàm lấy màu cho trạng thái
 function getStatusColor(status?: string | null): string {
   switch (status) {
+    case "NOT_DEPLOYED":
+      return "text-gray-600";
     case "IN_PROGRESS":
       return "text-orange-600";
     case "COMPLETED":
@@ -185,6 +188,8 @@ function getPriorityColor(priority?: string | null): string {
 // Background color helpers for small status/priority indicators
 function getStatusBg(status?: string | null): string {
   switch (status) {
+    case "NOT_DEPLOYED":
+      return "bg-gray-400";
     case "IN_PROGRESS":
       return "bg-orange-500";
     case "COMPLETED":
