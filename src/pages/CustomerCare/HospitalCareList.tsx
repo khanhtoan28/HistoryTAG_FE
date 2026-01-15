@@ -450,6 +450,20 @@ export default function HospitalCareList() {
     });
   }, [hospitals, activeTab, picFilter, dateFromFilter, dateToFilter]);
 
+  // Tính toán totalItems và totalPages dựa trên filteredHospitals khi có filter theo date
+  const effectiveTotalItems = useMemo(() => {
+    // Nếu có filter theo date, dùng số lượng từ filteredHospitals
+    if (dateFromFilter || dateToFilter) {
+      return filteredHospitals.length;
+    }
+    // Nếu không có filter theo date, dùng totalItems từ API
+    return totalItems;
+  }, [filteredHospitals.length, totalItems, dateFromFilter, dateToFilter]);
+
+  const effectiveTotalPages = useMemo(() => {
+    return Math.ceil(effectiveTotalItems / itemsPerPage);
+  }, [effectiveTotalItems, itemsPerPage]);
+
   // Pagination - API đã handle pagination, nhưng vẫn filter client-side cho tabs
   const paginatedHospitals = filteredHospitals;
 
@@ -699,40 +713,40 @@ export default function HospitalCareList() {
             <table className="w-full divide-y divide-gray-200 dark:divide-gray-800">
               <thead className="bg-gray-50 dark:bg-gray-800/50">
                 <tr>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                     Tên bệnh viện
                   </th>
                   
-                  <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                     Ưu tiên
                   </th>
                 
-                  <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                     Liên hệ cuối
                   </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                     Số Kiosk KD
                   </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                     Số Kiosk BT
                   </th>
                   
-                  <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 min-w-[140px]">
                     Phụ trách
                   </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 min-w-[150px]">
                     Tổng giá trị HĐ
                   </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                     Ngày thêm
                   </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                     Ngày mục tiêu
                   </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                     Người thêm
                   </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                  <th className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                     Thao tác
                   </th>
                 </tr>
@@ -765,7 +779,7 @@ export default function HospitalCareList() {
                     return (
                       <tr key={hospital.id} className={`${getRowBg(hospital.status)} transition hover:bg-gray-50 dark:hover:bg-gray-800/50`}>
                         {/* Tên bệnh viện */}
-                        <td className="min-w-[180px] px-3 py-3">
+                        <td className="min-w-[180px] px-4 py-3">
                           <button 
                             onClick={() => {
                               const basePath = location.pathname.includes('/superadmin') ? '/superadmin' : '/admin';
@@ -782,7 +796,7 @@ export default function HospitalCareList() {
                         
 
                         {/* Ưu tiên */}
-                        <td className="whitespace-nowrap px-3 py-3">
+                        <td className="whitespace-nowrap px-4 py-3">
                           {hospital.priority && (
                             <span
                               className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${priorityConfig[hospital.priority].bgColor} ${priorityConfig[hospital.priority].textColor}`}
@@ -800,7 +814,7 @@ export default function HospitalCareList() {
                         
 
                         {/* Liên hệ cuối */}
-                        <td className="whitespace-nowrap px-3 py-3">
+                        <td className="whitespace-nowrap px-4 py-3">
                           {hospital.lastContactRelative ? (
                             <div className="text-sm text-gray-700 dark:text-gray-300">
                               <div className="font-medium">{hospital.lastContactRelative}</div>
@@ -816,12 +830,12 @@ export default function HospitalCareList() {
                         </td>
 
                         {/* Số Kiosk KD */}
-                        <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-700 dark:text-gray-300">
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
                           {hospital.kioskCount}
                         </td>
 
                         {/* Số Kiosk BT */}
-                        <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-700 dark:text-gray-300">
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
                           {(() => {
                             if (!hospital.contracts || hospital.contracts.length === 0) return "-";
                             const totalKioskBT = hospital.contracts
@@ -838,30 +852,30 @@ export default function HospitalCareList() {
                         
 
                         {/* Phụ trách */}
-                        <td className="whitespace-nowrap px-3 py-3">
+                        <td className="whitespace-nowrap px-4 py-3 min-w-[140px]">
                           <div className="flex items-center gap-2">
                             {hospital.pic.avatar ? (
                             <img
                               src={hospital.pic.avatar}
                               alt={hospital.pic.name}
-                              className="h-7 w-7 rounded-full object-cover"
+                              className="h-7 w-7 rounded-full object-cover shrink-0"
                             />
                             ) : (
-                              <div className="h-7 w-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-medium">
+                              <div className="h-7 w-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-medium shrink-0">
                                 {hospital.pic.name.charAt(0).toUpperCase()}
                               </div>
                             )}
-                            <span className="text-sm text-gray-700 dark:text-gray-300">{hospital.pic.name}</span>
+                            <span className="text-sm text-gray-700 dark:text-gray-300 truncate max-w-[100px]">{hospital.pic.name}</span>
                           </div>
                         </td>
 
                         {/* Giá trị HĐ */}
-                        <td className="whitespace-nowrap px-3 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                        <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-900 dark:text-white min-w-[150px]">
                           {formatCurrency(hospital.contractValue)}
                         </td>
 
                         {/* Ngày thêm */}
-                        <td className="whitespace-nowrap px-3 py-3">
+                        <td className="whitespace-nowrap px-4 py-3">
                           {hospital.createdDate ? (
                             <div className="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300">
                               <FiCalendar className="h-4 w-4 text-gray-400" />
@@ -873,7 +887,7 @@ export default function HospitalCareList() {
                         </td>
 
                         {/* Ngày mục tiêu */}
-                        <td className="whitespace-nowrap px-3 py-3">
+                        <td className="whitespace-nowrap px-4 py-3">
                           {hospital.targetDate ? (
                             <div className="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300">
                               <FiCalendar className="h-4 w-4 text-gray-400" />
@@ -885,7 +899,7 @@ export default function HospitalCareList() {
                         </td>
 
                         {/* Người thêm */}
-                        <td className="whitespace-nowrap px-3 py-3">
+                        <td className="whitespace-nowrap px-4 py-3">
                           {hospital.createdBy ? (
                             <div className="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300">
                               <FiUser className="h-4 w-4 text-gray-400" />
@@ -897,7 +911,7 @@ export default function HospitalCareList() {
                         </td>
 
                         {/* Thao tác */}
-                        <td className="whitespace-nowrap px-3 py-3">
+                        <td className="whitespace-nowrap px-4 py-3">
                           <div className="flex items-center justify-center gap-1 relative">
                             <button
                               title="Xem chi tiết"
@@ -991,11 +1005,11 @@ export default function HospitalCareList() {
           </div>
 
           {/* Table Footer / Pagination */}
-          {!loading && totalItems > 0 && (
+          {!loading && effectiveTotalItems > 0 && (
             <Pagination
               currentPage={currentPage}
-              totalPages={totalPages}
-              totalItems={totalItems}
+              totalPages={effectiveTotalPages}
+              totalItems={effectiveTotalItems}
               itemsPerPage={itemsPerPage}
               onPageChange={setCurrentPage}
               onItemsPerPageChange={(newSize) => {
