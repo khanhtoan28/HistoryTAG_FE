@@ -619,7 +619,7 @@ export default function TaskFormModal({
             hospitalId: hospitalOpt.id,
             picDeploymentId: picOpts[0].id, // Gửi PIC đầu tiên làm chính
             // Gửi danh sách tất cả PICs (bao gồm cả PIC chính) để backend xử lý
-            picDeploymentIds: allPicIds.length > 1 ? allPicIds : undefined,
+            picDeploymentIds: allPicIds,
             agencyId: null,
             hisSystemId: null,
             hardwareId: null,
