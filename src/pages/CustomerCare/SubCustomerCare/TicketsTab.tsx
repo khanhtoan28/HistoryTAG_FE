@@ -33,6 +33,10 @@ interface TicketsTabProps {
   useTicketsProp?: boolean; // Flag để phân biệt: true = dùng tickets prop, false/undefined = load từ API
 }
 
+const TICKETS_CACHE_TTL_MS = 2 * 60 * 1000;
+const ticketsCache = new Map<number, Ticket[]>();
+const ticketsCacheUpdatedAt = new Map<number, number>();
+
 const statusConfig: Record<string, { label: string; bgColor: string; textColor: string }> = {
   CHUA_XU_LY: { label: "Chưa xử lý", bgColor: "bg-gray-100", textColor: "text-gray-700" },
   DANG_XU_LY: { label: "Đang xử lý", bgColor: "bg-blue-100", textColor: "text-blue-700" },
@@ -85,7 +89,17 @@ export default function TicketsTab({
     }
     
     console.log("TicketsTab: Loading tickets for hospitalId:", hospitalId, "Type:", typeof hospitalId);
-    setLoading(true);
+    const cached = ticketsCache.get(hospitalId);
+    const cachedAt = ticketsCacheUpdatedAt.get(hospitalId) ?? 0;
+    const isStale = Date.now() - cachedAt > TICKETS_CACHE_TTL_MS;
+    if (cached && cached.length > 0) {
+      setLocalTickets(cached);
+      setLoading(false);
+      if (!isStale) {
+        return;
+      }
+    }
+    setLoading(!cached || cached.length === 0);
     setError(null);
     try {
       const data = await getHospitalTickets(hospitalId);
@@ -108,6 +122,8 @@ export default function TicketsTab({
       });
       console.log("TicketsTab: Converted tickets:", convertedTickets);
       setLocalTickets(convertedTickets);
+      ticketsCache.set(hospitalId, convertedTickets);
+      ticketsCacheUpdatedAt.set(hospitalId, Date.now());
       if (onTicketsChange) {
         onTicketsChange(convertedTickets);
       }
