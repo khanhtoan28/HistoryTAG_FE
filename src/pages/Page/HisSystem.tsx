@@ -256,6 +256,8 @@ const HisSystemPage: React.FC = () => {
   const [selectedHisId, setSelectedHisId] = useState<number | null>(null);
   const [selectedHospitals, setSelectedHospitals] = useState<HospitalStat[]>([]);
   const [hospitalsLoading, setHospitalsLoading] = useState(false);
+  const [hospitalByHisCache, setHospitalByHisCache] = useState<Record<number, HospitalStat[]>>({});
+  const hospitalsCacheRef = React.useRef<{ data: any[]; fetchedAt: number } | null>(null);
 
   const isEditing = !!editing?.id;
   const isViewing = !!viewing?.id;
@@ -313,30 +315,53 @@ const HisSystemPage: React.FC = () => {
   }, [page, size, sortBy, sortDir]);
 
 
-  // Load hospital counts for all HIS items (optimized: fetch with reasonable size instead of 10000)
+  // Cache hospitals list to avoid refetching on every modal open / stats calc
+  async function fetchHospitalsCached() {
+    const cache = hospitalsCacheRef.current;
+    const now = Date.now();
+    if (cache && now - cache.fetchedAt < 2 * 60 * 1000) {
+      return cache.data;
+    }
+
+    const url = buildUrl(`${API_BASE}/api/v1/auth/hospitals`);
+    url.searchParams.set("page", "0");
+    url.searchParams.set("size", "500"); // Reduced from 10000 to 500 for better performance
+
+    const res = await fetch(url.toString(), { headers: { ...authHeader() } });
+    if (!res.ok) return cache?.data ?? [];
+
+    const data = await res.json();
+    const allHospitals = Array.isArray(data) ? data : (data.content ?? []);
+    hospitalsCacheRef.current = { data: allHospitals, fetchedAt: now };
+    return allHospitals;
+  }
+
+  // Load hospital counts for all HIS items (prefer server-side count)
   useEffect(() => {
     if (items.length === 0) return;
     
     const loadCounts = async () => {
       try {
-        // Optimized: Fetch hospitals with reasonable size (500) instead of all 10000
-        // If there are more than 500 hospitals, we'll count what we can get
-        const url = buildUrl(`${API_BASE}/api/v1/auth/hospitals`);
-        url.searchParams.set("page", "0");
-        url.searchParams.set("size", "500"); // Reduced from 10000 to 500 for better performance
-        
+        const url = buildUrl(`${API_BASE}/api/v1/auth/hospitals/count-by-his`);
         const res = await fetch(url.toString(), { headers: { ...authHeader() } });
-        if (!res.ok) return;
-        
-        const data = await res.json();
-        const allHospitals = Array.isArray(data) ? data : (data.content ?? []);
-        
-        // Count hospitals per HIS
+        if (res.ok) {
+          const data = await res.json();
+          if (data && typeof data === "object") {
+            const counts: Record<number, number> = {};
+            items.forEach((his) => {
+              counts[his.id] = Number(data[String(his.id)]) || 0;
+            });
+            setHospitalStats(counts);
+            return;
+          }
+        }
+
+        // Fallback: reuse cached hospitals list if endpoint not available
+        const allHospitals = await fetchHospitalsCached();
         const counts: Record<number, number> = {};
         items.forEach((his) => {
           counts[his.id] = allHospitals.filter((h: any) => h.hisSystemId === his.id).length;
         });
-        
         setHospitalStats(counts);
       } catch (e) {
         console.error("Error loading hospital counts:", e);
@@ -346,14 +371,18 @@ const HisSystemPage: React.FC = () => {
     loadCounts();
   }, [items]);
 
-  // Fetch hospitals when modal opens (optimized: try to use filter if available, otherwise fetch with reasonable size)
+  // Fetch hospitals when modal opens (use cache for faster display)
   async function loadHospitalsForHis(hisId: number) {
-    setHospitalsLoading(true);
+    const cached = hospitalByHisCache[hisId];
+    if (cached) {
+      setSelectedHospitals(cached);
+    }
+    setHospitalsLoading(!cached);
     try {
       const url = buildUrl(`${API_BASE}/api/v1/auth/hospitals`);
       url.searchParams.set("page", "0");
-      // Optimized: Try to use filter if backend supports it, otherwise fetch with reasonable size
-      // If backend supports hisSystemId filter, add it here: url.searchParams.set("hisSystemId", String(hisId));
+      // Try to use backend filter (if supported)
+      url.searchParams.set("hisSystemId", String(hisId));
       url.searchParams.set("size", "500"); // Reduced from 10000 to 500 for better performance
       
       const res = await fetch(url.toString(), { headers: { ...authHeader() } });
@@ -364,11 +393,13 @@ const HisSystemPage: React.FC = () => {
       
       const data = await res.json();
       const allHospitals = Array.isArray(data) ? data : (data.content ?? []);
+
+      // If backend ignores hisSystemId, filter on client
+      const filteredHospitals = allHospitals.every((h: any) => h.hisSystemId === hisId)
+        ? allHospitals
+        : allHospitals.filter((h: any) => h.hisSystemId === hisId);
       
-      // Filter hospitals by hisSystemId
-      const hospitals = allHospitals
-        .filter((h: any) => h.hisSystemId === hisId)
-        .map((h: any) => ({
+      const hospitals = filteredHospitals.map((h: any) => ({
           id: h.id,
           name: h.name,
           province: h.province,
@@ -378,6 +409,7 @@ const HisSystemPage: React.FC = () => {
         }));
       
       setSelectedHospitals(hospitals);
+      setHospitalByHisCache((prev) => ({ ...prev, [hisId]: hospitals }));
     } catch (e) {
       console.error("Error loading hospitals:", e);
       setSelectedHospitals([]);
