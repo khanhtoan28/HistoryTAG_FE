@@ -439,11 +439,14 @@ export default function HospitalsPage() {
   // Filters (server-side)
   const [qName, setQName] = useState("");
   const [debouncedQName, setDebouncedQName] = useState(""); // Debounced version for API calls
+  const [qCode, setQCode] = useState("");
+  const [debouncedQCode, setDebouncedQCode] = useState(""); // Debounced version for API calls
   const [qProvince, setQProvince] = useState("");
   const [qStatus, setQStatus] = useState("");
   const [qPriority, setQPriority] = useState("");
   const [qPersonInCharge, setQPersonInCharge] = useState("");
   const nameSearchDebounceRef = useRef<number | null>(null);
+  const codeSearchDebounceRef = useRef<number | null>(null);
   
   // Debounce name search input: update debouncedQName after 300ms of no typing
   useEffect(() => {
@@ -459,11 +462,25 @@ export default function HospitalsPage() {
       }
     };
   }, [qName]);
+
+  useEffect(() => {
+    if (codeSearchDebounceRef.current) {
+      window.clearTimeout(codeSearchDebounceRef.current);
+    }
+    codeSearchDebounceRef.current = window.setTimeout(() => {
+      setDebouncedQCode(qCode);
+    }, 300);
+    return () => {
+      if (codeSearchDebounceRef.current) {
+        window.clearTimeout(codeSearchDebounceRef.current);
+      }
+    };
+  }, [qCode]);
   
   // Reset về trang đầu khi filter thay đổi
   useEffect(() => {
     setPage(0);
-  }, [debouncedQName, qProvince, qStatus, qPriority, qPersonInCharge]);
+  }, [debouncedQName, debouncedQCode, qProvince, qStatus, qPriority, qPersonInCharge]);
 
   const [priorityOptions] = useState<EnumOption[]>(PRIORITY_FALLBACK);
   const [statusOptions] = useState<EnumOption[]>(STATUS_FALLBACK);
@@ -975,6 +992,7 @@ export default function HospitalsPage() {
       
       // Thêm filter params
       if (debouncedQName.trim()) url.searchParams.set("name", debouncedQName.trim());
+      if (debouncedQCode.trim()) url.searchParams.set("hospitalCode", debouncedQCode.trim());
       if (qProvince.trim()) url.searchParams.set("province", qProvince.trim());
       if (qStatus.trim()) url.searchParams.set("status", qStatus.trim());
       if (qPriority.trim()) url.searchParams.set("priority", qPriority.trim());
@@ -1027,7 +1045,7 @@ export default function HospitalsPage() {
 
   useEffect(() => {
     fetchList();
-  }, [page, size, debouncedQName, qProvince, qStatus, qPriority, qPersonInCharge]);
+  }, [page, size, debouncedQName, debouncedQCode, qProvince, qStatus, qPriority, qPersonInCharge]);
 
   // Server đã filter rồi, dùng trực tiếp items
   const filtered = items;
@@ -1719,6 +1737,13 @@ export default function HospitalsPage() {
               value={qName}
               onChange={(e) => setQName(e.target.value)}
             />
+            <input
+              type="text"
+              className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px] border-gray-300 bg-white"
+              placeholder="Tìm theo mã BV"
+              value={qCode}
+              onChange={(e) => setQCode(e.target.value)}
+            />
             <FilterProvinceSelect
               value={qProvince}
               onChange={setQProvince}
@@ -1753,6 +1778,7 @@ export default function HospitalsPage() {
               type="button"
               onClick={() => {
                 setQName("");
+                setQCode("");
                 setQProvince("");
                 setQStatus("");
                 setQPriority("");

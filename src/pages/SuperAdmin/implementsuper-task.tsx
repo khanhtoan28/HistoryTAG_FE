@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";// hoặc copy 2 hàm này từ trang cũ nếu bạn chưa có
-import { FiClipboard, FiMapPin, FiUser, FiClock, FiLink, FiActivity, FiCalendar, FiInfo, FiCheckCircle, FiXCircle } from "react-icons/fi";
+import { motion, AnimatePresence } from "framer-motion";// hoặc copy 2 hàm này từ trang cũ nếu bạn chưa có
+import { FiClipboard, FiMapPin, FiUser, FiClock, FiLink, FiActivity, FiCalendar, FiInfo, FiCheckCircle, FiXCircle, FiTag, FiX } from "react-icons/fi";
 import { AiOutlineEye } from "react-icons/ai";
 import toast from "react-hot-toast";
 import type { ToastOptions } from "react-hot-toast";
 import TaskCard from "./TaskCardNew";
 import TaskFormModal from "./TaskFormModal";
 import TaskNotes from "../../components/TaskNotes";
+import TicketsTab from "../../pages/CustomerCare/SubCustomerCare/TicketsTab";
 import { isBusinessContractTaskName as isBusinessContractTask } from "../../utils/businessContract";
 
 const API_ROOT = import.meta.env.VITE_API_URL || "";
@@ -198,6 +199,9 @@ const ImplementSuperTaskPage: React.FC = () => {
   const [enableItemAnimation, setEnableItemAnimation] = useState<boolean>(true);
   const [picOptions, setPicOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [acceptedCount, setAcceptedCount] = useState<number | null>(null);
+  const [showTicketsModal, setShowTicketsModal] = useState(false);
+  const [selectedHospitalIdForTickets, setSelectedHospitalIdForTickets] = useState<number | null>(null);
+  const [selectedHospitalNameForTickets, setSelectedHospitalNameForTickets] = useState<string | null>(null);
 
   // New state for hospital list view
   const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
@@ -1586,6 +1590,30 @@ const ImplementSuperTaskPage: React.FC = () => {
                                   >
                                     <AiOutlineEye className="text-lg" />
                                   </button>
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      let finalHospitalId: number | null = null;
+                                      if (hospital.id && hospital.id > 0) {
+                                        finalHospitalId = hospital.id;
+                                      } else {
+                                        const resolvedId = await resolveHospitalIdByName(hospital.label);
+                                        if (resolvedId) finalHospitalId = resolvedId;
+                                      }
+
+                                      if (finalHospitalId && finalHospitalId > 0) {
+                                        setSelectedHospitalIdForTickets(finalHospitalId);
+                                        setSelectedHospitalNameForTickets(hospital.label);
+                                        setShowTicketsModal(true);
+                                      } else {
+                                        toastError("Không thể tìm thấy ID bệnh viện hợp lệ");
+                                      }
+                                    }}
+                                    className="p-2 rounded-full text-gray-500 hover:text-purple-600 hover:bg-purple-50 transition"
+                                    title="Xem danh sách tickets"
+                                  >
+                                    <FiTag className="text-lg" />
+                                  </button>
                                   {(hospital.taskCount || 0) > 0 && hospital.allTransferred && !hospital.allAccepted ? (
                                     <span
                                       className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-yellow-100 text-yellow-700 text-sm font-medium"
@@ -2098,6 +2126,62 @@ const ImplementSuperTaskPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Tickets Modal */}
+      <AnimatePresence>
+        {showTicketsModal && selectedHospitalIdForTickets && (
+          <motion.div
+            className="fixed inset-0 z-[120] flex items-center justify-center p-4 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+          >
+            <motion.div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setShowTicketsModal(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+            />
+            <motion.div
+              className="relative z-[121] w-full max-w-6xl rounded-2xl bg-white shadow-2xl border border-gray-200 dark:bg-gray-800 dark:border-gray-700 max-h-[90vh] overflow-y-auto"
+              initial={{ opacity: 0, scale: 0.98, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: 8 }}
+              transition={{ duration: 0.18 }}
+            >
+              <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Tickets của {selectedHospitalNameForTickets || hospitalsWithTasks.find(h => h.id === selectedHospitalIdForTickets)?.label || "Bệnh viện"}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowTicketsModal(false);
+                    setSelectedHospitalIdForTickets(null);
+                    setSelectedHospitalNameForTickets(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
+                >
+                  <FiX className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="p-6">
+                {selectedHospitalIdForTickets ? (
+                  <TicketsTab
+                    hospitalId={selectedHospitalIdForTickets}
+                  />
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    Đang tải thông tin bệnh viện...
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

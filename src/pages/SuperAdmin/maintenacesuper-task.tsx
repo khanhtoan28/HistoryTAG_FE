@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { FiActivity, FiInfo, FiLink, FiUser, FiClock, FiCheckCircle, FiXCircle, FiTag, FiX } from "react-icons/fi";
 import { FaHospital } from "react-icons/fa";
 import { AiOutlineEye } from "react-icons/ai";
@@ -1566,40 +1566,60 @@ const MaintenanceSuperTaskPage: React.FC = () => {
       />
 
       {/* Tickets Modal */}
-      {showTicketsModal && selectedHospitalIdForTickets && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowTicketsModal(false)} />
-          <div className="relative z-[121] w-full max-w-6xl rounded-2xl bg-white shadow-2xl border border-gray-200 dark:bg-gray-800 dark:border-gray-700 max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Tickets của {selectedHospitalNameForTickets || hospitalsWithTasks.find(h => h.id === selectedHospitalIdForTickets)?.label || "Bệnh viện"}
-              </h3>
-              <button
-                onClick={() => {
-                  setShowTicketsModal(false);
-                  setSelectedHospitalIdForTickets(null);
-                  setSelectedHospitalNameForTickets(null);
-                }}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
-              >
-                <FiX className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="p-6">
-              {selectedHospitalIdForTickets ? (
-                <TicketsTab 
-                  key={selectedHospitalIdForTickets} 
-                  hospitalId={selectedHospitalIdForTickets} 
-                />
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  Đang tải thông tin bệnh viện...
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {showTicketsModal && selectedHospitalIdForTickets && (
+          <motion.div
+            className="fixed inset-0 z-[120] flex items-center justify-center p-4 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+          >
+            <motion.div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setShowTicketsModal(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+            />
+            <motion.div
+              className="relative z-[121] w-full max-w-6xl rounded-2xl bg-white shadow-2xl border border-gray-200 dark:bg-gray-800 dark:border-gray-700 max-h-[90vh] overflow-y-auto"
+              initial={{ opacity: 0, scale: 0.98, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: 8 }}
+              transition={{ duration: 0.18 }}
+            >
+              <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Tickets của {selectedHospitalNameForTickets || hospitalsWithTasks.find(h => h.id === selectedHospitalIdForTickets)?.label || "Bệnh viện"}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowTicketsModal(false);
+                    setSelectedHospitalIdForTickets(null);
+                    setSelectedHospitalNameForTickets(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
+                >
+                  <FiX className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="p-6">
+                {selectedHospitalIdForTickets ? (
+                  <TicketsTab
+                    hospitalId={selectedHospitalIdForTickets}
+                  />
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    Đang tải thông tin bệnh viện...
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
