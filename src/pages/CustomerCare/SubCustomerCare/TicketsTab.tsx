@@ -80,6 +80,15 @@ export default function TicketsTab({
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
 
+  const applyLocalTickets = React.useCallback((updated: Ticket[]) => {
+    setLocalTickets(updated);
+    onTicketsChange?.(updated);
+    if (hospitalId) {
+      ticketsCache.set(hospitalId, updated);
+      ticketsCacheUpdatedAt.set(hospitalId, Date.now());
+    }
+  }, [hospitalId, onTicketsChange]);
+
   // Load tickets function - wrap in useCallback để tránh recreate mỗi lần render
   const loadTickets = React.useCallback(async () => {
     if (!hospitalId) {
@@ -273,8 +282,7 @@ export default function TicketsTab({
     if (!hospitalId) {
       // Fallback: local delete if no hospitalId
       const updatedTickets = localTickets.filter(t => t.id !== ticketId);
-      setLocalTickets(updatedTickets);
-      onTicketsChange?.(updatedTickets);
+      applyLocalTickets(updatedTickets);
       return;
     }
 
@@ -289,8 +297,9 @@ export default function TicketsTab({
 
       await deleteHospitalTicket(hospitalId, numericId, false);
       toast.success("Xóa ticket thành công");
-      // Reload tickets after delete
-      await loadTickets();
+      // Update list immediately to avoid flicker; cache will keep it in sync
+      const updatedTickets = localTickets.filter(t => t.id !== ticketId);
+      applyLocalTickets(updatedTickets);
     } catch (err: any) {
       console.error("Error deleting ticket:", err);
       setError(err?.response?.data?.message || err?.message || "Không thể xóa ticket");
