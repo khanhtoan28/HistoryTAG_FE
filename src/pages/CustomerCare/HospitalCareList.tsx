@@ -207,6 +207,32 @@ const priorityConfig: Record<"HIGH" | "MEDIUM" | "LOW", { label: string; bgColor
   LOW: { label: "Thấp", bgColor: "bg-green-100", textColor: "text-green-700", icon: "🟢" },
 };
 
+const TAG_COLOR_CLASSES = [
+  "bg-blue-100 text-blue-700",
+  "bg-red-100 text-red-700",
+  "bg-amber-100 text-amber-700",
+  "bg-purple-100 text-purple-700",
+  "bg-rose-100 text-rose-700",
+  "bg-cyan-100 text-cyan-700",
+  "bg-lime-100 text-lime-700",
+  "bg-orange-100 text-orange-700",
+];
+
+const getTagColorClass = (tag: string): string => {
+  let hash = 0;
+  for (let i = 0; i < tag.length; i += 1) {
+    hash = (hash * 31 + tag.charCodeAt(i)) | 0;
+  }
+  const idx = Math.abs(hash) % TAG_COLOR_CLASSES.length;
+  return TAG_COLOR_CLASSES[idx];
+};
+
+const getPrimaryTag = (tags?: string[]): string | null => {
+  if (!tags || tags.length === 0) return null;
+  const [first] = tags.filter(Boolean);
+  return first || null;
+};
+
 // ===================== TAB CONFIG =====================
 type TabKey = "all" | "sap_het_han" | "qua_han" | "da_gia_han" | "dang_hoat_dong";
 
@@ -230,6 +256,7 @@ export default function HospitalCareList() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
+  const [customerTypeFilter, setCustomerTypeFilter] = useState("");
   const [dateFromFilter, setDateFromFilter] = useState("");
   const [dateToFilter, setDateToFilter] = useState("");
   const [picFilter, setPicFilter] = useState("");
@@ -431,6 +458,11 @@ export default function HospitalCareList() {
       }
       // PIC filter (client-side)
       if (picFilter && !h.pic.name.toLowerCase().includes(picFilter.toLowerCase())) return false;
+      // Customer type filter (client-side)
+      if (customerTypeFilter) {
+        const primaryTag = getPrimaryTag(h.tags);
+        if (primaryTag !== customerTypeFilter) return false;
+      }
       // Date filter (client-side)
       if (dateFromFilter || dateToFilter) {
         if (!h.createdDate) return false;
@@ -448,7 +480,7 @@ export default function HospitalCareList() {
       }
       return true;
     });
-  }, [hospitals, activeTab, picFilter, dateFromFilter, dateToFilter]);
+  }, [hospitals, activeTab, picFilter, customerTypeFilter, dateFromFilter, dateToFilter]);
 
   // Tính toán totalItems và totalPages dựa trên filteredHospitals khi có filter theo date
   const effectiveTotalItems = useMemo(() => {
@@ -472,7 +504,12 @@ export default function HospitalCareList() {
     if (currentPage !== 0) {
     setCurrentPage(0);
     }
-  }, [searchTerm, priorityFilter, dateFromFilter, dateToFilter, picFilter, activeTab]);
+  }, [searchTerm, priorityFilter, customerTypeFilter, dateFromFilter, dateToFilter, picFilter, activeTab]);
+
+  const customerTypeOptions = useMemo(() => {
+    const tags = hospitals.flatMap((h) => h.tags || []).filter(Boolean);
+    return Array.from(new Set(tags));
+  }, [hospitals]);
 
   // Get row background based on status
   const getRowBg = (status: Hospital["status"]): string => {
@@ -621,6 +658,23 @@ export default function HospitalCareList() {
                 <FiChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               </div>
 
+              {/* Loại khách hàng */}
+              <div className="relative">
+                <select
+                  value={customerTypeFilter}
+                  onChange={(e) => setCustomerTypeFilter(e.target.value)}
+                  className="w-full appearance-none rounded-lg border border-gray-300 bg-white py-2 pl-3 pr-8 text-sm text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
+                >
+                  <option value="">Loại khách hàng</option>
+                  {customerTypeOptions.map((tag) => (
+                    <option key={tag} value={tag}>
+                      {tag}
+                    </option>
+                  ))}
+                </select>
+                <FiChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              </div>
+
               {/* Nhân viên phụ trách */}
               <div className="relative">
                 <select
@@ -720,6 +774,10 @@ export default function HospitalCareList() {
                   <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                     Ưu tiên
                   </th>
+
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                    Loại khách hàng
+                  </th>
                 
                   <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                     Liên hệ cuối
@@ -754,7 +812,7 @@ export default function HospitalCareList() {
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                 {loading ? (
                   <tr>
-                    <td colSpan={11} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={12} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
                       <div className="flex items-center justify-center gap-2">
                         <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
                         <span>Đang tải dữ liệu...</span>
@@ -763,13 +821,13 @@ export default function HospitalCareList() {
                   </tr>
                 ) : error ? (
                   <tr>
-                    <td colSpan={11} className="px-3 py-12 text-center text-red-500 dark:text-red-400">
+                    <td colSpan={12} className="px-3 py-12 text-center text-red-500 dark:text-red-400">
                       {error}
                     </td>
                   </tr>
                 ) : paginatedHospitals.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={12} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
                       Không tìm thấy bệnh viện nào
                     </td>
                   </tr>
@@ -805,6 +863,21 @@ export default function HospitalCareList() {
                               {priorityConfig[hospital.priority].label}
                             </span>
                           )}
+                        </td>
+
+                        {/* Loại khách hàng */}
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                          {(() => {
+                            const primaryTag = getPrimaryTag(hospital.tags);
+                            if (!primaryTag) return "-";
+                            return (
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-xs font-medium ${getTagColorClass(primaryTag)}`}
+                              >
+                                {primaryTag}
+                              </span>
+                            );
+                          })()}
                         </td>
 
                         {/* Ngày hết hạn */}

@@ -105,7 +105,6 @@ export default function AddHospitalToCareForm({
       });
       setHospitalSearch("");
       setUserSearch("");
-      setTagInput("");
     }
   }, [editingData, isOpen]);
 
@@ -119,7 +118,6 @@ export default function AddHospitalToCareForm({
   const [users, setUsers] = useState<Array<{ id: number; label: string; subLabel?: string; phone?: string | null }>>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   
-  const [tagInput, setTagInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const hospitalDropdownRef = useRef<HTMLDivElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
@@ -268,7 +266,6 @@ export default function AddHospitalToCareForm({
         });
         setHospitalSearch("");
         setUserSearch("");
-        setTagInput("");
       }
     } catch (error: any) {
       console.error("Error submitting form:", error);
@@ -296,20 +293,10 @@ export default function AddHospitalToCareForm({
     });
     setHospitalSearch("");
     setUserSearch("");
-    setTagInput("");
     onClose();
   };
 
-  const handleAddTag = () => {
-    if (tagInput.trim() && !formData.tags.includes(tagInput.trim())) {
-      setFormData({ ...formData, tags: [...formData.tags, tagInput.trim()] });
-      setTagInput("");
-    }
-  };
-
-  const handleRemoveTag = (tag: string) => {
-    setFormData({ ...formData, tags: formData.tags.filter((t) => t !== tag) });
-  };
+  const selectedTag = formData.tags && formData.tags.length > 0 ? formData.tags[0] : "";
 
   if (!isOpen) return null;
 
@@ -566,49 +553,23 @@ export default function AddHospitalToCareForm({
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               <FiTag className="inline h-4 w-4 mr-1" />
-              Thẻ
+              Loại khách hàng
             </label>
-            <div className="flex flex-wrap gap-2 mb-2">
-              {formData.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium dark:bg-blue-900 dark:text-blue-300"
-                >
+            <select
+              value={selectedTag}
+              onChange={(e) => {
+                const value = e.target.value;
+                setFormData({ ...formData, tags: value ? [value] : [] });
+              }}
+              className="w-full rounded-lg border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+            >
+              <option value="">Chọn loại khách hàng...</option>
+              {availableTags.map((tag) => (
+                <option key={tag} value={tag}>
                   {tag}
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveTag(tag)}
-                    className="hover:text-blue-900 dark:hover:text-blue-100"
-                  >
-                    ×
-                  </button>
-                </span>
+                </option>
               ))}
-            </div>
-            <div className="flex gap-2">
-              <select
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                className="flex-1 rounded-lg border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
-              >
-                <option value="">Chọn thẻ...</option>
-                {availableTags
-                  .filter((tag) => !formData.tags.includes(tag))
-                  .map((tag) => (
-                    <option key={tag} value={tag}>
-                      {tag}
-                    </option>
-                  ))}
-              </select>
-              <button
-                type="button"
-                onClick={handleAddTag}
-                disabled={!tagInput}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-              >
-                Thêm
-              </button>
-            </div>
+            </select>
           </div>
 
           {/* Ghi chú */}

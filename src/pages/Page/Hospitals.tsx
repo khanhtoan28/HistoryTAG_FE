@@ -495,7 +495,7 @@ export default function HospitalsPage() {
   const [contractsHospital, setContractsHospital] = useState<Hospital | null>(null);
   const [contractsData, setContractsData] = useState<{
     businessContracts: any[];
-    warrantyContracts: any[];
+    maintainContracts: any[];
     totalCount: number;
   } | null>(null);
   const [contractsLoading, setContractsLoading] = useState(false);
@@ -1207,14 +1207,14 @@ export default function HospitalsPage() {
       const data = await res.json();
       setContractsData({
         businessContracts: data.businessContracts || [],
-        warrantyContracts: data.warrantyContracts || [],
+        maintainContracts: data.maintainContracts || [],
         totalCount: data.totalCount || 0,
       });
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải danh sách hợp đồng");
       setContractsData({
         businessContracts: [],
-        warrantyContracts: [],
+        maintainContracts: [],
         totalCount: 0,
       });
     } finally {
@@ -2732,7 +2732,7 @@ export default function HospitalsPage() {
                                       <span className="font-medium">Số lượng:</span> {contract.quantity}
                                     </div>
                                   )}
-                                  {contract.unitPrice && (
+                                  {/* {contract.unitPrice && (
                                     <div className="flex items-start gap-1">
                                       <span className="font-medium">Đơn giá:</span> <span className="whitespace-nowrap inline-block">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.unitPrice)}</span>
                                     </div>
@@ -2741,7 +2741,7 @@ export default function HospitalsPage() {
                                     <div className="flex items-start gap-1">
                                       <span className="font-medium">Tổng giá:</span> <span className="whitespace-nowrap inline-block">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.totalPrice)}</span>
                                     </div>
-                                  )}
+                                  )} */}
                                   {contract.picUser && (
                                     <div>
                                       <span className="font-medium">Người phụ trách:</span> {contract.picUser.label || "—"}
@@ -2767,14 +2767,14 @@ export default function HospitalsPage() {
                   )}
 
                   {/* Warranty Contracts */}
-                  {contractsData.warrantyContracts.length > 0 && (
+                  {contractsData.maintainContracts.length > 0 && (
                     <div>
                       <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                        Hợp đồng bảo trì ({contractsData.warrantyContracts.length})
+                        Hợp đồng bảo trì ({contractsData.maintainContracts.length})
                       </h4>
                       <div className="space-y-3">
-                        {contractsData.warrantyContracts.map((contract: any) => (
+                        {contractsData.maintainContracts.map((contract: any) => (
                           <div key={contract.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition">
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
@@ -2782,10 +2782,10 @@ export default function HospitalsPage() {
                                 <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
                                   {contract.durationYears && (
                                     <div>
-                                      <span className="font-medium">Thời hạn:</span> {contract.durationYears} năm
+                                      <span className="font-medium">Thời hạn:</span> {contract.durationYears} 
                                     </div>
                                   )}
-                                  {contract.yearlyPrice && (
+                                  {/* {contract.yearlyPrice && (
                                     <div className="flex items-start gap-1">
                                       <span className="font-medium">Giá hàng năm:</span> <span className="whitespace-nowrap inline-block">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.yearlyPrice)}</span>
                                     </div>
@@ -2794,7 +2794,7 @@ export default function HospitalsPage() {
                                     <div className="flex items-start gap-1">
                                       <span className="font-medium">Tổng giá:</span> <span className="whitespace-nowrap inline-block">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.totalPrice)}</span>
                                     </div>
-                                  )}
+                                  )} */}
                                   {contract.picUser && (
                                     <div>
                                       <span className="font-medium">Người phụ trách:</span> {contract.picUser.label || "—"}
