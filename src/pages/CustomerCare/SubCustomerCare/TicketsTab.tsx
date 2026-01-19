@@ -63,6 +63,16 @@ const priorityConfig: Record<string, { bgColor: string; textColor: string; icon:
 
 const priorityOptions: Ticket["priority"][] = ["Cao", "Trung bình", "Thấp"];
 
+const ticketTypeConfig: Record<string, { label: string; bgColor: string; textColor: string }> = {
+  MAINTENANCE: { label: "Bảo trì", bgColor: "bg-blue-100", textColor: "text-blue-700" },
+  DEPLOYMENT: { label: "Triển khai", bgColor: "bg-purple-100", textColor: "text-purple-700" }
+};
+
+const ticketTypeOptions: Array<{ value: "MAINTENANCE" | "DEPLOYMENT"; label: string }> = [
+  { value: "MAINTENANCE", label: "Bảo trì" },
+  { value: "DEPLOYMENT", label: "Triển khai" }
+];
+
 export default function TicketsTab({
   tickets = [],
   onTicketsChange,
@@ -78,6 +88,7 @@ export default function TicketsTab({
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [ticketTypeFilter, setTicketTypeFilter] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
 
   const applyLocalTickets = React.useCallback((updated: Ticket[]) => {
@@ -119,6 +130,7 @@ export default function TicketsTab({
         issue: item.issue,
         priority: item.priority,
         status: item.status,
+        ticketType: item.ticketType || "MAINTENANCE", // Default to MAINTENANCE if not provided
         pic: item.pic || '',
         createdAt: item.createdAt || undefined,
         timeElapsed: item.status === "HOAN_THANH" ? undefined : calculateTimeElapsed(item.createdAt || undefined)
@@ -197,7 +209,8 @@ export default function TicketsTab({
     priority: "Trung bình",
     createdAt: new Date().toISOString(),
     pic: "",
-    status: "DANG_XU_LY"
+    status: "DANG_XU_LY",
+    ticketType: "MAINTENANCE"
   });
 
   // Filter tickets
@@ -210,10 +223,11 @@ export default function TicketsTab({
 
       const matchesStatus = statusFilter === "all" || ticket.status === statusFilter;
       const matchesPriority = priorityFilter === "all" || ticket.priority === priorityFilter;
+      const matchesTicketType = ticketTypeFilter === "all" || ticket.ticketType === ticketTypeFilter;
 
-      return matchesSearch && matchesStatus && matchesPriority;
+      return matchesSearch && matchesStatus && matchesPriority && matchesTicketType;
     });
-  }, [localTickets, searchQuery, statusFilter, priorityFilter]);
+  }, [localTickets, searchQuery, statusFilter, priorityFilter, ticketTypeFilter]);
 
   // Calculate time elapsed from createdAt
   const calculateTimeElapsed = (createdAt?: string): string => {
@@ -253,7 +267,8 @@ export default function TicketsTab({
       priority: "Trung bình",
       createdAt: new Date().toISOString(),
       pic: "",
-      status: "CHUA_XU_LY"
+      status: "CHUA_XU_LY",
+      ticketType: "MAINTENANCE"
     });
     setShowTicketModal(true);
   };
@@ -265,7 +280,8 @@ export default function TicketsTab({
       priority: ticket.priority,
       createdAt: ticket.createdAt || new Date().toISOString(),
       pic: ticket.pic,
-      status: ticket.status
+      status: ticket.status,
+      ticketType: ticket.ticketType || "MAINTENANCE"
     });
     setShowTicketModal(true);
   };
@@ -349,25 +365,76 @@ export default function TicketsTab({
         issue: ticketForm.issue.trim(),
         priority: ticketForm.priority,
         status: ticketForm.status,
+        ticketType: ticketForm.ticketType || "MAINTENANCE",
         picName: ticketForm.pic.trim() || null,
         picUserId: null // TODO: Map pic name to user ID if needed
       };
 
+      let updatedTicket: Ticket | null = null;
       if (editingTicket) {
         // Extract numeric ID from ticketCode (e.g., "#TK-123" -> 123)
         const numericId = parseInt(editingTicket.id.replace(/[^\d]/g, ''));
         if (isNaN(numericId)) {
           throw new Error("Invalid ticket ID");
         }
-        await updateHospitalTicket(hospitalId, numericId, payload, false);
+        const response = await updateHospitalTicket(hospitalId, numericId, payload, false);
         toast.success("Cập nhật ticket thành công");
+        // Convert response to Ticket format, preserve createdAt from original ticket if response doesn't have it
+        const createdAt = response.createdAt || editingTicket.createdAt || undefined;
+        updatedTicket = {
+          id: response.ticketCode || editingTicket.id,
+          issue: response.issue,
+          priority: response.priority,
+          status: response.status,
+          ticketType: response.ticketType || editingTicket.ticketType || "MAINTENANCE",
+          pic: response.pic || editingTicket.pic || '',
+          createdAt: createdAt,
+          timeElapsed: response.status === "HOAN_THANH" ? undefined : calculateTimeElapsed(createdAt)
+        };
       } else {
-        await createHospitalTicket(hospitalId, payload, false);
+        const response = await createHospitalTicket(hospitalId, payload, false);
         toast.success("Tạo ticket thành công");
+        // Convert response to Ticket format
+        updatedTicket = {
+          id: response.ticketCode || `#TK-${response.id}`,
+          issue: response.issue,
+          priority: response.priority,
+          status: response.status,
+          ticketType: response.ticketType || ticketForm.ticketType || "MAINTENANCE",
+          pic: response.pic || '',
+          createdAt: response.createdAt || ticketForm.createdAt || undefined,
+          timeElapsed: response.status === "HOAN_THANH" ? undefined : calculateTimeElapsed(response.createdAt || ticketForm.createdAt)
+        };
       }
 
-      // Reload tickets after save
-      await loadTickets();
+      // Update local tickets immediately for instant UI feedback
+      if (updatedTicket) {
+        let updatedTickets: Ticket[];
+        if (editingTicket) {
+          updatedTickets = localTickets.map(t =>
+            t.id === editingTicket.id ? updatedTicket! : { ...t, timeElapsed: t.status === "HOAN_THANH" ? undefined : calculateTimeElapsed(t.createdAt) }
+          );
+        } else {
+          updatedTickets = [
+            updatedTicket,
+            ...localTickets.map(t => ({ ...t, timeElapsed: t.status === "HOAN_THANH" ? undefined : calculateTimeElapsed(t.createdAt) }))
+          ];
+        }
+        // Sort by createdAt descending
+        updatedTickets.sort((a, b) => {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return dateB - dateA;
+        });
+        applyLocalTickets(updatedTickets);
+      }
+
+      // Invalidate cache to force fresh reload on next open
+      if (hospitalId) {
+        ticketsCache.delete(hospitalId);
+        ticketsCacheUpdatedAt.delete(hospitalId);
+      }
+
       setShowTicketModal(false);
       setEditingTicket(null);
     } catch (err: any) {
@@ -468,7 +535,7 @@ export default function TicketsTab({
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition ${
-              showFilters || statusFilter !== "all" || priorityFilter !== "all"
+              showFilters || statusFilter !== "all" || priorityFilter !== "all" || ticketTypeFilter !== "all"
                 ? "bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-300"
                 : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300"
             }`}
@@ -491,7 +558,7 @@ export default function TicketsTab({
       {/* Filters Panel */}
       {showFilters && (
         <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Status Filter */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -525,6 +592,22 @@ export default function TicketsTab({
                 <option value="Thấp">Thấp</option>
               </select>
             </div>
+
+            {/* Ticket Type Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Loại ticket
+              </label>
+              <select
+                value={ticketTypeFilter}
+                onChange={(e) => setTicketTypeFilter(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+              >
+                <option value="all">Tất cả</option>
+                <option value="MAINTENANCE">Bảo trì</option>
+                <option value="DEPLOYMENT">Triển khai</option>
+              </select>
+            </div>
           </div>
         </div>
       )}
@@ -547,6 +630,9 @@ export default function TicketsTab({
                 Trạng thái
               </th>
               <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
+                Loại ticket
+              </th>
+              <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
                 Thời gian chờ
               </th>
               <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
@@ -560,7 +646,7 @@ export default function TicketsTab({
           <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-900 dark:divide-gray-700">
             {loading ? (
               <tr>
-                <td colSpan={7} className="py-12 text-center">
+                <td colSpan={8} className="py-12 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
                     <p className="text-gray-500 dark:text-gray-400">Đang tải tickets...</p>
@@ -569,10 +655,10 @@ export default function TicketsTab({
               </tr>
             ) : filteredTickets.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-12 text-center">
+                <td colSpan={8} className="py-12 text-center">
                   <FiFileText className="h-12 w-12 mx-auto text-gray-300 mb-4" />
                   <p className="text-gray-500 dark:text-gray-400">
-                    {searchQuery || statusFilter !== "all" || priorityFilter !== "all"
+                    {searchQuery || statusFilter !== "all" || priorityFilter !== "all" || ticketTypeFilter !== "all"
                       ? "Không tìm thấy ticket nào"
                       : "Chưa có ticket nào"}
                   </p>
@@ -614,6 +700,17 @@ export default function TicketsTab({
                       >
                         {statusConfig[ticket.status]?.label}
                       </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      {ticket.ticketType && (
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
+                            ticketTypeConfig[ticket.ticketType]?.bgColor
+                          } ${ticketTypeConfig[ticket.ticketType]?.textColor}`}
+                        >
+                          {ticketTypeConfig[ticket.ticketType]?.label}
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300">
@@ -709,7 +806,7 @@ export default function TicketsTab({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 {/* Mức độ ưu tiên */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -747,6 +844,27 @@ export default function TicketsTab({
                     <option value="CHUA_XU_LY">Chưa xử lý</option>
                     <option value="DANG_XU_LY">Đang xử lý</option>
                     <option value="HOAN_THANH">Hoàn thành</option>
+                  </select>
+                </div>
+
+                {/* Loại ticket */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Loại ticket <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={ticketForm.ticketType || "MAINTENANCE"}
+                    onChange={(e) =>
+                      setTicketForm({ ...ticketForm, ticketType: e.target.value as Ticket["ticketType"] })
+                    }
+                    className="w-full rounded-lg border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+                    required
+                  >
+                    {ticketTypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -838,7 +956,7 @@ export default function TicketsTab({
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
                     Mức độ ưu tiên
@@ -864,6 +982,21 @@ export default function TicketsTab({
                   >
                     {statusConfig[viewingTicket.status]?.label}
                   </span>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Loại ticket
+                  </label>
+                  {viewingTicket.ticketType && (
+                    <span
+                      className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${
+                        ticketTypeConfig[viewingTicket.ticketType]?.bgColor
+                      } ${ticketTypeConfig[viewingTicket.ticketType]?.textColor}`}
+                    >
+                      {ticketTypeConfig[viewingTicket.ticketType]?.label}
+                    </span>
+                  )}
                 </div>
               </div>
 

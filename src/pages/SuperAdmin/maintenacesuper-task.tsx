@@ -8,6 +8,7 @@ import TaskCard from "./TaskCardNew";
 import TaskFormModal from "./TaskFormModal";
 import TaskNotes from "../../components/TaskNotes";
 import TicketsTab from "../../pages/CustomerCare/SubCustomerCare/TicketsTab";
+import { getHospitalTickets } from "../../api/ticket.api";
 
 const API_ROOT = import.meta.env.VITE_API_URL || "";
 const MIN_LOADING_MS = 2000;
@@ -249,6 +250,8 @@ const MaintenanceSuperTaskPage: React.FC = () => {
   const [showTicketsModal, setShowTicketsModal] = useState(false);
   const [selectedHospitalIdForTickets, setSelectedHospitalIdForTickets] = useState<number | null>(null);
   const [selectedHospitalNameForTickets, setSelectedHospitalNameForTickets] = useState<string | null>(null);
+  const [ticketOpenCounts, setTicketOpenCounts] = useState<Record<number, number>>({});
+  const [ticketCountLoading, setTicketCountLoading] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -893,6 +896,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     else if (hospitalStatusFilter === 'unaccepted') list = list.filter(h => (h.acceptedCount || 0) === 0);
     else if (hospitalStatusFilter === 'fromDeployment') list = list.filter(h => h.fromDeployment && !h.acceptedByMaintenance);
     else if (hospitalStatusFilter === 'acceptedFromDeployment') list = list.filter(h => h.fromDeployment && h.acceptedByMaintenance);
+    else if (hospitalStatusFilter === 'hasOpenTickets') list = list.filter(h => h.id && (ticketOpenCounts[h.id] ?? 0) > 0);
     if (hospitalPicFilter.length > 0) {
       const selected = new Set(hospitalPicFilter);
       list = list.filter((h) =>
@@ -902,7 +906,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     }
     list = [...list].sort((a, b) => a.label.localeCompare(b.label));
     return list;
-  }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalPicFilter]);
+  }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalPicFilter, ticketOpenCounts]);
 
   const hospitalSummary = useMemo(() => {
     const total = hospitalsWithTasks.length;
@@ -915,6 +919,59 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     }
     return { total, filteredCount, acceptedFull };
   }, [hospitalsWithTasks, filteredHospitals]);
+
+  const pagedHospitals = useMemo(() => {
+    return filteredHospitals.slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize);
+  }, [filteredHospitals, hospitalPage, hospitalSize]);
+
+  const getOpenTicketCount = React.useCallback((tickets: Array<{ status?: string }>) => {
+    return tickets.filter((t) => t.status !== "HOAN_THANH").length;
+  }, []);
+
+  const updateTicketOpenCount = React.useCallback((hospitalId: number, tickets: Array<{ status?: string }>) => {
+    setTicketOpenCounts((prev) => {
+      const newCount = getOpenTicketCount(tickets);
+      // Chỉ update nếu count thay đổi để tránh re-render không cần thiết
+      if (prev[hospitalId] === newCount) return prev;
+      return {
+        ...prev,
+        [hospitalId]: newCount,
+      };
+    });
+  }, [getOpenTicketCount]);
+
+  const handleTicketsChange = React.useCallback((tickets: Array<{ status?: string }>) => {
+    if (selectedHospitalIdForTickets) {
+      updateTicketOpenCount(selectedHospitalIdForTickets, tickets);
+    }
+  }, [selectedHospitalIdForTickets, updateTicketOpenCount]);
+
+  const loadTicketOpenCount = React.useCallback(async (hospitalId: number) => {
+    if (!hospitalId || hospitalId <= 0) return;
+    if (typeof ticketOpenCounts[hospitalId] === "number") return;
+    if (ticketCountLoading.has(hospitalId)) return;
+    setTicketCountLoading((prev) => new Set(prev).add(hospitalId));
+    try {
+      const tickets = await getHospitalTickets(hospitalId);
+      updateTicketOpenCount(hospitalId, tickets);
+    } catch {
+      // ignore errors to avoid noisy UI; badge just won't show
+    } finally {
+      setTicketCountLoading((prev) => {
+        const next = new Set(prev);
+        next.delete(hospitalId);
+        return next;
+      });
+    }
+  }, [ticketCountLoading, ticketOpenCounts, updateTicketOpenCount]);
+
+  useEffect(() => {
+    if (!showHospitalList) return;
+    const ids = pagedHospitals.map((h) => h.id).filter((id): id is number => typeof id === "number" && id > 0);
+    ids.forEach((id) => {
+      void loadTicketOpenCount(id);
+    });
+  }, [pagedHospitals, showHospitalList, loadTicketOpenCount]);
 
   useEffect(() => {
     if (!showHospitalList && selectedHospital) {
@@ -1063,6 +1120,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                       <option value="unaccepted">Chưa có nghiệm thu</option>
                       <option value="fromDeployment">Từ triển khai</option>
                       <option value="acceptedFromDeployment">Đã nhận từ triển khai</option>
+                      <option value="hasOpenTickets">Có tickets chưa hoàn thành</option>
                     </select>
                     <button
                       type="button"
@@ -1311,10 +1369,15 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                                         toast.error("Không thể tìm thấy ID bệnh viện hợp lệ");
                                       }
                                     }}
-                                    className="rounded-lg p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 transition"
+                                    className="relative rounded-lg p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 transition"
                                     title="Xem danh sách tickets"
                                   >
                                     <FiTag className="h-4 w-4" />
+                                    {(ticketOpenCounts[hospital.id] ?? 0) > 0 && (
+                                      <span className="absolute -right-1 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
+                                        {ticketOpenCounts[hospital.id]}
+                                      </span>
+                                    )}
                                   </button>
                                 </div>
                               </td>
@@ -1609,6 +1672,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                 {selectedHospitalIdForTickets ? (
                   <TicketsTab
                     hospitalId={selectedHospitalIdForTickets}
+                    onTicketsChange={handleTicketsChange}
                   />
                 ) : (
                   <div className="text-center py-8 text-gray-500">

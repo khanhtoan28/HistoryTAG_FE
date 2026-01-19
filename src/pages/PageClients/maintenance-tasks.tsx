@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import { FaHospital } from "react-icons/fa";
 import { FiUser, FiLink, FiClock, FiTag, FiCheckCircle, FiX } from "react-icons/fi";
 import TicketsTab from "../../pages/CustomerCare/SubCustomerCare/TicketsTab";
+import { getHospitalTickets } from "../../api/ticket.api";
 
 // Helper function để parse PIC IDs từ additionalRequest
 function parsePicIdsFromAdditionalRequest(additionalRequest?: string | null, picDeploymentId?: number | null): number[] {
@@ -1702,6 +1703,8 @@ const ImplementationTasksPage: React.FC = () => {
     const [showTicketsModal, setShowTicketsModal] = useState(false);
     const [selectedHospitalIdForTickets, setSelectedHospitalIdForTickets] = useState<number | null>(null);
     const [selectedHospitalNameForTickets, setSelectedHospitalNameForTickets] = useState<string | null>(null);
+    const [ticketOpenCounts, setTicketOpenCounts] = useState<Record<number, number>>({});
+    const [ticketCountLoading, setTicketCountLoading] = useState<Set<number>>(new Set());
 
     // Click outside to close PIC filter dropdown
     useEffect(() => {
@@ -2280,6 +2283,7 @@ const ImplementationTasksPage: React.FC = () => {
         if (hospitalStatusFilter === 'accepted') list = list.filter(h => h.acceptedByMaintenance);
         else if (hospitalStatusFilter === 'incomplete') list = list.filter(h => (h.acceptedCount || 0) < (h.taskCount || 0));
         else if (hospitalStatusFilter === 'unaccepted') list = list.filter(h => !h.acceptedByMaintenance);
+        else if (hospitalStatusFilter === 'hasOpenTickets') list = list.filter(h => h.id && (ticketOpenCounts[h.id] ?? 0) > 0);
 
         // Filter by PIC
         if (hospitalPicFilter.length > 0) {
@@ -2303,7 +2307,60 @@ const ImplementationTasksPage: React.FC = () => {
             return a.label.localeCompare(b.label) * dir;
         });
         return list;
-    }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir]);
+    }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir, ticketOpenCounts]);
+
+    const pagedHospitals = useMemo(() => {
+        return filteredHospitals.slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize);
+    }, [filteredHospitals, hospitalPage, hospitalSize]);
+
+    const getOpenTicketCount = useCallback((tickets: Array<{ status?: string }>) => {
+        return tickets.filter((t) => t.status !== "HOAN_THANH").length;
+    }, []);
+
+    const updateTicketOpenCount = useCallback((hospitalId: number, tickets: Array<{ status?: string }>) => {
+        setTicketOpenCounts((prev) => {
+            const newCount = getOpenTicketCount(tickets);
+            // Chỉ update nếu count thay đổi để tránh re-render không cần thiết
+            if (prev[hospitalId] === newCount) return prev;
+            return {
+                ...prev,
+                [hospitalId]: newCount,
+            };
+        });
+    }, [getOpenTicketCount]);
+
+    const handleTicketsChange = useCallback((tickets: Array<{ status?: string }>) => {
+        if (selectedHospitalIdForTickets) {
+            updateTicketOpenCount(selectedHospitalIdForTickets, tickets);
+        }
+    }, [selectedHospitalIdForTickets, updateTicketOpenCount]);
+
+    const loadTicketOpenCount = useCallback(async (hospitalId: number) => {
+        if (!hospitalId || hospitalId <= 0) return;
+        if (typeof ticketOpenCounts[hospitalId] === "number") return;
+        if (ticketCountLoading.has(hospitalId)) return;
+        setTicketCountLoading((prev) => new Set(prev).add(hospitalId));
+        try {
+            const tickets = await getHospitalTickets(hospitalId);
+            updateTicketOpenCount(hospitalId, tickets);
+        } catch {
+            // ignore errors to avoid noisy UI; badge just won't show
+        } finally {
+            setTicketCountLoading((prev) => {
+                const next = new Set(prev);
+                next.delete(hospitalId);
+                return next;
+            });
+        }
+    }, [ticketCountLoading, ticketOpenCounts, updateTicketOpenCount]);
+
+    useEffect(() => {
+        if (!showHospitalList) return;
+        const ids = pagedHospitals.map((h) => h.id).filter((id): id is number => typeof id === "number" && id > 0);
+        ids.forEach((id) => {
+            void loadTicketOpenCount(id);
+        });
+    }, [pagedHospitals, showHospitalList, loadTicketOpenCount]);
 
     useEffect(() => {
         if (!showHospitalList && selectedHospital) {
@@ -2498,6 +2555,7 @@ const ImplementationTasksPage: React.FC = () => {
                                                 <option value="accepted">Có nghiệm thu</option>
                                                 <option value="incomplete">Chưa nghiệm thu hết</option>
                                                 <option value="unaccepted">Chưa có nghiệm thu</option>
+                                                <option value="hasOpenTickets">Có tickets chưa hoàn thành</option>
                                             </select>
                                         </div>
 
@@ -2632,8 +2690,7 @@ const ImplementationTasksPage: React.FC = () => {
                                                     </tr>
                                                 </thead>
                                                 <tbody className="bg-white divide-y divide-gray-200">
-                                                    {filteredHospitals
-                                                        .slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize)
+                                                    {pagedHospitals
                                                         .map((hospital, index) => (
                                                             <tr key={hospital.id || `${hospital.label}-${index}`} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => { setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }}>
                                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospitalPage * hospitalSize + index + 1}</td>
@@ -2714,10 +2771,15 @@ const ImplementationTasksPage: React.FC = () => {
                                                                                     toast.error("Không thể tìm thấy ID bệnh viện hợp lệ");
                                                                                 }
                                                                             }}
-                                                                            className="rounded-lg p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 transition"
+                                                                            className="relative rounded-lg p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 transition"
                                                                             title="Xem danh sách tickets"
                                                                         >
                                                                             <FiTag className="h-4 w-4" />
+                                                                            {(ticketOpenCounts[hospital.id] ?? 0) > 0 && (
+                                                                                <span className="absolute -right-1 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
+                                                                                    {ticketOpenCounts[hospital.id]}
+                                                                                </span>
+                                                                            )}
                                                                         </button>
                                                                     </div>
                                                                 </td>
@@ -3006,6 +3068,7 @@ const ImplementationTasksPage: React.FC = () => {
                             <div className="p-6">
                                 <TicketsTab
                                     hospitalId={selectedHospitalIdForTickets}
+                                    onTicketsChange={handleTicketsChange}
                                 />
                             </div>
                         </motion.div>

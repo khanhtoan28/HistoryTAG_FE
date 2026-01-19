@@ -24,6 +24,7 @@ export interface Ticket {
   timeElapsed?: string; // Human readable: "2h 30p", "3 ngày", etc.
   pic: string;
   status: "CHUA_XU_LY" | "DANG_XU_LY" | "HOAN_THANH";
+  ticketType?: "MAINTENANCE" | "DEPLOYMENT"; // Loại ticket: Bảo trì hoặc Triển khai
 }
 
 export interface CareActivity {

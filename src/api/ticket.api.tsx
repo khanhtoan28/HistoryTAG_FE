@@ -64,6 +64,7 @@ export type TicketResponseDTO = {
   issue: string;
   priority: "Cao" | "Trung bình" | "Thấp";
   status: "CHUA_XU_LY" | "DANG_XU_LY" | "HOAN_THANH";
+  ticketType?: "MAINTENANCE" | "DEPLOYMENT";
   pic: string | null;
   picUserId: number | null;
   hospitalId: number;
@@ -75,6 +76,7 @@ export type TicketRequestDTO = {
   issue: string;
   priority: "Cao" | "Trung bình" | "Thấp";
   status: "CHUA_XU_LY" | "DANG_XU_LY" | "HOAN_THANH";
+  ticketType?: "MAINTENANCE" | "DEPLOYMENT";
   picUserId?: number | null;
   picName?: string | null;
 };

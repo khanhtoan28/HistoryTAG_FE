@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCardNew from "../SuperAdmin/TaskCardNew";
@@ -8,6 +8,7 @@ import { AiOutlineEye } from "react-icons/ai";
 import { toast } from "react-hot-toast";
 import { FiUser, FiMapPin, FiLink, FiClock, FiTag, FiPhone, FiCheckCircle, FiX } from "react-icons/fi";
 import { isBusinessContractTaskName as isBusinessContractTask } from "../../utils/businessContract";
+import { getHospitalTickets } from "../../api/ticket.api";
 
 // Helper function để parse PIC IDs từ additionalRequest
 function parsePicIdsFromAdditionalRequest(additionalRequest?: string | null, picDeploymentId?: number | null): number[] {
@@ -1733,6 +1734,8 @@ const ImplementationTasksPage: React.FC = () => {
   const [showTicketsModal, setShowTicketsModal] = useState(false);
   const [selectedHospitalIdForTickets, setSelectedHospitalIdForTickets] = useState<number | null>(null);
   const [selectedHospitalNameForTickets, setSelectedHospitalNameForTickets] = useState<string | null>(null);
+  const [ticketOpenCounts, setTicketOpenCounts] = useState<Record<number, number>>({});
+  const [ticketCountLoading, setTicketCountLoading] = useState<Set<number>>(new Set());
 
   // Tính số task đã hoàn thành từ data đã được filter (trong trang hiện tại)
   const completedCountFromFiltered = useMemo(() => {
@@ -1861,6 +1864,7 @@ const ImplementationTasksPage: React.FC = () => {
       { value: "notCompleted", label: "Chưa hoàn thành hết" },
       { value: "noneCompleted", label: "Chưa có task hoàn thành" },
       { value: "transferred", label: "Đã chuyển sang bảo trì" },
+      { value: "hasOpenTickets", label: "Có tickets chưa hoàn thành" },
     ],
     []
   );
@@ -2242,7 +2246,7 @@ const ImplementationTasksPage: React.FC = () => {
       // Parse task count from subLabel (format: "Province - X tasks" or "X tasks")
       const baseList = (Array.isArray(hospitals) ? hospitals : []).map((hospital: { id: number; label: string; subLabel?: string; transferredToMaintenance?: boolean; acceptedByMaintenance?: boolean; personInChargeId?: number | null; personInChargeName?: string | null }) => {
         let taskCount = 0;
-        let province = hospital.subLabel || "";
+        let province = "";
 
         // Parse task count from subLabel
         if (hospital.subLabel) {
@@ -2250,13 +2254,22 @@ const ImplementationTasksPage: React.FC = () => {
           if (match) {
             taskCount = parseInt(match[1], 10);
             // Extract province (everything before " - X tasks")
-            province = hospital.subLabel.replace(/\s*-\s*\d+\s+tasks?/i, "").trim();
+            // If subLabel contains " - ", it means there's a province
+            if (hospital.subLabel.includes(" - ")) {
+              province = hospital.subLabel.replace(/\s*-\s*\d+\s+tasks?/i, "").trim();
+            } else {
+              // If no " - ", it means subLabel is just "X tasks" (no province)
+              province = "";
+            }
+          } else {
+            // No task count pattern found, treat entire subLabel as province
+            province = hospital.subLabel.trim();
           }
         }
 
         return {
           ...hospital,
-          subLabel: province, // Keep only province without task count
+          subLabel: province || undefined, // Keep only province without task count, undefined if empty
           taskCount: taskCount,
           nearDueCount: 0, // Initialize to 0 - will be calculated in augment()
           overdueCount: 0, // Initialize to 0 - will be calculated in augment()
@@ -2796,6 +2809,8 @@ const ImplementationTasksPage: React.FC = () => {
       list = list.filter(h => (h.acceptedCount || 0) === 0);
     } else if (hospitalStatusFilter === 'transferred') {
       list = list.filter(h => h.allTransferred === true);
+    } else if (hospitalStatusFilter === 'hasOpenTickets') {
+      list = list.filter(h => h.id && (ticketOpenCounts[h.id] ?? 0) > 0);
     }
 
     // Apply PIC filter - filter by personInChargeId from hospital summary
@@ -2819,7 +2834,60 @@ const ImplementationTasksPage: React.FC = () => {
       return a.label.localeCompare(b.label) * dir;
     });
     return list;
-  }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir]);
+  }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir, ticketOpenCounts]);
+
+  const pagedHospitals = useMemo(() => {
+    return filteredHospitals.slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize);
+  }, [filteredHospitals, hospitalPage, hospitalSize]);
+
+  const getOpenTicketCount = useCallback((tickets: Array<{ status?: string }>) => {
+    return tickets.filter((t) => t.status !== "HOAN_THANH").length;
+  }, []);
+
+  const updateTicketOpenCount = useCallback((hospitalId: number, tickets: Array<{ status?: string }>) => {
+    setTicketOpenCounts((prev) => {
+      const newCount = getOpenTicketCount(tickets);
+      // Chỉ update nếu count thay đổi để tránh re-render không cần thiết
+      if (prev[hospitalId] === newCount) return prev;
+      return {
+        ...prev,
+        [hospitalId]: newCount,
+      };
+    });
+  }, [getOpenTicketCount]);
+
+  const handleTicketsChange = useCallback((tickets: Array<{ status?: string }>) => {
+    if (selectedHospitalIdForTickets) {
+      updateTicketOpenCount(selectedHospitalIdForTickets, tickets);
+    }
+  }, [selectedHospitalIdForTickets, updateTicketOpenCount]);
+
+  const loadTicketOpenCount = useCallback(async (hospitalId: number) => {
+    if (!hospitalId || hospitalId <= 0) return;
+    if (typeof ticketOpenCounts[hospitalId] === "number") return;
+    if (ticketCountLoading.has(hospitalId)) return;
+    setTicketCountLoading((prev) => new Set(prev).add(hospitalId));
+    try {
+      const tickets = await getHospitalTickets(hospitalId);
+      updateTicketOpenCount(hospitalId, tickets);
+    } catch {
+      // ignore errors to avoid noisy UI; badge just won't show
+    } finally {
+      setTicketCountLoading((prev) => {
+        const next = new Set(prev);
+        next.delete(hospitalId);
+        return next;
+      });
+    }
+  }, [ticketCountLoading, ticketOpenCounts, updateTicketOpenCount]);
+
+  useEffect(() => {
+    if (!showHospitalList) return;
+    const ids = pagedHospitals.map((h) => h.id).filter((id): id is number => typeof id === "number" && id > 0);
+    ids.forEach((id) => {
+      void loadTicketOpenCount(id);
+    });
+  }, [pagedHospitals, showHospitalList, loadTicketOpenCount]);
 
   useEffect(() => {
     if (!showHospitalList && selectedHospital) {
@@ -3088,8 +3156,7 @@ const ImplementationTasksPage: React.FC = () => {
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                          {filteredHospitals
-                            .slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize)
+                          {pagedHospitals
                             .map((hospital, index) => {
                               const longName = (hospital.label || "").length > 32;
                               return (
@@ -3158,10 +3225,15 @@ const ImplementationTasksPage: React.FC = () => {
                                             toast.error("Không thể tìm thấy ID bệnh viện hợp lệ");
                                           }
                                         }}
-                                        className="p-2 rounded-full text-gray-500 hover:text-purple-600 hover:bg-purple-50 transition"
+                                        className="relative p-2 rounded-full text-gray-500 hover:text-purple-600 hover:bg-purple-50 transition"
                                         title="Xem danh sách tickets"
                                       >
                                         <FiTag className="text-lg" />
+                                        {hospital.id && (ticketOpenCounts[hospital.id] ?? 0) > 0 && (
+                                          <span className="absolute -right-1 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
+                                            {ticketOpenCounts[hospital.id]}
+                                          </span>
+                                        )}
                                       </button>
                                       {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) === (hospital.taskCount || 0) && !hospital.allTransferred && (
                                         <button
@@ -3571,6 +3643,7 @@ const ImplementationTasksPage: React.FC = () => {
                 {selectedHospitalIdForTickets ? (
                   <TicketsTab
                     hospitalId={selectedHospitalIdForTickets}
+                    onTicketsChange={handleTicketsChange}
                   />
                 ) : (
                   <div className="text-center py-8 text-gray-500">

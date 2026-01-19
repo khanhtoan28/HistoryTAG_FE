@@ -13,8 +13,8 @@ export default function Home() {
         title="Quản lý công việc | TAGTECH"
         description=""
       />
-      <FlowerFall />
-      <TetCelebration />
+      {/* <FlowerFall /> */}
+      {/* <TetCelebration /> */}
       <div className="grid grid-cols-12 gap-4 md:gap-6">
         <div className="col-span-12">
           <EcommerceMetrics />
