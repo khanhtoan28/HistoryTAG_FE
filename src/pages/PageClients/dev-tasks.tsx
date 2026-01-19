@@ -1029,7 +1029,7 @@ function DetailModal({
                     {/* Additional request */}
                     <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
                         <p className="text-gray-500 mb-2">Nội dung công việc:</p>
-                        <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px]">
+                        <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px] whitespace-pre-wrap break-words">
                             {item.additionalRequest || "—"}
                         </div>
                     </div>

@@ -49,7 +49,7 @@ const careTypes = [
   { value: "CONTRACT_EXPIRY", label: "Hợp đồng sắp hết hạn" },
 ];
 
-const availableTags = ["Khách hàng VIP", "Giá trị cao", "Tiềm năng bán thêm", "Có rủi ro", "Khách hàng mới", "Dài hạn"];
+const availableTags = ["Khách hàng VIP", "Giá trị cao", "Tiềm năng bán thêm", "Có rủi ro", "Khách hàng mới", "Dài hạn", "Không có nhu cầu"];
 
 export default function AddHospitalToCareForm({
   isOpen,

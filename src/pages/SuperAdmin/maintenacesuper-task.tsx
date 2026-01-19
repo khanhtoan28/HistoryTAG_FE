@@ -235,12 +235,13 @@ const MaintenanceSuperTaskPage: React.FC = () => {
   const [loadingPending, setLoadingPending] = useState(false);
   // hospital list view state (like implementation-tasks page)
   const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
-  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; fromDeployment?: boolean; acceptedByMaintenance?: boolean; picDeploymentIds?: Array<string | number>; picDeploymentNames?: string[] }>>([]);
+  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number; label: string; subLabel?: string; hospitalCode?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; fromDeployment?: boolean; acceptedByMaintenance?: boolean; picDeploymentIds?: Array<string | number>; picDeploymentNames?: string[] }>>([]);
   const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
   const [hospitalPage, setHospitalPage] = useState<number>(0);
   const [hospitalSize, setHospitalSize] = useState<number>(20);
   const [acceptedCount, setAcceptedCount] = useState<number | null>(null);
   const [hospitalSearch, setHospitalSearch] = useState<string>("");
+  const [hospitalCodeSearch, setHospitalCodeSearch] = useState<string>("");
   const [hospitalStatusFilter, setHospitalStatusFilter] = useState<string>("");
   const [hospitalPicFilter, setHospitalPicFilter] = useState<string[]>([]);
   const [picFilterOpen, setPicFilterOpen] = useState<boolean>(false);
@@ -697,6 +698,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
           id: hospitalId,
           label: hospitalName,
           subLabel: item?.province ? String(item.province) : "",
+          hospitalCode: item?.hospitalCode || "",
           taskCount: taskStats.taskCount > 0 ? taskStats.taskCount : Number(item?.maintenanceTaskCount ?? 0),
           acceptedCount: acceptedCount,
           nearDueCount: 0, // Will be calculated by augment()
@@ -717,6 +719,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
             id: hospitalId,
             label: hospitalName,
             subLabel: "",
+            hospitalCode: "",
             taskCount: taskStats.taskCount,
             acceptedCount: acceptedCount,
             nearDueCount: 0, // Will be calculated by augment()
@@ -737,6 +740,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
             id: -(normalized.length + 1), // Use negative ID for hospitals without ID
             label: hospitalName,
             subLabel: "",
+            hospitalCode: "",
             taskCount: taskStats.taskCount,
             acceptedCount: acceptedCount,
             nearDueCount: 0, // Will be calculated by augment()
@@ -891,6 +895,10 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     let list = hospitalsWithTasks;
     const q = hospitalSearch.trim().toLowerCase();
     if (q) list = list.filter(h => h.label.toLowerCase().includes(q) || (h.subLabel || '').toLowerCase().includes(q));
+    
+    // Filter by hospital code
+    const codeQ = hospitalCodeSearch.trim().toLowerCase();
+    if (codeQ) list = list.filter(h => (h.hospitalCode || '').toLowerCase().includes(codeQ));
     if (hospitalStatusFilter === 'accepted') list = list.filter(h => (h.acceptedCount || 0) > 0);
     else if (hospitalStatusFilter === 'incomplete') list = list.filter(h => (h.acceptedCount || 0) < (h.taskCount || 0));
     else if (hospitalStatusFilter === 'unaccepted') list = list.filter(h => (h.acceptedCount || 0) === 0);
@@ -906,7 +914,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     }
     list = [...list].sort((a, b) => a.label.localeCompare(b.label));
     return list;
-  }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalPicFilter, ticketOpenCounts]);
+  }, [hospitalsWithTasks, hospitalSearch, hospitalCodeSearch, hospitalStatusFilter, hospitalPicFilter, ticketOpenCounts]);
 
   const hospitalSummary = useMemo(() => {
     const total = hospitalsWithTasks.length;
@@ -1108,6 +1116,13 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                     value={hospitalSearch}
                     onChange={(e) => { setHospitalSearch(e.target.value); setHospitalPage(0); }}
                   />
+                  <input
+                    type="text"
+                    className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[180px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
+                    placeholder="Tìm theo mã bệnh viện"
+                    value={hospitalCodeSearch}
+                    onChange={(e) => { setHospitalCodeSearch(e.target.value); setHospitalPage(0); }}
+                  />
                   <div className="flex items-center gap-2 w-[280px]">
                     <select
                       className="w-[200px] rounded-full border px-4 py-3 text-sm shadow-sm border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
@@ -1275,6 +1290,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                       <tr>
                         <th className="px-6 w-10 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã bệnh viện</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/Thành phố</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượng task</th>
                         <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
@@ -1311,6 +1327,9 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                                     )}
                                   </div>
                                 </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {hospital.hospitalCode || "—"}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                 {hospital.subLabel || "—"}
@@ -1864,7 +1883,7 @@ function DetailModal({
 
           <div className="pt-6 mb-6">
             <p className="text-gray-500 mb-2">Nội dung công việc:</p>
-            <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 min-h-[60px]">
+            <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 min-h-[60px] whitespace-pre-wrap break-words">
               {(() => {
                 const notes = item.notes || item.additionalRequest || "";
                 // Loại bỏ phần [PIC_IDS: ...] khỏi hiển thị

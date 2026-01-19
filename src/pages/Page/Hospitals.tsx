@@ -36,6 +36,10 @@ export type Hospital = {
   personInChargeName?: string | null;
   personInChargeEmail?: string | null;
   personInChargePhone?: string | null;
+  maintenancePersonInChargeId?: number | null;
+  maintenancePersonInChargeName?: string | null;
+  maintenancePersonInChargeEmail?: string | null;
+  maintenancePersonInChargePhone?: string | null;
   contractCount?: number; // Tổng số hợp đồng (business + warranty)
 };
 
@@ -57,6 +61,8 @@ export type HospitalForm = {
   // assignedUserIds removed from Hospital form UI; assignment managed elsewhere
   personInChargeId?: number;
   personInChargeName?: string;
+  maintenancePersonInChargeId?: number;
+  maintenancePersonInChargeName?: string;
 };
 
 type ITUserOption = {
@@ -343,11 +349,22 @@ function DetailModal({
             />
 
             <Info
-              label="Phụ trách chính"
+              label="Phụ trách triển khai"
               icon={<FiUser />}
               value={
                 item.personInChargeName ? (
                   <span className="font-medium text-gray-900 dark:text-gray-100">{item.personInChargeName}</span>
+                ) : (
+                  "—"
+                )
+              }
+            />
+            <Info
+              label="Phụ trách bảo trì"
+              icon={<FiUser />}
+              value={
+                item.maintenancePersonInChargeName ? (
+                  <span className="font-medium text-gray-900 dark:text-gray-100">{item.maintenancePersonInChargeName}</span>
                 ) : (
                   "—"
                 )
@@ -543,6 +560,8 @@ export default function HospitalsPage() {
   priority: "P2",
     personInChargeId: undefined,
     personInChargeName: "",
+    maintenancePersonInChargeId: undefined,
+    maintenancePersonInChargeName: "",
   });
 
   const isEditing = !!editing?.id;
@@ -578,6 +597,8 @@ export default function HospitalsPage() {
       // assignedUserIds removed from form; we don't populate it here
       personInChargeId: h.personInChargeId ?? undefined,
       personInChargeName: h.personInChargeName ?? "",
+      maintenancePersonInChargeId: h.maintenancePersonInChargeId ?? undefined,
+      maintenancePersonInChargeName: h.maintenancePersonInChargeName ?? "",
     });
   }
 
@@ -624,6 +645,38 @@ export default function HospitalsPage() {
             username: undefined, // admin API không trả về username
             email: u.subLabel ?? null, // subLabel là email trong admin API
             phone: null, // admin API không trả về phone
+          }))
+          .filter((u: ITUserOption) => Number.isFinite(u.id) && u.name);
+      } catch (e) {
+        return [];
+      }
+    },
+    []
+  );
+
+  const searchMaintenanceUsers = useMemo(
+    () => async (term: string) => {
+      try {
+        // ✅ Tìm kiếm tất cả users (không filter theo team)
+        const params = new URLSearchParams();
+        if (term && term.trim()) {
+          params.set("name", term.trim());
+        }
+        const res = await fetch(`${API_BASE}/api/v1/admin/users/search?${params.toString()}`, {
+          headers: { ...authHeader() },
+          credentials: "include",
+        } as any);
+        if (!res.ok) return [];
+        const list = await res.json();
+        const array = Array.isArray(list) ? list : [];
+        // ✅ Map từ EntitySelectDTO format (id, label, subLabel) sang ITUserOption
+        return array
+          .map((u: any) => ({
+            id: Number(u.id),
+            name: String(u.label ?? u.name ?? u.id),
+            username: undefined,
+            email: u.subLabel ?? null,
+            phone: null,
           }))
           .filter((u: ITUserOption) => Number.isFinite(u.id) && u.name);
       } catch (e) {
@@ -867,6 +920,7 @@ export default function HospitalsPage() {
 
   const [hardwareOpt, setHardwareOpt] = useState<{ id: number; name: string } | null>(null);
   const [personInChargeOpt, setPersonInChargeOpt] = useState<ITUserOption | null>(null);
+  const [maintenancePersonInChargeOpt, setMaintenancePersonInChargeOpt] = useState<ITUserOption | null>(null);
 
   const [hisOptions, setHisOptions] = useState<Array<{ id: number; name: string }>>([]);
   const [itUserOptions, setItUserOptions] = useState<ITUserOption[]>([]);
@@ -906,6 +960,7 @@ export default function HospitalsPage() {
   useEffect(() => {
     if (!open) {
       setPersonInChargeOpt(null);
+      setMaintenancePersonInChargeOpt(null);
       return;
     }
     if (form.personInChargeId) {
@@ -925,7 +980,24 @@ export default function HospitalsPage() {
     } else {
       setPersonInChargeOpt(null);
     }
-  }, [open, form.personInChargeId, form.personInChargeName, viewing, editing]);
+    if (form.maintenancePersonInChargeId) {
+      const name =
+        viewing?.maintenancePersonInChargeName ??
+        editing?.maintenancePersonInChargeName ??
+        form.maintenancePersonInChargeName ??
+        `#${form.maintenancePersonInChargeId}`;
+      const email = viewing?.maintenancePersonInChargeEmail ?? editing?.maintenancePersonInChargeEmail ?? null;
+      const phone = viewing?.maintenancePersonInChargePhone ?? editing?.maintenancePersonInChargePhone ?? null;
+      setMaintenancePersonInChargeOpt({
+        id: form.maintenancePersonInChargeId,
+        name,
+        email: email ?? null,
+        phone: phone ?? null,
+      });
+    } else {
+      setMaintenancePersonInChargeOpt(null);
+    }
+  }, [open, form.personInChargeId, form.personInChargeName, form.maintenancePersonInChargeId, form.maintenancePersonInChargeName, viewing, editing]);
 
   // Load danh sách IT users cho dropdown filter
   useEffect(() => {
@@ -1072,6 +1144,8 @@ export default function HospitalsPage() {
       // assignedUserIds removed from form
       personInChargeId: undefined,
       personInChargeName: "",
+      maintenancePersonInChargeId: undefined,
+      maintenancePersonInChargeName: "",
     });
     setOpen(true);
   }
@@ -1309,6 +1383,7 @@ export default function HospitalsPage() {
     apiFile: form.apiFile || undefined,
     priority: form.priority,
     personInChargeId: form.personInChargeId ?? undefined,
+    maintenancePersonInChargeId: form.maintenancePersonInChargeId ?? undefined,
     // assignedUserIds intentionally not sent from Hospital form
   };
 
@@ -1902,8 +1977,12 @@ export default function HospitalsPage() {
                           <div className="truncate">{h.address || "—"}</div>
                           <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-700">
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-400">Người phụ trách chính:</span>
+                              <span className="text-xs text-gray-400">Phụ trách triển khai:</span>
                               <span className="font-medium text-gray-800">{h.personInChargeName || "—"}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400">Phụ trách bảo trì:</span>
+                              <span className="font-medium text-gray-800">{h.maintenancePersonInChargeName || "—"}</span>
                             </div>
                             {h.contactNumber && (
                               <div className="flex items-center gap-2">
@@ -2132,7 +2211,7 @@ export default function HospitalsPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <RemoteSelectPersonInCharge
-                      label="Người phụ trách chính (IT)"
+                      label="Phụ trách triển khai"
                       placeholder="Chọn người phụ trách..."
                       fetchOptions={searchItUsers}
                       value={personInChargeOpt}
@@ -2163,6 +2242,24 @@ export default function HospitalsPage() {
                         ))}
                       </select>
                     </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <RemoteSelectPersonInCharge
+                      label="Phụ trách bảo trì"
+                      placeholder="Chọn người phụ trách bảo trì..."
+                      fetchOptions={searchMaintenanceUsers}
+                      value={maintenancePersonInChargeOpt}
+                      onChange={(v) => {
+                        setMaintenancePersonInChargeOpt(v);
+                        setForm((s) => ({
+                          ...s,
+                          maintenancePersonInChargeId: v ? v.id : undefined,
+                          maintenancePersonInChargeName: v ? v.name : "",
+                        }));
+                      }}
+                      disabled={isViewing || !canEdit}
+                    />
+                    <div className="hidden md:block" />
                   </div>
                   {/* Hardware selector - Đã bỏ: Phần cứng sẽ được lấy từ hợp đồng (BusinessProject) */}
                   {/* <div className="mt-2">

@@ -664,7 +664,7 @@ function DetailModal({
 
           <div className="mt-6">
             <p className="text-gray-500 mb-2">Ghi chú / Mô tả:</p>
-            <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 min-h-[60px]">
+            <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 min-h-[60px] whitespace-pre-wrap break-words">
               {item.notes?.trim() || "—"}
             </div>
           </div>

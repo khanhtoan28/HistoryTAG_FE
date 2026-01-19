@@ -1581,7 +1581,7 @@ function DetailModal({
                     {/* Additional request */}
                     <div className="pt-6 mb-6">
                         <p className="text-gray-500 mb-2">Nội dung công việc:</p>
-                        <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px]">
+                        <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px] whitespace-pre-wrap break-words">
                             {(() => {
                                 const notes = (item as any).notes || item.additionalRequest || "";
                                 // Loại bỏ phần [PIC_IDS: ...] khỏi hiển thị
@@ -1676,6 +1676,7 @@ const ImplementationTasksPage: React.FC = () => {
         id: number;
         label: string;
         subLabel?: string;
+        hospitalCode?: string;
         taskCount: number;
         acceptedCount: number;
         nearDueCount?: number;
@@ -1684,12 +1685,14 @@ const ImplementationTasksPage: React.FC = () => {
         acceptedByMaintenance?: boolean;
         picDeploymentIds?: Array<string | number>;
         picDeploymentNames?: string[];
+        maintenancePersonInChargeName?: string;
     }>>([]);
     const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
     const [hospitalPage, setHospitalPage] = useState<number>(0);
     const [hospitalSize, setHospitalSize] = useState<number>(20);
     const [selectedHospital, setSelectedHospital] = useState<string | null>(null);
     const [hospitalSearch, setHospitalSearch] = useState<string>("");
+    const [hospitalCodeSearch, setHospitalCodeSearch] = useState<string>("");
     const [hospitalStatusFilter, setHospitalStatusFilter] = useState<string>("");
     const [hospitalPicFilter, setHospitalPicFilter] = useState<string[]>([]);
     const [picFilterOpen, setPicFilterOpen] = useState<boolean>(false);
@@ -2212,6 +2215,7 @@ const ImplementationTasksPage: React.FC = () => {
                     id: hospitalId,
                     label: String(item?.hospitalName ?? "—"),
                     subLabel: item?.province ? String(item.province) : "",
+                    hospitalCode: item?.hospitalCode || "", // Use code from summary if available
                     taskCount: taskStats.taskCount > 0 ? taskStats.taskCount : Number(item?.maintenanceTaskCount ?? 0),
                     acceptedCount: taskStats.acceptedCount, // Số task COMPLETED
                     nearDueCount: taskStats.nearDueCount,
@@ -2220,6 +2224,7 @@ const ImplementationTasksPage: React.FC = () => {
                     acceptedByMaintenance: Boolean(item?.acceptedByMaintenance),
                     picDeploymentIds: Array.from(taskStats.picIds),
                     picDeploymentNames: Array.from(taskStats.picNames),
+                    maintenancePersonInChargeName: item?.maintenancePersonInChargeName || undefined,
                 };
             });
 
@@ -2236,6 +2241,7 @@ const ImplementationTasksPage: React.FC = () => {
                             id: hospitalId,
                             label: String(hospitalTask.hospitalName ?? "—"),
                             subLabel: "",
+                            hospitalCode: "",
                             taskCount: taskStats.taskCount,
                             acceptedCount: taskStats.acceptedCount,
                             nearDueCount: taskStats.nearDueCount,
@@ -2244,6 +2250,7 @@ const ImplementationTasksPage: React.FC = () => {
                             acceptedByMaintenance: false,
                             picDeploymentIds: Array.from(taskStats.picIds),
                             picDeploymentNames: Array.from(taskStats.picNames),
+                            maintenancePersonInChargeName: undefined, // Không có trong task, sẽ để undefined
                         });
                     }
                 }
@@ -2280,6 +2287,10 @@ const ImplementationTasksPage: React.FC = () => {
         let list = hospitalsWithTasks;
         const q = hospitalSearch.trim().toLowerCase();
         if (q) list = list.filter(h => h.label.toLowerCase().includes(q) || (h.subLabel || '').toLowerCase().includes(q));
+        
+        // Filter by hospital code
+        const codeQ = hospitalCodeSearch.trim().toLowerCase();
+        if (codeQ) list = list.filter(h => (h.hospitalCode || '').toLowerCase().includes(codeQ));
         if (hospitalStatusFilter === 'accepted') list = list.filter(h => h.acceptedByMaintenance);
         else if (hospitalStatusFilter === 'incomplete') list = list.filter(h => (h.acceptedCount || 0) < (h.taskCount || 0));
         else if (hospitalStatusFilter === 'unaccepted') list = list.filter(h => !h.acceptedByMaintenance);
@@ -2307,7 +2318,7 @@ const ImplementationTasksPage: React.FC = () => {
             return a.label.localeCompare(b.label) * dir;
         });
         return list;
-    }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir, ticketOpenCounts]);
+    }, [hospitalsWithTasks, hospitalSearch, hospitalCodeSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir, ticketOpenCounts]);
 
     const pagedHospitals = useMemo(() => {
         return filteredHospitals.slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize);
@@ -2546,6 +2557,13 @@ const ImplementationTasksPage: React.FC = () => {
                                                 value={hospitalSearch}
                                                 onChange={(e) => { setHospitalSearch(e.target.value); setHospitalPage(0); }}
                                             />
+                                            <input
+                                                type="text"
+                                                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[180px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                                                placeholder="Tìm theo mã bệnh viện"
+                                                value={hospitalCodeSearch}
+                                                onChange={(e) => { setHospitalCodeSearch(e.target.value); setHospitalPage(0); }}
+                                            />
                                             <select
                                                 className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[200px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
                                                 value={hospitalStatusFilter}
@@ -2684,7 +2702,9 @@ const ImplementationTasksPage: React.FC = () => {
                                                     <tr>
                                                         <th className="px-6 w-10 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
                                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã bệnh viện</th>
                                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/Thành phố</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phụ trách bảo trì</th>
                                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượng task</th>
                                                         <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
                                                     </tr>
@@ -2716,7 +2736,9 @@ const ImplementationTasksPage: React.FC = () => {
                                                                         );
                                                                     })()}
                                                                 </td>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.hospitalCode || "—"}</td>
                                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.subLabel || "—"}</td>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.maintenancePersonInChargeName || "—"}</td>
                                                                 <td className="px-6 py-4 whitespace-nowrap text-sm align-center">
                                                                     <div className="flex flex-col items-start gap-1">
                                                                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task</span>

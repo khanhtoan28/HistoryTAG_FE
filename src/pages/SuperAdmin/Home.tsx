@@ -866,6 +866,9 @@ export default function SuperAdminHome() {
         'APPROVING': 'Đang duyệt',
         'ON_HOLD': 'Tạm dừng',
         'ARCHIVED': 'Đã lưu trữ',
+        'ISSUE': 'Gặp sự cố',
+        'FAILED': 'Gặp sự cố',
+        'ERROR': 'Gặp sự cố',
       };
       const key = String(s).toUpperCase();
       return m[key] ?? String(s).replace(/_/g, ' ');
@@ -2920,6 +2923,8 @@ export default function SuperAdminHome() {
                                           ? 'bg-green-100 text-green-800'
                                           : String(task.status ?? '').toUpperCase() === 'IN_PROCESS' || String(task.status ?? '').toUpperCase() === 'ĐANG XỬ LÝ'
                                           ? 'bg-blue-100 text-blue-800'
+                                          : String(task.status ?? '').toUpperCase() === 'ISSUE' || String(task.status ?? '').toUpperCase() === 'FAILED' || String(task.status ?? '').toUpperCase() === 'ERROR'
+                                          ? 'bg-red-100 text-red-800'
                                           : 'bg-yellow-100 text-yellow-800'
                                       }`}>
                                         {translateStatus(String(task.status ?? ''))}
