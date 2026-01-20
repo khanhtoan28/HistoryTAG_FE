@@ -417,6 +417,21 @@ export async function getCustomerTypes(): Promise<Array<{ value: string; label: 
   return res.data || [];
 }
 
+/**
+ * Lấy danh sách users đã được assign trong customer care records
+ */
+export async function getAssignedUsers(): Promise<Array<{ id: number; label: string; subLabel?: string; phone?: string | null }>> {
+  const base = getBase('GET', false);
+  const res = await api.get(`${base}/customer-care/assigned-users`);
+  const data = Array.isArray(res.data) ? res.data : [];
+  return data.map((item: any) => ({
+    id: Number(item?.id ?? 0),
+    label: String(item?.label ?? ''),
+    subLabel: item?.subLabel ? String(item.subLabel) : undefined,
+    phone: item?.phone ? String(item.phone).trim() : null,
+  }));
+}
+
 // =======================================================
 // HELPER APIs
 // =======================================================

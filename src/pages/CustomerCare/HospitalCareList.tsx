@@ -24,7 +24,8 @@ import {
   deleteCustomerCare, 
   getCustomerCareById,
   CustomerCareResponseDTO,
-  getCustomerTypes
+  getCustomerTypes,
+  getAssignedUsers
 } from "../../api/customerCare.api";
 import { getMaintainContracts } from "../../api/maintain.api";
 
@@ -264,7 +265,7 @@ export default function HospitalCareList() {
   const [customerTypeFilter, setCustomerTypeFilter] = useState("");
   const [dateFromFilter, setDateFromFilter] = useState("");
   const [dateToFilter, setDateToFilter] = useState("");
-  const [picFilter, setPicFilter] = useState("");
+  const [picFilter, setPicFilter] = useState(""); // User ID (string) thay vì tên
   const [groupFilter, setGroupFilter] = useState("");
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [currentPage, setCurrentPage] = useState(0);
@@ -283,6 +284,9 @@ export default function HospitalCareList() {
   
   // Customer types for filter dropdown
   const [customerTypes, setCustomerTypes] = useState<Array<{ value: string; label: string }>>([]);
+  
+  // Users for PIC filter dropdown
+  const [picUsers, setPicUsers] = useState<Array<{ id: number; label: string; subLabel?: string }>>([]);
 
   // Load data from API
   useEffect(() => {
@@ -302,8 +306,11 @@ export default function HospitalCareList() {
         if (priorityFilter) params.priority = priorityFilter;
         if (customerTypeFilter) params.customerType = customerTypeFilter;
         if (picFilter) {
-          // Find user ID from name (simplified - in real app, you'd have a user lookup)
-          // For now, we'll filter on frontend
+          // Gửi assignedUserId lên backend để filter
+          const userId = parseInt(picFilter, 10);
+          if (!isNaN(userId)) {
+            params.assignedUserId = userId;
+          }
         }
 
         const response = await getAllCustomerCares(params);
@@ -429,7 +436,7 @@ export default function HospitalCareList() {
     };
 
     loadData();
-  }, [currentPage, itemsPerPage, searchTerm, priorityFilter, customerTypeFilter, activeTab]);
+  }, [currentPage, itemsPerPage, searchTerm, priorityFilter, customerTypeFilter, picFilter, activeTab]);
 
   // Load customer types on mount
   useEffect(() => {
@@ -443,6 +450,20 @@ export default function HospitalCareList() {
       }
     };
     loadCustomerTypes();
+  }, []);
+
+  // Load PIC users on mount (chỉ lấy users đã được assign trong customer care records)
+  useEffect(() => {
+    const loadPicUsers = async () => {
+      try {
+        const users = await getAssignedUsers();
+        setPicUsers(users);
+      } catch (error) {
+        console.error("Error loading assigned users:", error);
+        setPicUsers([]);
+      }
+    };
+    loadPicUsers();
   }, []);
 
   // Count hospitals per status (tính với trạng thái tự động)
@@ -479,9 +500,8 @@ export default function HospitalCareList() {
         if (h._calculatedStatus === null) return false;
         if (h._calculatedStatus !== activeTab) return false;
       }
-      // PIC filter (client-side)
-      if (picFilter && !h.pic.name.toLowerCase().includes(picFilter.toLowerCase())) return false;
-      // Customer type filter is now done on backend, but keep this for backward compatibility
+      // PIC filter is now done on backend
+      // Customer type filter is now done on backend
       // Date filter (client-side)
       if (dateFromFilter || dateToFilter) {
         if (!h.createdDate) return false;
@@ -700,8 +720,10 @@ export default function HospitalCareList() {
                   className="w-full appearance-none rounded-lg border border-gray-300 bg-white py-2 pl-3 pr-8 text-sm text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
                 >
                   <option value="">Nhân viên phụ trách</option>
-                  {[...new Set(hospitals.map((h) => h.pic.name))].map((name) => (
-                    <option key={name} value={name}>{name}</option>
+                  {picUsers.map((user) => (
+                    <option key={user.id} value={String(user.id)}>
+                      {user.label}
+                    </option>
                   ))}
                 </select>
                 <FiChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
