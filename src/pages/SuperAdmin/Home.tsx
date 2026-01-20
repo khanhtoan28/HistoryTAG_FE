@@ -1771,7 +1771,7 @@ export default function SuperAdminHome() {
       worksheet.getColumn(4).width = 20; // Người phụ trách
       worksheet.getColumn(5).width = 18; // Trạng thái
       worksheet.getColumn(6).width = 18; // Ngày hoàn thành
-      worksheet.getColumn(7).width = 18; // Số ngày thực hiện
+      worksheet.getColumn(7).width = 22; // Số ngày thực hiện (tăng width để hiển thị "X ngày Y giờ")
       if (isSalesSelected) {
         worksheet.getColumn(8).width = 20; // Doanh thu
       }
@@ -1816,16 +1816,30 @@ export default function SuperAdminHome() {
               translateStatus(String((biz as any)?.status ?? '')),
               (biz as any)?.completionDate ? new Date((biz as any).completionDate).toLocaleDateString('vi-VN') : '—',
               (() => {
+                // ✅ Tính chi tiết đến giờ: "X ngày Y giờ" hoặc "Y giờ" (nếu < 1 ngày)
                 const startDate = (biz as any)?.startDate;
                 if (!startDate) return '—';
                 const start = new Date(startDate);
                 const endDate = (biz as any)?.completionDate ? new Date((biz as any).completionDate) : new Date();
                 if (Number.isNaN(start.getTime()) || Number.isNaN(endDate.getTime())) return '—';
-                const startDateOnly = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-                const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-                const diffTime = endDateOnly.getTime() - startDateOnly.getTime();
-                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                return diffDays >= 0 ? `${diffDays} ngày` : '—';
+                
+                // ✅ Tính diff time (milliseconds) - giữ nguyên timestamp để tính chính xác đến giờ
+                const diffTime = endDate.getTime() - start.getTime();
+                
+                // ✅ Kiểm tra số âm (completionDate < startDate → lỗi data)
+                if (diffTime < 0) return '—';
+                
+                // ✅ Tính số ngày và số giờ
+                const totalHours = Math.floor(diffTime / (1000 * 60 * 60));
+                const days = Math.floor(totalHours / 24);
+                const hours = totalHours % 24;
+                
+                // ✅ Format: "X ngày Y giờ" hoặc "Y giờ" (nếu < 1 ngày)
+                if (days > 0) {
+                  return hours > 0 ? `${days} ngày ${hours} giờ` : `${days} ngày`;
+                } else {
+                  return hours > 0 ? `${hours} giờ` : '< 1 giờ';
+                }
               })(),
               // Doanh thu column (only for SALES)
               new Intl.NumberFormat('vi-VN').format(Number((biz as any)?.totalPrice ?? (biz as any)?.unitPrice ?? 0)) + ' ₫'
@@ -2862,17 +2876,35 @@ export default function SuperAdminHome() {
                         </thead>
                         <tbody>
                           {tasksByHospital.map((group, groupIdx) => {
-                            const calculateDays = (startDate: string | null | undefined, completionDate: string | null | undefined): number => {
-                              if (!startDate || !completionDate) return 0;
+                            // ✅ Tính chi tiết đến giờ: "X ngày Y giờ" hoặc "Y giờ" (nếu < 1 ngày)
+                            // - Giữ nguyên timestamp (không normalize) để tính chính xác đến giờ
+                            // - Kiểm tra diffTime >= 0 để phát hiện lỗi data (completionDate < startDate)
+                            const calculateDuration = (startDate: string | null | undefined, completionDate: string | null | undefined): string => {
+                              if (!startDate || !completionDate) return '—';
                               try {
                                 const start = new Date(startDate);
                                 const end = new Date(completionDate);
-                                if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
-                                const diffTime = Math.abs(end.getTime() - start.getTime());
-                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                return diffDays;
+                                if (isNaN(start.getTime()) || isNaN(end.getTime())) return '—';
+                                
+                                // ✅ Tính diff time (milliseconds) - giữ nguyên timestamp để tính chính xác đến giờ
+                                const diffTime = end.getTime() - start.getTime();
+                                
+                                // ✅ Kiểm tra số âm (completionDate < startDate → lỗi data)
+                                if (diffTime < 0) return '—';
+                                
+                                // ✅ Tính số ngày và số giờ
+                                const totalHours = Math.floor(diffTime / (1000 * 60 * 60));
+                                const days = Math.floor(totalHours / 24);
+                                const hours = totalHours % 24;
+                                
+                                // ✅ Format: "X ngày Y giờ" hoặc "Y giờ" (nếu < 1 ngày)
+                                if (days > 0) {
+                                  return hours > 0 ? `${days} ngày ${hours} giờ` : `${days} ngày`;
+                                } else {
+                                  return hours > 0 ? `${hours} giờ` : '< 1 giờ';
+                                }
                               } catch {
-                                return 0;
+                                return '—';
                               }
                             };
 
@@ -2933,9 +2965,9 @@ export default function SuperAdminHome() {
                                     <td className="px-3 py-2 text-center">{task.completionDate ? new Date(task.completionDate).toLocaleDateString('vi-VN') : '—'}</td>
                                     <td className="px-3 py-2 text-center">
                                       {task.startDate && task.completionDate ? (
-                                        <span className="text-gray-700">{calculateDays(task.startDate, task.completionDate)} ngày</span>
+                                        <span className="text-gray-700">{calculateDuration(task.startDate, task.completionDate)}</span>
                                       ) : task.startDate ? (
-                                        <span className="text-gray-500">{calculateDays(task.startDate, new Date().toISOString())} ngày</span>
+                                        <span className="text-gray-500">{calculateDuration(task.startDate, new Date().toISOString())}</span>
                                       ) : (
                                         <span className="text-gray-400">—</span>
                                       )}
