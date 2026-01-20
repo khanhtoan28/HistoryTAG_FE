@@ -27,26 +27,11 @@ import { normalizeBusinessContractName } from '../../utils/businessContract';
 
 type ITUserOption = { id: number; name: string; phone?: string | null };
 
+import { useAuth } from '../../contexts/AuthContext';
+
 const BusinessPage: React.FC = () => {
-  // read roles from either localStorage or sessionStorage (some flows store roles in sessionStorage)
-  const rolesRaw = localStorage.getItem('roles') || sessionStorage.getItem('roles') || '[]';
-  const roles = JSON.parse(rolesRaw);
-  const isAdmin = roles.some((r: unknown) => {
-    if (typeof r === 'string') return r.toUpperCase() === 'ADMIN' || r.toUpperCase() === 'SUPERADMIN';
-    if (r && typeof r === 'object') {
-      const roleName = (r as Record<string, unknown>).roleName;
-      if (typeof roleName === 'string') return roleName.toUpperCase() === 'ADMIN' || roleName.toUpperCase() === 'SUPERADMIN';
-    }
-    return false;
-  });
-  const isSuperAdmin = roles.some((r: unknown) => {
-    if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
-    if (r && typeof r === 'object') {
-      const roleName = (r as Record<string, unknown>).roleName ?? (r as Record<string, unknown>).role_name ?? (r as Record<string, unknown>).role;
-      if (typeof roleName === 'string') return roleName.toUpperCase() === 'SUPERADMIN';
-    }
-    return false;
-  });
+  // ✅ Use AuthContext hook - Performance optimized với useMemo, reactive với token changes
+  const { roles, isAdmin, isSuperAdmin } = useAuth();
   
   // Read stored user (may contain team information)
   const storedUserRaw = localStorage.getItem('user') || sessionStorage.getItem('user');

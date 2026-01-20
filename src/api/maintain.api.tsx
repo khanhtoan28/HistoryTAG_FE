@@ -1,45 +1,18 @@
 import api, { getAuthToken } from './client';
 import { getAllUsers } from './superadmin.api';
 
-// ✅ Helper để check xem user có phải SUPERADMIN không
+import { isSuperAdmin as isSuperAdminPermission } from '../utils/permission';
+
+// ✅ Helper để check xem user có phải SUPERADMIN không (từ JWT token - source of truth)
 function isSuperAdmin(): boolean {
   if (typeof window === 'undefined') return false;
   try {
     // Check pathname
     if (window.location.pathname.startsWith('/superadmin')) return true;
-    // Check roles from localStorage/sessionStorage
-    const roles = JSON.parse(localStorage.getItem('roles') || sessionStorage.getItem('roles') || '[]');
-    if (Array.isArray(roles) && roles.some((r: unknown) => {
-      if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
-      if (r && typeof r === 'object') {
-        const rr = r as Record<string, unknown>;
-        const rn = rr.roleName ?? rr.role_name ?? rr.role;
-        return typeof rn === 'string' && rn.toUpperCase() === 'SUPERADMIN';
-      }
-      return false;
-    })) {
-      return true;
-    }
-    // Check JWT token
-    const token = getAuthToken();
-    if (token) {
-      try {
-        const parts = token.split('.');
-        if (parts.length >= 2) {
-          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-          const maybeRoles = payload.roles || payload.authorities || payload.role || payload.realm_access && payload.realm_access.roles;
-          if (Array.isArray(maybeRoles) && maybeRoles.some((r: unknown) => typeof r === 'string' && (r as string).toUpperCase() === 'SUPERADMIN')) {
-            return true;
-          }
-        }
-      } catch {
-        // ignore decode errors
-      }
-    }
+    return isSuperAdminPermission();
   } catch {
-    // ignore
+    return false;
   }
-  return false;
 }
 
 function getBase(method: string = 'GET', canManage: boolean = false) {

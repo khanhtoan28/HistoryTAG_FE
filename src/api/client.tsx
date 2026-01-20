@@ -113,6 +113,28 @@ function isSuperAdminUser(): boolean {
 }
 
 api.interceptors.request.use((config) => {
+  // ✅ Auto-refresh roles từ token nếu localStorage mất (fix button ẩn issue)
+  try {
+    const token = getAuthToken();
+    if (token && !isTokenExpired(token)) {
+      const rolesStr = localStorage.getItem('roles') || sessionStorage.getItem('roles');
+      if (!rolesStr) {
+        // localStorage roles mất → parse từ token và sync lại
+        const parts = token.split('.');
+        if (parts.length >= 2) {
+          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+          const roles = payload.roles || payload.authorities || payload.role || [];
+          if (Array.isArray(roles) && roles.length > 0) {
+            const storage = localStorage.getItem('access_token') ? localStorage : sessionStorage;
+            storage.setItem('roles', JSON.stringify(roles));
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // Ignore errors - không block request
+  }
+  
   // ✅ Chặn superadmin API calls từ ADMIN users (chặn từ gốc)
   const isSuperAdminAPI = config.url?.includes('/api/v1/superadmin/');
   if (isSuperAdminAPI && !isSuperAdminUser()) {

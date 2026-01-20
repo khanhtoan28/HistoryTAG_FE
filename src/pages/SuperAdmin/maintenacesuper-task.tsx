@@ -9,6 +9,7 @@ import TaskFormModal from "./TaskFormModal";
 import TaskNotes from "../../components/TaskNotes";
 import TicketsTab from "../../pages/CustomerCare/SubCustomerCare/TicketsTab";
 import { getHospitalTickets } from "../../api/ticket.api";
+import { useAuth } from '../../contexts/AuthContext';
 
 const API_ROOT = import.meta.env.VITE_API_URL || "";
 const MIN_LOADING_MS = 2000;
@@ -188,16 +189,9 @@ const toastError = (message: string, options?: ToastOptions) =>
   showStyledToast("error", message, options);
 
 const MaintenanceSuperTaskPage: React.FC = () => {
-  const roles = JSON.parse(localStorage.getItem("roles") || "[]");
-  const isSuper = roles.some((r: unknown) => {
-    if (typeof r === "string") return r.toUpperCase() === "SUPERADMIN";
-    if (r && typeof r === "object") {
-      const roleName = (r as Record<string, unknown>).roleName;
-      if (typeof roleName === "string")
-        return roleName.toUpperCase() === "SUPERADMIN";
-    }
-    return false;
-  });
+  // ✅ Use AuthContext hook - Performance optimized với useMemo, reactive với token changes
+  const { isSuperAdmin } = useAuth();
+  const isSuper = isSuperAdmin;
 
   const [data, setData] = useState<MaintTask[]>([]);
   const [loading, setLoading] = useState(false);

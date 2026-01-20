@@ -1,12 +1,14 @@
 import api, { getAuthToken } from './client';
 import { getAllUsers } from './superadmin.api';
+import { getRolesFromToken } from '../utils/permission';
 
 // ✅ Helper để check xem user có phải SUPERADMIN không
 function isSuperAdmin(): boolean {
   if (typeof window === 'undefined') return false;
   try {
     if (window.location.pathname.startsWith('/superadmin')) return true;
-    const roles = JSON.parse(localStorage.getItem('roles') || sessionStorage.getItem('roles') || '[]');
+    // ✅ Parse roles từ token (source of truth) thay vì localStorage
+    const roles = getRolesFromToken();
     if (Array.isArray(roles) && roles.some((r: unknown) => {
       if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
       if (r && typeof r === 'object') {

@@ -11,6 +11,7 @@ import TaskNotes from "../../components/TaskNotes";
 import TicketsTab from "../../pages/CustomerCare/SubCustomerCare/TicketsTab";
 import { isBusinessContractTaskName as isBusinessContractTask } from "../../utils/businessContract";
 import { getHospitalTickets } from "../../api/ticket.api";
+import { useAuth } from '../../contexts/AuthContext';
 
 const API_ROOT = import.meta.env.VITE_API_URL || "";
 const MIN_LOADING_MS = 2000; // ensure spinner shows at least ~2s for perceived smoothness
@@ -173,15 +174,9 @@ function statusLabel(status?: string | null) {
 }
 
 const ImplementSuperTaskPage: React.FC = () => {
-  const roles = JSON.parse(localStorage.getItem("roles") || "[]");
-  const isSuper = roles.some((r: unknown) => {
-    if (typeof r === "string") return r.toUpperCase() === "SUPERADMIN";
-    if (r && typeof r === "object") {
-      const roleName = (r as Record<string, unknown>).roleName;
-      if (typeof roleName === "string") return roleName.toUpperCase() === "SUPERADMIN";
-    }
-    return false;
-  });
+  // ✅ Use AuthContext hook - Performance optimized với useMemo, reactive với token changes
+  const { isSuperAdmin } = useAuth();
+  const isSuper = isSuperAdmin;
   const [data, setData] = useState<ImplTask[]>([]);
   const [loading, setLoading] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);

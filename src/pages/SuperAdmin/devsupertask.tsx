@@ -4,6 +4,7 @@ import { FiActivity, FiInfo, FiLink, FiUser, FiClock } from "react-icons/fi";
 import TaskFormModal from "./TaskFormModal";
 import TaskCard from "./TaskCardNew";
 import toast from "react-hot-toast";
+import { useAuth } from '../../contexts/AuthContext';
 
 const API_ROOT = import.meta.env.VITE_API_URL || "";
 const MIN_LOADING_MS = 2000;
@@ -105,16 +106,9 @@ function statusBadgeClasses(status?: string | null) {
 }
 
 const DevSuperTaskPage: React.FC = () => {
-  const roles = JSON.parse(localStorage.getItem("roles") || "[]");
-  const isSuper = roles.some((r: unknown) => {
-    if (typeof r === "string") return r.toUpperCase() === "SUPERADMIN";
-    if (r && typeof r === "object") {
-      const roleName = (r as Record<string, unknown>).roleName;
-      if (typeof roleName === "string")
-        return roleName.toUpperCase() === "SUPERADMIN";
-    }
-    return false;
-  });
+  // ✅ Use AuthContext hook - Performance optimized với useMemo, reactive với token changes
+  const { isSuperAdmin } = useAuth();
+  const isSuper = isSuperAdmin;
 
   const [data, setData] = useState<DevTask[]>([]);
   const [loading, setLoading] = useState(false);

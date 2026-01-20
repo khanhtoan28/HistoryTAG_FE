@@ -3,6 +3,7 @@ import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { useNavigate } from "react-router";
 import { getUserAccount, type UserResponseDTO } from "../../api/auth.api";
+import { getRolesFromToken } from '../../utils/permission';
 
 const fallbackAvatar = "/images/user/owner.jpg";
 
@@ -12,14 +13,8 @@ export default function UserDropdown() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const roles = useMemo(() => {
-    try {
-      const raw = localStorage.getItem("roles") || sessionStorage.getItem("roles");
-      if (!raw) return [] as string[];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [] as string[];
-    }
+    // ✅ Parse roles từ JWT token (source of truth) - auto-recover nếu localStorage mất
+    return getRolesFromToken();
   }, []);
   const isSuperAdmin = roles.includes("SUPERADMIN") || roles.includes("SUPER_ADMIN") || roles.includes("Super Admin");
 

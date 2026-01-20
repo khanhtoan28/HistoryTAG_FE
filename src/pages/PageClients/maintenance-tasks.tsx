@@ -8,6 +8,7 @@ import { FaHospital } from "react-icons/fa";
 import { FiUser, FiLink, FiClock, FiTag, FiCheckCircle, FiX } from "react-icons/fi";
 import TicketsTab from "../../pages/CustomerCare/SubCustomerCare/TicketsTab";
 import { getHospitalTickets } from "../../api/ticket.api";
+import { useAuth } from '../../contexts/AuthContext';
 
 // Helper function để parse PIC IDs từ additionalRequest
 function parsePicIdsFromAdditionalRequest(additionalRequest?: string | null, picDeploymentId?: number | null): number[] {
@@ -1738,12 +1739,9 @@ const ImplementationTasksPage: React.FC = () => {
         return picOptions.filter((opt) => opt.label.toLowerCase().includes(q));
     }, [picOptions, picFilterQuery]);
 
+    // ✅ Use AuthContext hook - Performance optimized với useMemo, reactive với token changes
+    const { isSuperAdmin } = useAuth();
     const currentUser = useMemo<UserInfo>(() => readStored<UserInfo>("user"), []);
-    const roles = useMemo<string[]>(() => {
-        const r = readStored<string[]>("roles");
-        return Array.isArray(r) ? r : [];
-    }, []);
-    const isSuperAdmin = roles.includes("SUPERADMIN");
     const userTeam = (currentUser?.team || "").toString().toUpperCase();
 
     const filtered = useMemo(() => data, [data]);

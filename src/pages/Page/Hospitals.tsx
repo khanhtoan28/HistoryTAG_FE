@@ -425,21 +425,11 @@ function DetailModal({
   );
 }
 
+import { useAuth } from "../../contexts/AuthContext";
+
 export default function HospitalsPage() {
-  // Determine if current user can perform write actions (SUPERADMIN or ADMIN)
-  const canEdit = (() => {
-    try {
-      const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
-      if (!rolesStr) return false;
-      const roles = JSON.parse(rolesStr);
-      return Array.isArray(roles) && roles.some((r: string) => 
-        r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin" || 
-        r === "ADMIN" || r === "Admin"
-      );
-    } catch (e) {
-      return false;
-    }
-  })();
+  // ✅ Use AuthContext hook - Performance optimized với useMemo, reactive với token changes
+  const { canEdit } = useAuth();
   const [items, setItems] = useState<Hospital[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

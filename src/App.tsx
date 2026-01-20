@@ -42,6 +42,7 @@ import MaintainContractsPage from "./pages/CustomerCare/MaintainContracts";
 import HospitalCareList from "./pages/CustomerCare/HospitalCareList";
 import HospitalDetailView from "./pages/CustomerCare/View/HospitalDetailView";
 import HospitalDetail from "./pages/CustomerCare/HospitalDetail";
+import { AuthProvider } from "./contexts/AuthContext";
 
 // Protected Route Component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -62,59 +63,42 @@ export default function App() {
     return !!token;
   };
 
-  // Get user roles
-  const getUserRoles = () => {
-    try {
-      const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
-      if (rolesStr) {
-        return JSON.parse(rolesStr);
-      }
-    } catch (e) {
-      console.error("Error parsing roles:", e);
-    }
-    return [];
-  };
-
-  // Check if user is super admin
-  // @ts-ignore
-  const isSuperAdmin = () => {
-    const roles = getUserRoles();
-    return roles.some((role: string) => role === "SUPERADMIN" || role === "SUPER_ADMIN" || role === "Super Admin");
-  };
+  // ✅ Note: getUserRoles và isSuperAdmin functions giữ lại để backward compatibility
+  // ✅ Nhưng trong components, nên dùng useAuth() hook từ AuthContext
 
   return (
     <div className="font-outfit overflow-x-hidden w-full max-w-full">
-      <Toaster
-        position="top-right"
-        containerStyle={{
-          zIndex: 100003,
-        }}
-        toastOptions={{
-          duration: 3000,
-          style: {
-            background: '#fff',
-            color: '#363636',
-            padding: '16px',
-            borderRadius: '8px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-            zIndex: 100003,
-          },
-          success: {
-            iconTheme: {
-              primary: '#10b981',
-              secondary: '#fff',
-            },
-          },
-          error: {
-            iconTheme: {
-              primary: '#ef4444',
-              secondary: '#fff',
-            },
-            duration: 6000, // Lỗi hiển thị lâu hơn
-          },
-        }}
-      />
-      <Router>
+          <Toaster
+            position="top-right"
+            containerStyle={{
+              zIndex: 100003,
+            }}
+            toastOptions={{
+              duration: 3000,
+              style: {
+                background: '#fff',
+                color: '#363636',
+                padding: '16px',
+                borderRadius: '8px',
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                zIndex: 100003,
+              },
+              success: {
+                iconTheme: {
+                  primary: '#10b981',
+                  secondary: '#fff',
+                },
+              },
+              error: {
+                iconTheme: {
+                  primary: '#ef4444',
+                  secondary: '#fff',
+                },
+                duration: 6000, // Lỗi hiển thị lâu hơn
+              },
+            }}
+          />
+          <Router>
         <ScrollToTop />
         <Routes>
           {/* Default redirect to Sign In */}

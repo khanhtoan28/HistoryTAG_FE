@@ -9,6 +9,7 @@ import { toast } from "react-hot-toast";
 import { FiUser, FiMapPin, FiLink, FiClock, FiTag, FiPhone, FiCheckCircle, FiX } from "react-icons/fi";
 import { isBusinessContractTaskName as isBusinessContractTask } from "../../utils/businessContract";
 import { getHospitalTickets } from "../../api/ticket.api";
+import { useAuth } from '../../contexts/AuthContext';
 
 // Helper function để parse PIC IDs từ additionalRequest
 function parsePicIdsFromAdditionalRequest(additionalRequest?: string | null, picDeploymentId?: number | null): number[] {
@@ -1715,12 +1716,10 @@ const ImplementationTasksPage: React.FC = () => {
     }
   };
 
+  // ✅ Use AuthContext hook - Performance optimized với useMemo, reactive với token changes
+  const { isSuperAdmin } = useAuth();
   const currentUser = readStored<{ id?: number; username?: string; team?: string; roles?: unknown[] }>("user") || null;
-  const userRoles = (readStored<string[]>("roles") || (currentUser?.roles as string[] | undefined)) || [];
   const userTeam = (currentUser?.team || "").toString().toUpperCase();
-  const isSuperAdmin = userRoles.some(
-    (r: any) => (typeof r === "string" ? r : r.roleName)?.toUpperCase() === "SUPERADMIN"
-  );
   const canManage = isSuperAdmin || userTeam === "DEPLOYMENT";
 
   // Filter out tasks from Business that haven't been received yet
