@@ -200,30 +200,32 @@ export default function TaskCardNew({
         </div>
 
         {/* Main content */}
-        <div className="flex-1">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0">
-              <div className="flex items-center gap-3 flex-wrap">
-                <h3 className="text-lg font-semibold text-blue-800 dark:text-gray-100 truncate">
-                  { task.name}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start gap-3 flex-wrap">
+                <h3 className="text-lg font-semibold text-blue-800 dark:text-gray-100 break-words min-w-0 flex-1" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                  {task.name}
                 </h3>
 
-                {(statusValue || transferredToMaintenance) && (
-                  <span
-                    className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${badgeClass}`}
-                  >
-                    {badgeLabel}
-                  </span>
-                )}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {(statusValue || transferredToMaintenance) && (
+                    <span
+                      className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${badgeClass}`}
+                    >
+                      {badgeLabel}
+                    </span>
+                  )}
 
-                {/* Hiển thị badge "Quá hạn" hoặc "Sắp hạn" */}
-                {deadlineStatus && (
-                  <span
-                    className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${deadlineStatus.class}`}
-                  >
-                    {deadlineStatus.label}
-                  </span>
-                )}
+                  {/* Hiển thị badge "Quá hạn" hoặc "Sắp hạn" */}
+                  {deadlineStatus && (
+                    <span
+                      className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${deadlineStatus.class}`}
+                    >
+                      {deadlineStatus.label}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {task.hisSystemName && (

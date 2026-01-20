@@ -235,7 +235,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
   const [loadingPending, setLoadingPending] = useState(false);
   // hospital list view state (like implementation-tasks page)
   const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
-  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number; label: string; subLabel?: string; hospitalCode?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; fromDeployment?: boolean; acceptedByMaintenance?: boolean; picDeploymentIds?: Array<string | number>; picDeploymentNames?: string[] }>>([]);
+  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number; label: string; subLabel?: string; hospitalCode?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; fromDeployment?: boolean; acceptedByMaintenance?: boolean; picDeploymentIds?: Array<string | number>; picDeploymentNames?: string[]; maintenancePersonInChargeName?: string }>>([]);
   const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
   const [hospitalPage, setHospitalPage] = useState<number>(0);
   const [hospitalSize, setHospitalSize] = useState<number>(20);
@@ -707,6 +707,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
           acceptedByMaintenance: Boolean(item?.acceptedByMaintenance),
           picDeploymentIds: Array.from(taskStats.picIds),
           picDeploymentNames: Array.from(taskStats.picNames),
+          maintenancePersonInChargeName: item?.maintenancePersonInChargeName || undefined,
         };
       });
 
@@ -728,6 +729,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
             acceptedByMaintenance: false,
             picDeploymentIds: Array.from(taskStats.picIds),
             picDeploymentNames: Array.from(taskStats.picNames),
+            maintenancePersonInChargeName: undefined, // Không có trong task, sẽ để undefined
           });
         }
       }
@@ -749,6 +751,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
             acceptedByMaintenance: false,
             picDeploymentIds: Array.from(taskStats.picIds),
             picDeploymentNames: Array.from(taskStats.picNames),
+            maintenancePersonInChargeName: undefined, // Không có trong task, sẽ để undefined
           });
         }
       }
@@ -1292,6 +1295,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã bệnh viện</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/Thành phố</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phụ trách bảo trì</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượng task</th>
                         <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
                       </tr>
@@ -1333,6 +1337,9 @@ const MaintenanceSuperTaskPage: React.FC = () => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                 {hospital.subLabel || "—"}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {hospital.maintenancePersonInChargeName || "—"}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm align-center">
                                 <div className="flex flex-col items-start gap-1">
