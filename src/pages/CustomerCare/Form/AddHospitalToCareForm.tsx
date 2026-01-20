@@ -15,6 +15,7 @@ export interface AddHospitalToCareFormData {
   nextFollowUpDate: string;
   notes: string;
   customerType?: string; // Enum: VIP, HIGH_VALUE, etc.
+  customerTypeLabel?: string; // Display name (for display only, not sent to backend)
 }
 
 interface AddHospitalToCareFormProps {
