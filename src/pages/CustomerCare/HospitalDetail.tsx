@@ -462,10 +462,8 @@ export default function HospitalDetailView() {
           ? `${totalContractValue.toLocaleString('vi-VN')} VNĐ`
           : 'Chưa có dữ liệu';
 
-        // Lấy loại khách hàng từ tags của customer_care_hospital
-        const servicePack = (careDetail.tags && careDetail.tags.length > 0)
-          ? careDetail.tags.join(', ') // Hoặc có thể lấy tag đầu tiên: careDetail.tags[0]
-          : 'Chưa phân loại';
+        // Lấy loại khách hàng từ customerType
+        const servicePack = careDetail.customerTypeLabel || 'Chưa phân loại';
 
         // Format expiry date
         const latestContract = contracts

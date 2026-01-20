@@ -101,7 +101,9 @@ export type CustomerCareResponseDTO = {
     endDate: string;
     daysUntilExpiry: number;
   } | null;
-  tags?: string[];
+  customerType?: string; // Enum: VIP, HIGH_VALUE, etc.
+  customerTypeLabel?: string; // Display name: "Khách hàng VIP", etc.
+  tags?: string[]; // Deprecated, dùng customerType thay thế
 };
 
 export type CustomerCareCreateRequestDTO = {
@@ -113,7 +115,8 @@ export type CustomerCareCreateRequestDTO = {
   assignedUserId?: number | null;
   targetDate: string;
   nextFollowUpDate?: string;
-  tags?: string[];
+  customerType?: string; // Enum: VIP, HIGH_VALUE, etc.
+  tags?: string[]; // Deprecated, dùng customerType thay thế
 };
 
 export type CustomerCareUpdateRequestDTO = {
@@ -125,7 +128,8 @@ export type CustomerCareUpdateRequestDTO = {
   targetDate?: string;
   nextFollowUpDate?: string;
   isResolved?: boolean;
-  tags?: string[];
+  customerType?: string; // Enum: VIP, HIGH_VALUE, etc.
+  tags?: string[]; // Deprecated, dùng customerType thay thế
 };
 
 export type CustomerCareActivityResponseDTO = {
@@ -205,6 +209,7 @@ export async function deleteCustomerCare(careId: number, canManage: boolean = fa
 export async function getAllCustomerCares(params: {
   status?: string;
   careType?: string;
+  customerType?: string; // Enum: VIP, HIGH_VALUE, etc.
   priority?: string;
   assignedUserId?: number;
   createdById?: number;
@@ -401,6 +406,15 @@ export async function getOverdueCustomerCareTasks() {
   const base = getBase('GET', false);
   const res = await api.get(`${base}/customer-care/overdue`);
   return res.data;
+}
+
+/**
+ * Lấy danh sách CustomerType enum values
+ */
+export async function getCustomerTypes(): Promise<Array<{ value: string; label: string }>> {
+  const base = getBase('GET', false);
+  const res = await api.get(`${base}/customer-care/customer-types`);
+  return res.data || [];
 }
 
 // =======================================================

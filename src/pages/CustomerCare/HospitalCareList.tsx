@@ -23,7 +23,8 @@ import {
   getAllCustomerCares, 
   deleteCustomerCare, 
   getCustomerCareById,
-  CustomerCareResponseDTO 
+  CustomerCareResponseDTO,
+  getCustomerTypes
 } from "../../api/customerCare.api";
 import { getMaintainContracts } from "../../api/maintain.api";
 
@@ -62,7 +63,9 @@ interface Hospital {
   careType?: string; // Loại chăm sóc
   reason?: string; // Lý do
   notes?: string; // Ghi chú
-  tags?: string[]; // Tags
+  tags?: string[]; // Tags (deprecated)
+  customerType?: string; // Enum: VIP, HIGH_VALUE, etc.
+  customerTypeLabel?: string; // Display name
 }
 
 // Helper function để convert API response sang Hospital format
@@ -131,7 +134,9 @@ function convertApiResponseToHospital(apiData: CustomerCareResponseDTO): Hospita
     careType: apiData.careType,
     reason: apiData.reason,
     notes: apiData.notes,
-    tags: apiData.tags,
+    customerType: apiData.customerType,
+    customerTypeLabel: apiData.customerTypeLabel,
+    tags: apiData.tags, // Deprecated - chỉ dùng cho backward compatibility
   };
 }
 
@@ -275,6 +280,9 @@ export default function HospitalCareList() {
   const [error, setError] = useState<string | null>(null);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  
+  // Customer types for filter dropdown
+  const [customerTypes, setCustomerTypes] = useState<Array<{ value: string; label: string }>>([]);
 
   // Load data from API
   useEffect(() => {
@@ -292,6 +300,7 @@ export default function HospitalCareList() {
         // Apply filters
         if (searchTerm) params.search = searchTerm;
         if (priorityFilter) params.priority = priorityFilter;
+        if (customerTypeFilter) params.customerType = customerTypeFilter;
         if (picFilter) {
           // Find user ID from name (simplified - in real app, you'd have a user lookup)
           // For now, we'll filter on frontend
@@ -420,7 +429,21 @@ export default function HospitalCareList() {
     };
 
     loadData();
-  }, [currentPage, itemsPerPage, searchTerm, priorityFilter, activeTab]);
+  }, [currentPage, itemsPerPage, searchTerm, priorityFilter, customerTypeFilter, activeTab]);
+
+  // Load customer types on mount
+  useEffect(() => {
+    const loadCustomerTypes = async () => {
+      try {
+        const types = await getCustomerTypes();
+        setCustomerTypes(types);
+      } catch (error) {
+        console.error("Error loading customer types:", error);
+        setCustomerTypes([]);
+      }
+    };
+    loadCustomerTypes();
+  }, []);
 
   // Count hospitals per status (tính với trạng thái tự động)
   const statusCounts = useMemo(() => {
@@ -458,11 +481,7 @@ export default function HospitalCareList() {
       }
       // PIC filter (client-side)
       if (picFilter && !h.pic.name.toLowerCase().includes(picFilter.toLowerCase())) return false;
-      // Customer type filter (client-side)
-      if (customerTypeFilter) {
-        const primaryTag = getPrimaryTag(h.tags);
-        if (primaryTag !== customerTypeFilter) return false;
-      }
+      // Customer type filter is now done on backend, but keep this for backward compatibility
       // Date filter (client-side)
       if (dateFromFilter || dateToFilter) {
         if (!h.createdDate) return false;
@@ -480,7 +499,7 @@ export default function HospitalCareList() {
       }
       return true;
     });
-  }, [hospitals, activeTab, picFilter, customerTypeFilter, dateFromFilter, dateToFilter]);
+  }, [hospitals, activeTab, picFilter, dateFromFilter, dateToFilter]);
 
   // Tính toán totalItems và totalPages dựa trên filteredHospitals khi có filter theo date
   const effectiveTotalItems = useMemo(() => {
@@ -506,10 +525,8 @@ export default function HospitalCareList() {
     }
   }, [searchTerm, priorityFilter, customerTypeFilter, dateFromFilter, dateToFilter, picFilter, activeTab]);
 
-  const customerTypeOptions = useMemo(() => {
-    const tags = hospitals.flatMap((h) => h.tags || []).filter(Boolean);
-    return Array.from(new Set(tags));
-  }, [hospitals]);
+  // Customer type options from API (enum values)
+  const customerTypeOptions = customerTypes;
 
   // Get row background based on status
   const getRowBg = (status: Hospital["status"]): string => {
@@ -666,9 +683,9 @@ export default function HospitalCareList() {
                   className="w-full appearance-none rounded-lg border border-gray-300 bg-white py-2 pl-3 pr-8 text-sm text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
                 >
                   <option value="">Loại khách hàng</option>
-                  {customerTypeOptions.map((tag) => (
-                    <option key={tag} value={tag}>
-                      {tag}
+                  {customerTypeOptions.map((type) => (
+                    <option key={type.value} value={type.value}>
+                      {type.label}
                     </option>
                   ))}
                 </select>
@@ -767,6 +784,9 @@ export default function HospitalCareList() {
             <table className="w-full divide-y divide-gray-200 dark:divide-gray-800">
               <thead className="bg-gray-50 dark:bg-gray-800/50">
                 <tr>
+                  <th className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                    STT
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                     Tên bệnh viện
                   </th>
@@ -812,7 +832,7 @@ export default function HospitalCareList() {
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                 {loading ? (
                   <tr>
-                    <td colSpan={12} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={13} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
                       <div className="flex items-center justify-center gap-2">
                         <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
                         <span>Đang tải dữ liệu...</span>
@@ -821,21 +841,26 @@ export default function HospitalCareList() {
                   </tr>
                 ) : error ? (
                   <tr>
-                    <td colSpan={12} className="px-3 py-12 text-center text-red-500 dark:text-red-400">
+                    <td colSpan={13} className="px-3 py-12 text-center text-red-500 dark:text-red-400">
                       {error}
                     </td>
                   </tr>
                 ) : paginatedHospitals.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={13} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
                       Không tìm thấy bệnh viện nào
                     </td>
                   </tr>
                 ) : (
-                  paginatedHospitals.map((hospital) => {
+                  paginatedHospitals.map((hospital, index) => {
                     const { label, bgColor, textColor } = statusConfig[hospital.status];
+                    const stt = currentPage * itemsPerPage + index + 1;
                     return (
                       <tr key={hospital.id} className={`${getRowBg(hospital.status)} transition hover:bg-gray-50 dark:hover:bg-gray-800/50`}>
+                        {/* STT */}
+                        <td className="whitespace-nowrap px-4 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
+                          {stt}
+                        </td>
                         {/* Tên bệnh viện */}
                         <td className="min-w-[180px] px-4 py-3">
                           <button 
@@ -867,17 +892,26 @@ export default function HospitalCareList() {
 
                         {/* Loại khách hàng */}
                         <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
-                          {(() => {
-                            const primaryTag = getPrimaryTag(hospital.tags);
-                            if (!primaryTag) return "-";
-                            return (
-                              <span
-                                className={`rounded-full px-2 py-0.5 text-xs font-medium ${getTagColorClass(primaryTag)}`}
-                              >
-                                {primaryTag}
-                              </span>
-                            );
-                          })()}
+                          {hospital.customerTypeLabel ? (
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${getTagColorClass(hospital.customerTypeLabel)}`}
+                            >
+                              {hospital.customerTypeLabel}
+                            </span>
+                          ) : (
+                            // Fallback: hiển thị từ tags nếu không có customerTypeLabel
+                            (() => {
+                              const primaryTag = getPrimaryTag(hospital.tags);
+                              if (!primaryTag) return "-";
+                              return (
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${getTagColorClass(primaryTag)}`}
+                                >
+                                  {primaryTag}
+                                </span>
+                              );
+                            })()
+                          )}
                         </td>
 
                         {/* Ngày hết hạn */}
@@ -1047,7 +1081,7 @@ export default function HospitalCareList() {
                                     targetDate: formatDateForInput(careDetail.targetDate),
                                     nextFollowUpDate: formatDateTimeForInput(careDetail.nextFollowUpDate),
                                     notes: careDetail.notes || "",
-                                    tags: Array.isArray(careDetail.tags) ? careDetail.tags : [],
+                                    customerType: careDetail.customerType || undefined,
                                 };
                                 setEditingHospital(editData);
                                 setShowAddHospitalModal(true);

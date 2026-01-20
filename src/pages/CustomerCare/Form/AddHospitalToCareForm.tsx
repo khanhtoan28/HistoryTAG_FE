@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { FiX, FiSave, FiSearch, FiUser, FiCalendar, FiTag } from "react-icons/fi";
 import { searchHospitals } from "../../../api/business.api";
-import { getCustomerCareUserOptions, createCustomerCare, updateCustomerCare, CustomerCareCreateRequestDTO, CustomerCareUpdateRequestDTO } from "../../../api/customerCare.api";
+import { getCustomerCareUserOptions, createCustomerCare, updateCustomerCare, CustomerCareCreateRequestDTO, CustomerCareUpdateRequestDTO, getCustomerTypes } from "../../../api/customerCare.api";
 
 export interface AddHospitalToCareFormData {
   hospitalId: number | null;
@@ -14,7 +14,7 @@ export interface AddHospitalToCareFormData {
   targetDate: string;
   nextFollowUpDate: string;
   notes: string;
-  tags: string[];
+  customerType?: string; // Enum: VIP, HIGH_VALUE, etc.
 }
 
 interface AddHospitalToCareFormProps {
@@ -49,8 +49,6 @@ const careTypes = [
   { value: "CONTRACT_EXPIRY", label: "Hợp đồng sắp hết hạn" },
 ];
 
-const availableTags = ["Khách hàng VIP", "Giá trị cao", "Tiềm năng bán thêm", "Có rủi ro", "Khách hàng mới", "Dài hạn", "Không có nhu cầu"];
-
 export default function AddHospitalToCareForm({
   isOpen,
   onClose,
@@ -68,8 +66,12 @@ export default function AddHospitalToCareForm({
     targetDate: "",
     nextFollowUpDate: "",
     notes: "",
-    tags: [],
+    customerType: undefined,
   });
+
+  // Load customer types from API
+  const [customerTypes, setCustomerTypes] = useState<Array<{ value: string; label: string }>>([]);
+  const [loadingCustomerTypes, setLoadingCustomerTypes] = useState(false);
 
   // Load editing data when modal opens
   useEffect(() => {
@@ -85,7 +87,7 @@ export default function AddHospitalToCareForm({
         targetDate: editingData.targetDate, // Đã được format trong HospitalCareList
         nextFollowUpDate: editingData.nextFollowUpDate, // Đã được format trong HospitalCareList
         notes: editingData.notes,
-        tags: editingData.tags || [],
+        customerType: editingData.customerType || undefined,
       });
       setHospitalSearch(editingData.hospitalName);
     } else {
@@ -101,7 +103,7 @@ export default function AddHospitalToCareForm({
         targetDate: "",
         nextFollowUpDate: "",
         notes: "",
-        tags: [],
+        customerType: undefined,
       });
       setHospitalSearch("");
       setUserSearch("");
@@ -166,6 +168,26 @@ export default function AddHospitalToCareForm({
     loadUsers();
   }, [isOpen]);
 
+  // Load customer types from API
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    const loadCustomerTypes = async () => {
+      setLoadingCustomerTypes(true);
+      try {
+        const types = await getCustomerTypes();
+        setCustomerTypes(types);
+      } catch (error) {
+        console.error("Error loading customer types:", error);
+        setCustomerTypes([]);
+      } finally {
+        setLoadingCustomerTypes(false);
+      }
+    };
+
+    loadCustomerTypes();
+  }, [isOpen]);
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -227,7 +249,7 @@ export default function AddHospitalToCareForm({
           assignedUserId: formData.assignedUserId || undefined,
           targetDate: formData.targetDate ? convertDateToISO(formData.targetDate) : undefined,
           nextFollowUpDate: formData.nextFollowUpDate ? convertDateToISO(formData.nextFollowUpDate) : undefined,
-          tags: formData.tags.length > 0 ? formData.tags : undefined,
+          customerType: formData.customerType || undefined,
         };
         await updateCustomerCare(editingData.id, updatePayload);
       } else {
@@ -241,7 +263,7 @@ export default function AddHospitalToCareForm({
           assignedUserId: formData.assignedUserId || undefined,
           targetDate: convertDateToISO(formData.targetDate),
           nextFollowUpDate: formData.nextFollowUpDate ? convertDateToISO(formData.nextFollowUpDate) : undefined,
-          tags: formData.tags.length > 0 ? formData.tags : undefined,
+          customerType: formData.customerType || undefined,
         };
         await createCustomerCare(createPayload);
       }
@@ -262,7 +284,7 @@ export default function AddHospitalToCareForm({
           targetDate: "",
           nextFollowUpDate: "",
           notes: "",
-          tags: [],
+          customerType: undefined,
         });
         setHospitalSearch("");
         setUserSearch("");
@@ -289,14 +311,12 @@ export default function AddHospitalToCareForm({
       targetDate: "",
       nextFollowUpDate: "",
       notes: "",
-      tags: [],
+      customerType: undefined,
     });
     setHospitalSearch("");
     setUserSearch("");
     onClose();
   };
-
-  const selectedTag = formData.tags && formData.tags.length > 0 ? formData.tags[0] : "";
 
   if (!isOpen) return null;
 
@@ -549,27 +569,30 @@ export default function AddHospitalToCareForm({
             </div>
           </div>
 
-          {/* Tags */}
+          {/* Customer Type */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               <FiTag className="inline h-4 w-4 mr-1" />
               Loại khách hàng
             </label>
             <select
-              value={selectedTag}
+              value={formData.customerType || ""}
               onChange={(e) => {
-                const value = e.target.value;
-                setFormData({ ...formData, tags: value ? [value] : [] });
+                setFormData({ ...formData, customerType: e.target.value || undefined });
               }}
-              className="w-full rounded-lg border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+              disabled={loadingCustomerTypes}
+              className="w-full rounded-lg border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="">Chọn loại khách hàng...</option>
-              {availableTags.map((tag) => (
-                <option key={tag} value={tag}>
-                  {tag}
+              {customerTypes.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
                 </option>
               ))}
             </select>
+            {loadingCustomerTypes && (
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Đang tải danh sách...</p>
+            )}
           </div>
 
           {/* Ghi chú */}

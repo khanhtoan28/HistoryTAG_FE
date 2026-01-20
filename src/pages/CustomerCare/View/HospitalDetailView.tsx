@@ -109,7 +109,8 @@ export default function HospitalDetailView({ isOpen, onClose, hospitalId }: Hosp
             targetDate: formatDateForDisplay(careDetail.targetDate),
             nextFollowUpDate: careDetail.nextFollowUpDate ? formatDateTimeForDisplay(careDetail.nextFollowUpDate) : "",
             notes: careDetail.notes || "",
-            tags: Array.isArray(careDetail.tags) ? careDetail.tags : [],
+            customerType: careDetail.customerType,
+            customerTypeLabel: careDetail.customerTypeLabel,
           };
           
           setHospitalData(formData);
@@ -250,22 +251,17 @@ export default function HospitalDetailView({ isOpen, onClose, hospitalId }: Hosp
                         </>
                       )}
 
-                      {/* Tags */}
-                      {hospitalData.tags && hospitalData.tags.length > 0 && (
+                      {/* Loại khách hàng */}
+                      {hospitalData.customerTypeLabel && (
                         <div>
                           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                            Tags
+                            Loại khách hàng
                           </label>
                           <div className="flex flex-wrap gap-2">
-                            {hospitalData.tags.map((tag, index) => (
-                              <span
-                                key={index}
-                                className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800"
-                              >
-                                <FiTag className="h-3 w-3" />
-                                {tag}
-                              </span>
-                            ))}
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800">
+                              <FiTag className="h-3 w-3" />
+                              {hospitalData.customerTypeLabel}
+                            </span>
                           </div>
                         </div>
                       )}
