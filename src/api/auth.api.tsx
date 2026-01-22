@@ -106,7 +106,7 @@ export async function changePassword(userId: number, payload: ChangePasswordRequ
   return data;
 }
 
-function setCookie(
+export function setCookie(
   name: string,
   value: string,
   days = 7,
@@ -222,6 +222,24 @@ export const clearUserStorage = () => {
 // ==========================
 // Logout
 // ==========================
+// ==========================
+// Team Switching API
+// ==========================
+export type SwitchTeamRequestDTO = {
+  teamId: string;
+};
+
+export type SwitchTeamResponseDTO = {
+  success: boolean;
+  message: string;
+  newToken?: string; // Optional new JWT token
+};
+
+export async function switchTeam(payload: SwitchTeamRequestDTO): Promise<SwitchTeamResponseDTO> {
+  const { data } = await api.post<SwitchTeamResponseDTO>("/api/v1/auth/switch-team", payload);
+  return data;
+}
+
 export const logout = async () => {
   try {
     await api.get("/api/v1/auth/logout", { withCredentials: true });

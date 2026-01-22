@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { useSidebar } from "../context/SidebarContext";
 import NotificationDropdown from "../components/header/NotificationDropdownNew";
 import UserDropdown from "../components/header/UserDropdown";
+import TeamSwitcher from "../components/TeamSwitcher";
 
 const AppHeader: React.FC = () => {
   const [isApplicationMenuOpen, setApplicationMenuOpen] = useState(false);
@@ -126,6 +127,8 @@ const AppHeader: React.FC = () => {
           <div className="flex items-center gap-2 2xsm:gap-3">
             <ThemeToggleButton />
             {/* <!-- Dark Mode Toggler --> */}
+            {/* <!-- Team Switcher --> */}
+            <TeamSwitcher />
             <NotificationDropdown />
             {/* <!-- Notification Menu Area --> */}
           </div>

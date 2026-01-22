@@ -837,6 +837,7 @@ export default function SuperAdminHome() {
     if (teamUpper === 'DEV' || teamUpper === 'DEVELOPMENT' || teamUpper.includes('PHÁT TRIỂN') || teamUpper.includes('PHATTRIEN')) return 'Phát triển';
     if (teamUpper === 'MAINTENANCE' || teamUpper.includes('BẢO TRÌ') || teamUpper.includes('BAOTRI')) return 'Bảo trì';
     if (teamUpper === 'SALES' || teamUpper.includes('KINH DOANH') || teamUpper.includes('KINHDOANH')) return 'Kinh doanh';
+    if (teamUpper === 'CUSTOMER_SERVICE' || teamUpper.includes('CHĂM SÓC KHÁCH HÀNG') || teamUpper.includes('CHAMSOCKHACHHANG')) return 'CSKH';
     return team; // Return original if no match
   };
 
@@ -1598,6 +1599,7 @@ export default function SuperAdminHome() {
       'Phát triển': 'Phat_trien',
       'Bảo trì': 'Bao_tri',
       'Kinh doanh': 'Kinh_doanh',
+      'CSKH': 'Cham_soc_khach_hang',
     };
     return mapping[translated] || translated.replace(/[^a-z0-9\-_]/gi, '_').replace(/\s+/g, '_');
   };
@@ -2473,13 +2475,7 @@ export default function SuperAdminHome() {
                     </button>
                     {teamDropdownOpen && (
                       <div className="absolute z-30 mt-2 w-full rounded-xl border border-gray-200 bg-white shadow-xl p-3 space-y-3">
-                        <input
-                          type="text"
-                          value={teamSearchQuery}
-                          onChange={(e) => setTeamSearchQuery(e.target.value)}
-                          placeholder="Tìm team..."
-                          className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
-                        />
+                        
                         <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
                           {filteredTeams.length === 0 ? (
                             <div className="text-sm text-gray-500 text-center py-6">

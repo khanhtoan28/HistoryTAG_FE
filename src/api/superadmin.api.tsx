@@ -22,6 +22,11 @@ export type UserResponseDTO = {
   roles?: { roleId: number; roleName: string }[];
   businessProjectId?: number | null;
   businessProjectName?: string | null;
+  // New multi-team support
+  globalRole?: string | null;
+  availableTeams?: string[] | null;
+  primaryTeam?: string | null;
+  teamRoles?: Record<string, string> | null;
 };
 
 export type SuperAdminUserCreateDTO = {
@@ -33,9 +38,14 @@ export type SuperAdminUserCreateDTO = {
   address: string;
   phoneNumber?: string;
   department: string;
-  team?: string;
-  roles: string[];
+  team?: string; // Deprecated: Use selectedTeams instead
+  roles: string[]; // Deprecated: Use globalRole instead
   businessProjectId?: number | null;
+  // New multi-team support
+  globalRole?: string; // USER, ADMIN, SUPERADMIN
+  selectedTeams?: string[]; // List of team IDs
+  teamRoles?: string; // JSON string: teamId -> role (LEADER/MEMBER)
+  primaryTeam?: string; // Primary team ID
 };
 
 export type UserUpdateRequestDTO = {
@@ -48,9 +58,14 @@ export type UserUpdateRequestDTO = {
   workStatus?: string;
   workStatusDate?: string | null;
   department?: "IT" | "ACCOUNTING" | "BUSINESS" | null;
-  team?: "DEV" | "DEPLOYMENT" | "MAINTENANCE" | "SALES" | "CUSTOMER_SERVICE" | null;
-  roles?: string[];
+  team?: "DEV" | "DEPLOYMENT" | "MAINTENANCE" | "SALES" | "CUSTOMER_SERVICE" | null; // Deprecated: Use selectedTeams instead
+  roles?: string[]; // Deprecated: Use globalRole instead
   businessProjectId?: number | null;
+  // New multi-team support
+  globalRole?: string; // USER, ADMIN, SUPERADMIN
+  selectedTeams?: string[]; // List of team IDs
+  teamRoles?: string; // JSON string: teamId -> role (LEADER/MEMBER)
+  primaryTeam?: string; // Primary team ID
 };
 
 // User Management APIs
@@ -87,13 +102,22 @@ export async function updateUser(id: number, payload: UserUpdateRequestDTO) {
   Object.entries(payload).forEach(([key, value]) => {
     if (value === null || value === undefined) return;
 
+    // Handle File
+    if (value instanceof File) {
+      formData.append(key, value as File);
+      return;
+    }
+
+    // Handle arrays (including selectedTeams)
     if (Array.isArray(value)) {
       value.forEach((v) => formData.append(key, String(v)));
       return;
     }
 
-    if (value instanceof File) {
-      formData.append(key, value as File);
+    // Handle objects (for backward compatibility, but teamRoles is already stringified)
+    if (typeof value === 'object' && !Array.isArray(value) && value !== null) {
+      // Convert to JSON string for backend to parse
+      formData.append(key, JSON.stringify(value));
       return;
     }
 

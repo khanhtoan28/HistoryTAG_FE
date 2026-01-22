@@ -1740,9 +1740,10 @@ const ImplementationTasksPage: React.FC = () => {
     }, [picOptions, picFilterQuery]);
 
     // ✅ Use AuthContext hook - Performance optimized với useMemo, reactive với token changes
-    const { isSuperAdmin } = useAuth();
+    const { isSuperAdmin, activeTeam } = useAuth();
     const currentUser = useMemo<UserInfo>(() => readStored<UserInfo>("user"), []);
-    const userTeam = (currentUser?.team || "").toString().toUpperCase();
+    // Prefer activeTeam from JWT (new way), fallback to localStorage (old way)
+    const userTeam = (activeTeam || currentUser?.team || "").toString().toUpperCase();
 
     const filtered = useMemo(() => data, [data]);
     const [completedCount, setCompletedCount] = useState<number | null>(null);

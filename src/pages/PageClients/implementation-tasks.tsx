@@ -1717,9 +1717,11 @@ const ImplementationTasksPage: React.FC = () => {
   };
 
   // ✅ Use AuthContext hook - Performance optimized với useMemo, reactive với token changes
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, activeTeam } = useAuth();
   const currentUser = readStored<{ id?: number; username?: string; team?: string; roles?: unknown[] }>("user") || null;
-  const userTeam = (currentUser?.team || "").toString().toUpperCase();
+  // Prefer activeTeam from JWT (new way), fallback to localStorage (old way)
+  const userTeam = (activeTeam || currentUser?.team || "").toString().toUpperCase();
+  // SUPERADMIN can always manage, DEPLOYMENT team can manage
   const canManage = isSuperAdmin || userTeam === "DEPLOYMENT";
 
   // Filter out tasks from Business that haven't been received yet

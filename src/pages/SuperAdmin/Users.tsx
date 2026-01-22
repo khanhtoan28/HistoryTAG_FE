@@ -32,9 +32,16 @@ type UserForm = {
   address: string;
   avatarFile?: File | null;
   avatar?: string | null;
-  roles: string[];
+
+  // Global role - single selection (radio)
+  globalRole: 'USER' | 'ADMIN' | 'SUPERADMIN';
+
+  // Teams - multi-selection with roles
+  selectedTeams: string[];
+  teamRoles: Record<string, 'LEADER' | 'MEMBER'>; // team -> role mapping
+  primaryTeam: string;
+
   department: "" | (typeof DEPARTMENT_OPTIONS)[number];
-  team: "" | (typeof TEAM_OPTIONS)[number];
   workStatus?: string;
   workStatusDate?: string;
 };
@@ -56,7 +63,7 @@ const TEAM_LABELS: Record<string, string> = {
   DEPLOYMENT: "Triển khai",
   MAINTENANCE: "Bảo trì",
   SALES: "Kinh doanh",
-  CUSTOMER_SERVICE: "Chăm sóc khách hàng"
+  CUSTOMER_SERVICE: "CSKH"
 };
 
 const WORK_STATUS_LABELS: Record<string, string> = {
@@ -153,9 +160,16 @@ export default function SuperAdminUsers() {
     address: "",
     avatarFile: null,
     avatar: null,
-    roles: [],
+
+    // Global role - default to USER
+    globalRole: 'USER',
+
+    // Teams - start with empty selections
+    selectedTeams: [],
+    teamRoles: {},
+    primaryTeam: "",
+
     department: "",
-    team: "",
     workStatus: "",
     workStatusDate: "",
   });
@@ -195,9 +209,13 @@ export default function SuperAdminUsers() {
       address: "",
       avatarFile: null,
       avatar: null,
-      roles: [],
+
+      globalRole: 'USER',
+      selectedTeams: [],
+      teamRoles: {},
+      primaryTeam: "",
+
       department: "",
-      team: "",
       workStatus: "",
       workStatusDate: "",
     });
@@ -212,6 +230,25 @@ export default function SuperAdminUsers() {
         return name.replace(/^ROLE_/i, "").toUpperCase();
       }) || [];
     // console.log("[Users] fillForm roles normalized:", normalizedRoles);
+    // Parse global role from normalized roles (take the highest role)
+    const globalRole = normalizedRoles.includes('SUPERADMIN') ? 'SUPERADMIN' :
+                      normalizedRoles.includes('ADMIN') ? 'ADMIN' : 'USER';
+
+    // Parse team data (prefer new multi-team fields from backend)
+    const selectedTeams =
+      (user.availableTeams && user.availableTeams.length > 0)
+        ? user.availableTeams
+        : (user.team ? [user.team] : []);
+
+    const teamRoles: Record<string, 'LEADER' | 'MEMBER'> = {};
+    if (user.teamRoles) {
+      Object.entries(user.teamRoles).forEach(([teamId, role]) => {
+        teamRoles[teamId] = role === 'LEADER' ? 'LEADER' : 'MEMBER';
+      });
+    } else {
+      selectedTeams.forEach((t) => { teamRoles[t] = 'MEMBER'; });
+    }
+
     setForm({
       username: user.username || "",
       email: user.email || "",
@@ -222,9 +259,13 @@ export default function SuperAdminUsers() {
       address: user.address || "",
       avatarFile: null,
       avatar: user.avatar || null,
-      roles: normalizedRoles,
+
+      globalRole: ((user.globalRole as any) || globalRole) as UserForm['globalRole'],
+      selectedTeams,
+      teamRoles,
+      primaryTeam: user.primaryTeam || selectedTeams[0] || "",
+
       department: (user.department ?? "") as UserForm["department"],
-      team: (user.team ?? "") as UserForm["team"],
       workStatus: user.workStatus || "",
       workStatusDate: user.workStatusDate || "",
     });
@@ -308,9 +349,13 @@ export default function SuperAdminUsers() {
       address: "",
       avatarFile: null,
       avatar: null,
-      roles: [],
+
+      globalRole: 'USER',
+      selectedTeams: [],
+      teamRoles: {},
+      primaryTeam: "",
+
       department: "",
-      team: "",
       workStatus: "ACTIVE", // Mặc định là "Đang làm việc"
       workStatusDate: "",
     });
@@ -424,9 +469,36 @@ export default function SuperAdminUsers() {
     //   setError("Địa chỉ không được để trống");
     //   return;
     // }
-    if (!isEditing && form.roles.length === 0) {
-      setError("Vai trò không được để trống");
+    // Validate global role
+    if (!form.globalRole) {
+      setError("Vai trò toàn cục không được để trống");
       return;
+    }
+
+    // Validate team selection
+    if (form.selectedTeams.length === 0) {
+      setError("Phải chọn ít nhất một đội");
+      return;
+    }
+
+    // Validate primary team
+    if (!form.primaryTeam) {
+      setError("Phải chọn đội chính");
+      return;
+    }
+
+    // Validate that primary team is in selected teams
+    if (!form.selectedTeams.includes(form.primaryTeam)) {
+      setError("Đội chính phải nằm trong danh sách đội đã chọn");
+      return;
+    }
+
+    // Validate team roles
+    for (const team of form.selectedTeams) {
+      if (!form.teamRoles[team]) {
+        setError(`Chưa chọn vai trò cho đội ${team}`);
+        return;
+      }
     }
 
     if (isViewing) return;
@@ -443,11 +515,16 @@ export default function SuperAdminUsers() {
           address: form.address?.trim() || undefined,
           avatar: form.avatarFile || undefined,
           department: form.department || undefined,
-          team: form.team || undefined,
-          
           workStatus: form.workStatus || undefined,
           workStatusDate: form.workStatusDate || undefined,
-          roles: form.roles && form.roles.length ? form.roles : undefined,
+          // New multi-team support
+          globalRole: form.globalRole,
+          selectedTeams: form.selectedTeams.length > 0 ? form.selectedTeams : undefined,
+          teamRoles: Object.keys(form.teamRoles).length > 0 ? JSON.stringify(form.teamRoles) : undefined,
+          primaryTeam: form.primaryTeam || undefined,
+          // Backward compatibility fallback
+          team: form.selectedTeams.length > 0 ? (form.selectedTeams[0] as any) : undefined,
+          roles: [form.globalRole],
         };
         await updateUser(editing!.id, payload);
         toast.success("Cập nhật thành công");
@@ -461,9 +538,14 @@ export default function SuperAdminUsers() {
           address: form.address.trim(),
           phoneNumber: form.phoneNumber.trim(),
           department: form.department,
-          team: form.team || undefined,
-          
-          roles: form.roles,
+          // New multi-team support
+          globalRole: form.globalRole,
+          selectedTeams: form.selectedTeams.length > 0 ? form.selectedTeams : undefined,
+          teamRoles: Object.keys(form.teamRoles).length > 0 ? JSON.stringify(form.teamRoles) : undefined,
+          primaryTeam: form.primaryTeam || undefined,
+          // Backward compatibility fallback
+          team: form.selectedTeams.length > 0 ? form.selectedTeams[0] : undefined,
+          roles: [form.globalRole],
         };
         await createUser(payload);
         toast.success("Tạo thành công");
@@ -665,7 +747,48 @@ export default function SuperAdminUsers() {
 
                 <div className="flex items-start gap-4">
                   <div className="min-w-[150px]"><span className="font-semibold text-gray-900 flex items-center gap-2"><FiBriefcase className="text-gray-500" />Team:</span></div>
-                  <div className="flex-1 text-gray-700 break-words">{viewing.team ? getTeamLabel(viewing.team) : "—"}</div>
+                  <div className="flex-1 text-gray-700 break-words">
+                    {(() => {
+                      // Lấy danh sách teams (ưu tiên availableTeams, fallback về team)
+                      const teams = (viewing as any).availableTeams && (viewing as any).availableTeams.length > 0
+                        ? (viewing as any).availableTeams
+                        : (viewing.team ? [viewing.team] : []);
+                      
+                      if (teams.length === 0) return "—";
+                      
+                      const teamRoles = (viewing as any).teamRoles || {};
+                      const primaryTeam = (viewing as any).primaryTeam || teams[0];
+                      
+                      return (
+                        <div className="flex flex-wrap gap-2">
+                          {teams.map((team: string) => {
+                            const role = teamRoles[team] || 'MEMBER';
+                            const isPrimary = team === primaryTeam;
+                            return (
+                              <span
+                                key={team}
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${
+                                  isPrimary
+                                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                    : 'bg-gray-50 text-gray-700 border-gray-200'
+                                }`}
+                              >
+                                {getTeamLabel(team)}
+                                {isPrimary && (
+                                  <span className="text-indigo-600 font-semibold" title="Đội chính">★</span>
+                                )}
+                                <span className={`text-xs ${
+                                  role === 'LEADER' ? 'text-orange-600 font-semibold' : 'text-gray-500'
+                                }`}>
+                                  ({role === 'LEADER' ? 'Trưởng đội' : 'Thành viên'})
+                                </span>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>
 
                 {/* Team kinh doanh view removed */}
@@ -823,28 +946,32 @@ export default function SuperAdminUsers() {
                     </div>
 
                     <div>
-                      <label className="mb-1 block text-sm font-medium">Vai trò <span className="text-red-500">*</span> {!isEditing && !isViewing && "(Có thể chọn nhiều)"}</label>
+                      <label className="mb-1 block text-sm font-medium">Vai trò toàn cục <span className="text-red-500">*</span></label>
                       <div className="rounded-lg border border-gray-300 p-3">
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                           {ROLE_OPTIONS.map((role) => {
-                            const checked = form.roles.includes(role);
+                            const checked = form.globalRole === role;
                             return (
-                              <label key={role} className={`flex items-center gap-2 text-sm ${isViewing || isEditing ? 'opacity-60' : ''}`}>
-                                <input type="checkbox" className="h-4 w-4" checked={checked} onChange={(e) => {
-                                  const isChecked = e.target.checked;
-                                  setForm((s) => {
-                                    const next = new Set(s.roles);
-                                    if (isChecked) next.add(role); else next.delete(role);
-                                    return { ...s, roles: Array.from(next) };
-                                  });
-                                }} disabled={isViewing} />
+                              <label key={role} className={`flex items-center gap-2 text-sm ${isViewing ? 'opacity-60' : ''}`}>
+                                <input
+                                  type="radio"
+                                  name="globalRole"
+                                  className="h-4 w-4 text-blue-600"
+                                  checked={checked}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setForm((s) => ({ ...s, globalRole: role as UserForm['globalRole'] }));
+                                    }
+                                  }}
+                                  disabled={isViewing}
+                                />
                                 <span>{role}</span>
                               </label>
                             );
                           })}
                         </div>
                       </div>
-                      {!isEditing && !isViewing && <p className="mt-1 text-xs text-gray-500">Chọn một hoặc nhiều vai trò</p>}
+                      {!isViewing && <p className="mt-1 text-xs text-gray-500">Chọn một vai trò toàn cục</p>}
                     </div>
 
                     <div>
@@ -855,12 +982,112 @@ export default function SuperAdminUsers() {
                       </select>
                     </div>
 
-                    <div>
-                      <label className="mb-1 block text-sm">Team</label>
-                      <select className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50" value={form.team} onChange={(e) => setForm((s) => ({ ...s, team: e.target.value as UserForm['team'] }))} disabled={isViewing}>
-                        <option value="">— Chọn team —</option>
-                        {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{getTeamLabel(t)}</option>)}
+                    <div className="md:col-span-2">
+                      <label className="mb-1 block text-sm font-medium">Đội và vai trò <span className="text-red-500">*</span></label>
+
+                      {/* Team Multi-Selection */}
+                      <div className="rounded-lg border border-gray-300 p-3 mb-3">
+                        <div className="mb-2">
+                          <label className="text-sm font-medium text-gray-700">Chọn đội:</label>
+                        </div>
+                        <div className="grid grid-cols-3 sm:grid-cols-3 gap-2">
+                          {TEAM_OPTIONS.map((team) => {
+                            const isSelected = form.selectedTeams.includes(team);
+                            return (
+                              <label key={team} className="flex items-center gap-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 text-blue-600"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    setForm((s) => {
+                                      const selectedTeams = checked
+                                        ? [...s.selectedTeams, team]
+                                        : s.selectedTeams.filter(t => t !== team);
+
+                                      // Update team roles
+                                      const teamRoles = { ...s.teamRoles };
+                                      if (checked) {
+                                        teamRoles[team] = 'MEMBER'; // Default role
+                                      } else {
+                                        delete teamRoles[team];
+                                        // If removing primary team, clear it
+                                        const primaryTeam = s.primaryTeam === team ? '' : s.primaryTeam;
+                                        return { ...s, selectedTeams, teamRoles, primaryTeam };
+                                      }
+
+                                      return { ...s, selectedTeams, teamRoles };
+                                    });
+                                  }}
+                                  disabled={isViewing}
+                                />
+                                <span>{getTeamLabel(team)}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Team Role Assignment */}
+                      {form.selectedTeams.length > 0 && (
+                        <div className="rounded-lg border border-gray-300 p-3 mb-3">
+                          <div className="mb-2">
+                            <label className="text-sm font-medium text-gray-700">Vai trò trong từng đội:</label>
+                          </div>
+                          <div className="space-y-2">
+                            {form.selectedTeams.map((team) => (
+                              <div key={team} className="flex items-center gap-4 p-2 bg-gray-50 rounded">
+                                <span className="text-sm font-medium w-32">{getTeamLabel(team)}:</span>
+                                <div className="flex gap-4">
+                                  {(['LEADER', 'MEMBER'] as const).map((role) => (
+                                    <label key={role} className="flex items-center gap-1 text-sm">
+                                      <input
+                                        type="radio"
+                                        name={`teamRole-${team}`}
+                                        className="h-3 w-3 text-blue-600"
+                                        checked={form.teamRoles[team] === role}
+                                        onChange={() => {
+                                          setForm((s) => ({
+                                            ...s,
+                                            teamRoles: { ...s.teamRoles, [team]: role }
+                                          }));
+                                        }}
+                                        disabled={isViewing}
+                                      />
+                                      <span>{role === 'LEADER' ? 'Trưởng đội' : 'Thành viên'}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Primary Team Selection */}
+                      {form.selectedTeams.length > 1 && (
+                        <div className="rounded-lg border border-gray-300 p-3">
+                          <div className="mb-2">
+                            <label className="text-sm font-medium text-gray-700">Đội chính <span className="text-red-500">*</span>:</label>
+                          </div>
+                          <select
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
+                            value={form.primaryTeam}
+                            onChange={(e) => setForm((s) => ({ ...s, primaryTeam: e.target.value }))}
+                            disabled={isViewing}
+                          >
+                            <option value="">— Chọn đội chính —</option>
+                            {form.selectedTeams.map((team) => (
+                              <option key={team} value={team}>
+                                {getTeamLabel(team)} {form.teamRoles[team] === 'LEADER' ? '(Trưởng đội)' : '(Thành viên)'}
+                              </option>
+                            ))}
                       </select>
+                          <p className="mt-1 text-xs text-gray-500">Đội chính sẽ được sử dụng mặc định khi đăng nhập</p>
+                        </div>
+                      )}
+
                     </div>
 
                     {/* Team kinh doanh selection removed from form */}
