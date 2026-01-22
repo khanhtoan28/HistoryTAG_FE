@@ -886,7 +886,7 @@ export default function TicketsTab({
                 {/* Người phụ trách */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Người phụ trách <span className="text-red-500">*</span>
+                    Người phụ trách 
                   </label>
                   <input
                     type="text"
