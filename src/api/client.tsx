@@ -193,11 +193,11 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// ✅ Response interceptor để handle 401 gracefully và prevent redirect loop
+// ✅ Response interceptor để handle 401 và 403 gracefully
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Chỉ handle 401 errors
+    // Handle 401 errors (Unauthorized)
     if (error.response?.status === 401) {
       const currentPath = window.location.pathname;
       const isAuthPage = currentPath === '/signin' || 
@@ -225,6 +225,14 @@ api.interceptors.response.use(
           silent: true, // Flag để caller biết đây là error có thể ignore
         });
       }
+    }
+    
+    // Handle 403 errors (Forbidden - Permission denied)
+    if (error.response?.status === 403) {
+      // Log để debug (có thể remove sau khi fix xong)
+      console.warn('403 Forbidden:', error.response?.data?.message || error.message);
+      // Error sẽ được propagate để component có thể hiển thị toast/notification
+      // Không redirect vì đây là lỗi permission, không phải authentication
     }
     
     return Promise.reject(error);
