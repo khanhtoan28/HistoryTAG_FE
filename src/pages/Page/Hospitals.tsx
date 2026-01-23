@@ -647,10 +647,12 @@ export default function HospitalsPage() {
   const searchMaintenanceUsers = useMemo(
     () => async (term: string) => {
       try {
-        // ✅ Tìm kiếm tất cả users (không filter theo team)
-        const params = new URLSearchParams();
+        // ✅ Dùng /api/v1/admin/users/search với filter department: "IT" giống như "Phụ trách triển khai"
+        const params = new URLSearchParams({
+          department: "IT",
+        });
         if (term && term.trim()) {
-          params.set("name", term.trim());
+          params.set("name", term.trim()); // admin API dùng "name" thay vì "fullName"
         }
         const res = await fetch(`${API_BASE}/api/v1/admin/users/search?${params.toString()}`, {
           headers: { ...authHeader() },
@@ -664,9 +666,9 @@ export default function HospitalsPage() {
           .map((u: any) => ({
             id: Number(u.id),
             name: String(u.label ?? u.name ?? u.id),
-            username: undefined,
-            email: u.subLabel ?? null,
-            phone: null,
+            username: undefined, // admin API không trả về username
+            email: u.subLabel ?? null, // subLabel là email trong admin API
+            phone: null, // admin API không trả về phone
           }))
           .filter((u: ITUserOption) => Number.isFinite(u.id) && u.name);
       } catch (e) {
