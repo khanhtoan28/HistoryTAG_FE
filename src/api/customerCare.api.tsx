@@ -217,6 +217,7 @@ export async function getAllCustomerCares(params: {
   createdById?: number;
   isResolved?: boolean;
   search?: string;
+  contractStatus?: string; // Filter theo contract status: "sap_het_han", "qua_han", "da_gia_han", "dang_hoat_dong"
   page?: number;
   size?: number;
   sortBy?: string;
@@ -432,6 +433,22 @@ export async function getAssignedUsers(): Promise<Array<{ id: number; label: str
     subLabel: item?.subLabel ? String(item.subLabel) : undefined,
     phone: item?.phone ? String(item.phone).trim() : null,
   }));
+}
+
+/**
+ * Lấy số lượng hospitals theo contract status (dựa trên contracts)
+ * @returns Map với keys: "all", "sap_het_han", "qua_han", "da_gia_han", "dang_hoat_dong"
+ */
+export async function getContractStatusCounts(): Promise<Record<string, number>> {
+  const base = getBase('GET', false);
+  const res = await api.get(`${base}/customer-care/stats/contract-status-counts`);
+  const data = res.data || {};
+  // Convert Long values to numbers
+  const counts: Record<string, number> = {};
+  Object.entries(data).forEach(([key, value]) => {
+    counts[key] = typeof value === 'number' ? value : Number(value) || 0;
+  });
+  return counts;
 }
 
 // =======================================================

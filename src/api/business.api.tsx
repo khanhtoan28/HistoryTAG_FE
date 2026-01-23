@@ -57,12 +57,17 @@ function getBase(method: string = 'GET', canManage: boolean = false) {
   if (method === 'GET') {
     return '/api/v1/admin';
   }
-  // ✅ Write operations (POST, PUT, DELETE): chỉ dùng superadmin API nếu canManage = true
+  // ✅ Write operations (POST, PUT, DELETE): 
+  // Nếu canManage = true, có nghĩa là user có quyền (superadmin hoặc team SALES)
+  // Superadmin nên dùng superadmin API để bypass team check
+  // Team SALES có thể dùng admin API vì backend đã check team permission
   if (canManage && (method === 'POST' || method === 'PUT' || method === 'DELETE')) {
-    // Double check: chỉ dùng superadmin API nếu thực sự là superadmin
+    // Nếu là superadmin, dùng superadmin API để đảm bảo bypass team check
     if (isSuperAdmin()) {
       return '/api/v1/superadmin';
     }
+    // Nếu không phải superadmin nhưng canManage = true, có nghĩa là team SALES
+    // Team SALES có thể dùng admin API vì backend đã check team permission
   }
   // Fallback: dùng admin API
   return '/api/v1/admin';

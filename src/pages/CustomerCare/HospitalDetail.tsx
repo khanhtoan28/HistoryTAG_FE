@@ -367,6 +367,7 @@ export default function HospitalDetailView() {
             issue: item.issue,
             priority: item.priority,
             status: item.status,
+            ticketType: item.ticketType || "MAINTENANCE", // Default to MAINTENANCE if not provided
             pic: item.pic || '',
             createdAt: item.createdAt || undefined,
             timeElapsed: item.status === "HOAN_THANH" ? undefined : undefined // Will be calculated in component

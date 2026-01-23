@@ -1548,6 +1548,137 @@ export default function SuperAdminHome() {
     }
   }, [isSalesSelected, salesFilteredBusinesses, profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, profileDateFrom, profileDateTo, implStatusFilter, devStatusFilter, maintStatusFilter, profileStatusFilter, profilePicFilter, profileUsers, normalizedSelectedTeam]);
 
+  // All tasks by hospital (without pagination) - used for Excel export
+  // Same filtering logic as tasksByHospital but returns all groups without pagination
+  const allTasksByHospital = useMemo(() => {
+    if (isSalesSelected) {
+      return [];
+    }
+    // Same logic as tasksByHospital but without pagination
+    const matchesDateRangeFilter = (startDate?: string | null) => {
+      if (profileDateFrom || profileDateTo) {
+        if (!startDate) return false;
+        const d = new Date(startDate);
+        if (Number.isNaN(d.getTime())) return false;
+        const taskDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        if (profileDateFrom) {
+          const fromDate = new Date(profileDateFrom);
+          fromDate.setHours(0, 0, 0, 0);
+          if (taskDate < fromDate) return false;
+        }
+        if (profileDateTo) {
+          const toDate = new Date(profileDateTo);
+          toDate.setHours(23, 59, 59, 999);
+          if (taskDate > toDate) return false;
+        }
+        return true;
+      }
+      if (profileQuarter === 'all' && (!profileYear || profileYear === '')) return true;
+      if (!startDate) {
+        return profileQuarter === 'all' && (!profileYear || profileYear === '');
+      }
+      const d = new Date(startDate);
+      if (Number.isNaN(d.getTime())) {
+        return profileQuarter === 'all' && (!profileYear || profileYear === '');
+      }
+      if (profileYear && profileYear !== '' && String(d.getFullYear()) !== profileYear) return false;
+      if (profileQuarter === 'all') return true;
+      const month = d.getMonth();
+      const q = Math.floor(month / 3) + 1;
+      return `Q${q}` === profileQuarter;
+    };
+
+    const allImplTasks = profileImplTasks.filter(t => {
+      const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
+      return matchesDateRangeFilter(startDate);
+    });
+    const allDevTasks = profileDevTasks.filter(t => {
+      const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
+      return matchesDateRangeFilter(startDate);
+    });
+    const allMaintTasks = profileMaintTasks.filter(t => {
+      const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
+      return matchesDateRangeFilter(startDate);
+    });
+
+    const normalizeStatusToCanonical = (status?: string | null): string | null => {
+      if (!status) return null;
+      const s = String(status).trim().toUpperCase();
+      if (s === 'RECEIVED' || s === 'NOT_STARTED' || s === 'PENDING') return 'RECEIVED';
+      if (s === 'IN_PROCESS' || s === 'IN_PROGRESS' || s === 'API_TESTING' || s === 'INTEGRATING' || s === 'WAITING_FOR_DEV' || s === 'WAITING_FOR_DEPLOY') return 'IN_PROCESS';
+      if (s === 'COMPLETED' || s === 'DONE' || s === 'FINISHED' || s === 'ACCEPTED' || s === 'TRANSFERRED' || s === 'PENDING_TRANSFER' || s === 'TRANSFERRED_TO_CUSTOMER') return 'COMPLETED';
+      if (s === 'ISSUE' || s === 'FAILED' || s === 'ERROR') return 'ISSUE';
+      if (s === 'RECEIVED' || s === 'IN_PROCESS' || s === 'COMPLETED' || s === 'ISSUE') return s;
+      return s;
+    };
+    
+    const statusFilter = profileStatusFilter !== 'all' ? profileStatusFilter : null;
+    const implTasksFiltered = statusFilter 
+      ? allImplTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
+      : (implStatusFilter === 'all' ? allImplTasks : allImplTasks.filter(t => String((t as any).status ?? '').toUpperCase() === implStatusFilter));
+    const devTasksFiltered = statusFilter
+      ? allDevTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
+      : (devStatusFilter === 'all' ? allDevTasks : allDevTasks.filter(t => String((t as any).status ?? '').toUpperCase() === devStatusFilter));
+    const maintTasksFiltered = statusFilter
+      ? allMaintTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
+      : (maintStatusFilter === 'all' ? allMaintTasks : allMaintTasks.filter(t => String((t as any).status ?? '').toUpperCase() === maintStatusFilter));
+
+    const implTasksPicFiltered = implTasksFiltered.filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+    const devTasksPicFiltered = devTasksFiltered.filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+    const maintTasksPicFiltered = maintTasksFiltered.filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+
+    const normalizedTeam = normalizedSelectedTeam;
+    const isDeploymentTeam = normalizedTeam.includes('DEPLOY') || normalizedTeam.includes('TRIỂN KHAI') || normalizedTeam.includes('TRIENKHAI');
+    const isMaintenanceTeam = normalizedTeam.includes('MAINT') || normalizedTeam.includes('BẢO TRÌ') || normalizedTeam.includes('BAOTRI');
+    const isDevTeam = normalizedTeam.includes('DEV') || normalizedTeam.includes('PHÁT TRIỂN') || normalizedTeam.includes('PHATTRIEN');
+
+    type TaskWithType = {
+      type: 'Triển khai' | 'Bảo trì' | 'Phát triển';
+      hospitalName: string | null | undefined;
+      startDate: string | null | undefined;
+      completionDate: string | null | undefined;
+      status: string | null | undefined;
+      name: string;
+      picName: string;
+      [key: string]: unknown;
+    };
+    const allTasks: TaskWithType[] = [];
+    if (isDeploymentTeam) {
+      allTasks.push(...implTasksPicFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
+    }
+    if (isMaintenanceTeam) {
+      allTasks.push(...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
+    }
+    if (isDevTeam) {
+      allTasks.push(...devTasksPicFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
+    }
+    if (!isDeploymentTeam && !isMaintenanceTeam && !isDevTeam) {
+      allTasks.push(
+        ...implTasksPicFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
+        ...devTasksPicFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
+        ...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' }))
+      );
+    }
+
+    const grouped = new Map<string, TaskWithType[]>();
+    allTasks.forEach(task => {
+      const hospitalName = task.hospitalName || 'Không xác định';
+      if (!grouped.has(hospitalName)) {
+        grouped.set(hospitalName, []);
+      }
+      grouped.get(hospitalName)!.push(task);
+    });
+
+    return Array.from(grouped.entries()).map(([hospitalName, tasks]) => ({
+      hospitalName,
+      tasks: tasks.sort((a, b) => {
+        const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
+        const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
+        return dateB - dateA;
+      })
+    }));
+  }, [profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, profileDateFrom, profileDateTo, implStatusFilter, devStatusFilter, maintStatusFilter, profileStatusFilter, profilePicFilter, profileUsers, isSalesSelected, normalizedSelectedTeam]);
+
   // Update pagination totals when computed value changes
   useEffect(() => {
     setDetailTotalItems(detailTotalItemsComputed);
@@ -1885,102 +2016,9 @@ export default function SuperAdminHome() {
           }
         }
       } else {
-      // Get all groups (not paginated) - reuse logic from tasksByHospital
-      const allGroups = (() => {
-        // Same logic as tasksByHospital but without pagination
-        const matchesDateRangeFilter = (startDate?: string | null) => {
-          if (profileDateFrom || profileDateTo) {
-            if (!startDate) return false;
-            const d = new Date(startDate);
-            if (Number.isNaN(d.getTime())) return false;
-            const taskDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-            
-            if (profileDateFrom) {
-              const fromDate = new Date(profileDateFrom);
-              fromDate.setHours(0, 0, 0, 0);
-              if (taskDate < fromDate) return false;
-            }
-            if (profileDateTo) {
-              const toDate = new Date(profileDateTo);
-              toDate.setHours(23, 59, 59, 999);
-              if (taskDate > toDate) return false;
-            }
-            return true;
-          }
-          if (profileQuarter === 'all' && (!profileYear || profileYear === '')) return true;
-          if (!startDate) {
-            return profileQuarter === 'all' && (!profileYear || profileYear === '');
-          }
-          const d = new Date(startDate);
-          if (Number.isNaN(d.getTime())) {
-            return profileQuarter === 'all' && (!profileYear || profileYear === '');
-          }
-          if (profileYear && profileYear !== '' && String(d.getFullYear()) !== profileYear) return false;
-          if (profileQuarter === 'all') return true;
-          const month = d.getMonth();
-          const q = Math.floor(month / 3) + 1;
-          return `Q${q}` === profileQuarter;
-        };
-
-        const allImplTasks = profileImplTasks.filter(t => {
-          const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
-          return matchesDateRangeFilter(startDate);
-        });
-        const allDevTasks = profileDevTasks.filter(t => {
-          const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
-          return matchesDateRangeFilter(startDate);
-        });
-        const allMaintTasks = profileMaintTasks.filter(t => {
-          const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
-          return matchesDateRangeFilter(startDate);
-        });
-
-        const normalizeStatusToCanonical = (status?: string | null): string | null => {
-          if (!status) return null;
-          const s = String(status).trim().toUpperCase();
-          if (s === 'RECEIVED' || s === 'NOT_STARTED' || s === 'PENDING') return 'RECEIVED';
-          if (s === 'IN_PROCESS' || s === 'IN_PROGRESS' || s === 'API_TESTING' || s === 'INTEGRATING' || s === 'WAITING_FOR_DEV' || s === 'WAITING_FOR_DEPLOY') return 'IN_PROCESS';
-          if (s === 'COMPLETED' || s === 'DONE' || s === 'FINISHED' || s === 'ACCEPTED' || s === 'TRANSFERRED' || s === 'PENDING_TRANSFER' || s === 'TRANSFERRED_TO_CUSTOMER') return 'COMPLETED';
-          if (s === 'ISSUE' || s === 'FAILED' || s === 'ERROR') return 'ISSUE';
-          if (s === 'RECEIVED' || s === 'IN_PROCESS' || s === 'COMPLETED' || s === 'ISSUE') return s;
-          return s;
-        };
-
-        const statusFilter = profileStatusFilter !== 'all' ? profileStatusFilter : null;
-        const implTasksFiltered = statusFilter 
-          ? allImplTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
-          : allImplTasks;
-        const devTasksFiltered = statusFilter
-          ? allDevTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
-          : allDevTasks;
-        const maintTasksFiltered = statusFilter
-          ? allMaintTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
-          : allMaintTasks;
-
-        const allTasks = [
-          ...implTasksFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
-          ...devTasksFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
-          ...maintTasksFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
-        ];
-
-        const grouped = new Map<string, Array<typeof allTasks[0]>>();
-        allTasks.forEach(task => {
-          const hospitalName = task.hospitalName || 'Không xác định';
-          if (!grouped.has(hospitalName)) {
-            grouped.set(hospitalName, []);
-          }
-          grouped.get(hospitalName)!.push(task);
-        });
-
-        return Array.from(grouped.entries()).map(([hospitalName, tasks]) => ({
-          hospitalName,
-          tasks: tasks.sort((a, b) => {
-            const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
-            const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
-            return dateB - dateA;
-          })
-        }));
-      })();
+      // Use allTasksByHospital (already filtered, just not paginated) instead of re-filtering
+      // This ensures export uses the exact same filters as the displayed data
+      const allGroups = allTasksByHospital;
 
       // Add hospital groups - hospital name in first column, tasks below with empty first column
       for (const group of allGroups) {

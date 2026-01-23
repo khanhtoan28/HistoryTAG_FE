@@ -25,7 +25,8 @@ import {
   getCustomerCareById,
   CustomerCareResponseDTO,
   getCustomerTypes,
-  getAssignedUsers
+  getAssignedUsers,
+  getContractStatusCounts
 } from "../../api/customerCare.api";
 import { getMaintainContracts } from "../../api/maintain.api";
 
@@ -287,6 +288,29 @@ export default function HospitalCareList() {
   
   // Users for PIC filter dropdown
   const [picUsers, setPicUsers] = useState<Array<{ id: number; label: string; subLabel?: string }>>([]);
+  
+  // Contract status counts from API
+  const [contractStatusCounts, setContractStatusCounts] = useState<Record<string, number>>({
+    all: 0,
+    sap_het_han: 0,
+    qua_han: 0,
+    da_gia_han: 0,
+    dang_hoat_dong: 0,
+  });
+
+  // Load contract status counts from API
+  useEffect(() => {
+    const loadContractStatusCounts = async () => {
+      try {
+        const counts = await getContractStatusCounts();
+        setContractStatusCounts(counts);
+      } catch (error) {
+        console.error("Error loading contract status counts:", error);
+        // Fallback: tính từ hospitals hiện tại nếu API fail
+      }
+    };
+    loadContractStatusCounts();
+  }, []); // Chỉ load một lần khi mount
 
   // Load data from API
   useEffect(() => {
@@ -311,6 +335,10 @@ export default function HospitalCareList() {
           if (!isNaN(userId)) {
             params.assignedUserId = userId;
           }
+        }
+        // Filter theo contract status (tab filter) - gửi lên backend
+        if (activeTab !== "all") {
+          params.contractStatus = activeTab;
         }
 
         const response = await getAllCustomerCares(params);
@@ -424,6 +452,14 @@ export default function HospitalCareList() {
         setHospitals(hospitalsWithContracts);
         setTotalItems(total);
         setTotalPages(pages);
+        
+        // Refresh contract status counts sau khi load data
+        try {
+          const counts = await getContractStatusCounts();
+          setContractStatusCounts(counts);
+        } catch (countsErr) {
+          console.warn("Error refreshing contract status counts:", countsErr);
+        }
       } catch (err: any) {
         console.error("Error loading customer care list:", err);
         setError(err?.response?.data?.message || err?.message || "Có lỗi xảy ra khi tải dữ liệu");
@@ -466,8 +502,15 @@ export default function HospitalCareList() {
     loadPicUsers();
   }, []);
 
-  // Count hospitals per status (tính với trạng thái tự động)
+  // Count hospitals per status - sử dụng từ API (chính xác hơn)
+  // Fallback: tính từ hospitals hiện tại nếu API chưa load xong
   const statusCounts = useMemo(() => {
+    // Ưu tiên dùng contractStatusCounts từ API (chính xác hơn)
+    if (contractStatusCounts.all > 0 || Object.values(contractStatusCounts).some(v => v > 0)) {
+      return contractStatusCounts;
+    }
+    
+    // Fallback: tính từ hospitals hiện tại (chỉ là page hiện tại, không chính xác)
     const counts: Record<string, number> = {
       all: totalItems,
       sap_het_han: 0,
@@ -482,27 +525,20 @@ export default function HospitalCareList() {
       }
     });
     return counts;
-  }, [hospitals, totalItems]);
+  }, [contractStatusCounts, hospitals, totalItems]);
 
-  // Filter hospitals với trạng thái được tính tự động (client-side filtering for tabs)
+  // Filter hospitals - tab filter đã được xử lý ở backend, chỉ còn date filter ở client-side
   const filteredHospitals = useMemo(() => {
     return hospitals.map(h => {
       const calculatedStatus = calculateHospitalStatus(h);
       return {
         ...h,
         status: calculatedStatus || "dang_hoat_dong", // Dùng "dang_hoat_dong" làm fallback cho display
-        _calculatedStatus: calculatedStatus // Lưu status đã tính để filter
+        _calculatedStatus: calculatedStatus // Lưu status đã tính để display
       };
     }).filter((h) => {
-      // Tab filter (client-side)
-      // Nếu không có hợp đồng (_calculatedStatus = null), chỉ hiển thị trong tab "Tất cả"
-      if (activeTab !== "all") {
-        if (h._calculatedStatus === null) return false;
-        if (h._calculatedStatus !== activeTab) return false;
-      }
-      // PIC filter is now done on backend
-      // Customer type filter is now done on backend
-      // Date filter (client-side)
+      // Tab filter đã được xử lý ở backend, không cần filter client-side nữa
+      // Date filter (client-side) - vẫn cần filter ở client vì backend chưa hỗ trợ
       if (dateFromFilter || dateToFilter) {
         if (!h.createdDate) return false;
         const createdDate = new Date(h.createdDate);
@@ -519,7 +555,7 @@ export default function HospitalCareList() {
       }
       return true;
     });
-  }, [hospitals, activeTab, picFilter, dateFromFilter, dateToFilter]);
+  }, [hospitals, dateFromFilter, dateToFilter]);
 
   // Tính toán totalItems và totalPages dựa trên filteredHospitals khi có filter theo date
   const effectiveTotalItems = useMemo(() => {

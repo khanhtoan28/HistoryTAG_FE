@@ -929,7 +929,7 @@ export default function ContractsTab({
                 {formatCurrency(stats.totalValue)}
               </p>
             </div>
-            <FiDollarSign className="h-8 w-8 text-emerald-500" />
+            {/* <FiDollarSign className="h-8 w-8 text-emerald-500" /> */}
           </div>
         </div>
       </div>

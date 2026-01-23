@@ -613,9 +613,10 @@ export default function TicketsTab({
       )}
 
       {/* Tickets Table */}
-      <div className="w-full overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700" style={{ maxWidth: '100%' }}>
-        <table className="min-w-[1200px] divide-y divide-gray-200 dark:divide-gray-700" style={{ width: 'max-content' }}>
-          <thead className="bg-gray-50 dark:bg-gray-800">
+      <div className="w-full rounded-lg border border-gray-200 dark:border-gray-700" style={{ maxWidth: '100%' }}>
+        <div className="overflow-x-auto overflow-y-auto max-h-[600px]">
+          <table className="min-w-[1200px] divide-y divide-gray-200 dark:divide-gray-700" style={{ width: 'max-content' }}>
+            <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10">
             <tr>
               <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
                 Ticket ID
@@ -702,7 +703,7 @@ export default function TicketsTab({
                       </span>
                     </td>
                     <td className="py-3 px-4">
-                      {ticket.ticketType && (
+                      {ticket.ticketType && ticketTypeConfig[ticket.ticketType] ? (
                         <span
                           className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
                             ticketTypeConfig[ticket.ticketType]?.bgColor
@@ -710,7 +711,11 @@ export default function TicketsTab({
                         >
                           {ticketTypeConfig[ticket.ticketType]?.label}
                         </span>
-                      )}
+                      ) : ticket.ticketType ? (
+                        <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-700">
+                          {ticket.ticketType}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300">
@@ -766,6 +771,7 @@ export default function TicketsTab({
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Ticket Modal (Add/Edit) */}
