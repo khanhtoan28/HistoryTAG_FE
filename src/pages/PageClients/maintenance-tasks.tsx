@@ -6,6 +6,7 @@ import { AiOutlineEye } from "react-icons/ai";
 import toast from "react-hot-toast";
 import { FaHospital } from "react-icons/fa";
 import { FiUser, FiLink, FiClock, FiTag, FiCheckCircle, FiX } from "react-icons/fi";
+import { useWebSocket } from "../../contexts/WebSocketContext";
 import TicketsTab from "../../pages/CustomerCare/SubCustomerCare/TicketsTab";
 import { getHospitalTickets } from "../../api/ticket.api";
 import { useAuth } from '../../contexts/AuthContext';
@@ -75,7 +76,7 @@ function PendingTasksModal({
                     <div className="text-center text-gray-500 py-6">Đang tải...</div>
                 ) : list.length === 0 ? (
                     <div className="text-center text-gray-500 py-6">
-                        Không có công viện nào chờ tiếp nhận.
+                        Không có viện nào chờ tiếp nhận.
                     </div>
                 ) : (
                     <>
@@ -1663,6 +1664,9 @@ const ImplementationTasksPage: React.FC = () => {
     const [size, setSize] = useState(10);
     const [totalCount, setTotalCount] = useState<number | null>(null);
     const [enableItemAnimation, setEnableItemAnimation] = useState<boolean>(true);
+
+    const { subscribe } = useWebSocket();
+
     const [hospitalQuery, setHospitalQuery] = useState<string>("");
     const [hospitalOptions, setHospitalOptions] = useState<Array<{ id: number; label: string }>>([]);
     const [detailOpen, setDetailOpen] = useState(false);
@@ -1951,6 +1955,18 @@ const ImplementationTasksPage: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // ✅ WebSocket subscription: Cập nhật danh sách chờ khi có thông báo
+    useEffect(() => {
+        const unsubscribe = subscribe("/topic/maintenance/pending-changed", (payload) => {
+            console.log("WebSocket: Pending maintenance tasks changed", payload);
+            fetchPendingTasks();
+            if (!showHospitalList && selectedHospital) {
+                fetchList();
+            }
+        });
+        return () => unsubscribe();
+    }, [subscribe, fetchPendingTasks, fetchList, showHospitalList, selectedHospital]);
+
     // when page or size changes, refetch
     useEffect(() => {
         if (!showHospitalList && selectedHospital) fetchList();
@@ -2047,37 +2063,11 @@ const ImplementationTasksPage: React.FC = () => {
             try {
                 // Skip if modal is open or component unmounted
                 if (!mounted || pendingOpen) return;
-                
-                // ✅ Check token before polling
-                const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
-                if (!token) {
-                    window.clearInterval(timer);
-                    return;
-                }
-                
-                // ✅ Check token expired
-                try {
-                    const parts = token.split('.');
-                    if (parts.length >= 2) {
-                        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-                        const exp = payload.exp;
-                        if (exp && Date.now() >= exp * 1000) {
-                            // Token expired - stop polling
-                            window.clearInterval(timer);
-                            return;
-                        }
-                    }
-                } catch {
-                    // If parse fails, stop polling to be safe
-                    window.clearInterval(timer);
-                    return;
-                }
-                
                 fetchPendingTasks();
             } catch (err) {
                 console.debug('Polling fetchPendingTasks failed', err);
             }
-        }, 40000);
+        }, 60000); // ✅ Đã có WebSocket, giảm polling xuống 60s làm fallback
 
         return () => {
             mounted = false;

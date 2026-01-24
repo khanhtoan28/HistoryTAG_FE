@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";// hoặc copy 2 hàm này từ trang cũ nếu bạn chưa có
 import { FiClipboard, FiMapPin, FiUser, FiClock, FiLink, FiActivity, FiCalendar, FiInfo, FiCheckCircle, FiXCircle, FiTag, FiX } from "react-icons/fi";
+import { useWebSocket } from "../../contexts/WebSocketContext";
 import { AiOutlineEye } from "react-icons/ai";
 import toast from "react-hot-toast";
 import type { ToastOptions } from "react-hot-toast";
@@ -193,6 +194,9 @@ const ImplementSuperTaskPage: React.FC = () => {
   const [page, setPage] = useState<number>(0);
   const [size, setSize] = useState<number>(10);
   const [enableItemAnimation, setEnableItemAnimation] = useState<boolean>(true);
+
+  const { subscribe } = useWebSocket();
+
   const [picOptions, setPicOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [acceptedCount, setAcceptedCount] = useState<number | null>(null);
   const [showTicketsModal, setShowTicketsModal] = useState(false);
@@ -565,6 +569,30 @@ const ImplementSuperTaskPage: React.FC = () => {
     }
   }
 
+  // ✅ WebSocket subscription: Cập nhật danh sách chờ khi có thông báo
+  useEffect(() => {
+    const unsubscribe = subscribe("/topic/implementation/pending-changed", (payload) => {
+      console.log("WebSocket: Pending implementation tasks changed", payload);
+      fetchPendingGroups();
+      if (!showHospitalList && selectedHospital) {
+        fetchList();
+      }
+    });
+    return () => unsubscribe();
+  }, [subscribe, fetchPendingGroups, fetchList, showHospitalList, selectedHospital]);
+
+  // ✅ WebSocket subscription: Cập nhật danh sách chờ khi có thông báo
+  useEffect(() => {
+    const unsubscribe = subscribe("/topic/implementation/pending-changed", (payload) => {
+      console.log("WebSocket: Pending implementation tasks changed", payload);
+      fetchPendingGroups();
+      if (!showHospitalList && selectedHospital) {
+        fetchList();
+      }
+    });
+    return () => unsubscribe();
+  }, [subscribe, fetchPendingGroups, fetchList, showHospitalList, selectedHospital]);
+
   // when page or size changes, refetch
   useEffect(() => {
     fetchList();
@@ -936,26 +964,11 @@ const ImplementSuperTaskPage: React.FC = () => {
         // Skip if modal is open or component unmounted
         if (!mounted || pendingOpen) return;
         const newCount = await fetchPendingGroups();
-        const last = lastPendingCountRef.current || 0;
-        if (!mounted || pendingOpen) return;
-        if (newCount > last) {
-          const diff = newCount - last;
-          // show in-app toast
-          toastSuccess(`Có ${diff} công việc chờ mới cần tiếp nhận`);
-          // show browser notification if permitted
-          try {
-            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-              new Notification('Công việc chờ mới', { body: `Có ${diff} công việc chờ cần tiếp nhận`, silent: false });
-            }
-          } catch (err) {
-            console.debug('Browser notification failed', err);
-          }
-        }
         lastPendingCountRef.current = newCount;
       } catch (err) {
         console.debug('Polling fetchPendingGroups failed', err);
       }
-    }, 8000);
+    }, 60000); // ✅ Đã có WebSocket, giảm polling xuống 60s làm fallback
 
     return () => {
       mounted = false;
@@ -977,7 +990,7 @@ const ImplementSuperTaskPage: React.FC = () => {
       } catch (err) {
         console.debug('Polling hospital status failed', err);
       }
-    }, 8000);
+    }, 30000); // ✅ Tăng interval polling trạng thái lên 30s
     return () => {
       active = false;
       window.clearInterval(id);

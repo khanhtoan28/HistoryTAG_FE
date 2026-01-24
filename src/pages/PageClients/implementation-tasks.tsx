@@ -7,6 +7,7 @@ import TicketsTab from "../../pages/CustomerCare/SubCustomerCare/TicketsTab";
 import { AiOutlineEye } from "react-icons/ai";
 import { toast } from "react-hot-toast";
 import { FiUser, FiMapPin, FiLink, FiClock, FiTag, FiPhone, FiCheckCircle, FiX } from "react-icons/fi";
+import { useWebSocket } from "../../contexts/WebSocketContext";
 import { isBusinessContractTaskName as isBusinessContractTask } from "../../utils/businessContract";
 import { getHospitalTickets } from "../../api/ticket.api";
 import { useAuth } from '../../contexts/AuthContext';
@@ -1680,6 +1681,9 @@ const ImplementationTasksPage: React.FC = () => {
   const [size, setSize] = useState(10);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [enableItemAnimation, setEnableItemAnimation] = useState<boolean>(true);
+
+  const { subscribe } = useWebSocket();
+
   const [hospitalQuery, setHospitalQuery] = useState<string>("");
   const [hospitalOptions, setHospitalOptions] = useState<Array<{ id: number; label: string }>>([]);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -2085,56 +2089,12 @@ const ImplementationTasksPage: React.FC = () => {
       try {
         // Skip if modal is open or component unmounted
         if (!mounted || pendingOpen) return;
-        
-        // ✅ Check token before polling
-        const token = localStorage.getItem("access_token") || 
-                     sessionStorage.getItem("access_token") || 
-                     localStorage.getItem("token") || 
-                     sessionStorage.getItem("token");
-        if (!token) {
-          window.clearInterval(intervalId);
-          return;
-        }
-        
-        // ✅ Check token expired
-        try {
-          const parts = token.split('.');
-          if (parts.length >= 2) {
-            const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-            const exp = payload.exp;
-            if (exp && Date.now() >= exp * 1000) {
-              // Token expired - stop polling
-              window.clearInterval(intervalId);
-              return;
-            }
-          }
-        } catch {
-          // If parse fails, stop polling to be safe
-          window.clearInterval(intervalId);
-          return;
-        }
-        
         const newCount = await fetchPendingGroups();
-        const last = lastPendingCountRef.current || 0;
-        if (!mounted || pendingOpen) return;
-        if (newCount > last) {
-          const diff = newCount - last;
-          // show in-app toast
-          toast.success(`Có ${diff} công việc chờ mới cần tiếp nhận`);
-          // show browser notification if permitted
-          try {
-            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-              new Notification('Công việc chờ mới', { body: `Có ${diff} công việc chờ cần tiếp nhận`, silent: false });
-            }
-          } catch (err) {
-            console.debug('Browser notification failed', err);
-          }
-        }
         lastPendingCountRef.current = newCount;
       } catch (err) {
         console.debug('Polling fetchPendingGroups failed', err);
       }
-    }, 8000);
+    }, 60000); // ✅ Đã có WebSocket, giảm polling xuống 60s làm fallback
 
     return () => {
       mounted = false;
@@ -2142,6 +2102,30 @@ const ImplementationTasksPage: React.FC = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingOpen]);
+
+  // ✅ WebSocket subscription: Cập nhật danh sách chờ khi có thông báo
+  useEffect(() => {
+    const unsubscribe = subscribe("/topic/implementation/pending-changed", (payload) => {
+      console.log("WebSocket: Pending implementation tasks changed", payload);
+      fetchPendingGroups();
+      if (!showHospitalList && selectedHospital) {
+        fetchList();
+      }
+    });
+    return () => unsubscribe();
+  }, [subscribe, fetchPendingGroups, fetchList, showHospitalList, selectedHospital]);
+
+  // ✅ WebSocket subscription: Cập nhật danh sách chờ khi có thông báo
+  useEffect(() => {
+    const unsubscribe = subscribe("/topic/implementation/pending-changed", (payload) => {
+      console.log("WebSocket: Pending implementation tasks changed", payload);
+      fetchPendingGroups();
+      if (!showHospitalList && selectedHospital) {
+        fetchList();
+      }
+    });
+    return () => unsubscribe();
+  }, [subscribe, fetchPendingGroups, fetchList, showHospitalList, selectedHospital]);
 
   // when page or size changes, refetch
   useEffect(() => {

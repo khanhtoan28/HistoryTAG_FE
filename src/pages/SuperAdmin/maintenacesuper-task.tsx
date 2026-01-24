@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiActivity, FiInfo, FiLink, FiUser, FiClock, FiCheckCircle, FiXCircle, FiTag, FiX } from "react-icons/fi";
+import { useWebSocket } from "../../contexts/WebSocketContext";
 import { FaHospital } from "react-icons/fa";
 import { AiOutlineEye } from "react-icons/ai";
 import toast, { ToastOptions } from "react-hot-toast";
@@ -219,6 +220,8 @@ const MaintenanceSuperTaskPage: React.FC = () => {
   const [enableItemAnimation, setEnableItemAnimation] =
     useState<boolean>(true);
 
+  const { subscribe } = useWebSocket();
+
   const apiBase = `${API_ROOT}/api/v1/superadmin/maintenance/tasks`;
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -333,6 +336,18 @@ const MaintenanceSuperTaskPage: React.FC = () => {
       if (isInitialLoad) setIsInitialLoad(false);
     }
   }
+
+  // ✅ WebSocket subscription: Cập nhật danh sách chờ khi có thông báo
+  useEffect(() => {
+    const unsubscribe = subscribe("/topic/maintenance/pending-changed", (payload) => {
+      console.log("WebSocket: Pending maintenance tasks changed", payload);
+      fetchPendingTasks();
+      if (!showHospitalList && selectedHospital) {
+        fetchList();
+      }
+    });
+    return () => unsubscribe();
+  }, [subscribe, fetchPendingTasks, fetchList, showHospitalList, selectedHospital]);
 
   // Initial: load hospital list instead of tasks
   useEffect(() => {
@@ -522,7 +537,7 @@ const MaintenanceSuperTaskPage: React.FC = () => {
       } catch (err) {
         console.debug('Polling fetchPendingTasks failed', err);
       }
-    }, 40000);
+    }, 60000); // ✅ Đã có WebSocket, giảm polling xuống 60s làm fallback
 
     return () => {
       mounted = false;

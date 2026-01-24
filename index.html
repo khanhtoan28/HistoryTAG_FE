@@ -11,6 +11,12 @@
   </head>
   <body class="dark:bg-gray-900">
     <div id="root"></div>
+    <!-- ✅ Polyfill global cho sockjs-client -->
+    <script>
+      if (typeof window !== "undefined" && typeof window.global === "undefined") {
+        window.global = window;
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

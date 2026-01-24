@@ -81,15 +81,17 @@ function buildUrl(path: string): URL {
   return new URL(path, window.location.origin);
 }
 
-// ✅ Helper để chọn API base dựa trên method và canEdit
-function getApiBase(method: string = "GET", canEdit: boolean = false): string {
+// ✅ Helper để chọn API base dựa trên method và user role
+function getApiBase(method: string = "GET", isSuperAdminUser: boolean = false): string {
   // GET requests: luôn dùng admin API (admin thường có thể dùng)
   if (method === "GET") {
     return ADMIN_BASE;
   }
-  // Write operations (POST, PUT, DELETE): chỉ dùng superadmin API nếu canEdit = true
-  if (canEdit && (method === "POST" || method === "PUT" || method === "DELETE")) {
-    return SUPERADMIN_BASE;
+  // Write operations (POST, PUT, DELETE): 
+  // - Nếu là superadmin → dùng superadmin API
+  // - Nếu là admin → dùng admin API
+  if (method === "POST" || method === "PUT" || method === "DELETE") {
+    return isSuperAdminUser ? SUPERADMIN_BASE : ADMIN_BASE;
   }
   // Fallback: dùng admin API
   return ADMIN_BASE;
@@ -262,13 +264,29 @@ const HisSystemPage: React.FC = () => {
   const isEditing = !!editing?.id;
   const isViewing = !!viewing?.id;
 
-  // Determine if current user can perform write actions (SUPERADMIN)
+  // Determine if current user can perform write actions (ADMIN or SUPERADMIN)
   const canEdit = (() => {
     try {
       const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
       if (!rolesStr) return false;
       const roles = JSON.parse(rolesStr);
-      return Array.isArray(roles) && roles.some((r: string) => r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin");
+      return Array.isArray(roles) && roles.some((r: string) => 
+        r === "ADMIN" || r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin"
+      );
+    } catch (e) {
+      return false;
+    }
+  })();
+
+  // Check if user is superadmin (to decide which API to use)
+  const isSuperAdmin = (() => {
+    try {
+      const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
+      if (!rolesStr) return false;
+      const roles = JSON.parse(rolesStr);
+      return Array.isArray(roles) && roles.some((r: string) => 
+        r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin"
+      );
     } catch (e) {
       return false;
     }
@@ -663,8 +681,8 @@ const HisSystemPage: React.FC = () => {
     if (!confirm("Xóa HIS này?")) return;
     setLoading(true);
     try {
-      // ✅ DELETE request: chỉ dùng superadmin API nếu canEdit = true
-      const base = getApiBase("DELETE", canEdit);
+      // ✅ DELETE request: dùng admin API nếu là admin, superadmin API nếu là superadmin
+      const base = getApiBase("DELETE", isSuperAdmin);
       const res = await fetch(`${base}/${id}`, { method: "DELETE", headers: { ...authHeader() } });
       if (!res.ok) throw new Error(`DELETE ${res.status}`);
       // adjust page when last item removed
@@ -694,8 +712,8 @@ const HisSystemPage: React.FC = () => {
     }
     try {
       const method = isEditing ? "PUT" : "POST";
-      // ✅ POST/PUT request: chỉ dùng superadmin API nếu canEdit = true
-      const base = getApiBase(method, canEdit);
+      // ✅ POST/PUT request: dùng admin API nếu là admin, superadmin API nếu là superadmin
+      const base = getApiBase(method, isSuperAdmin);
       const url = isEditing ? `${base}/${editing!.id}` : base;
       const res = await fetch(url, {
         method,
