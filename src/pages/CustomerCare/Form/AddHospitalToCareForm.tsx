@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { FiX, FiSave, FiSearch, FiUser, FiCalendar, FiTag } from "react-icons/fi";
+import { FiX, FiSave, FiSearch, FiUser, FiCalendar, FiTag, FiAlertTriangle, FiEye } from "react-icons/fi";
 import { searchHospitals } from "../../../api/business.api";
-import { getCustomerCareUserOptions, createCustomerCare, updateCustomerCare, CustomerCareCreateRequestDTO, CustomerCareUpdateRequestDTO, getCustomerTypes } from "../../../api/customerCare.api";
+import { getCustomerCareUserOptions, createCustomerCare, updateCustomerCare, CustomerCareCreateRequestDTO, CustomerCareUpdateRequestDTO, getCustomerTypes, getActiveCareTasksByHospitalId, CustomerCareResponseDTO } from "../../../api/customerCare.api";
 
 export interface AddHospitalToCareFormData {
   hospitalId: number | null;
@@ -73,6 +73,10 @@ export default function AddHospitalToCareForm({
   // Load customer types from API
   const [customerTypes, setCustomerTypes] = useState<Array<{ value: string; label: string }>>([]);
   const [loadingCustomerTypes, setLoadingCustomerTypes] = useState(false);
+  
+  // Active tasks warning
+  const [activeTasks, setActiveTasks] = useState<CustomerCareResponseDTO[]>([]);
+  const [loadingActiveTasks, setLoadingActiveTasks] = useState(false);
 
   // Load editing data when modal opens
   useEffect(() => {
@@ -168,6 +172,29 @@ export default function AddHospitalToCareForm({
 
     loadUsers();
   }, [isOpen]);
+  
+  // Check active tasks when hospital is selected (only when adding new, not editing)
+  useEffect(() => {
+    if (!isOpen || editingData || !formData.hospitalId) {
+      setActiveTasks([]);
+      return;
+    }
+    
+    const checkActiveTasks = async () => {
+      setLoadingActiveTasks(true);
+      try {
+        const tasks = await getActiveCareTasksByHospitalId(formData.hospitalId!);
+        setActiveTasks(tasks);
+      } catch (error) {
+        console.error("Error loading active tasks:", error);
+        setActiveTasks([]);
+      } finally {
+        setLoadingActiveTasks(false);
+      }
+    };
+    
+    checkActiveTasks();
+  }, [formData.hospitalId, isOpen, editingData]);
 
   // Load customer types from API
   useEffect(() => {
@@ -396,6 +423,31 @@ export default function AddHospitalToCareForm({
               )}
             </div>
           </div>
+
+          {/* ⚠️ Warning: Active tasks */}
+          {!editingData && formData.hospitalId && activeTasks.length > 0 && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-600 dark:bg-amber-900/20">
+              <div className="flex items-start gap-3">
+                <FiAlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                <div className="flex-1">
+                  <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-2">
+                    Cảnh báo: Bệnh viện này đang có {activeTasks.length} task đang xử lý:
+                  </h4>
+                  <ul className="space-y-1 mb-3">
+                    {activeTasks.map((task) => (
+                      <li key={task.careId} className="text-sm text-amber-800 dark:text-amber-300">
+                        • <span className="font-medium">{careTypes.find(t => t.value === task.careType)?.label || task.careType}</span>
+                        {task.reason && <span className="ml-2 text-amber-700 dark:text-amber-400">- {task.reason}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    Nếu tạo task mới cùng loại và cùng nội dung, hệ thống sẽ từ chối để tránh trùng lặp.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Loại chăm sóc */}
           <div>

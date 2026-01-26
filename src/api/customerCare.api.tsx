@@ -516,3 +516,19 @@ export async function getCustomerCareUserOptions() {
   }
 }
 
+/**
+ * Lấy danh sách active care tasks của một hospital (để hiển thị warning ở frontend)
+ * @param hospitalId ID của hospital
+ * @returns List of active care tasks
+ */
+export async function getActiveCareTasksByHospitalId(hospitalId: number): Promise<CustomerCareResponseDTO[]> {
+  try {
+    const base = getBase('GET', false);
+    const res = await api.get(`${base}/customer-care/hospital/${hospitalId}/active-tasks`);
+    return Array.isArray(res.data) ? res.data : [];
+  } catch (err) {
+    console.error('getActiveCareTasksByHospitalId failed', err);
+    return [];
+  }
+}
+

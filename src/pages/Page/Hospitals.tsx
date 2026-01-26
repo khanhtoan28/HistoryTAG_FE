@@ -103,6 +103,70 @@ function authHeader(): Record<string, string> {
     : { Accept: "application/json" };
 }
 
+/**
+ * Download file API bệnh viện qua secure endpoint
+ * @param hospitalId ID bệnh viện
+ * @param apiFileUrl URL hoặc path của file (để kiểm tra loại file)
+ */
+async function downloadHospitalApiFile(hospitalId: number, apiFileUrl: string | null | undefined) {
+  if (!apiFileUrl) return;
+  
+  // Nếu là URL công khai (Cloudinary) → download trực tiếp (backward compatibility)
+  if (apiFileUrl.startsWith('http://') || apiFileUrl.startsWith('https://')) {
+    window.open(apiFileUrl, '_blank');
+    return;
+  }
+  
+  // Nếu là local file path → download qua secure endpoint
+  try {
+    const url = `${API_BASE}/api/v1/admin/hospitals/${hospitalId}/api-file/download`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: authHeader(),
+      credentials: 'include',
+    });
+    
+    if (!response.ok) {
+      if (response.status === 401) {
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
+      if (response.status === 403) {
+        toast.error('Bạn không có quyền truy cập file này.');
+        return;
+      }
+      const errorText = await response.text();
+      throw new Error(errorText || `Lỗi ${response.status}`);
+    }
+    
+    // Lấy filename từ Content-Disposition header
+    const contentDisposition = response.headers.get('Content-Disposition');
+    let filename = 'api-file';
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      if (filenameMatch && filenameMatch[1]) {
+        filename = filenameMatch[1].replace(/['"]/g, '');
+      }
+    }
+    
+    // Download file
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(downloadUrl);
+    
+    toast.success('Tải file thành công');
+  } catch (error) {
+    console.error('Error downloading file:', error);
+    toast.error('Lỗi khi tải file: ' + (error instanceof Error ? error.message : 'Unknown error'));
+  }
+}
+
 function toFormData(payload: Record<string, any>) {
   const fd = new FormData();
   Object.entries(payload).forEach(([k, v]) => {
@@ -383,17 +447,16 @@ function DetailModal({
             <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
               <p className="font-semibold text-gray-900 dark:text-gray-100 mb-2">File API bệnh viện:</p>
               <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-4">
-                <a
-                  href={item.apiFileUrl}
-                  download
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 text-blue-700 hover:text-blue-800 transition-colors"
+                <button
+                  onClick={() => downloadHospitalApiFile(item.id, item.apiFileUrl)}
+                  className="flex items-center gap-3 text-blue-700 hover:text-blue-800 transition-colors cursor-pointer"
                 >
                   <FiDownload className="w-5 h-5" />
                   <span className="font-medium">Tải file API</span>
-                </a>
-                <p className="mt-2 text-xs text-gray-600 dark:text-gray-400 break-all">{item.apiFileUrl}</p>
+                </button>
+                <p className="mt-2 text-xs text-gray-600 dark:text-gray-400 break-all">
+                  {item.apiFileUrl.startsWith('http') ? item.apiFileUrl : 'File được lưu trên server (bảo mật)'}
+                </p>
               </div>
             </div>
           )}
@@ -2302,17 +2365,16 @@ export default function HospitalsPage() {
                           <div className="flex items-center gap-3">
                             <FiFile className="w-6 h-6 text-blue-600 flex-shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <a
-                                href={form.apiFileUrl}
-                                download
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-sm font-medium text-blue-700 hover:text-blue-800 transition-colors inline-flex items-center gap-1"
+                              <button
+                                onClick={() => editing?.id && downloadHospitalApiFile(editing.id, form.apiFileUrl)}
+                                className="text-sm font-medium text-blue-700 hover:text-blue-800 transition-colors inline-flex items-center gap-1 cursor-pointer"
                               >
                                 <FiDownload className="w-4 h-4" />
                                 Tải file API hiện tại
-                              </a>
-                              <p className="text-xs text-gray-600 mt-1 break-all">{form.apiFileUrl}</p>
+                              </button>
+                              <p className="text-xs text-gray-600 mt-1 break-all">
+                                {form.apiFileUrl.startsWith('http') ? form.apiFileUrl : 'File được lưu trên server (bảo mật)'}
+                              </p>
                             </div>
                           </div>
                         ) : null}

@@ -321,9 +321,12 @@ export default function HospitalCareList() {
         const params: any = {
           page: currentPage,
           size: itemsPerPage,
-          sortBy: "createdAt",
-          sortDir: "desc",
+          sortBy: "lastContactDate", // Sắp xếp theo lịch sử liên hệ mới nhất
+          sortDir: "desc", // Mới nhất lên đầu
         };
+        
+        // Debug: Log params
+        console.log("🔍 DEBUG getAllCares params:", params);
 
         // Apply filters
         if (searchTerm) params.search = searchTerm;
@@ -342,6 +345,16 @@ export default function HospitalCareList() {
         }
 
         const response = await getAllCustomerCares(params);
+        
+        // Debug: Log response để kiểm tra thứ tự
+        console.log("🔍 DEBUG getAllCares response:", {
+          totalElements: response.totalElements,
+          totalPages: response.totalPages,
+          firstItemLastContactDate: response.content?.[0]?.lastContactDate,
+          lastItemLastContactDate: response.content?.[response.content.length - 1]?.lastContactDate,
+          firstItemHospitalName: response.content?.[0]?.hospitalName,
+          lastItemHospitalName: response.content?.[response.content.length - 1]?.hospitalName,
+        });
         
         // Handle paginated response
         const data = response.content || response.data || (Array.isArray(response) ? response : []);
@@ -528,6 +541,7 @@ export default function HospitalCareList() {
   }, [contractStatusCounts, hospitals, totalItems]);
 
   // Filter hospitals - tab filter đã được xử lý ở backend, chỉ còn date filter ở client-side
+  // Sắp xếp đã được xử lý ở backend theo lastContactDate
   const filteredHospitals = useMemo(() => {
     return hospitals.map(h => {
       const calculatedStatus = calculateHospitalStatus(h);
@@ -555,6 +569,7 @@ export default function HospitalCareList() {
       }
       return true;
     });
+    // Không cần sort ở client nữa vì backend đã sort theo lastContactDate
   }, [hospitals, dateFromFilter, dateToFilter]);
 
   // Tính toán totalItems và totalPages dựa trên filteredHospitals khi có filter theo date
@@ -605,7 +620,7 @@ export default function HospitalCareList() {
         const params: any = {
           page: currentPage,
           size: itemsPerPage,
-          sortBy: "createdAt",
+          sortBy: "lastContactDate",
           sortDir: "desc",
         };
         if (searchTerm) params.search = searchTerm;
@@ -640,8 +655,8 @@ export default function HospitalCareList() {
       const params: any = {
         page: currentPage,
         size: itemsPerPage,
-        sortBy: "createdAt",
-        sortDir: "desc",
+        sortBy: "lastContactDate", // Sắp xếp theo lịch sử liên hệ mới nhất
+        sortDir: "desc", // Mới nhất lên đầu
       };
       if (searchTerm) params.search = searchTerm;
       if (priorityFilter) params.priority = priorityFilter;
@@ -914,7 +929,7 @@ export default function HospitalCareList() {
                     const { label, bgColor, textColor } = statusConfig[hospital.status];
                     const stt = currentPage * itemsPerPage + index + 1;
                     return (
-                      <tr key={hospital.id} className={`${getRowBg(hospital.status)} transition hover:bg-gray-50 dark:hover:bg-gray-800/50`}>
+                      <tr key={hospital.careId} className={`${getRowBg(hospital.status)} transition hover:bg-gray-50 dark:hover:bg-gray-800/50`}>
                         {/* STT */}
                         <td className="whitespace-nowrap px-4 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
                           {stt}
