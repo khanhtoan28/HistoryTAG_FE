@@ -208,8 +208,8 @@ export default function ContractsTab({
                 <FiShield className="h-5 w-5" />
               )}
             </div>
-            <p className="mt-2 text-sm font-medium text-gray-700 dark:text-gray-300">Warranty</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{timeline.warranty.year}</p>
+            <p className="mt-2 text-sm font-medium text-gray-700 dark:text-gray-300">Bảo hành</p>
+            {/* <p className="text-xs text-gray-500 dark:text-gray-400">{timeline.warranty.year}</p> */}
           </div>
 
           {/* Maintenance Step */}
@@ -225,8 +225,8 @@ export default function ContractsTab({
                 <FiTool className="h-5 w-5" />
               )}
             </div>
-            <p className="mt-2 text-sm font-medium text-gray-700 dark:text-gray-300">Maintenance</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{timeline.maintenance.year}</p>
+            <p className="mt-2 text-sm font-medium text-gray-700 dark:text-gray-300">Bảo trì</p>
+            {/* <p className="text-xs text-gray-500 dark:text-gray-400">{timeline.maintenance.year}</p> */}
           </div>
 
           {/* Renewal Step */}
@@ -238,8 +238,8 @@ export default function ContractsTab({
             }`}>
               <FiRefreshCw className="h-5 w-5" />
             </div>
-            <p className="mt-2 text-sm font-medium text-gray-700 dark:text-gray-300">Renewal</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{timeline.renewal.year}</p>
+            <p className="mt-2 text-sm font-medium text-gray-700 dark:text-gray-300">Gia hạn</p>
+            {/* <p className="text-xs text-gray-500 dark:text-gray-400">{timeline.renewal.year}</p> */}
           </div>
         </div>
       </div>

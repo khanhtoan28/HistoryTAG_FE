@@ -1863,7 +1863,7 @@ export default function SuperAdminHome() {
       // SALES team has 8 columns (including Doanh thu), others have 7
       const headers = isSalesSelected
         ? ['Tên bệnh viện', 'Mã hợp đồng', 'Ngày bắt đầu', 'Người phụ trách', 'Trạng thái', 'Ngày hoàn thành', 'Số ngày thực hiện', 'Doanh thu']
-        : ['Tên bệnh viện', 'Nội dung công việc', 'Ngày bắt đầu', 'Người phụ trách', 'Trạng thái', 'Ngày hoàn thành', 'Số ngày thực hiện'];
+        : ['Tên bệnh viện', 'Nội dung công việc', 'Ngày bắt đầu', 'Người phụ trách', 'Trạng thái', 'Ngày hoàn thành', 'Thời gian thực hiện'];
       const headerRow = worksheet.addRow(headers);
       
       // Style header row with yellow background
@@ -2905,7 +2905,7 @@ export default function SuperAdminHome() {
                             <th className="px-3 py-2 text-left w-[15%]">Người phụ trách</th>
                             <th className="px-3 py-2 text-center w-[10%]">Trạng thái</th>
                             <th className="px-3 py-2 text-center w-[10%]">Ngày hoàn thành</th>
-                            <th className="px-3 py-2 text-center w-[10%]">Số ngày thực hiện</th>
+                            <th className="px-3 py-2 text-center w-[10%]">Thời gian thực hiện</th>
                           </tr>
                         </thead>
                         <tbody>
