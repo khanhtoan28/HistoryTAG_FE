@@ -280,7 +280,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const tryWS = () => {
       if (!wsUrl) return false;
       try {
-        const url = currentToken ? `${wsUrl}${wsUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(currentToken)}` : wsUrl;
+        // ✅ SECURITY FIX: Native WebSocket doesn't support custom headers
+        // For native WebSocket, we should use cookie-based auth or STOMP instead
+        // This fallback is kept for compatibility but should prefer STOMP
+        const url = wsUrl;
         const ws = new WebSocket(url as string);
         wsRef.current = ws;
 
@@ -339,16 +342,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const SockJSClass = sockjsMod.default;
         // console.log("[NotificationContext] Creating STOMP client...");
 
-        // Add token to URL for SockJS handshake (backend reads from query param)
-        const urlWithToken = currentToken 
-          ? `${stompUrl}${stompUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(currentToken)}`
-          : stompUrl;
+        // ✅ SECURITY FIX: Do NOT send token in query string (it will appear in logs)
+        // Token is sent via STOMP connectHeaders instead
+        // Backend will read from Authorization header during STOMP CONNECT frame
         let client;
         try {
           client = new StompClientClass({
             webSocketFactory: () => {
-              // console.log("[NotificationContext] Creating SockJS connection to:", urlWithToken);
-              return new SockJSClass(urlWithToken);
+              // console.log("[NotificationContext] Creating SockJS connection to:", stompUrl);
+              return new SockJSClass(stompUrl);
             },
             connectHeaders: currentToken ? { Authorization: `Bearer ${currentToken}` } : {},
             reconnectDelay: 5000,

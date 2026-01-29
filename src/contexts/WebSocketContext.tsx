@@ -37,12 +37,13 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
 
       const stompUrl = import.meta.env.VITE_NOTIFICATION_STOMP_URL || '/ws';
-      const urlWithToken = `${stompUrl}${stompUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+      // ✅ SECURITY FIX: Do NOT send token in query string (it will appear in logs)
+      // Token is sent via STOMP connectHeaders instead
 
       const client = new Client({
         webSocketFactory: () => {
           try {
-            return new SockJS(urlWithToken);
+            return new SockJS(stompUrl);
           } catch (err) {
             console.error('Failed to create SockJS connection:', err);
             throw err;

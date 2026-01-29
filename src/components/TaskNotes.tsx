@@ -220,10 +220,11 @@ export default function TaskNotes({
         const SockJS = sockjsMod.default;
 
         const token = authHeaders().Authorization?.replace("Bearer ", "") || "";
-        const wsUrl = token ? `${WS_URL}?token=${encodeURIComponent(token)}` : WS_URL;
-
+        // ✅ SECURITY FIX: Do NOT send token in query string (it will appear in logs)
+        // Token is sent via STOMP connectHeaders instead
         const client = new StompClient({
-          webSocketFactory: () => new SockJS(wsUrl) as any,
+          webSocketFactory: () => new SockJS(WS_URL) as any,
+          connectHeaders: token ? { Authorization: `Bearer ${token}` } : {},
           reconnectDelay: 5000,
           heartbeatIncoming: 4000,
           heartbeatOutgoing: 4000,
