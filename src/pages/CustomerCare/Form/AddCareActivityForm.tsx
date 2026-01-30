@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { FiX, FiSave, FiPhoneCall, FiMail, FiUser, FiFileText } from "react-icons/fi";
-
+import  { FaViber } from "react-icons/fa";
 export interface CareActivityFormData {
-  type: "call" | "email" | "visit" | "note" | "zalo" | "cong_van";
+  type: "call" | "email" | "visit" | "note" | "zalo"|"viber" | "cong_van";
   date: string;
   title: string;
   description: string;
@@ -22,6 +22,7 @@ export function convertActivityFormDataToDTO(formData: CareActivityFormData): an
     "meeting": "MEETING",
     "sms": "SMS",
     "zalo": "ZALO",
+    "viber": "VIBER",
     "cong_van": "CONG_VAN"
   };
   
@@ -61,6 +62,7 @@ export function convertActivityFormDataToUpdateDTO(formData: CareActivityFormDat
     "meeting": "MEETING",
     "sms": "SMS",
     "zalo": "ZALO",
+    "viber": "VIBER",
     "cong_van": "CONG_VAN"
   };
   
@@ -88,7 +90,7 @@ interface CareActivity {
   id: number;
   date: string;
   timeAgo: string;
-  type: "call" | "email" | "visit" | "note" | "zalo" | "cong_van";
+  type: "call" | "email" | "visit" | "note" | "zalo"| "viber" | "cong_van";
   title: string;
   description: string;
   outcome?: "POSITIVE" | "NEUTRAL" | "NEGATIVE";
@@ -298,6 +300,7 @@ export default function AddCareActivityForm({
               <option value="visit">👤 Gặp mặt</option>
               <option value="note">📝 Ghi chú</option>
               <option value="zalo">💬 Zalo</option>
+              <option value="viber">💜 Viber</option>
               <option value="cong_van">📄 Công văn</option>
             </select>
           </div>
