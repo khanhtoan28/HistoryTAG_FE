@@ -26,6 +26,8 @@ export interface Ticket {
   pic: string;
   status: "CHUA_XU_LY" | "DANG_XU_LY" | "HOAN_THANH";
   ticketType?: "MAINTENANCE" | "DEPLOYMENT"; // Loại ticket: Bảo trì hoặc Triển khai
+  createdBy?: string | null; // Tên người tạo ticket
+  createdById?: number | null; // ID của người tạo ticket
 }
 
 export interface CareActivity {

@@ -222,6 +222,28 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       return;
     }
     
+    // ✅ Request browser notification permission when user is logged in
+    // This will show a popup asking for permission to show notifications
+    try {
+      if (typeof window !== "undefined" && "Notification" in window) {
+        if (Notification.permission === "default") {
+          // Request permission in background (non-blocking)
+          // User will see a browser popup asking for notification permission
+          Notification.requestPermission().then((permission) => {
+            if (permission === "granted") {
+              console.log("[NotificationContext] Browser notification permission granted");
+            } else if (permission === "denied") {
+              console.log("[NotificationContext] Browser notification permission denied");
+            }
+          }).catch((err) => {
+            console.debug("[NotificationContext] Failed to request notification permission:", err);
+          });
+        }
+      }
+    } catch (err) {
+      console.debug("[NotificationContext] Error checking notification support:", err);
+    }
+    
     // ✅ Chỉ gọi API khi có token VÀ không ở trang auth
     // initial load
     loadUnread();

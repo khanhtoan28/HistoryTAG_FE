@@ -24,6 +24,7 @@ import {
   type TicketResponseDTO,
   type TicketRequestDTO
 } from "../../../api/ticket.api";
+import { filterUsers, type UserResponseDTO } from "../../../api/superadmin.api";
 import toast from "react-hot-toast";
 
 interface TicketsTabProps {
@@ -90,6 +91,41 @@ export default function TicketsTab({
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [ticketTypeFilter, setTicketTypeFilter] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [itUsers, setItUsers] = useState<Array<{ id: number; name: string }>>([]);
+  const [loadingItUsers, setLoadingItUsers] = useState(false);
+
+  // Get current user ID from localStorage
+  const currentUserId = useMemo(() => {
+    const userIdStr = localStorage.getItem("userId");
+    if (!userIdStr) return null;
+    const userId = Number(userIdStr);
+    return isNaN(userId) ? null : userId;
+  }, []);
+
+  // Check if current user is SUPERADMIN
+  const isSuperAdmin = useMemo(() => {
+    try {
+      const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
+      if (rolesStr) {
+        const roles = JSON.parse(rolesStr);
+        if (Array.isArray(roles)) {
+          return roles.some((r: any) => {
+            if (typeof r === "string") {
+              return r.toUpperCase() === "SUPERADMIN" || r.toUpperCase() === "SUPER_ADMIN";
+            }
+            if (r && typeof r === "object") {
+              const roleName = r.roleName || r.role_name || r.role;
+              return typeof roleName === "string" && roleName.toUpperCase() === "SUPERADMIN";
+            }
+            return false;
+          });
+        }
+      }
+    } catch (e) {
+      console.error("Error checking superadmin role:", e);
+    }
+    return false;
+  }, []);
 
   const applyLocalTickets = React.useCallback((updated: Ticket[]) => {
     setLocalTickets(updated);
@@ -133,6 +169,8 @@ export default function TicketsTab({
         ticketType: item.ticketType || "MAINTENANCE", // Default to MAINTENANCE if not provided
         pic: item.pic || '',
         createdAt: item.createdAt || undefined,
+        createdBy: item.createdBy || null,
+        createdById: item.createdById || null,
         timeElapsed: item.status === "HOAN_THANH" ? undefined : calculateTimeElapsed(item.createdAt || undefined)
       }))
       .sort((a, b) => {
@@ -204,14 +242,42 @@ export default function TicketsTab({
     }
   }, [tickets, useTicketsProp]); // Chỉ sync khi tickets prop thay đổi và useTicketsProp = true
 
-  const [ticketForm, setTicketForm] = useState<Omit<Ticket, "id" | "timeElapsed">>({
+  const [ticketForm, setTicketForm] = useState<Omit<Ticket, "id" | "timeElapsed"> & { picUserId?: number | null }>({
     issue: "",
     priority: "Trung bình",
     createdAt: new Date().toISOString(),
     pic: "",
+    picUserId: null,
     status: "DANG_XU_LY",
     ticketType: "MAINTENANCE"
   });
+
+  // Load IT users on mount
+  useEffect(() => {
+    const loadItUsers = async () => {
+      setLoadingItUsers(true);
+      try {
+        const users = await filterUsers({
+          department: "IT",
+          status: true
+        });
+        const userOptions = (users || [])
+          .map((u: UserResponseDTO) => ({
+            id: u.id!,
+            name: u.fullname || u.username || `User ${u.id}`
+          }))
+          .filter((u): u is { id: number; name: string } => u.id != null)
+          .sort((a, b) => a.name.localeCompare(b.name, "vi"));
+        setItUsers(userOptions);
+      } catch (err) {
+        console.error("Error loading IT users:", err);
+        toast.error("Không thể tải danh sách người phụ trách");
+      } finally {
+        setLoadingItUsers(false);
+      }
+    };
+    loadItUsers();
+  }, []);
 
   // Filter tickets
   const filteredTickets = useMemo(() => {
@@ -267,6 +333,7 @@ export default function TicketsTab({
       priority: "Trung bình",
       createdAt: new Date().toISOString(),
       pic: "",
+      picUserId: null,
       status: "CHUA_XU_LY",
       ticketType: "MAINTENANCE"
     });
@@ -275,11 +342,20 @@ export default function TicketsTab({
 
   const handleEditTicket = (ticket: Ticket) => {
     setEditingTicket(ticket);
+    // Tìm userId từ picName nếu có
+    let picUserId: number | null = null;
+    if (ticket.pic) {
+      const matchedUser = itUsers.find(u => u.name === ticket.pic);
+      if (matchedUser) {
+        picUserId = matchedUser.id;
+      }
+    }
     setTicketForm({
       issue: ticket.issue,
       priority: ticket.priority,
       createdAt: ticket.createdAt || new Date().toISOString(),
       pic: ticket.pic,
+      picUserId: picUserId,
       status: ticket.status,
       ticketType: ticket.ticketType || "MAINTENANCE"
     });
@@ -338,6 +414,8 @@ export default function TicketsTab({
         const updatedTicket = {
           ...ticketForm,
           id: editingTicket.id,
+          createdBy: editingTicket.createdBy, // Preserve createdBy when editing
+          createdById: editingTicket.createdById, // Preserve createdById when editing
           timeElapsed: ticketForm.status === "HOAN_THANH" ? undefined : calculateTimeElapsed(ticketForm.createdAt)
         };
         updatedTickets = localTickets.map(t =>
@@ -367,7 +445,7 @@ export default function TicketsTab({
         status: ticketForm.status,
         ticketType: ticketForm.ticketType || "MAINTENANCE",
         picName: ticketForm.pic.trim() || null,
-        picUserId: null // TODO: Map pic name to user ID if needed
+        picUserId: ticketForm.picUserId || null
       };
 
       let updatedTicket: Ticket | null = null;
@@ -389,6 +467,8 @@ export default function TicketsTab({
           ticketType: response.ticketType || editingTicket.ticketType || "MAINTENANCE",
           pic: response.pic || editingTicket.pic || '',
           createdAt: createdAt,
+          createdBy: response.createdBy || editingTicket.createdBy || null,
+          createdById: response.createdById ?? editingTicket.createdById ?? null,
           timeElapsed: response.status === "HOAN_THANH" ? undefined : calculateTimeElapsed(createdAt)
         };
       } else {
@@ -403,6 +483,8 @@ export default function TicketsTab({
           ticketType: response.ticketType || ticketForm.ticketType || "MAINTENANCE",
           pic: response.pic || '',
           createdAt: response.createdAt || ticketForm.createdAt || undefined,
+          createdBy: response.createdBy || null,
+          createdById: response.createdById || null,
           timeElapsed: response.status === "HOAN_THANH" ? undefined : calculateTimeElapsed(response.createdAt || ticketForm.createdAt)
         };
       }
@@ -615,7 +697,7 @@ export default function TicketsTab({
       {/* Tickets Table */}
       <div className="w-full rounded-lg border border-gray-200 dark:border-gray-700" style={{ maxWidth: '100%' }}>
         <div className="overflow-x-auto overflow-y-auto max-h-[600px]">
-          <table className="min-w-[1200px] divide-y divide-gray-200 dark:divide-gray-700" style={{ width: 'max-content' }}>
+          <table className="min-w-[1400px] divide-y divide-gray-200 dark:divide-gray-700" style={{ width: 'max-content' }}>
             <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10">
             <tr>
               <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
@@ -639,6 +721,9 @@ export default function TicketsTab({
               <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
                 Người phụ trách
               </th>
+              <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
+                Người tạo
+              </th>
               <th className="py-3 px-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
                 Thao tác
               </th>
@@ -647,7 +732,7 @@ export default function TicketsTab({
           <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-900 dark:divide-gray-700">
             {loading ? (
               <tr>
-                <td colSpan={8} className="py-12 text-center">
+                <td colSpan={9} className="py-12 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
                     <p className="text-gray-500 dark:text-gray-400">Đang tải tickets...</p>
@@ -656,7 +741,7 @@ export default function TicketsTab({
               </tr>
             ) : filteredTickets.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-12 text-center">
+                <td colSpan={9} className="py-12 text-center">
                   <FiFileText className="h-12 w-12 mx-auto text-gray-300 mb-4" />
                   <p className="text-gray-500 dark:text-gray-400">
                     {searchQuery || statusFilter !== "all" || priorityFilter !== "all" || ticketTypeFilter !== "all"
@@ -741,6 +826,12 @@ export default function TicketsTab({
                       </div>
                     </td>
                     <td className="py-3 px-4">
+                      <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <FiUser className="h-4 w-4 text-gray-400" />
+                        {ticket.createdBy || "N/A"}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => handleViewTicket(ticket)}
@@ -756,13 +847,16 @@ export default function TicketsTab({
                         >
                           <FiEdit2 className="h-4 w-4" />
                         </button>
-                        <button
-                          onClick={() => handleDeleteTicket(ticket.id)}
-                          className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition dark:hover:bg-red-900/20"
-                          title="Xóa"
-                        >
-                          <FiTrash2 className="h-4 w-4" />
-                        </button>
+                        {/* Chỉ hiển thị nút xóa nếu user hiện tại là người tạo ticket HOẶC là SUPERADMIN */}
+                        {((currentUserId && ticket.createdById && currentUserId === ticket.createdById) || isSuperAdmin) && (
+                          <button
+                            onClick={() => handleDeleteTicket(ticket.id)}
+                            className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition dark:hover:bg-red-900/20"
+                            title={isSuperAdmin ? "Xóa (SUPERADMIN)" : "Xóa"}
+                          >
+                            <FiTrash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -894,14 +988,33 @@ export default function TicketsTab({
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Người phụ trách 
                   </label>
-                  <input
-                    type="text"
-                    value={ticketForm.pic}
-                    onChange={(e) => setTicketForm({ ...ticketForm, pic: e.target.value })}
-                    placeholder="Tên người phụ trách"
+                  <select
+                    value={ticketForm.picUserId || ""}
+                    onChange={(e) => {
+                      const userId = e.target.value ? Number(e.target.value) : null;
+                      const selectedUser = itUsers.find(u => u.id === userId);
+                      setTicketForm({ 
+                        ...ticketForm, 
+                        picUserId: userId,
+                        pic: selectedUser ? selectedUser.name : ""
+                      });
+                    }}
                     className="w-full rounded-lg border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
-                    
-                  />
+                    disabled={loadingItUsers}
+                  >
+                    <option value="">-- Chọn người phụ trách --</option>
+                    {itUsers.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </select>
+                  {/* Hiển thị giá trị cũ nếu không tìm thấy trong danh sách (backward compatibility) */}
+                  {ticketForm.pic && !ticketForm.picUserId && (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Giá trị hiện tại: {ticketForm.pic} (không có trong danh sách)
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -930,45 +1043,49 @@ export default function TicketsTab({
       {/* View Ticket Modal */}
       {viewingTicket && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full dark:bg-gray-800">
-            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Chi tiết Ticket
-              </h3>
+          <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto dark:bg-gray-800">
+            {/* Header */}
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center z-10">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                  <FiFileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Chi tiết Ticket
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {viewingTicket.id}
+                  </p>
+                </div>
+              </div>
               <button
                 onClick={handleCloseViewModal}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
               >
                 <FiX className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  Ticket ID
+            <div className="p-6 space-y-6">
+              {/* Vấn đề - Section chính */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                  Vấn đề / Mô tả
                 </label>
-                <p className="text-base font-semibold text-blue-600 dark:text-blue-400">
-                  {viewingTicket.id}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  Vấn đề
-                </label>
-                <p className="text-base text-gray-900 dark:text-white">
+                <p className="text-base text-gray-900 dark:text-white leading-relaxed">
                   {viewingTicket.issue}
                 </p>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+              {/* Thông tin trạng thái - Badges */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
                     Mức độ ưu tiên
                   </label>
                   <span
-                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-medium ${
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium ${
                       priorityConfig[viewingTicket.priority]?.bgColor
                     } ${priorityConfig[viewingTicket.priority]?.textColor}`}
                   >
@@ -977,12 +1094,12 @@ export default function TicketsTab({
                   </span>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
                     Trạng thái
                   </label>
                   <span
-                    className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${
+                    className={`inline-flex items-center rounded-full px-3 py-1.5 text-sm font-medium ${
                       statusConfig[viewingTicket.status]?.bgColor
                     } ${statusConfig[viewingTicket.status]?.textColor}`}
                   >
@@ -990,52 +1107,96 @@ export default function TicketsTab({
                   </span>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
                     Loại ticket
                   </label>
-                  {viewingTicket.ticketType && (
+                  {viewingTicket.ticketType ? (
                     <span
-                      className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${
+                      className={`inline-flex items-center rounded-full px-3 py-1.5 text-sm font-medium ${
                         ticketTypeConfig[viewingTicket.ticketType]?.bgColor
                       } ${ticketTypeConfig[viewingTicket.ticketType]?.textColor}`}
                     >
                       {ticketTypeConfig[viewingTicket.ticketType]?.label}
                     </span>
+                  ) : (
+                    <span className="text-sm text-gray-400 dark:text-gray-500">Chưa xác định</span>
                   )}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
-                    Thời gian chờ
+              {/* Thông tin thời gian và người liên quan */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Thời gian */}
+                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                    Thời gian
                   </label>
-                  <div className="flex items-center gap-2 text-base text-gray-900 dark:text-white">
-                    <FiClock className="h-4 w-4 text-gray-400" />
-                    {viewingTicket.status === "HOAN_THANH" ? "Đã hoàn thành" : (viewingTicket.timeElapsed || calculateTimeElapsed(viewingTicket.createdAt))}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
-                    Ngày tạo
-                  </label>
-                  <div className="text-base text-gray-900 dark:text-white">
-                    {viewingTicket.createdAt ? new Date(viewingTicket.createdAt).toLocaleString("vi-VN") : "Chưa có"}
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3">
+                      <FiClock className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Thời gian chờ</p>
+                        <p className={`text-sm font-medium ${
+                          viewingTicket.status === "HOAN_THANH" 
+                            ? "text-green-600 dark:text-green-400" 
+                            : "text-gray-900 dark:text-white"
+                        }`}>
+                          {viewingTicket.status === "HOAN_THANH" 
+                            ? "Đã hoàn thành" 
+                            : (viewingTicket.timeElapsed || calculateTimeElapsed(viewingTicket.createdAt) || "Chưa có")}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
+                      <FiClock className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Ngày tạo</p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                          {viewingTicket.createdAt 
+                            ? new Date(viewingTicket.createdAt).toLocaleString("vi-VN", {
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })
+                            : "Chưa có"}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
-                    Người phụ trách
+                {/* Người liên quan */}
+                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                    Người liên quan
                   </label>
-                  <div className="flex items-center gap-2 text-base text-gray-900 dark:text-white">
-                    <FiUser className="h-4 w-4 text-gray-400" />
-                    {viewingTicket.pic}
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3">
+                      <FiUser className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Người phụ trách</p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                          {viewingTicket.pic || "Chưa có"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
+                      <FiUser className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Người tạo</p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                          {viewingTicket.createdBy || "N/A"}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
 
+              {/* Actions */}
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button
                   onClick={handleCloseViewModal}

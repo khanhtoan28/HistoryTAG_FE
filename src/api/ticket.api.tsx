@@ -42,6 +42,8 @@ export type TicketResponseDTO = {
   pic: string | null;
   picUserId: number | null;
   hospitalId: number;
+  createdBy: string | null; // Tên người tạo ticket
+  createdById: number | null; // ID của User tạo ticket
   createdAt: string | null;
   updatedAt: string | null;
 };

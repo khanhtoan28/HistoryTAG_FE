@@ -2114,7 +2114,7 @@ const ImplementationTasksPage: React.FC = () => {
         setLoadingHospitals(true);
         setError(null);
         try {
-            // Fetch summary để lấy thông tin từ deployment và các bệnh viện đã accept
+            // ✅ Chỉ cần 1 API call - summary đã có đầy đủ thống kê và PIC info
             const summaryEndpoint = `${API_ROOT}/api/v1/admin/maintenance/hospitals/summary`;
             const summaryRes = await fetch(summaryEndpoint, {
                 method: "GET",
@@ -2125,125 +2125,39 @@ const ImplementationTasksPage: React.FC = () => {
             const summaryPayload = await summaryRes.json();
             const summaries = Array.isArray(summaryPayload) ? summaryPayload : [];
 
-            // Fetch tất cả maintenance tasks để đếm COMPLETED tasks
-            const tasksParams = new URLSearchParams({ page: "0", size: "2000", sortBy: "id", sortDir: "asc" });
-            const tasksEndpoint = `${API_ROOT}/api/v1/admin/maintenance/tasks?${tasksParams.toString()}`;
-            const tasksRes = await fetch(tasksEndpoint, {
-                method: "GET",
-                headers: authHeaders(),
-                credentials: "include",
-            });
-            if (!tasksRes.ok) throw new Error(`Failed to fetch maintenance tasks: ${tasksRes.status}`);
-            const tasksPayload = await tasksRes.json();
-            const tasks: ImplementationTaskResponseDTO[] = Array.isArray(tasksPayload?.content) ? tasksPayload.content : Array.isArray(tasksPayload) ? tasksPayload : [];
-
-            // Aggregate tasks by hospital để đếm taskCount, acceptedCount, và collect PIC info
-            const tasksByHospital = new Map<number, { taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number; picIds: Set<string>; picNames: Set<string> }>();
+            // Collect PIC options từ summary
             const picOptionMap = new Map<string, { id: string; label: string }>();
-
-            for (const task of tasks) {
-                const hospitalId = typeof task.hospitalId === "number" ? task.hospitalId : task.hospitalId != null ? Number(task.hospitalId) : null;
-                if (!hospitalId) continue;
-
-                const current = tasksByHospital.get(hospitalId) || { taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0, picIds: new Set<string>(), picNames: new Set<string>() };
-                current.taskCount += 1;
-
-                // Collect PIC info
-                const picIdValue = task.picDeploymentId != null ? String(task.picDeploymentId) : null;
-                const picLabel = (task.picDeploymentName || "").toString().trim();
-                if (picLabel) {
-                    if (picIdValue) {
-                        current.picIds.add(picIdValue);
-                        picOptionMap.set(picIdValue, { id: picIdValue, label: picLabel });
+            summaries.forEach((item: any) => {
+                const picIds = Array.isArray(item?.picDeploymentIds) ? item.picDeploymentIds : [];
+                const picNames = Array.isArray(item?.picDeploymentNames) ? item.picDeploymentNames : [];
+                picIds.forEach((picId: any, idx: number) => {
+                    const picIdStr = String(picId);
+                    const picName = picNames[idx] && String(picNames[idx]).trim() ? String(picNames[idx]).trim() : "";
+                    if (picName) {
+                        picOptionMap.set(picIdStr, { id: picIdStr, label: picName });
                     }
-                    current.picNames.add(picLabel);
-                }
-                if (Array.isArray(task.picDeploymentIds) && task.picDeploymentIds.length > 0) {
-                    const supporterNames = Array.isArray(task.picDeploymentNames) ? task.picDeploymentNames : [];
-                    task.picDeploymentIds.forEach((sid, idx) => {
-                        const supporterId = Number(sid);
-                        if (!Number.isFinite(supporterId)) return;
-                        const supporterIdStr = String(supporterId);
-                        current.picIds.add(supporterIdStr);
-                        const supporterName = supporterNames[idx] && String(supporterNames[idx]).trim()
-                            ? String(supporterNames[idx]).trim()
-                            : "";
-                        if (supporterName) {
-                            current.picNames.add(supporterName);
-                            picOptionMap.set(supporterIdStr, { id: supporterIdStr, label: supporterName });
-                        }
-                    });
-                }
+                });
+            });
 
-                const taskStatus = normalizeStatus(task.status);
-                if (taskStatus === 'COMPLETED') {
-                    current.acceptedCount += 1;
-                }
-                // Count near due / overdue for non-completed
-                if (taskStatus !== 'COMPLETED' && task.deadline) {
-                    const d = new Date(task.deadline);
-                    if (!Number.isNaN(d.getTime())) {
-                        d.setHours(0, 0, 0, 0);
-                        const today = new Date();
-                        const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-                        const dayDiff = Math.round((d.getTime() - startToday) / (24 * 60 * 60 * 1000));
-                        // Quá hạn: deadline đã qua (dayDiff < 0)
-                        if (dayDiff < 0) current.overdueCount += 1;
-                        // Sắp đến hạn: hôm nay hoặc trong 3 ngày tới (0 <= dayDiff <= 3)
-                        if (dayDiff >= 0 && dayDiff <= 3) current.nearDueCount += 1;
-                    }
-                }
-                tasksByHospital.set(hospitalId, current);
-            }
-
-            // Merge summary với task counts
+            // Map summary - đã có đầy đủ thông tin từ backend
             const normalized = summaries.map((item: any, idx: number) => {
                 const hospitalId = Number(item?.hospitalId ?? -(idx + 1));
-                const taskStats = tasksByHospital.get(hospitalId) || { taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0, picIds: new Set<string>(), picNames: new Set<string>() };
                 return {
                     id: hospitalId,
                     label: String(item?.hospitalName ?? "—"),
                     subLabel: item?.province ? String(item.province) : "",
-                    hospitalCode: item?.hospitalCode || "", // Use code from summary if available
-                    taskCount: taskStats.taskCount > 0 ? taskStats.taskCount : Number(item?.maintenanceTaskCount ?? 0),
-                    acceptedCount: taskStats.acceptedCount, // Số task COMPLETED
-                    nearDueCount: taskStats.nearDueCount,
-                    overdueCount: taskStats.overdueCount,
+                    hospitalCode: item?.hospitalCode || "",
+                    taskCount: Number(item?.maintenanceTaskCount ?? 0),
+                    acceptedCount: Number(item?.acceptedCount ?? 0), // ✅ Từ backend
+                    nearDueCount: Number(item?.nearDueCount ?? 0),   // ✅ Từ backend
+                    overdueCount: Number(item?.overdueCount ?? 0),  // ✅ Từ backend
                     fromDeployment: Boolean(item?.transferredFromDeployment),
                     acceptedByMaintenance: Boolean(item?.acceptedByMaintenance),
-                    picDeploymentIds: Array.from(taskStats.picIds),
-                    picDeploymentNames: Array.from(taskStats.picNames),
+                    picDeploymentIds: Array.isArray(item?.picDeploymentIds) ? item.picDeploymentIds.map((id: any) => String(id)) : [],
+                    picDeploymentNames: Array.isArray(item?.picDeploymentNames) ? item.picDeploymentNames.map((name: any) => String(name)) : [],
                     maintenancePersonInChargeName: item?.maintenancePersonInChargeName || undefined,
                 };
             });
-
-            // Thêm các bệnh viện có tasks nhưng không có trong summary (nếu có)
-            for (const [hospitalId, taskStats] of tasksByHospital.entries()) {
-                if (!normalized.find(h => h.id === hospitalId)) {
-                    // Cần fetch thông tin hospital từ tasks
-                    const hospitalTask = tasks.find(t => {
-                        const tid = typeof t.hospitalId === "number" ? t.hospitalId : t.hospitalId != null ? Number(t.hospitalId) : null;
-                        return tid === hospitalId;
-                    });
-                    if (hospitalTask) {
-                        normalized.push({
-                            id: hospitalId,
-                            label: String(hospitalTask.hospitalName ?? "—"),
-                            subLabel: "",
-                            hospitalCode: "",
-                            taskCount: taskStats.taskCount,
-                            acceptedCount: taskStats.acceptedCount,
-                            nearDueCount: taskStats.nearDueCount,
-                            overdueCount: taskStats.overdueCount,
-                            fromDeployment: false,
-                            acceptedByMaintenance: false,
-                            picDeploymentIds: Array.from(taskStats.picIds),
-                            picDeploymentNames: Array.from(taskStats.picNames),
-                            maintenancePersonInChargeName: undefined, // Không có trong task, sẽ để undefined
-                        });
-                    }
-                }
-            }
 
             setPicOptions(Array.from(picOptionMap.values()));
 
