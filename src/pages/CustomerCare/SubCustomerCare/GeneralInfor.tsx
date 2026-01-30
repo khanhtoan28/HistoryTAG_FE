@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { FiPlus, FiAlertTriangle, FiCheckCircle, FiShield, FiTool, FiRefreshCw, FiExternalLink, FiClock, FiPhoneCall, FiSend, FiUser, FiMail, FiFileText, FiMessageCircle } from "react-icons/fi";
+import { FaViber } from "react-icons/fa";
 
 export interface Contract {
   id: string;
@@ -31,7 +32,7 @@ export interface CareActivity {
   id: number;
   date: string;
   timeAgo: string;
-  type: "call" | "email" | "visit" | "note" | "zalo" | "cong_van";
+  type: "call" | "email" | "visit" | "note" | "zalo" | "viber" | "cong_van";
   title: string;
   description: string;
   outcome?: "POSITIVE" | "NEUTRAL" | "NEGATIVE";
@@ -344,6 +345,8 @@ export default function ContractsTab({
                       <FiUser className="h-4 w-4" />
                     ) : item.type === "zalo" ? (
                       <FiMessageCircle className="h-4 w-4" />
+                    ) : item.type === "viber" ? (
+                      <FaViber className="h-4 w-4" />
                     ) : item.type === "cong_van" ? (
                       <FiFileText className="h-4 w-4" />
                     ) : (
@@ -379,6 +382,7 @@ export default function ContractsTab({
                       {item.type === "visit" && <FiUser className="h-4 w-4 inline-block mr-1.5 text-green-600" />}
                       {item.type === "note" && <FiFileText className="h-4 w-4 inline-block mr-1.5 text-gray-600" />}
                       {item.type === "zalo" && <FiMessageCircle className="h-4 w-4 inline-block mr-1.5 text-indigo-600" />}
+                      {item.type === "viber" && <FaViber className="h-4 w-4 inline-block mr-1.5" style={{ color: "#7360F2" }} />}
                       {item.type === "cong_van" && <FiFileText className="h-4 w-4 inline-block mr-1.5 text-orange-600" />}
                       {item.title}
                     </h4>
