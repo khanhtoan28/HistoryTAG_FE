@@ -24,8 +24,25 @@ import {
   type TicketResponseDTO,
   type TicketRequestDTO
 } from "../../../api/ticket.api";
-import { filterUsers, type UserResponseDTO } from "../../../api/superadmin.api";
 import toast from "react-hot-toast";
+
+const API_ROOT = import.meta.env.VITE_API_URL || "";
+
+function authHeaders(extra?: Record<string, string>) {
+  const token =
+    localStorage.getItem("access_token") ||
+    sessionStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    sessionStorage.getItem("token") ||
+    localStorage.getItem("accessToken") ||
+    sessionStorage.getItem("accessToken");
+  return {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(extra || {}),
+  } as Record<string, string>;
+}
 
 interface TicketsTabProps {
   tickets?: Ticket[];
@@ -252,22 +269,42 @@ export default function TicketsTab({
     ticketType: "MAINTENANCE"
   });
 
-  // Load IT users on mount
+  // Load IT users on mount - using ADMIN API endpoint
   useEffect(() => {
     const loadItUsers = async () => {
       setLoadingItUsers(true);
       try {
-        const users = await filterUsers({
+        // Use ADMIN API endpoint instead of SUPERADMIN API
+        const params = new URLSearchParams({
           department: "IT",
-          status: true
         });
-        const userOptions = (users || [])
-          .map((u: UserResponseDTO) => ({
-            id: u.id!,
-            name: u.fullname || u.username || `User ${u.id}`
-          }))
-          .filter((u): u is { id: number; name: string } => u.id != null)
+        const res = await fetch(`${API_ROOT}/api/v1/admin/users/search?${params.toString()}`, {
+          method: 'GET',
+          headers: authHeaders(),
+          credentials: 'include',
+        });
+        
+        if (!res.ok) {
+          throw new Error(`Failed to load IT users: ${res.status}`);
+        }
+        
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : [];
+        
+        // Map from EntitySelectDTO format (id, label, subLabel) to our format
+        const userOptions = list
+          .map((u: any) => {
+            const id = u?.id;
+            const name = u?.label || u?.fullname || u?.fullName || u?.username || `User ${id}`;
+            if (!id || !name) return null;
+            return {
+              id: Number(id),
+              name: String(name).trim()
+            };
+          })
+          .filter((u): u is { id: number; name: string } => u != null && Number.isFinite(u.id))
           .sort((a, b) => a.name.localeCompare(b.name, "vi"));
+        
         setItUsers(userOptions);
       } catch (err) {
         console.error("Error loading IT users:", err);
