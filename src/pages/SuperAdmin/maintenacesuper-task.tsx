@@ -550,82 +550,51 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     setLoadingHospitals(true);
     setError(null);
     try {
-      // Fetch summary để lấy thông tin từ deployment và các bệnh viện đã accept
+      // ✅ Tối ưu: Chỉ fetch summary (đã có đầy đủ thông tin), không cần fetch tất cả tasks
       const summaryEndpoint = `${API_ROOT}/api/v1/admin/maintenance/hospitals/summary`;
       const summaryRes = await fetch(summaryEndpoint, {
         method: "GET",
         headers: authHeaders(),
         credentials: "include",
       });
-      let summaries: any[] = [];
-      if (summaryRes.ok) {
-        const summaryPayload = await summaryRes.json();
-        summaries = Array.isArray(summaryPayload) ? summaryPayload : [];
-      }
+      if (!summaryRes.ok) throw new Error(`Failed to fetch hospitals summary: ${summaryRes.status}`);
+      const summaryPayload = await summaryRes.json();
+      const summaries: any[] = Array.isArray(summaryPayload) ? summaryPayload : [];
 
-      // Fetch a large page of tasks and aggregate by hospital
-      const params = new URLSearchParams({ page: "0", size: "2000", sortBy: "id", sortDir: "asc" });
-      const endpoint = `${API_ROOT}/api/v1/superadmin/maintenance/tasks?${params.toString()}`;
-      const res = await fetch(endpoint, {
-        method: "GET",
-        headers: authHeaders(),
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`Failed to fetch hospitals: ${res.status}`);
-      const payload = await res.json();
-      const items: MaintTask[] = Array.isArray(payload?.content) ? payload.content : Array.isArray(payload) ? payload : [];
-
-      // Aggregate tasks by hospital để đếm taskCount
-      // Use both hospitalId (number) and hospitalName (string) as keys
-      // Note: acceptedCount will be fetched separately for accuracy
-      // Note: nearDueCount and overdueCount will be calculated separately in augment function
-      const tasksByHospitalId = new Map<number, { taskCount: number; hospitalName?: string; picIds: Set<string>; picNames: Set<string> }>();
-      const tasksByHospitalName = new Map<string, { taskCount: number; hospitalId?: number; picIds: Set<string>; picNames: Set<string> }>();
+      // Collect PIC options từ summary
       const picOptionMap = new Map<string, { id: string; label: string }>();
-
-      // First pass: count total tasks per hospital
-      for (const it of items) {
-        const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
-        const hospitalName = (it.hospitalName || "").toString().trim();
-        const picIdValue = it.picDeploymentId != null ? String(it.picDeploymentId) : null;
-        const picLabel = (it.picDeploymentName || "").toString().trim();
-        if (picLabel) {
-          const optionKey = picIdValue ?? picLabel;
-          if (!picOptionMap.has(optionKey)) {
-            picOptionMap.set(optionKey, { id: optionKey, label: picLabel });
+      summaries.forEach((item: any) => {
+        // Collect từ picDeploymentIds và picDeploymentNames
+        const picIds = Array.isArray(item?.picDeploymentIds) ? item.picDeploymentIds : [];
+        const picNames = Array.isArray(item?.picDeploymentNames) ? item.picDeploymentNames : [];
+        picIds.forEach((picId: any, idx: number) => {
+          const picIdStr = String(picId);
+          const picName = picNames[idx] && String(picNames[idx]).trim() ? String(picNames[idx]).trim() : "";
+          if (picName) {
+            picOptionMap.set(picIdStr, { id: picIdStr, label: picName });
+          }
+        });
+        
+        // ✅ Collect từ maintenancePersonInCharge (người phụ trách bảo trì)
+        const maintenancePicId = item?.maintenancePersonInChargeId;
+        const maintenancePicName = item?.maintenancePersonInChargeName;
+        if (maintenancePicId && maintenancePicName) {
+          const maintenancePicIdStr = String(maintenancePicId);
+          const maintenancePicNameStr = String(maintenancePicName).trim();
+          if (maintenancePicNameStr && !picOptionMap.has(maintenancePicIdStr)) {
+            picOptionMap.set(maintenancePicIdStr, { id: maintenancePicIdStr, label: maintenancePicNameStr });
           }
         }
+      });
 
-        if (hospitalId) {
-          const current = tasksByHospitalId.get(hospitalId) || { taskCount: 0, hospitalName: hospitalName || undefined, picIds: new Set<string>(), picNames: new Set<string>() };
-          current.taskCount += 1;
-          if (!current.hospitalName && hospitalName) current.hospitalName = hospitalName;
-          if (picIdValue) current.picIds.add(picIdValue);
-          if (picLabel) current.picNames.add(picLabel);
-          tasksByHospitalId.set(hospitalId, current);
-        } else if (hospitalName) {
-          const current = tasksByHospitalName.get(hospitalName) || { taskCount: 0, hospitalId: undefined, picIds: new Set<string>(), picNames: new Set<string>() };
-          current.taskCount += 1;
-          if (picIdValue) current.picIds.add(picIdValue);
-          if (picLabel) current.picNames.add(picLabel);
-          tasksByHospitalName.set(hospitalName, current);
-        }
-      }
-
-      // Build list of all hospitals (from summaries and from tasks)
+      // Build list of all hospitals from summary
       const allHospitalNames = new Set<string>();
       summaries.forEach((item: any) => {
         const name = String(item?.hospitalName ?? "").trim();
         if (name) allHospitalNames.add(name);
       });
-      tasksByHospitalId.forEach((stats) => {
-        if (stats.hospitalName) allHospitalNames.add(stats.hospitalName);
-      });
-      tasksByHospitalName.forEach((_, name) => {
-        allHospitalNames.add(name);
-      });
 
-      // Fetch accepted counts for each hospital in parallel (like implementation super task)
+      // ✅ Fetch acceptedCount cho từng bệnh viện (backend không trả về trong summary)
       const acceptedCountsMap = new Map<string, number>();
       const acceptedCountsPromises = Array.from(allHospitalNames).map(async (hospitalName) => {
         try {
@@ -650,164 +619,32 @@ const MaintenanceSuperTaskPage: React.FC = () => {
         acceptedCountsMap.set(hospitalName, count);
       });
 
-      // Calculate near due/overdue counts using augment function (like implementation super task)
-      // This ensures we reset values and only count non-completed tasks
-      const augment = (list: Array<{ label: string; nearDueCount?: number; overdueCount?: number }>) => {
-        // Reset all nearDueCount and overdueCount to 0 before counting
-        for (const item of list) {
-          item.nearDueCount = 0;
-          item.overdueCount = 0;
-        }
-
-        const today = new Date();
-        const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-
-        for (const it of items) {
-          const statusUp = String(it?.status || '').trim().toUpperCase();
-          const label = String(it?.hospitalName || '').trim();
-          const target = list.find(x => x.label === label);
-          if (!target) continue;
-
-          // CRITICAL: Skip ALL completed/transferred tasks when counting near due/overdue
-          // Different APIs/pages may use different status values. Treat the following
-          // as completed for maintenance: ACCEPTED, WAITING_FOR_DEV, or COMPLETED
-          // Also respect transferredToMaintenance boolean flag (some responses set this)
-          const isCompleted = statusUp === 'ACCEPTED' || statusUp === 'WAITING_FOR_DEV' || statusUp === 'COMPLETED';
-          const isTransferred = statusUp === 'TRANSFERRED' || Boolean((it as any)?.transferredToMaintenance);
-
-          if (isCompleted || isTransferred) {
-            continue; // Skip this task - do not count towards near due/overdue
-          }
-
-          // Only process tasks that are NOT completed and NOT transferred
-          if (!it?.deadline) continue;
-          const d = new Date(it.deadline);
-          if (Number.isNaN(d.getTime())) continue;
-          d.setHours(0, 0, 0, 0);
-          const dayDiff = Math.round((d.getTime() - startToday) / (24 * 60 * 60 * 1000));
-
-          // Quá hạn: deadline đã qua (dayDiff < 0)
-          if (dayDiff < 0) {
-            target.overdueCount = (target.overdueCount || 0) + 1;
-          }
-          // Sắp đến hạn: hôm nay hoặc trong 3 ngày tới (0 <= dayDiff <= 3)
-          else if (dayDiff >= 0 && dayDiff <= 3) {
-            target.nearDueCount = (target.nearDueCount || 0) + 1;
-          }
-        }
-      };
-
-      // Merge summary với task counts
+      // ✅ Map summary - dùng taskCount từ summary, không cần aggregate từ tasks
       const normalized = summaries.map((item: any, idx: number) => {
         const hospitalId = Number(item?.hospitalId ?? -(idx + 1));
         const hospitalName = String(item?.hospitalName ?? "—");
-        const taskStats = tasksByHospitalId.get(hospitalId) || { taskCount: 0, picIds: new Set<string>(), picNames: new Set<string>() };
         const acceptedCount = acceptedCountsMap.get(hospitalName) ?? 0;
         return {
           id: hospitalId,
           label: hospitalName,
-          subLabel: item?.province ? String(item.province) : "",
+          subLabel: item?.province ? String(item.province) : "", // ✅ Dùng province từ summary, không cần resolve
           hospitalCode: item?.hospitalCode || "",
-          taskCount: taskStats.taskCount > 0 ? taskStats.taskCount : Number(item?.maintenanceTaskCount ?? 0),
+          taskCount: Number(item?.maintenanceTaskCount ?? 0), // ✅ Dùng từ summary
           acceptedCount: acceptedCount,
-          nearDueCount: 0, // Will be calculated by augment()
-          overdueCount: 0, // Will be calculated by augment()
+          nearDueCount: 0, // ✅ Tạm thời để 0, có thể tính sau nếu cần
+          overdueCount: 0, // ✅ Tạm thời để 0, có thể tính sau nếu cần
           fromDeployment: Boolean(item?.transferredFromDeployment),
           acceptedByMaintenance: Boolean(item?.acceptedByMaintenance),
-          picDeploymentIds: Array.from(taskStats.picIds),
-          picDeploymentNames: Array.from(taskStats.picNames),
+          picDeploymentIds: Array.isArray(item?.picDeploymentIds) ? item.picDeploymentIds.map((id: any) => String(id)) : [],
+          picDeploymentNames: Array.isArray(item?.picDeploymentNames) ? item.picDeploymentNames.map((name: any) => String(name)) : [],
           maintenancePersonInChargeName: item?.maintenancePersonInChargeName || undefined,
         };
       });
 
-      // Thêm các bệnh viện có tasks nhưng không có trong summary (nếu có)
-      for (const [hospitalId, taskStats] of tasksByHospitalId.entries()) {
-        if (taskStats.hospitalName && !normalized.find(h => h.id === hospitalId)) {
-          const hospitalName = String(taskStats.hospitalName ?? "—");
-          const acceptedCount = acceptedCountsMap.get(hospitalName) ?? 0;
-          normalized.push({
-            id: hospitalId,
-            label: hospitalName,
-            subLabel: "",
-            hospitalCode: "",
-            taskCount: taskStats.taskCount,
-            acceptedCount: acceptedCount,
-            nearDueCount: 0, // Will be calculated by augment()
-            overdueCount: 0, // Will be calculated by augment()
-            fromDeployment: false,
-            acceptedByMaintenance: false,
-            picDeploymentIds: Array.from(taskStats.picIds),
-            picDeploymentNames: Array.from(taskStats.picNames),
-            maintenancePersonInChargeName: undefined, // Không có trong task, sẽ để undefined
-          });
-        }
-      }
-
-      // Thêm các bệnh viện chỉ có tên (không có ID) từ tasks
-      for (const [hospitalName, taskStats] of tasksByHospitalName.entries()) {
-        if (!normalized.find(h => h.label === hospitalName)) {
-          const acceptedCount = acceptedCountsMap.get(hospitalName) ?? 0;
-          normalized.push({
-            id: -(normalized.length + 1), // Use negative ID for hospitals without ID
-            label: hospitalName,
-            subLabel: "",
-            hospitalCode: "",
-            taskCount: taskStats.taskCount,
-            acceptedCount: acceptedCount,
-            nearDueCount: 0, // Will be calculated by augment()
-            overdueCount: 0, // Will be calculated by augment()
-            fromDeployment: false,
-            acceptedByMaintenance: false,
-            picDeploymentIds: Array.from(taskStats.picIds),
-            picDeploymentNames: Array.from(taskStats.picNames),
-            maintenancePersonInChargeName: undefined, // Không có trong task, sẽ để undefined
-          });
-        }
-      }
-
-      // Apply augment function to calculate nearDueCount and overdueCount (like implementation super task)
-      augment(normalized);
-
-      const list = normalized;
-      // Enrich province/subLabel by querying hospitals search per name (best effort)
-      async function resolveProvinceByName(name: string): Promise<string> {
-        try {
-          const res = await fetch(`${API_ROOT}/api/v1/superadmin/hospitals/search?name=${encodeURIComponent(name)}`, { headers: authHeaders(), credentials: 'include' });
-          if (!res.ok) return '';
-          const arr = await res.json();
-          if (!Array.isArray(arr) || arr.length === 0) return '';
-          // Prefer exact match by label/name
-          const pick = (arr as any[]).find((x) => {
-            const label = String(x?.label ?? x?.name ?? '').trim();
-            return label.toLowerCase() === name.trim().toLowerCase();
-          }) || arr[0];
-          if (!pick || typeof pick !== 'object') return '';
-          const obj: any = pick;
-          const keys = ['province', 'provinceName', 'city', 'cityName', 'addressProvince', 'addressProvinceName', 'region', 'subLabel'];
-          for (const k of keys) {
-            const v = obj[k];
-            if (typeof v === 'string' && v.trim()) {
-              const value = String(v).split(',')[0].trim();
-              return value.replace(/\s*-\s*\d+\s+tasks?/i, '').trim();
-            }
-          }
-          if (typeof obj.label === 'string') {
-            const m = obj.label.split(' - ');
-            if (m.length > 1) return m[0].split(',')[0].trim();
-          }
-          return '';
-        } catch { return ''; }
-      }
-
-      const withProvince = await Promise.all(list.map(async (h) => ({
-        ...h,
-        subLabel: h.subLabel && h.subLabel.trim() ? h.subLabel : await resolveProvinceByName(h.label),
-      })));
-
       // ✅ CHỈ hiển thị bệnh viện đã được tiếp nhận (acceptedByMaintenance = true) hoặc có task bảo trì
       // Bệnh viện chưa tiếp nhận (fromDeployment = true nhưng acceptedByMaintenance = false) sẽ KHÔNG hiện ở đây
       // Bệnh viện chưa tiếp nhận sẽ chỉ hiện ở "Bệnh viện chờ tiếp nhận" (pending-hospitals)
-      const filtered = withProvince.filter((h) => {
+      const filtered = normalized.filter((h) => {
         // Nếu từ triển khai: CHỈ hiển thị nếu đã được tiếp nhận
         if (h.fromDeployment) {
           return h.acceptedByMaintenance === true;
@@ -917,12 +754,37 @@ const MaintenanceSuperTaskPage: React.FC = () => {
     else if (hospitalStatusFilter === 'fromDeployment') list = list.filter(h => h.fromDeployment && !h.acceptedByMaintenance);
     else if (hospitalStatusFilter === 'acceptedFromDeployment') list = list.filter(h => h.fromDeployment && h.acceptedByMaintenance);
     else if (hospitalStatusFilter === 'hasOpenTickets') list = list.filter(h => h.id && (ticketOpenCounts[h.id] ?? 0) > 0);
+    // Filter by PIC
     if (hospitalPicFilter.length > 0) {
-      const selected = new Set(hospitalPicFilter);
-      list = list.filter((h) =>
-        (h.picDeploymentIds || []).some((id) => selected.has(String(id))) ||
-        (h.picDeploymentNames || []).some((name) => selected.has(name))
-      );
+      const selected = new Set(hospitalPicFilter.map(id => String(id).trim()));
+      // Tạo map từ picOptions để có thể lookup name từ ID
+      const picIdToNameMap = new Map<string, string>();
+      picOptions.forEach(opt => {
+        picIdToNameMap.set(String(opt.id).trim(), String(opt.label).trim());
+      });
+      
+      list = list.filter((h) => {
+        // Check by ID (so sánh với picDeploymentIds)
+        const picIds = (h.picDeploymentIds || []).map(id => String(id).trim());
+        const hasMatchingId = picIds.some((idStr) => selected.has(idStr));
+        
+        // Check by name (so sánh với picDeploymentNames)
+        const picNames = (h.picDeploymentNames || []).map(name => String(name).trim());
+        const hasMatchingName = picNames.some((nameStr) => selected.has(nameStr));
+        
+        // ✅ Check by maintenancePersonInChargeName (người phụ trách bảo trì)
+        const maintenancePicName = h.maintenancePersonInChargeName ? String(h.maintenancePersonInChargeName).trim() : "";
+        const hasMatchingMaintenancePic = maintenancePicName && (
+          selected.has(maintenancePicName) || 
+          // Cũng kiểm tra xem ID trong filter có match với name này không
+          Array.from(selected).some(selectedValue => {
+            const nameFromId = picIdToNameMap.get(selectedValue);
+            return nameFromId && nameFromId === maintenancePicName;
+          })
+        );
+        
+        return hasMatchingId || hasMatchingName || hasMatchingMaintenancePic;
+      });
     }
     list = [...list].sort((a, b) => a.label.localeCompare(b.label));
     return list;
