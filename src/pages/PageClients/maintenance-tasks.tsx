@@ -2218,11 +2218,55 @@ const ImplementationTasksPage: React.FC = () => {
                 acceptedCountsMap.set(hospitalName, count);
             });
 
+            // ✅ Fetch tasks chưa completed để tính nearDueCount và overdueCount
+            const nearDueOverdueMap = new Map<string, { nearDueCount: number; overdueCount: number }>();
+            try {
+                // Fetch tasks chưa completed (không phải COMPLETED, ACCEPTED, WAITING_FOR_DEV)
+                const tasksParams = new URLSearchParams({ page: "0", size: "500", sortBy: "id", sortDir: "asc" });
+                const tasksUrl = `${API_ROOT}/api/v1/admin/maintenance/tasks?${tasksParams.toString()}`;
+                const tasksRes = await fetch(tasksUrl, { headers: authHeaders(), credentials: "include" });
+                if (tasksRes.ok) {
+                    const tasksPayload = await tasksRes.json();
+                    const tasks = Array.isArray(tasksPayload?.content) ? tasksPayload.content : Array.isArray(tasksPayload) ? tasksPayload : [];
+                    
+                    const today = new Date();
+                    const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+                    
+                    tasks.forEach((task: any) => {
+                        const statusUp = String(task?.status || '').trim().toUpperCase();
+                        const hospitalName = String(task?.hospitalName || '').trim();
+                        if (!hospitalName) return;
+                        
+                        // Skip completed tasks
+                        const isCompleted = statusUp === 'COMPLETED' || statusUp === 'ACCEPTED' || statusUp === 'WAITING_FOR_DEV' || statusUp === 'TRANSFERRED';
+                        if (isCompleted) return;
+                        
+                        // Chỉ tính cho task có deadline
+                        if (!task?.deadline) return;
+                        const d = new Date(task.deadline);
+                        if (Number.isNaN(d.getTime())) return;
+                        d.setHours(0, 0, 0, 0);
+                        const dayDiff = Math.round((d.getTime() - startToday) / (24 * 60 * 60 * 1000));
+                        
+                        const current = nearDueOverdueMap.get(hospitalName) || { nearDueCount: 0, overdueCount: 0 };
+                        if (dayDiff < 0) {
+                            current.overdueCount += 1;
+                        } else if (dayDiff >= 0 && dayDiff <= 3) {
+                            current.nearDueCount += 1;
+                        }
+                        nearDueOverdueMap.set(hospitalName, current);
+                    });
+                }
+            } catch (err) {
+                console.warn("Failed to fetch tasks for nearDue/overdue calculation:", err);
+            }
+
             // Map summary - đã có đầy đủ thông tin từ backend
             const normalized = summaries.map((item: any, idx: number) => {
                 const hospitalId = Number(item?.hospitalId ?? -(idx + 1));
                 const hospitalName = String(item?.hospitalName ?? "—");
                 const acceptedCount = acceptedCountsMap.get(hospitalName) ?? 0;
+                const dueStats = nearDueOverdueMap.get(hospitalName) || { nearDueCount: 0, overdueCount: 0 };
                 return {
                     id: hospitalId,
                     label: hospitalName,
@@ -2230,8 +2274,8 @@ const ImplementationTasksPage: React.FC = () => {
                     hospitalCode: item?.hospitalCode || "",
                     taskCount: Number(item?.maintenanceTaskCount ?? 0),
                     acceptedCount: acceptedCount, // ✅ Fetch từ API riêng
-                    nearDueCount: 0,   // Chưa có trong backend summary
-                    overdueCount: 0,  // Chưa có trong backend summary
+                    nearDueCount: dueStats.nearDueCount,   // ✅ Tính từ tasks chưa completed
+                    overdueCount: dueStats.overdueCount,  // ✅ Tính từ tasks chưa completed
                     fromDeployment: Boolean(item?.transferredFromDeployment),
                     acceptedByMaintenance: Boolean(item?.acceptedByMaintenance),
                     picDeploymentIds: Array.isArray(item?.picDeploymentIds) ? item.picDeploymentIds.map((id: any) => String(id)) : [],

@@ -2307,8 +2307,9 @@ const ImplementationTasksPage: React.FC = () => {
         })
       );
 
-      // Fetch all tasks (limited) to compute near due/overdue per hospital
-      const allParams = new URLSearchParams({ page: "0", size: "2000", sortBy: "id", sortDir: "asc" });
+      // ✅ Tối ưu: Fetch tasks chưa completed để tính near due/overdue (giảm từ 2000 xuống 500)
+      // Fetch tasks chưa completed để tính toán nearDueCount và overdueCount
+      const allParams = new URLSearchParams({ page: "0", size: "500", sortBy: "id", sortDir: "asc" });
       const allRes = await fetch(`${API_ROOT}/api/v1/admin/implementation/tasks?${allParams.toString()}`, { method: 'GET', headers: authHeaders(), credentials: 'include' });
       const allPayload = allRes.ok ? await allRes.json() : [];
       const allItems = Array.isArray(allPayload?.content) ? allPayload.content : Array.isArray(allPayload) ? allPayload : [];
