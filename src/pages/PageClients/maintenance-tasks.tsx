@@ -2186,18 +2186,52 @@ const ImplementationTasksPage: React.FC = () => {
                 console.warn("Failed to fetch all users for PIC filter:", err);
             }
 
+            // ✅ Fetch acceptedCount cho từng bệnh viện (backend không trả về trong summary)
+            const acceptedCountsMap = new Map<string, number>();
+            const allHospitalNames = new Set<string>();
+            summaries.forEach((item: any) => {
+                const hospitalName = String(item?.hospitalName ?? "").trim();
+                if (hospitalName) allHospitalNames.add(hospitalName);
+            });
+
+            // Fetch acceptedCount cho tất cả bệnh viện
+            const acceptedCountsPromises = Array.from(allHospitalNames).map(async (hospitalName) => {
+                try {
+                    // Fetch count of COMPLETED tasks for this hospital (maintenance tasks use COMPLETED status)
+                    const params = new URLSearchParams({ page: "0", size: "1", status: "COMPLETED", hospitalName });
+                    const url = `${API_ROOT}/api/v1/admin/maintenance/tasks?${params.toString()}`;
+                    const res = await fetch(url, {
+                        method: "GET",
+                        headers: authHeaders(),
+                        credentials: "include",
+                    });
+                    if (!res.ok) return { hospitalName, count: 0 };
+                    const resp = await res.json();
+                    const count = resp && typeof resp.totalElements === "number" ? resp.totalElements : (Array.isArray(resp) ? resp.length : (Array.isArray(resp?.content) ? resp.content.length : 0));
+                    return { hospitalName, count };
+                } catch {
+                    return { hospitalName, count: 0 };
+                }
+            });
+            const acceptedCountsResults = await Promise.all(acceptedCountsPromises);
+            acceptedCountsResults.forEach(({ hospitalName, count }) => {
+                acceptedCountsMap.set(hospitalName, count);
+            });
+
             // Map summary - đã có đầy đủ thông tin từ backend
             const normalized = summaries.map((item: any, idx: number) => {
                 const hospitalId = Number(item?.hospitalId ?? -(idx + 1));
+                const hospitalName = String(item?.hospitalName ?? "—");
+                const acceptedCount = acceptedCountsMap.get(hospitalName) ?? 0;
                 return {
                     id: hospitalId,
-                    label: String(item?.hospitalName ?? "—"),
+                    label: hospitalName,
                     subLabel: item?.province ? String(item.province) : "",
                     hospitalCode: item?.hospitalCode || "",
                     taskCount: Number(item?.maintenanceTaskCount ?? 0),
-                    acceptedCount: Number(item?.acceptedCount ?? 0), // ✅ Từ backend
-                    nearDueCount: Number(item?.nearDueCount ?? 0),   // ✅ Từ backend
-                    overdueCount: Number(item?.overdueCount ?? 0),  // ✅ Từ backend
+                    acceptedCount: acceptedCount, // ✅ Fetch từ API riêng
+                    nearDueCount: 0,   // Chưa có trong backend summary
+                    overdueCount: 0,  // Chưa có trong backend summary
                     fromDeployment: Boolean(item?.transferredFromDeployment),
                     acceptedByMaintenance: Boolean(item?.acceptedByMaintenance),
                     picDeploymentIds: Array.isArray(item?.picDeploymentIds) ? item.picDeploymentIds.map((id: any) => String(id)) : [],
