@@ -587,6 +587,8 @@ const MaintenanceSuperTaskPage: React.FC = () => {
         }
       });
 
+      // ✅ Không fetch tất cả users - chỉ dùng PICs từ summary và từ tasks (để tránh hiển thị quá nhiều options)
+
       // Build list of all hospitals from summary
       const allHospitalNames = new Set<string>();
       summaries.forEach((item: any) => {
@@ -619,16 +621,57 @@ const MaintenanceSuperTaskPage: React.FC = () => {
         acceptedCountsMap.set(hospitalName, count);
       });
 
-      // ✅ Fetch tasks chưa completed để tính nearDueCount và overdueCount
+      // ✅ Fetch tasks để tính nearDueCount, overdueCount và collect PICs từ từng task
       const nearDueOverdueMap = new Map<string, { nearDueCount: number; overdueCount: number }>();
+      const hospitalPicsFromTasks = new Map<string, { picIds: Set<string>; picNames: Set<string> }>();
       try {
-        // Fetch tasks chưa completed (không phải COMPLETED, ACCEPTED, WAITING_FOR_DEV)
-        const tasksParams = new URLSearchParams({ page: "0", size: "500", sortBy: "id", sortDir: "asc" });
-        const tasksUrl = `${API_ROOT}/api/v1/superadmin/maintenance/tasks?${tasksParams.toString()}`;
-        const tasksRes = await fetch(tasksUrl, { headers: authHeaders(), credentials: "include" });
-        if (tasksRes.ok) {
-          const tasksPayload = await tasksRes.json();
-          const tasks = Array.isArray(tasksPayload?.content) ? tasksPayload.content : Array.isArray(tasksPayload) ? tasksPayload : [];
+        // Fetch tasks (cả completed và chưa completed để lấy đầy đủ PICs)
+        // ✅ Tối ưu: Fetch song song nhiều pages đầu để nhanh hơn, giới hạn tối đa để tránh chậm
+        let allTasks: any[] = [];
+        const pageSize = 1000; // Mỗi page 1000 items
+        const maxPages = 5; // Giới hạn tối đa 5 pages (5000 tasks) để tránh quá chậm
+        
+        // Fetch song song 3 pages đầu để nhanh hơn
+        const initialPages = Math.min(3, maxPages);
+        const initialPromises = Array.from({ length: initialPages }, (_, i) => {
+          const tasksParams = new URLSearchParams({ page: String(i), size: String(pageSize), sortBy: "id", sortDir: "asc" });
+          const tasksUrl = `${API_ROOT}/api/v1/superadmin/maintenance/tasks?${tasksParams.toString()}`;
+          return fetch(tasksUrl, { headers: authHeaders(), credentials: "include" })
+            .then(res => res.ok ? res.json() : null)
+            .then(payload => {
+              const tasks = Array.isArray(payload?.content) ? payload.content : Array.isArray(payload) ? payload : [];
+              return { page: i, tasks, totalElements: payload?.totalElements || 0 };
+            })
+            .catch(() => ({ page: i, tasks: [], totalElements: 0 }));
+        });
+        
+        const initialResults = await Promise.all(initialPromises);
+        initialResults.forEach(({ tasks }) => {
+          if (tasks.length > 0) allTasks = allTasks.concat(tasks);
+        });
+        
+        // Nếu còn nhiều tasks và chưa đạt maxPages, fetch thêm tuần tự
+        const firstResult = initialResults[0];
+        const totalTasks = firstResult?.totalElements || 0;
+        if (totalTasks > initialPages * pageSize && initialPages < maxPages) {
+          for (let page = initialPages; page < maxPages; page++) {
+            const tasksParams = new URLSearchParams({ page: String(page), size: String(pageSize), sortBy: "id", sortDir: "asc" });
+            const tasksUrl = `${API_ROOT}/api/v1/superadmin/maintenance/tasks?${tasksParams.toString()}`;
+            const tasksRes = await fetch(tasksUrl, { headers: authHeaders(), credentials: "include" });
+            if (tasksRes.ok) {
+              const tasksPayload = await tasksRes.json();
+              const tasks = Array.isArray(tasksPayload?.content) ? tasksPayload.content : Array.isArray(tasksPayload) ? tasksPayload : [];
+              if (tasks.length === 0) break;
+              allTasks = allTasks.concat(tasks);
+              if (tasks.length < pageSize) break; // Đã hết
+            } else {
+              break; // Lỗi, dừng
+            }
+          }
+        }
+        
+        if (allTasks.length > 0) {
+          const tasks = allTasks;
           
           const today = new Date();
           const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
@@ -638,7 +681,40 @@ const MaintenanceSuperTaskPage: React.FC = () => {
             const hospitalName = String(task?.hospitalName || '').trim();
             if (!hospitalName) return;
             
-            // Skip completed tasks
+            // ✅ Collect PICs từ từng task (quan trọng cho filter)
+            const picId = task?.picDeploymentId ? String(task.picDeploymentId) : null;
+            const picName = task?.picDeploymentName ? String(task.picDeploymentName).trim() : null;
+            if (picId || picName) {
+              const hospitalPics = hospitalPicsFromTasks.get(hospitalName) || { picIds: new Set<string>(), picNames: new Set<string>() };
+              if (picId) hospitalPics.picIds.add(picId);
+              if (picName) hospitalPics.picNames.add(picName);
+              hospitalPicsFromTasks.set(hospitalName, hospitalPics);
+              
+              // ✅ Thêm vào picOptionMap để filter có đầy đủ options
+              if (picId && picName && !picOptionMap.has(picId)) {
+                picOptionMap.set(picId, { id: picId, label: picName });
+              }
+            }
+            
+            // Collect PICs từ additionalRequest nếu có
+            const additionalRequest = task?.additionalRequest || task?.notes || "";
+            if (additionalRequest) {
+              const picIds = parsePicIdsFromAdditionalRequest(additionalRequest, task?.notes, task?.picDeploymentId);
+              if (picIds.length > 0) {
+                const hospitalPics = hospitalPicsFromTasks.get(hospitalName) || { picIds: new Set<string>(), picNames: new Set<string>() };
+                picIds.forEach(id => {
+                  const idStr = String(id);
+                  hospitalPics.picIds.add(idStr);
+                  // Thêm vào picOptionMap nếu chưa có (sẽ fetch name sau nếu cần)
+                  if (!picOptionMap.has(idStr)) {
+                    picOptionMap.set(idStr, { id: idStr, label: `User-${id}` });
+                  }
+                });
+                hospitalPicsFromTasks.set(hospitalName, hospitalPics);
+              }
+            }
+            
+            // Skip completed tasks khi tính nearDue/overdue
             const isCompleted = statusUp === 'COMPLETED' || statusUp === 'ACCEPTED' || statusUp === 'WAITING_FOR_DEV' || statusUp === 'TRANSFERRED';
             if (isCompleted) return;
             
@@ -668,6 +744,16 @@ const MaintenanceSuperTaskPage: React.FC = () => {
         const hospitalName = String(item?.hospitalName ?? "—");
         const acceptedCount = acceptedCountsMap.get(hospitalName) ?? 0;
         const dueStats = nearDueOverdueMap.get(hospitalName) || { nearDueCount: 0, overdueCount: 0 };
+        
+        // ✅ Merge PICs từ summary và từ tasks (ưu tiên từ tasks vì đầy đủ hơn)
+        const taskPics = hospitalPicsFromTasks.get(hospitalName) || { picIds: new Set<string>(), picNames: new Set<string>() };
+        const summaryPicIds = Array.isArray(item?.picDeploymentIds) ? item.picDeploymentIds.map((id: any) => String(id)) : [];
+        const summaryPicNames = Array.isArray(item?.picDeploymentNames) ? item.picDeploymentNames.map((name: any) => String(name)) : [];
+        
+        // Merge: thêm PICs từ summary vào set từ tasks
+        summaryPicIds.forEach(id => taskPics.picIds.add(id));
+        summaryPicNames.forEach(name => taskPics.picNames.add(name));
+        
         return {
           id: hospitalId,
           label: hospitalName,
@@ -679,8 +765,8 @@ const MaintenanceSuperTaskPage: React.FC = () => {
           overdueCount: dueStats.overdueCount, // ✅ Tính từ tasks chưa completed
           fromDeployment: Boolean(item?.transferredFromDeployment),
           acceptedByMaintenance: Boolean(item?.acceptedByMaintenance),
-          picDeploymentIds: Array.isArray(item?.picDeploymentIds) ? item.picDeploymentIds.map((id: any) => String(id)) : [],
-          picDeploymentNames: Array.isArray(item?.picDeploymentNames) ? item.picDeploymentNames.map((name: any) => String(name)) : [],
+          picDeploymentIds: Array.from(taskPics.picIds), // ✅ Dùng PICs từ tasks (đầy đủ hơn)
+          picDeploymentNames: Array.from(taskPics.picNames), // ✅ Dùng PICs từ tasks (đầy đủ hơn)
           maintenancePersonInChargeName: item?.maintenancePersonInChargeName || undefined,
         };
       });
