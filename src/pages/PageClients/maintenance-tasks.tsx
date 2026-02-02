@@ -2128,6 +2128,7 @@ const ImplementationTasksPage: React.FC = () => {
             // Collect PIC options từ summary
             const picOptionMap = new Map<string, { id: string; label: string }>();
             summaries.forEach((item: any) => {
+                // Collect từ picDeploymentIds và picDeploymentNames
                 const picIds = Array.isArray(item?.picDeploymentIds) ? item.picDeploymentIds : [];
                 const picNames = Array.isArray(item?.picDeploymentNames) ? item.picDeploymentNames : [];
                 picIds.forEach((picId: any, idx: number) => {
@@ -2137,7 +2138,53 @@ const ImplementationTasksPage: React.FC = () => {
                         picOptionMap.set(picIdStr, { id: picIdStr, label: picName });
                     }
                 });
+                
+                // ✅ Collect từ maintenancePersonInCharge (người phụ trách bảo trì)
+                const maintenancePicId = item?.maintenancePersonInChargeId;
+                const maintenancePicName = item?.maintenancePersonInChargeName;
+                if (maintenancePicId && maintenancePicName) {
+                    const maintenancePicIdStr = String(maintenancePicId);
+                    const maintenancePicNameStr = String(maintenancePicName).trim();
+                    // Chỉ thêm nếu chưa có trong map (tránh override nếu đã có từ picDeploymentIds)
+                    if (maintenancePicNameStr && !picOptionMap.has(maintenancePicIdStr)) {
+                        picOptionMap.set(maintenancePicIdStr, { id: maintenancePicIdStr, label: maintenancePicNameStr });
+                    }
+                }
             });
+
+            // ✅ Fetch tất cả PICs từ API users để đảm bảo filter có đầy đủ options
+            try {
+                const params = new URLSearchParams();
+                // Không gửi parameter 'name' để lấy tất cả users
+                // Lọc theo team dựa trên user đăng nhập
+                if (userTeam === "MAINTENANCE") {
+                    params.set("team", "MAINTENANCE");
+                } else if (userTeam === "DEPLOYMENT") {
+                    params.set("team", "DEPLOYMENT");
+                }
+                // Nếu SUPERADMIN, không lọc team để hiện tất cả
+                const queryString = params.toString();
+                const usersUrl = queryString 
+                    ? `${API_ROOT}/api/v1/admin/users/search?${queryString}`
+                    : `${API_ROOT}/api/v1/admin/users/search`;
+                const usersRes = await fetch(usersUrl, { headers: authHeaders(), credentials: "include" });
+                if (usersRes.ok) {
+                    const usersList = await usersRes.json();
+                    const users = Array.isArray(usersList) ? usersList : [];
+                    users.forEach((u: any) => {
+                        const userId = String(u?.id);
+                        if (userId && !picOptionMap.has(userId)) {
+                            const userName = String(u?.label ?? u?.name ?? u?.fullName ?? u?.fullname ?? u?.username ?? u?.id ?? "");
+                            if (userName && userName.trim()) {
+                                picOptionMap.set(userId, { id: userId, label: userName.trim() });
+                            }
+                        }
+                    });
+                }
+            } catch (err) {
+                // Nếu lỗi khi fetch users, vẫn dùng PICs từ summary
+                console.warn("Failed to fetch all users for PIC filter:", err);
+            }
 
             // Map summary - đã có đầy đủ thông tin từ backend
             const normalized = summaries.map((item: any, idx: number) => {
@@ -2201,11 +2248,35 @@ const ImplementationTasksPage: React.FC = () => {
 
         // Filter by PIC
         if (hospitalPicFilter.length > 0) {
-            const selected = new Set(hospitalPicFilter);
-            list = list.filter((h) =>
-                (h.picDeploymentIds || []).some((id) => selected.has(String(id))) ||
-                (h.picDeploymentNames || []).some((name) => selected.has(name))
-            );
+            const selected = new Set(hospitalPicFilter.map(id => String(id).trim()));
+            // Tạo map từ picOptions để có thể lookup name từ ID
+            const picIdToNameMap = new Map<string, string>();
+            picOptions.forEach(opt => {
+                picIdToNameMap.set(String(opt.id).trim(), String(opt.label).trim());
+            });
+            
+            list = list.filter((h) => {
+                // Check by ID (so sánh với picDeploymentIds)
+                const picIds = (h.picDeploymentIds || []).map(id => String(id).trim());
+                const hasMatchingId = picIds.some((idStr) => selected.has(idStr));
+                
+                // Check by name (so sánh với picDeploymentNames)
+                const picNames = (h.picDeploymentNames || []).map(name => String(name).trim());
+                const hasMatchingName = picNames.some((nameStr) => selected.has(nameStr));
+                
+                // ✅ Check by maintenancePersonInChargeName (người phụ trách bảo trì)
+                const maintenancePicName = h.maintenancePersonInChargeName ? String(h.maintenancePersonInChargeName).trim() : "";
+                const hasMatchingMaintenancePic = maintenancePicName && (
+                    selected.has(maintenancePicName) || 
+                    // Cũng kiểm tra xem ID trong filter có match với name này không
+                    Array.from(selected).some(selectedValue => {
+                        const nameFromId = picIdToNameMap.get(selectedValue);
+                        return nameFromId && nameFromId === maintenancePicName;
+                    })
+                );
+                
+                return hasMatchingId || hasMatchingName || hasMatchingMaintenancePic;
+            });
         }
 
         const dir = hospitalSortDir === 'desc' ? -1 : 1;
