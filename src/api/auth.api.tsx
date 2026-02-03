@@ -88,8 +88,25 @@ export async function updateUserAccount(userId: number, payload: UserUpdateReque
   return data;
 }
 
+// =====================================
+// 🔹 Đổi mật khẩu
+// =====================================
+export type ChangePasswordRequestDTO = {
+  oldPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+};
 
-function setCookie(
+export async function changePassword(userId: number, payload: ChangePasswordRequestDTO) {
+  const url = `/api/v1/auth/change-password`;
+  const { data } = await api.post(url, payload, {
+    params: { userId },
+    headers: { "Content-Type": "application/json" },
+  });
+  return data;
+}
+
+export function setCookie(
   name: string,
   value: string,
   days = 7,
@@ -157,6 +174,9 @@ export async function resetPassword(data: ResetPasswordPayload) {
 // Clear all user data from storage
 // ==========================
 export const clearUserStorage = () => {
+  // Get userId before clearing (to remove user-specific Tet flag)
+  const userId = localStorage.getItem("userId") || sessionStorage.getItem("userId");
+  
   // Clear localStorage
   localStorage.removeItem("access_token");
   localStorage.removeItem("token");
@@ -165,6 +185,14 @@ export const clearUserStorage = () => {
   localStorage.removeItem("roles");
   localStorage.removeItem("user");
   localStorage.removeItem("userId");
+  
+  // Clear Tet celebration flag for this user (if userId exists)
+  if (userId) {
+    localStorage.removeItem(`tetCelebrationShown_${userId}`);
+  }
+  
+  // Also clear old format flag (backward compatibility)
+  localStorage.removeItem("tetCelebrationShown");
   
   // Clear sessionStorage
   sessionStorage.removeItem("access_token");
@@ -194,14 +222,32 @@ export const clearUserStorage = () => {
 // ==========================
 // Logout
 // ==========================
+// ==========================
+// Team Switching API
+// ==========================
+export type SwitchTeamRequestDTO = {
+  teamId: string;
+};
+
+export type SwitchTeamResponseDTO = {
+  success: boolean;
+  message: string;
+  newToken?: string; // Optional new JWT token
+};
+
+export async function switchTeam(payload: SwitchTeamRequestDTO): Promise<SwitchTeamResponseDTO> {
+  const { data } = await api.post<SwitchTeamResponseDTO>("/api/v1/auth/switch-team", payload);
+  return data;
+}
+
 export const logout = async () => {
   try {
     await api.get("/api/v1/auth/logout", { withCredentials: true });
   } catch (e) {
-    console.warn("Logout API error:", e);
+    // console.warn("Logout API error:", e);
   } finally {
     clearUserStorage();
-    console.log("User data cleared after logout");
+    // console.log("User data cleared after logout");
   }
 };
 

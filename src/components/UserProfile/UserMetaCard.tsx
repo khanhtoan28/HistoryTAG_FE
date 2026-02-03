@@ -48,6 +48,8 @@ export default function UserMetaCard() {
     DEV: "Lập trình viên",
     DEPLOYMENT: "Triển khai",
     MAINTENANCE: "Bảo hành, bảo trì",
+    SALES: "Kinh doanh",
+    CUSTOMER_SERVICE: "Chăm sóc khách hàng",
   };
 
   const name = user?.fullname && user.fullname !== "Chưa cập nhật"

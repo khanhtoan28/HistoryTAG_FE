@@ -55,31 +55,87 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   };
 
   const loadNotifications = async (limit = 50) => {
+    // ✅ Guard: chỉ gọi API khi có token và không ở trang auth
+    const token = getAuthToken();
+    const currentPath = window.location.pathname;
+    const isAuthPage = currentPath === '/signin' || 
+                      currentPath === '/signup' || 
+                      currentPath === '/forgot-password' || 
+                      currentPath === '/reset-password';
+    
+    if (!token || isAuthPage) {
+      return;
+    }
+    
     try {
       const safeLimit = Math.min(limit, MAX_NOTIFICATIONS);
       const list = await apiGetNotifications(safeLimit);
       // console.debug("[NotificationContext] loadNotifications got:", Array.isArray(list) ? list.length : typeof list);
       setNotifications(clampList(list || []));
-    } catch {
-      // ignore
+    } catch (error: any) {
+      // ✅ Ignore silent errors (401 khi chưa login)
+      if (error?.silent) return;
+      // ignore other errors
     }
   };
 
   const loadUnread = async () => {
+    // ✅ Guard: chỉ gọi API khi có token và không ở trang auth
+    const token = getAuthToken();
+    const currentPath = window.location.pathname;
+    const isAuthPage = currentPath === '/signin' || 
+                      currentPath === '/signup' || 
+                      currentPath === '/forgot-password' || 
+                      currentPath === '/reset-password';
+    
+    if (!token || isAuthPage) {
+      return;
+    }
+    
     try {
       const c = await apiGetUnreadCount();
       // console.debug("[NotificationContext] loadUnread got:", c);
       setUnreadCount(c || 0);
-    } catch {
-      // ignore
+    } catch (error: any) {
+      // ✅ Ignore silent errors (401 khi chưa login)
+      if (error?.silent) return;
+      // ignore other errors
     }
   };
 
   const markAsRead = async (id: number) => {
+    // ✅ Guard: chỉ gọi API khi có token và không ở trang auth
+    const token = getAuthToken();
+    const currentPath = window.location.pathname;
+    const isAuthPage = currentPath === '/signin' || 
+                      currentPath === '/signup' || 
+                      currentPath === '/forgot-password' || 
+                      currentPath === '/reset-password';
+    
+    if (!token || isAuthPage) {
+      // Vẫn update UI optimistically ngay cả khi không có token
+      setNotifications((prev) => {
+        const nxt = prev.map((n) => (n.id === id ? { ...n, read: true } : n));
+        return nxt;
+      });
+      setUnreadCount((c) => Math.max(0, c - 1));
+      return;
+    }
+    
     try {
       await apiMarkAsRead(id);
-    } catch {
-      // ignore server error but still update UI optimistically
+    } catch (error: any) {
+      // ✅ Ignore silent errors (401 khi chưa login)
+      if (error?.silent) {
+        // Vẫn update UI optimistically
+        setNotifications((prev) => {
+          const nxt = prev.map((n) => (n.id === id ? { ...n, read: true } : n));
+          return nxt;
+        });
+        setUnreadCount((c) => Math.max(0, c - 1));
+        return;
+      }
+      // ignore other server errors but still update UI optimistically
     }
     setNotifications((prev) => {
       const nxt = prev.map((n) => (n.id === id ? { ...n, read: true } : n));
@@ -151,12 +207,44 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     // console.log("[NotificationContext] useEffect started");
     
     const currentToken = getAuthToken();
-    if (!currentToken) {
-      // console.log("[NotificationContext] No token, skipping load");
+    const currentPath = window.location.pathname;
+    const isAuthPage = currentPath === '/signin' || 
+                      currentPath === '/signup' || 
+                      currentPath === '/forgot-password' || 
+                      currentPath === '/reset-password';
+    
+    // ✅ Không gọi API nếu:
+    // 1. Không có token
+    // 2. Đang ở trang auth (login/signup/forgot-password)
+    if (!currentToken || isAuthPage) {
+      // console.log("[NotificationContext] No token or on auth page, skipping load");
       clearNotifications();
       return;
     }
     
+    // ✅ Request browser notification permission when user is logged in
+    // This will show a popup asking for permission to show notifications
+    try {
+      if (typeof window !== "undefined" && "Notification" in window) {
+        if (Notification.permission === "default") {
+          // Request permission in background (non-blocking)
+          // User will see a browser popup asking for notification permission
+          Notification.requestPermission().then((permission) => {
+            if (permission === "granted") {
+              console.log("[NotificationContext] Browser notification permission granted");
+            } else if (permission === "denied") {
+              console.log("[NotificationContext] Browser notification permission denied");
+            }
+          }).catch((err) => {
+            console.debug("[NotificationContext] Failed to request notification permission:", err);
+          });
+        }
+      }
+    } catch (err) {
+      console.debug("[NotificationContext] Error checking notification support:", err);
+    }
+    
+    // ✅ Chỉ gọi API khi có token VÀ không ở trang auth
     // initial load
     loadUnread();
     loadNotifications(20);
@@ -214,7 +302,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const tryWS = () => {
       if (!wsUrl) return false;
       try {
-        const url = currentToken ? `${wsUrl}${wsUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(currentToken)}` : wsUrl;
+        // ✅ SECURITY FIX: Native WebSocket doesn't support custom headers
+        // For native WebSocket, we should use cookie-based auth or STOMP instead
+        // This fallback is kept for compatibility but should prefer STOMP
+        const url = wsUrl;
         const ws = new WebSocket(url as string);
         wsRef.current = ws;
 
@@ -273,16 +364,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const SockJSClass = sockjsMod.default;
         // console.log("[NotificationContext] Creating STOMP client...");
 
-        // Add token to URL for SockJS handshake (backend reads from query param)
-        const urlWithToken = currentToken 
-          ? `${stompUrl}${stompUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(currentToken)}`
-          : stompUrl;
+        // ✅ SECURITY FIX: Do NOT send token in query string (it will appear in logs)
+        // Token is sent via STOMP connectHeaders instead
+        // Backend will read from Authorization header during STOMP CONNECT frame
         let client;
         try {
           client = new StompClientClass({
             webSocketFactory: () => {
-              // console.log("[NotificationContext] Creating SockJS connection to:", urlWithToken);
-              return new SockJSClass(urlWithToken);
+              // console.log("[NotificationContext] Creating SockJS connection to:", stompUrl);
+              return new SockJSClass(stompUrl);
             },
             connectHeaders: currentToken ? { Authorization: `Bearer ${currentToken}` } : {},
             reconnectDelay: 5000,
@@ -385,7 +475,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           if (parsed && typeof parsed === "object") finalData = parsed;
         }
       } catch (e) {
-        console.warn("[NotificationContext] error normalizing payload.data:", e);
+        // console.warn("[NotificationContext] error normalizing payload.data:", e);
       }
 
       // If finalData still contains a data string, try parse recursively
@@ -480,7 +570,51 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       if (!connected) {
         // console.log("[NotificationContext] No realtime connection, falling back to polling");
         loadUnread();
+        
+        // ✅ Polling với guard để không poll khi token expired hoặc ở auth page
         pollInterval = window.setInterval(() => {
+          const currentToken = getAuthToken();
+          const currentPath = window.location.pathname;
+          const isAuthPage = currentPath === '/signin' || 
+                            currentPath === '/signup' || 
+                            currentPath === '/forgot-password' || 
+                            currentPath === '/reset-password';
+          
+          // ✅ Stop polling nếu không có token hoặc ở trang auth
+          if (!currentToken || isAuthPage) {
+            if (pollInterval) {
+              window.clearInterval(pollInterval);
+              pollInterval = null;
+            }
+            return;
+          }
+          
+          // ✅ Check token expired trước khi poll
+          try {
+            if (currentToken) {
+              const parts = currentToken.split('.');
+              if (parts.length >= 2) {
+                const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+                const exp = payload.exp;
+                if (exp && Date.now() >= exp * 1000) {
+                  // Token expired - stop polling
+                  if (pollInterval) {
+                    window.clearInterval(pollInterval);
+                    pollInterval = null;
+                  }
+                  return;
+                }
+              }
+            }
+          } catch {
+            // If parse fails, stop polling to be safe
+            if (pollInterval) {
+              window.clearInterval(pollInterval);
+              pollInterval = null;
+            }
+            return;
+          }
+          
           loadUnread();
         }, 10000);
       } else {

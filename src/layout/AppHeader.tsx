@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { useSidebar } from "../context/SidebarContext";
 import NotificationDropdown from "../components/header/NotificationDropdownNew";
 import UserDropdown from "../components/header/UserDropdown";
+import TeamSwitcher from "../components/TeamSwitcher";
 
 const AppHeader: React.FC = () => {
   const [isApplicationMenuOpen, setApplicationMenuOpen] = useState(false);
@@ -82,7 +83,7 @@ const AppHeader: React.FC = () => {
             {/* Cross Icon */}
           </button>
 
-          <Link to="/" className="lg:hidden">
+          {/* <Link to="/" className="lg:hidden">
             <img
               className="dark:hidden"
               src="./images/logo/logo.svg"
@@ -93,7 +94,7 @@ const AppHeader: React.FC = () => {
               src="./images/logo/logo.png"
               alt="Logo"
             />
-          </Link>
+          </Link> */}
 
           <button
             onClick={toggleApplicationMenu}
@@ -126,6 +127,8 @@ const AppHeader: React.FC = () => {
           <div className="flex items-center gap-2 2xsm:gap-3">
             <ThemeToggleButton />
             {/* <!-- Dark Mode Toggler --> */}
+            {/* <!-- Team Switcher --> */}
+            <TeamSwitcher />
             <NotificationDropdown />
             {/* <!-- Notification Menu Area --> */}
           </div>

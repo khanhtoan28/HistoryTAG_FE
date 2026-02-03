@@ -1,12 +1,16 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCardNew from "../SuperAdmin/TaskCardNew";
 import TaskNotes from "../../components/TaskNotes";
+import TicketsTab from "../../pages/CustomerCare/SubCustomerCare/TicketsTab";
 import { AiOutlineEye } from "react-icons/ai";
 import { toast } from "react-hot-toast";
-import { FiUser, FiMapPin, FiLink, FiClock, FiTag, FiPhone, FiCheckCircle } from "react-icons/fi";
+import { FiUser, FiMapPin, FiLink, FiClock, FiTag, FiPhone, FiCheckCircle, FiX } from "react-icons/fi";
+import { useWebSocket } from "../../contexts/WebSocketContext";
 import { isBusinessContractTaskName as isBusinessContractTask } from "../../utils/businessContract";
+import { getHospitalTickets } from "../../api/ticket.api";
+import { useAuth } from '../../contexts/AuthContext';
 
 // Helper function để parse PIC IDs từ additionalRequest
 function parsePicIdsFromAdditionalRequest(additionalRequest?: string | null, picDeploymentId?: number | null): number[] {
@@ -29,6 +33,9 @@ export type ImplementationTaskResponseDTO = {
   name: string;
   hospitalId: number | null;
   hospitalName?: string | null;
+  businessProjectId?: number | null;
+  businessProjectName?: string | null;
+  fromBusinessContract?: boolean | null;
   picDeploymentId: number | null;
   picDeploymentIds?: number[] | null;
   picDeploymentName?: string | null;
@@ -352,7 +359,11 @@ function RemoteSelect({
   }
 
   useEffect(() => {
-    if (!q.trim()) return;
+    // Chỉ search khi user nhập ít nhất 2 ký tự để tránh load quá nhiều dữ liệu
+    if (!q.trim() || q.trim().length < 2) {
+      setOptions([]);
+      return;
+    }
     let alive = true;
     const t = setTimeout(async () => {
       setLoading(true);
@@ -369,24 +380,24 @@ function RemoteSelect({
     };
   }, [q, fetchOptions]);
 
-  // Preload options when opened without typing
-  useEffect(() => {
-    let alive = true;
-    if (open && options.length === 0 && !q.trim()) {
-      (async () => {
-        setLoading(true);
-        try {
-          const res = await fetchOptions("");
-          if (alive) setOptions(res);
-        } finally {
-          if (alive) setLoading(false);
-        }
-      })();
-    }
-    return () => {
-      alive = false;
-    };
-  }, [open]);
+  // KHÔNG preload khi mở dropdown - chỉ load khi user nhập ít nhất 2 ký tự
+  // useEffect(() => {
+  //   let alive = true;
+  //   if (open && options.length === 0 && !q.trim()) {
+  //     (async () => {
+  //       setLoading(true);
+  //       try {
+  //         const res = await fetchOptions("");
+  //         if (alive) setOptions(res);
+  //       } finally {
+  //         if (alive) setLoading(false);
+  //       }
+  //     })();
+  //   }
+  //   return () => {
+  //     alive = false;
+  //   };
+  // }, [open]);
 
   return (
     <Field label={label} required={required}>
@@ -437,11 +448,12 @@ function RemoteSelect({
             className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
             onMouseLeave={() => setHighlight(-1)}
           >
-            {loading && <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>}
-            {!loading && filteredOptions.length === 0 && (
-              <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>
+            {filteredOptions.length === 0 && (
+              <div className="px-3 py-2 text-sm text-gray-500">
+                {q.trim().length < 2 ? "Nhập ít nhất 2 ký tự để tìm kiếm" : "Không tìm thấy"}
+              </div>
             )}
-            {!loading &&
+            {filteredOptions.length > 0 &&
               filteredOptions.map((opt, idx) => (
                 <div
                   key={opt.id}
@@ -487,6 +499,9 @@ function TaskFormModal({
   onSubmit: (payload: ImplementationTaskRequestDTO, id?: number) => Promise<void>;
   userTeam: string;
 }) {
+  const fromBusinessContract =
+    Boolean((initial as any)?.fromBusinessContract) ||
+    Boolean((initial as any)?.businessProjectId);
   const searchHospitals = useMemo(
     () => async (term: string) => {
       const url = `${API_ROOT}/api/v1/admin/hospitals/search?name=${encodeURIComponent(term)}`;
@@ -818,6 +833,7 @@ function TaskFormModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Field label="Tên công việc" required>
                 <TextInput
+                  disabled={fromBusinessContract}
                   value={model.name}
                   onChange={(e) => setModel((s) => ({ ...s, name: e.target.value }))}
                   placeholder="Nhập tên công việc"
@@ -831,7 +847,7 @@ function TaskFormModal({
                 fetchOptions={searchHospitals}
                 value={hospitalOpt}
                 onChange={setHospitalOpt}
-                disabled={lockHospital}
+                disabled={fromBusinessContract || lockHospital}
               />
 
               <div className="col-span-2">
@@ -1068,7 +1084,7 @@ function DetailModal({
         const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
 
         if (res.status === 401) {
-          console.warn('Admin batch API returned 401');
+          // console.warn('Admin batch API returned 401');
           setNeedRelogin(true);
           // fallback to User-<id>
           setPicNames(picIds.map((id) => ({ id, name: id === item.picDeploymentId && item.picDeploymentName ? item.picDeploymentName : `User-${id}` })));
@@ -1076,7 +1092,7 @@ function DetailModal({
         }
 
         if (!res.ok) {
-          console.warn(`Admin batch API returned ${res.status}`);
+          // console.warn(`Admin batch API returned ${res.status}`);
           // fallback per-id
           setPicNames(picIds.map((id) => ({ id, name: id === item.picDeploymentId && item.picDeploymentName ? item.picDeploymentName : `User-${id}` })));
           return;
@@ -1137,7 +1153,7 @@ function DetailModal({
           signal: controller.signal,
         });
         if (!res.ok) {
-          console.warn("GET my notes failed", res.status);
+          // console.warn("GET my notes failed", res.status);
           return;
         }
         const payload = await res.json();
@@ -1183,7 +1199,7 @@ function DetailModal({
           signal: controller.signal,
         });
         if (!res.ok) {
-          console.warn("GET all notes failed", res.status);
+          // console.warn("GET all notes failed", res.status);
           return;
         }
         const payload = await res.json();
@@ -1365,8 +1381,8 @@ function DetailModal({
           </div>
           {/* Additional request */}
           <div className="">
-            <p className="text-gray-500 mb-2">Yêu cầu bổ sung:</p>
-            <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px]">
+            <p className="text-gray-500 mb-2">Nội dung công việc:</p>
+            <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px] whitespace-pre-wrap break-words">
               {(() => {
                 const notes = (item as any).notes || item.additionalRequest || "";
                 // Loại bỏ phần [PIC_IDS: ...] khỏi hiển thị
@@ -1458,6 +1474,8 @@ function FilterToolbar({
   datalistOptions,
   actions,
   picFilter,
+  hospitalCodeSearch,
+  onHospitalCodeSearchChange,
 }: {
   mode: "tasks" | "hospitals";
   searchValue: string;
@@ -1472,6 +1490,8 @@ function FilterToolbar({
   datalistOptions?: Array<{ id: number | string; label: string }>;
   actions?: React.ReactNode;
   picFilter?: FilterToolbarPicFilterProps;
+  hospitalCodeSearch?: string;
+  onHospitalCodeSearchChange?: (value: string) => void;
 }) {
   const clearStatusFilter = () => {
     if (onStatusChange) {
@@ -1504,6 +1524,16 @@ function FilterToolbar({
                   <option key={opt.id ?? opt.label} value={opt.label} />
                 ))}
               </datalist>
+            )}
+
+            {mode === "hospitals" && hospitalCodeSearch !== undefined && onHospitalCodeSearchChange && (
+              <input
+                type="text"
+                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[180px] border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition dark:border-gray-700 dark:bg-gray-900"
+                placeholder="Tìm theo mã bệnh viện"
+                value={hospitalCodeSearch}
+                onChange={(e) => onHospitalCodeSearchChange(e.target.value)}
+              />
             )}
 
             {statusOptions && statusOptions.length > 0 && onStatusChange && (
@@ -1651,18 +1681,22 @@ const ImplementationTasksPage: React.FC = () => {
   const [size, setSize] = useState(10);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [enableItemAnimation, setEnableItemAnimation] = useState<boolean>(true);
+
+  const { subscribe } = useWebSocket();
+
   const [hospitalQuery, setHospitalQuery] = useState<string>("");
   const [hospitalOptions, setHospitalOptions] = useState<Array<{ id: number; label: string }>>([]);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<ImplementationTaskResponseDTO | null>(null);
   // hospital list view state (like SuperAdmin page)
   const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
-  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number | null; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean; personInChargeId?: number | null; personInChargeName?: string | null; hiddenPendingCount?: number; hiddenTaskCount?: number; acceptedFromBusiness?: boolean; hasBusinessPlaceholder?: boolean }>>([]);
+  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number | null; label: string; subLabel?: string; hospitalCode?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean; personInChargeId?: number | null; personInChargeName?: string | null; hiddenPendingCount?: number; hiddenTaskCount?: number; acceptedFromBusiness?: boolean; hasBusinessPlaceholder?: boolean; picDeploymentIds?: Array<string | number>; picDeploymentNames?: string[] }>>([]);
   const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
   const [hospitalPage, setHospitalPage] = useState<number>(0);
   const [hospitalSize, setHospitalSize] = useState<number>(20);
   const [selectedHospital, setSelectedHospital] = useState<string | null>(null);
   const [hospitalSearch, setHospitalSearch] = useState<string>("");
+  const [hospitalCodeSearch, setHospitalCodeSearch] = useState<string>("");
   const [hospitalStatusFilter, setHospitalStatusFilter] = useState<string>("");
   const [hospitalPicFilter, setHospitalPicFilter] = useState<string[]>([]);
   const [picFilterOpen, setPicFilterOpen] = useState(false);
@@ -1686,12 +1720,12 @@ const ImplementationTasksPage: React.FC = () => {
     }
   };
 
+  // ✅ Use AuthContext hook - Performance optimized với useMemo, reactive với token changes
+  const { isSuperAdmin, activeTeam } = useAuth();
   const currentUser = readStored<{ id?: number; username?: string; team?: string; roles?: unknown[] }>("user") || null;
-  const userRoles = (readStored<string[]>("roles") || (currentUser?.roles as string[] | undefined)) || [];
-  const userTeam = (currentUser?.team || "").toString().toUpperCase();
-  const isSuperAdmin = userRoles.some(
-    (r: any) => (typeof r === "string" ? r : r.roleName)?.toUpperCase() === "SUPERADMIN"
-  );
+  // Prefer activeTeam from JWT (new way), fallback to localStorage (old way)
+  const userTeam = (activeTeam || currentUser?.team || "").toString().toUpperCase();
+  // SUPERADMIN can always manage, DEPLOYMENT team can manage
   const canManage = isSuperAdmin || userTeam === "DEPLOYMENT";
 
   // Filter out tasks from Business that haven't been received yet
@@ -1717,6 +1751,11 @@ const ImplementationTasksPage: React.FC = () => {
   const [loadingPending, setLoadingPending] = useState(false);
   const pendingCountRef = useRef<number>(0);
   const lastPendingCountRef = useRef<number>(0);
+  const [showTicketsModal, setShowTicketsModal] = useState(false);
+  const [selectedHospitalIdForTickets, setSelectedHospitalIdForTickets] = useState<number | null>(null);
+  const [selectedHospitalNameForTickets, setSelectedHospitalNameForTickets] = useState<string | null>(null);
+  const [ticketOpenCounts, setTicketOpenCounts] = useState<Record<number, number>>({});
+  const [ticketCountLoading, setTicketCountLoading] = useState<Set<number>>(new Set());
 
   // Tính số task đã hoàn thành từ data đã được filter (trong trang hiện tại)
   const completedCountFromFiltered = useMemo(() => {
@@ -1774,6 +1813,53 @@ const ImplementationTasksPage: React.FC = () => {
     }
   }, [picFilterOpen]);
 
+  // ✅ Tự động set filter cho user hiện tại khi đăng nhập
+  const autoFilterSetRef = useRef<boolean>(false);
+  useEffect(() => {
+    // Chỉ set một lần khi picOptions đã load và filter chưa được set
+    if (autoFilterSetRef.current || hospitalPicFilter.length > 0 || picOptions.length === 0) {
+      return;
+    }
+
+    // Lấy userId hiện tại - thử nhiều cách
+    let userId: string | null = null;
+    
+    // Thử từ currentUser.id
+    if (currentUser?.id) {
+      userId = String(currentUser.id);
+    }
+    
+    // Nếu chưa có, thử từ localStorage/sessionStorage
+    if (!userId) {
+      userId = localStorage.getItem("userId") || sessionStorage.getItem("userId");
+    }
+    
+    // Nếu vẫn chưa có, thử parse từ currentUser object
+    if (!userId && currentUser && typeof currentUser === 'object') {
+      const userObj = currentUser as any;
+      if (userObj.userId) userId = String(userObj.userId);
+      if (!userId && userObj.id) userId = String(userObj.id);
+    }
+
+    if (!userId) return;
+
+    // Normalize userId (trim và đảm bảo là string)
+    userId = String(userId).trim();
+    if (!userId) return;
+
+    // Kiểm tra xem userId có trong picOptions không (so sánh cả string và number)
+    const userOption = picOptions.find(opt => {
+      const optId = String(opt.id).trim();
+      return optId === userId || optId === String(Number(userId)) || String(Number(optId)) === userId;
+    });
+    
+    if (userOption) {
+      // Sử dụng ID chính xác từ picOptions
+      setHospitalPicFilter([userOption.id]);
+      autoFilterSetRef.current = true;
+    }
+  }, [picOptions, currentUser, hospitalPicFilter.length]);
+
   const handleNewTaskClick = async () => {
     if (!canManage) return;
     if (!showHospitalList && selectedHospital) {
@@ -1801,7 +1887,7 @@ const ImplementationTasksPage: React.FC = () => {
     </button>
   ) : (
     <button
-      disabled
+      hidden
       className="rounded-xl bg-gray-200 text-gray-500 px-5 py-2 shadow-sm"
       title="Không có quyền"
       type="button"
@@ -1845,6 +1931,7 @@ const ImplementationTasksPage: React.FC = () => {
       { value: "notCompleted", label: "Chưa hoàn thành hết" },
       { value: "noneCompleted", label: "Chưa có task hoàn thành" },
       { value: "transferred", label: "Đã chuyển sang bảo trì" },
+      { value: "hasOpenTickets", label: "Có tickets chưa hoàn thành" },
     ],
     []
   );
@@ -2050,26 +2137,11 @@ const ImplementationTasksPage: React.FC = () => {
         // Skip if modal is open or component unmounted
         if (!mounted || pendingOpen) return;
         const newCount = await fetchPendingGroups();
-        const last = lastPendingCountRef.current || 0;
-        if (!mounted || pendingOpen) return;
-        if (newCount > last) {
-          const diff = newCount - last;
-          // show in-app toast
-          toast.success(`Có ${diff} công việc chờ mới cần tiếp nhận`);
-          // show browser notification if permitted
-          try {
-            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-              new Notification('Công việc chờ mới', { body: `Có ${diff} công việc chờ cần tiếp nhận`, silent: false });
-            }
-          } catch (err) {
-            console.debug('Browser notification failed', err);
-          }
-        }
         lastPendingCountRef.current = newCount;
       } catch (err) {
         console.debug('Polling fetchPendingGroups failed', err);
       }
-    }, 8000);
+    }, 60000); // ✅ Đã có WebSocket, giảm polling xuống 60s làm fallback
 
     return () => {
       mounted = false;
@@ -2077,6 +2149,30 @@ const ImplementationTasksPage: React.FC = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingOpen]);
+
+  // ✅ WebSocket subscription: Cập nhật danh sách chờ khi có thông báo
+  useEffect(() => {
+    const unsubscribe = subscribe("/topic/implementation/pending-changed", (payload) => {
+      console.log("WebSocket: Pending implementation tasks changed", payload);
+      fetchPendingGroups();
+      if (!showHospitalList && selectedHospital) {
+        fetchList();
+      }
+    });
+    return () => unsubscribe();
+  }, [subscribe, fetchPendingGroups, fetchList, showHospitalList, selectedHospital]);
+
+  // ✅ WebSocket subscription: Cập nhật danh sách chờ khi có thông báo
+  useEffect(() => {
+    const unsubscribe = subscribe("/topic/implementation/pending-changed", (payload) => {
+      console.log("WebSocket: Pending implementation tasks changed", payload);
+      fetchPendingGroups();
+      if (!showHospitalList && selectedHospital) {
+        fetchList();
+      }
+    });
+    return () => unsubscribe();
+  }, [subscribe, fetchPendingGroups, fetchList, showHospitalList, selectedHospital]);
 
   // when page or size changes, refetch
   useEffect(() => {
@@ -2193,11 +2289,12 @@ const ImplementationTasksPage: React.FC = () => {
         throw new Error(`Failed to fetch hospitals: ${res.status}`);
       }
       const hospitals = await res.json();
+      console.log("[Admin Implementation] Hospitals response sample:", hospitals?.[0]); // Debug: Check if hospitalCode exists in response
 
       // Parse task count from subLabel (format: "Province - X tasks" or "X tasks")
-      const baseList = (Array.isArray(hospitals) ? hospitals : []).map((hospital: { id: number; label: string; subLabel?: string; transferredToMaintenance?: boolean; acceptedByMaintenance?: boolean; personInChargeId?: number | null; personInChargeName?: string | null }) => {
+      const baseList = (Array.isArray(hospitals) ? hospitals : []).map((hospital: { id: number; label: string; subLabel?: string; hospitalCode?: string; transferredToMaintenance?: boolean; acceptedByMaintenance?: boolean; personInChargeId?: number | null; personInChargeName?: string | null }) => {
         let taskCount = 0;
-        let province = hospital.subLabel || "";
+        let province = "";
 
         // Parse task count from subLabel
         if (hospital.subLabel) {
@@ -2205,13 +2302,23 @@ const ImplementationTasksPage: React.FC = () => {
           if (match) {
             taskCount = parseInt(match[1], 10);
             // Extract province (everything before " - X tasks")
-            province = hospital.subLabel.replace(/\s*-\s*\d+\s+tasks?/i, "").trim();
+            // If subLabel contains " - ", it means there's a province
+            if (hospital.subLabel.includes(" - ")) {
+              province = hospital.subLabel.replace(/\s*-\s*\d+\s+tasks?/i, "").trim();
+            } else {
+              // If no " - ", it means subLabel is just "X tasks" (no province)
+              province = "";
+            }
+          } else {
+            // No task count pattern found, treat entire subLabel as province
+            province = hospital.subLabel.trim();
           }
         }
 
         return {
           ...hospital,
-          subLabel: province, // Keep only province without task count
+          subLabel: province || undefined, // Keep only province without task count, undefined if empty
+          hospitalCode: (hospital.hospitalCode || (hospital as any).hospital_code || ""), // Support both camelCase and snake_case
           taskCount: taskCount,
           nearDueCount: 0, // Initialize to 0 - will be calculated in augment()
           overdueCount: 0, // Initialize to 0 - will be calculated in augment()
@@ -2247,8 +2354,9 @@ const ImplementationTasksPage: React.FC = () => {
         })
       );
 
-      // Fetch all tasks (limited) to compute near due/overdue per hospital
-      const allParams = new URLSearchParams({ page: "0", size: "2000", sortBy: "id", sortDir: "asc" });
+      // ✅ Tối ưu: Fetch tasks chưa completed để tính near due/overdue (giảm từ 2000 xuống 500)
+      // Fetch tasks chưa completed để tính toán nearDueCount và overdueCount
+      const allParams = new URLSearchParams({ page: "0", size: "500", sortBy: "id", sortDir: "asc" });
       const allRes = await fetch(`${API_ROOT}/api/v1/admin/implementation/tasks?${allParams.toString()}`, { method: 'GET', headers: authHeaders(), credentials: 'include' });
       const allPayload = allRes.ok ? await allRes.json() : [];
       const allItems = Array.isArray(allPayload?.content) ? allPayload.content : Array.isArray(allPayload) ? allPayload : [];
@@ -2310,15 +2418,36 @@ const ImplementationTasksPage: React.FC = () => {
       });
 
       // Aggregate by hospitalName
-      const acc = new Map<string, { id: number | null; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number; transferredCount: number; acceptedByMaintenanceCount: number; hiddenPendingCount: number; hiddenTaskCount: number }>();
+      const acc = new Map<string, { id: number | null; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number; transferredCount: number; acceptedByMaintenanceCount: number; hiddenPendingCount: number; hiddenTaskCount: number; picDeploymentIds: Set<string | number>; picDeploymentNames: Set<string> }>();
       for (const it of visibleItems) {
         const name = (it.hospitalName || "").toString().trim() || "—";
         const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
         const key = hospitalId != null ? `id-${hospitalId}` : `name-${name}`;
-        const current = acc.get(key) || { id: hospitalId, label: name, subLabel: "", taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0, transferredCount: 0, acceptedByMaintenanceCount: 0, hiddenPendingCount: 0, hiddenTaskCount: 0 };
+        const current = acc.get(key) || { id: hospitalId, label: name, subLabel: "", taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0, transferredCount: 0, acceptedByMaintenanceCount: 0, hiddenPendingCount: 0, hiddenTaskCount: 0, picDeploymentIds: new Set<string | number>(), picDeploymentNames: new Set<string>() };
         if (current.id == null && hospitalId != null) current.id = hospitalId;
         if (!current.label && name) current.label = name;
         current.taskCount += 1;
+        
+        // ✅ Collect PICs từ task
+        if (it.picDeploymentIds && Array.isArray(it.picDeploymentIds)) {
+          it.picDeploymentIds.forEach((picId: any) => {
+            if (picId != null) current.picDeploymentIds.add(picId);
+          });
+        }
+        if (it.picDeploymentNames && Array.isArray(it.picDeploymentNames)) {
+          it.picDeploymentNames.forEach((picName: any) => {
+            const nameStr = String(picName || "").trim();
+            if (nameStr) current.picDeploymentNames.add(nameStr);
+          });
+        }
+        // Fallback: nếu không có picDeploymentIds nhưng có picDeploymentId
+        if (!it.picDeploymentIds && it.picDeploymentId) {
+          current.picDeploymentIds.add(it.picDeploymentId);
+        }
+        if (!it.picDeploymentNames && it.picDeploymentName) {
+          const nameStr = String(it.picDeploymentName || "").trim();
+          if (nameStr) current.picDeploymentNames.add(nameStr);
+        }
         const taskStatus = normalizeStatus(it.status);
         if (taskStatus === 'COMPLETED') current.acceptedCount += 1;
         // Count transferred tasks
@@ -2359,7 +2488,7 @@ const ImplementationTasksPage: React.FC = () => {
           pendingTasksFromBusiness = Array.isArray(pendingList) ? pendingList : [];
         }
       } catch (err) {
-        console.warn('Failed to fetch pending tasks:', err);
+        // console.warn('Failed to fetch pending tasks:', err);
       }
 
       // Count hidden (pending Business) tasks per hospital from hiddenItems
@@ -2371,6 +2500,26 @@ const ImplementationTasksPage: React.FC = () => {
         if (current) {
           current.hiddenPendingCount += 1;
           current.hiddenTaskCount += 1;
+          // ✅ Collect PICs từ hidden task
+          if (it.picDeploymentIds && Array.isArray(it.picDeploymentIds)) {
+            it.picDeploymentIds.forEach((picId: any) => {
+              if (picId != null) current.picDeploymentIds.add(picId);
+            });
+          }
+          if (it.picDeploymentNames && Array.isArray(it.picDeploymentNames)) {
+            it.picDeploymentNames.forEach((picName: any) => {
+              const nameStr = String(picName || "").trim();
+              if (nameStr) current.picDeploymentNames.add(nameStr);
+            });
+          }
+          // Fallback: nếu không có picDeploymentIds nhưng có picDeploymentId
+          if (!it.picDeploymentIds && it.picDeploymentId) {
+            current.picDeploymentIds.add(it.picDeploymentId);
+          }
+          if (!it.picDeploymentNames && it.picDeploymentName) {
+            const nameStr = String(it.picDeploymentName || "").trim();
+            if (nameStr) current.picDeploymentNames.add(nameStr);
+          }
         }
       }
 
@@ -2420,8 +2569,31 @@ const ImplementationTasksPage: React.FC = () => {
           transferredCount: 0,
           acceptedByMaintenanceCount: 0,
           hiddenPendingCount: 0,
-          hiddenTaskCount: 0
+          hiddenTaskCount: 0,
+          picDeploymentIds: new Set<string | number>(),
+          picDeploymentNames: new Set<string>()
         };
+        
+        // ✅ Collect PICs từ pending task
+        if (it.picDeploymentIds && Array.isArray(it.picDeploymentIds)) {
+          it.picDeploymentIds.forEach((picId: any) => {
+            if (picId != null) current.picDeploymentIds.add(picId);
+          });
+        }
+        if (it.picDeploymentNames && Array.isArray(it.picDeploymentNames)) {
+          it.picDeploymentNames.forEach((picName: any) => {
+            const nameStr = String(picName || "").trim();
+            if (nameStr) current.picDeploymentNames.add(nameStr);
+          });
+        }
+        // Fallback: nếu không có picDeploymentIds nhưng có picDeploymentId
+        if (!it.picDeploymentIds && it.picDeploymentId) {
+          current.picDeploymentIds.add(it.picDeploymentId);
+        }
+        if (!it.picDeploymentNames && it.picDeploymentName) {
+          const nameStr = String(it.picDeploymentName || "").trim();
+          if (nameStr) current.picDeploymentNames.add(nameStr);
+        }
         if (current.id == null && hospitalId != null) current.id = hospitalId;
         if (!current.label && name) current.label = name;
         current.hiddenPendingCount += 1;
@@ -2471,6 +2643,9 @@ const ImplementationTasksPage: React.FC = () => {
             hiddenTaskCount: hiddenTaskCount,
             acceptedFromBusiness: acceptedFromBusiness,
             hasBusinessPlaceholder: Boolean(businessInfo?.hasGeneratedTask) || hiddenTaskCount > 0,
+            // ✅ Merge PICs từ aggregated
+            picDeploymentIds: aggregated ? Array.from(aggregated.picDeploymentIds) : undefined,
+            picDeploymentNames: aggregated ? Array.from(aggregated.picDeploymentNames) : undefined,
             // Transfer status đã có từ backend endpoint
           };
         })
@@ -2478,7 +2653,7 @@ const ImplementationTasksPage: React.FC = () => {
 
       // Thêm các bệnh viện chỉ có pending tasks (không có trong baseList)
       // Đảm bảo TẤT CẢ các bệnh viện trong pendingTasksFromBusiness đều được hiển thị
-      const hospitalsWithOnlyPending: Array<{ id: number | null; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean; personInChargeId?: number | null; personInChargeName?: string | null; hiddenPendingCount?: number; hiddenTaskCount?: number; acceptedFromBusiness?: boolean; hasBusinessPlaceholder?: boolean }> = [];
+      const hospitalsWithOnlyPending: Array<{ id: number | null; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean; personInChargeId?: number | null; personInChargeName?: string | null; hiddenPendingCount?: number; hiddenTaskCount?: number; acceptedFromBusiness?: boolean; hasBusinessPlaceholder?: boolean; picDeploymentIds?: Array<string | number>; picDeploymentNames?: string[] }> = [];
       const addedHospitalKeys = new Set<string>();
 
       // First, add hospitals from acc that are not in baseList
@@ -2510,6 +2685,9 @@ const ImplementationTasksPage: React.FC = () => {
               personInChargeName: null,
               acceptedFromBusiness: acceptedFromBusiness,
               hasBusinessPlaceholder: Boolean(businessInfo?.hasGeneratedTask) || hiddenPendingCount > 0,
+              // ✅ Merge PICs từ aggregated
+              picDeploymentIds: Array.from(aggregated.picDeploymentIds),
+              picDeploymentNames: Array.from(aggregated.picDeploymentNames),
             });
           }
         }
@@ -2741,6 +2919,10 @@ const ImplementationTasksPage: React.FC = () => {
     let list = hospitalsWithTasks;
     const q = hospitalSearch.trim().toLowerCase();
     if (q) list = list.filter(h => h.label.toLowerCase().includes(q) || (h.subLabel || '').toLowerCase().includes(q));
+    
+    // Filter by hospital code
+    const codeQ = hospitalCodeSearch.trim().toLowerCase();
+    if (codeQ) list = list.filter(h => (h.hospitalCode || '').toLowerCase().includes(codeQ));
 
     // Apply status filter
     if (hospitalStatusFilter === 'hasCompleted') {
@@ -2751,13 +2933,71 @@ const ImplementationTasksPage: React.FC = () => {
       list = list.filter(h => (h.acceptedCount || 0) === 0);
     } else if (hospitalStatusFilter === 'transferred') {
       list = list.filter(h => h.allTransferred === true);
+    } else if (hospitalStatusFilter === 'hasOpenTickets') {
+      list = list.filter(h => h.id && (ticketOpenCounts[h.id] ?? 0) > 0);
     }
 
-    // Apply PIC filter - filter by personInChargeId from hospital summary
+    // Apply PIC filter - filter by picDeploymentIds/picDeploymentNames from tasks (giống bên bảo trì)
     if (hospitalPicFilter.length > 0) {
-      list = list.filter(h => {
-        if (!h.personInChargeId) return false;
-        return hospitalPicFilter.includes(String(h.personInChargeId));
+      // ✅ Normalize selected IDs - tạo Set với cả string và number format để match được cả hai
+      const selectedStrings = new Set<string>();
+      const selectedNumbers = new Set<number>();
+      hospitalPicFilter.forEach(id => {
+        const idStr = String(id).trim();
+        const idNum = Number(id);
+        selectedStrings.add(idStr);
+        if (!isNaN(idNum) && idNum > 0) {
+          selectedNumbers.add(idNum);
+          // Thêm cả number dạng string để match
+          selectedStrings.add(String(idNum));
+        }
+      });
+      
+      // Tạo map từ picOptions để có thể lookup name từ ID và ngược lại
+      const picIdToNameMap = new Map<string, string>();
+      const picNameToIdMap = new Map<string, string>();
+      picOptions.forEach(opt => {
+        const idStr = String(opt.id).trim();
+        const nameStr = String(opt.label).trim();
+        picIdToNameMap.set(idStr, nameStr);
+        picNameToIdMap.set(nameStr, idStr);
+      });
+
+      list = list.filter((h) => {
+        // Check by ID (so sánh với picDeploymentIds) - normalize cả hai bên
+        const picIds = h.picDeploymentIds || [];
+        const hasMatchingId = picIds.some((id: any) => {
+          // So sánh cả string và number format
+          const idStr = String(id).trim();
+          const idNum = Number(id);
+          return selectedStrings.has(idStr) || 
+                 (!isNaN(idNum) && idNum > 0 && selectedNumbers.has(idNum)) ||
+                 (!isNaN(idNum) && idNum > 0 && selectedStrings.has(String(idNum)));
+        });
+        
+        // Check by name (so sánh với picDeploymentNames) - cần convert name sang ID trước
+        const picNames = (h.picDeploymentNames || []).map(name => String(name).trim());
+        const hasMatchingName = picNames.some((nameStr) => {
+          // Tìm ID từ name, rồi check ID đó có trong selected không
+          const idFromName = picNameToIdMap.get(nameStr);
+          if (!idFromName) return false;
+          // Check cả string và number format
+          const idNum = Number(idFromName);
+          return selectedStrings.has(idFromName) || 
+                 (!isNaN(idNum) && idNum > 0 && selectedNumbers.has(idNum)) ||
+                 (!isNaN(idNum) && idNum > 0 && selectedStrings.has(String(idNum)));
+        });
+        
+        // Fallback: Check by personInChargeId nếu không có picDeploymentIds
+        const hasMatchingPersonInCharge = h.personInChargeId && (() => {
+          const picIdStr = String(h.personInChargeId).trim();
+          const picIdNum = Number(h.personInChargeId);
+          return selectedStrings.has(picIdStr) || 
+                 (!isNaN(picIdNum) && picIdNum > 0 && selectedNumbers.has(picIdNum)) ||
+                 (!isNaN(picIdNum) && picIdNum > 0 && selectedStrings.has(String(picIdNum)));
+        })();
+        
+        return hasMatchingId || hasMatchingName || hasMatchingPersonInCharge;
       });
     }
 
@@ -2774,7 +3014,60 @@ const ImplementationTasksPage: React.FC = () => {
       return a.label.localeCompare(b.label) * dir;
     });
     return list;
-  }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir]);
+  }, [hospitalsWithTasks, hospitalSearch, hospitalCodeSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir, ticketOpenCounts, picOptions]);
+
+  const pagedHospitals = useMemo(() => {
+    return filteredHospitals.slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize);
+  }, [filteredHospitals, hospitalPage, hospitalSize]);
+
+  const getOpenTicketCount = useCallback((tickets: Array<{ status?: string }>) => {
+    return tickets.filter((t) => t.status !== "HOAN_THANH").length;
+  }, []);
+
+  const updateTicketOpenCount = useCallback((hospitalId: number, tickets: Array<{ status?: string }>) => {
+    setTicketOpenCounts((prev) => {
+      const newCount = getOpenTicketCount(tickets);
+      // Chỉ update nếu count thay đổi để tránh re-render không cần thiết
+      if (prev[hospitalId] === newCount) return prev;
+      return {
+        ...prev,
+        [hospitalId]: newCount,
+      };
+    });
+  }, [getOpenTicketCount]);
+
+  const handleTicketsChange = useCallback((tickets: Array<{ status?: string }>) => {
+    if (selectedHospitalIdForTickets) {
+      updateTicketOpenCount(selectedHospitalIdForTickets, tickets);
+    }
+  }, [selectedHospitalIdForTickets, updateTicketOpenCount]);
+
+  const loadTicketOpenCount = useCallback(async (hospitalId: number) => {
+    if (!hospitalId || hospitalId <= 0) return;
+    if (typeof ticketOpenCounts[hospitalId] === "number") return;
+    if (ticketCountLoading.has(hospitalId)) return;
+    setTicketCountLoading((prev) => new Set(prev).add(hospitalId));
+    try {
+      const tickets = await getHospitalTickets(hospitalId);
+      updateTicketOpenCount(hospitalId, tickets);
+    } catch {
+      // ignore errors to avoid noisy UI; badge just won't show
+    } finally {
+      setTicketCountLoading((prev) => {
+        const next = new Set(prev);
+        next.delete(hospitalId);
+        return next;
+      });
+    }
+  }, [ticketCountLoading, ticketOpenCounts, updateTicketOpenCount]);
+
+  useEffect(() => {
+    if (!showHospitalList) return;
+    const ids = pagedHospitals.map((h) => h.id).filter((id): id is number => typeof id === "number" && id > 0);
+    ids.forEach((id) => {
+      void loadTicketOpenCount(id);
+    });
+  }, [pagedHospitals, showHospitalList, loadTicketOpenCount]);
 
   useEffect(() => {
     if (!showHospitalList && selectedHospital) {
@@ -2901,6 +3194,11 @@ const ImplementationTasksPage: React.FC = () => {
     placeholder: "Tìm theo tên bệnh viện / tỉnh",
     onSearchChange: (value: string) => {
       setHospitalSearch(value);
+      setHospitalPage(0);
+    },
+    hospitalCodeSearch: hospitalCodeSearch,
+    onHospitalCodeSearchChange: (value: string) => {
+      setHospitalCodeSearch(value);
       setHospitalPage(0);
     },
     statusValue: hospitalStatusFilter,
@@ -3036,15 +3334,15 @@ const ImplementationTasksPage: React.FC = () => {
                           <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã bệnh viện</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/Thành phố</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phụ trách chính</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phụ trách triển khai</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượng task</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                          {filteredHospitals
-                            .slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize)
+                          {pagedHospitals
                             .map((hospital, index) => {
                               const longName = (hospital.label || "").length > 32;
                               return (
@@ -3063,6 +3361,7 @@ const ImplementationTasksPage: React.FC = () => {
                                       </div>
                                     </div>
                                   </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.hospitalCode || "—"}</td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.subLabel || "—"}</td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.personInChargeName || "—"}</td>
                                   <td className="px-6 py-6 whitespace-nowrap text-sm align-top">
@@ -3093,6 +3392,35 @@ const ImplementationTasksPage: React.FC = () => {
                                         className="p-2 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition" title="Xem công việc"
                                       >
                                         <AiOutlineEye className="text-lg" />
+                                      </button>
+                                      <button
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          let finalHospitalId: number | null = null;
+                                          if (hospital.id && hospital.id > 0) {
+                                            finalHospitalId = hospital.id;
+                                          } else {
+                                            const resolvedId = await resolveHospitalIdByName(hospital.label);
+                                            if (resolvedId) finalHospitalId = resolvedId;
+                                          }
+
+                                          if (finalHospitalId && finalHospitalId > 0) {
+                                            setSelectedHospitalIdForTickets(finalHospitalId);
+                                            setSelectedHospitalNameForTickets(hospital.label);
+                                            setShowTicketsModal(true);
+                                          } else {
+                                            toast.error("Không thể tìm thấy ID bệnh viện hợp lệ");
+                                          }
+                                        }}
+                                        className="relative p-2 rounded-full text-gray-500 hover:text-purple-600 hover:bg-purple-50 transition"
+                                        title="Xem danh sách tickets"
+                                      >
+                                        <FiTag className="text-lg" />
+                                        {hospital.id && (ticketOpenCounts[hospital.id] ?? 0) > 0 && (
+                                          <span className="absolute -right-1 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
+                                            {ticketOpenCounts[hospital.id]}
+                                          </span>
+                                        )}
                                       </button>
                                       {canManage && (hospital.taskCount || 0) > 0 && (hospital.acceptedCount || 0) === (hospital.taskCount || 0) && !hospital.allTransferred && (
                                         <button
@@ -3458,6 +3786,62 @@ const ImplementationTasksPage: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Tickets Modal */}
+      <AnimatePresence>
+        {showTicketsModal && selectedHospitalIdForTickets && (
+          <motion.div
+            className="fixed inset-0 z-[120] flex items-center justify-center p-4 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+          >
+            <motion.div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setShowTicketsModal(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+            />
+            <motion.div
+              className="relative z-[121] w-full max-w-6xl rounded-2xl bg-white shadow-2xl border border-gray-200 dark:bg-gray-800 dark:border-gray-700 max-h-[90vh] overflow-y-auto"
+              initial={{ opacity: 0, scale: 0.98, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: 8 }}
+              transition={{ duration: 0.18 }}
+            >
+              <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Tickets của {selectedHospitalNameForTickets || hospitalsWithTasks.find(h => h.id === selectedHospitalIdForTickets)?.label || "Bệnh viện"}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowTicketsModal(false);
+                    setSelectedHospitalIdForTickets(null);
+                    setSelectedHospitalNameForTickets(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
+                >
+                  <FiX className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="p-6">
+                {selectedHospitalIdForTickets ? (
+                  <TicketsTab
+                    hospitalId={selectedHospitalIdForTickets}
+                    onTicketsChange={handleTicketsChange}
+                  />
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    Đang tải thông tin bệnh viện...
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

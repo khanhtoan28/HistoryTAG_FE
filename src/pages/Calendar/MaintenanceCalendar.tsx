@@ -130,9 +130,56 @@ const MaintenanceCalendar: React.FC = () => {
     const loadTeamMembers = async () => {
       setLoadingMembers(true);
       try {
-        // Load users from MAINTENANCE team
+        // ✅ Check if user is SUPERADMIN before calling superadmin API
+        const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
+        const roles = rolesStr ? JSON.parse(rolesStr) : [];
+        const isSuperAdmin = Array.isArray(roles) && roles.some((r: string) => 
+          r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin"
+        );
+
+        if (isSuperAdmin) {
+          // ✅ SUPERADMIN: dùng superadmin API
         const users = await filterUsers({ team: "MAINTENANCE" });
-        setTeamMembers(users || []);
+          // ✅ Map để đảm bảo đầy đủ required fields (username là required)
+          const mappedUsers = (users || []).map((u: any) => ({
+            id: u.id,
+            username: u.username ?? `user_${u.id}`, // Required field
+            fullname: u.fullname ?? u.label ?? null,
+            email: u.email ?? u.subLabel ?? null,
+            phone: u.phone ?? null,
+            status: u.status ?? null,
+            avatar: u.avatar ?? null,
+            address: u.address ?? null,
+            department: u.department ?? null,
+            team: u.team ?? null,
+            roles: u.roles ?? null,
+          }));
+          setTeamMembers(mappedUsers);
+        } else {
+          // ✅ ADMIN: dùng admin API để search users theo team
+          const API_BASE = import.meta.env.VITE_API_URL ?? "";
+          const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+          const params = new URLSearchParams({ team: "MAINTENANCE" });
+          const res = await fetch(`${API_BASE}/api/v1/admin/users/search?${params.toString()}`, {
+            headers: {
+              Authorization: token ? `Bearer ${token}` : "",
+              Accept: "application/json",
+            },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            // ✅ Map từ EntitySelectDTO format sang UserResponseDTO format với đầy đủ required fields
+            const users = Array.isArray(data) ? data.map((u: any) => ({
+              id: u.id,
+              username: u.label?.toLowerCase().replace(/\s+/g, '_') || `user_${u.id}`, // Generate username từ label hoặc fallback
+              fullname: u.label || null,
+              email: u.subLabel || null,
+            })) : [];
+            setTeamMembers(users);
+          } else {
+            setTeamMembers([]);
+          }
+        }
       } catch (error) {
         console.error("Error loading team members:", error);
         setTeamMembers([]);
@@ -473,13 +520,13 @@ const MaintenanceCalendar: React.FC = () => {
   return (
     <>
       <PageMeta
-        title="Lịch Team Bảo Hành | TailAdmin"
-        description="Lịch làm việc của team bảo hành"
+        title="Lịch Team bảo trì | TailAdmin"
+        description="Lịch làm việc của team bảo trì"
       />
       <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
-            Lịch Team Bảo Hành
+            Lịch Team bảo trì
           </h2>
         </div>
         <style>{`

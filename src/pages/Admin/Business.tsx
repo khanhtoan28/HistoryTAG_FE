@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { searchHardware, searchHospitals, createBusiness, getBusinesses, updateBusiness, deleteBusiness, getBusinessById, getHardwareById, getBusinessPicOptions } from '../../api/business.api';
 import { getAllUsers } from '../../api/superadmin.api';
 import api from '../../api/client';
+import { toast as hotToast } from 'react-hot-toast';
 import {
   PlusIcon,
   PencilIcon,
@@ -26,26 +27,11 @@ import { normalizeBusinessContractName } from '../../utils/businessContract';
 
 type ITUserOption = { id: number; name: string; phone?: string | null };
 
+import { useAuth } from '../../contexts/AuthContext';
+
 const BusinessPage: React.FC = () => {
-  // read roles from either localStorage or sessionStorage (some flows store roles in sessionStorage)
-  const rolesRaw = localStorage.getItem('roles') || sessionStorage.getItem('roles') || '[]';
-  const roles = JSON.parse(rolesRaw);
-  const isAdmin = roles.some((r: unknown) => {
-    if (typeof r === 'string') return r.toUpperCase() === 'ADMIN' || r.toUpperCase() === 'SUPERADMIN';
-    if (r && typeof r === 'object') {
-      const roleName = (r as Record<string, unknown>).roleName;
-      if (typeof roleName === 'string') return roleName.toUpperCase() === 'ADMIN' || roleName.toUpperCase() === 'SUPERADMIN';
-    }
-    return false;
-  });
-  const isSuperAdmin = roles.some((r: unknown) => {
-    if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
-    if (r && typeof r === 'object') {
-      const roleName = (r as Record<string, unknown>).roleName ?? (r as Record<string, unknown>).role_name ?? (r as Record<string, unknown>).role;
-      if (typeof roleName === 'string') return roleName.toUpperCase() === 'SUPERADMIN';
-    }
-    return false;
-  });
+  // ✅ Use AuthContext hook - Performance optimized với useMemo, reactive với token changes
+  const { roles, isAdmin, isSuperAdmin } = useAuth();
   
   // Read stored user (may contain team information)
   const storedUserRaw = localStorage.getItem('user') || sessionStorage.getItem('user');
@@ -66,6 +52,7 @@ const BusinessPage: React.FC = () => {
   const [selectedHardwareId, setSelectedHardwareId] = useState<number | null>(null);
   const [selectedHardwarePrice, setSelectedHardwarePrice] = useState<number | null>(null);
   const [unitPrice, setUnitPrice] = useState<number | ''>('');
+  const [unitPriceNet, setUnitPriceNet] = useState<number | ''>('');
   const [selectedHospitalId, setSelectedHospitalId] = useState<number | null>(null);
   const [selectedHospitalPhone, setSelectedHospitalPhone] = useState<string | null>(null);
   const [businessPicOptionsState, setBusinessPicOptionsState] = useState<Array<{ id: number; label: string; subLabel?: string; phone?: string | null }>>([]);
@@ -82,6 +69,11 @@ const BusinessPage: React.FC = () => {
   const [statusValue, setStatusValue] = useState<string>('CARING');
   const [startDateValue, setStartDateValue] = useState<string>('');
   const [completionDateValue, setCompletionDateValue] = useState<string>('');
+  const [warrantyEnabled, setWarrantyEnabled] = useState<boolean>(false);
+  const [warrantyStartDateValue, setWarrantyStartDateValue] = useState<string>('');
+  const [warrantyEndDateValue, setWarrantyEndDateValue] = useState<string>('');
+  const [warrantyDuration, setWarrantyDuration] = useState<string>('');
+  const [isWarrantyEndDateManuallyEdited, setIsWarrantyEndDateManuallyEdited] = useState(false);
   const [originalStatus, setOriginalStatus] = useState<string>('CARING');
   const [statusConfirmOpen, setStatusConfirmOpen] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState<{ payload: Record<string, unknown>; isUpdate: boolean; successMessage?: string } | null>(null);
@@ -92,6 +84,9 @@ const BusinessPage: React.FC = () => {
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [bankName, setBankName] = useState<string>('');
   const [bankContactPerson, setBankContactPerson] = useState<string>('');
+  const [notes, setNotes] = useState<string>('');
+  const [attachments, setAttachments] = useState<Array<{ url: string; fileName: string }>>([]);
+  const [uploadingFile, setUploadingFile] = useState<boolean>(false);
   type BusinessItem = {
     id: number;
     name?: string;
@@ -101,14 +96,20 @@ const BusinessPage: React.FC = () => {
     picUser?: { id?: number; label?: string; subLabel?: string } | null;
     quantity?: number | null;
     unitPrice?: number | null;
+    unitPriceNet?: number | null;
     totalPrice?: number | null;
     commission?: number | null;
     status?: string | null;
     startDate?: string | null;
     completionDate?: string | null;
+    warrantyStartDate?: string | null;
+    warrantyEndDate?: string | null;
     createdAt?: string | null;
     bankName?: string | null;
     bankContactPerson?: string | null;
+    notes?: string | null;
+    attachments?: Array<{ url: string; fileName: string }>;
+    implementationCompleted?: boolean | null;
   };
 
   function formatDateShort(value?: string | null) {
@@ -195,6 +196,20 @@ const BusinessPage: React.FC = () => {
       </div>
     );
   }
+
+  // Detail Field Component for CRM-style view (hides empty fields)
+  function DetailField({ label, value }: { label: string; value?: React.ReactNode | string | null }) {
+    if (!value || value === '—' || (typeof value === 'string' && value.trim() === '')) {
+      return null; // Hide empty fields
+    }
+    return (
+      <div>
+        <div className="text-xs font-medium text-gray-500 mb-1.5">{label}</div>
+        <div className="text-sm text-gray-900">{typeof value === 'string' ? value : value}</div>
+      </div>
+    );
+  }
+
   const [items, setItems] = useState<BusinessItem[]>([]);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(0);
@@ -309,6 +324,8 @@ const BusinessPage: React.FC = () => {
         // accept multiple possible keys for start/completion
         const start = (c['startDate'] ?? c['start_date'] ?? c['start'] ?? c['startDateTime']) as string | undefined | null;
         const completion = (c['completionDate'] ?? c['finishDate'] ?? c['completion_date'] ?? c['finish_date'] ?? c['finishDate']) as string | undefined | null;
+        const warrantyStart = (c['warrantyStartDate'] ?? c['warranty_start_date']) as string | undefined | null;
+        const warrantyEnd = (c['warrantyEndDate'] ?? c['warranty_end_date']) as string | undefined | null;
         const created = (c['createdAt'] ?? c['created_at']) as string | undefined | null;
         const picRaw = c['picUser'] ?? c['pic_user'] ?? null;
         let picUser: BusinessItem['picUser'] = null;
@@ -326,15 +343,21 @@ const BusinessPage: React.FC = () => {
         return {
           ...c,
           unitPrice: unit != null ? Number(String(unit)) : null,
+          unitPriceNet: c['unitPriceNet'] != null ? Number(String(c['unitPriceNet'])) : null,
           totalPrice: total != null ? Number(String(total)) : null,
           commission: comm != null ? Number(String(comm)) : null,
           quantity: qty != null ? Number(String(qty)) : null,
           startDate: start ?? null,
           completionDate: completion ?? null,
+          warrantyStartDate: warrantyStart ?? null,
+          warrantyEndDate: warrantyEnd ?? null,
           createdAt: created ?? null,
           picUser,
           bankName: c['bankName'] ?? c['bank_name'] ?? null,
           bankContactPerson: c['bankContactPerson'] ?? c['bank_contact_person'] ?? null,
+          notes: c['notes'] ?? null,
+          attachments: Array.isArray(c['attachments']) ? c['attachments'] : [],
+          implementationCompleted: Boolean(c['implementationCompleted']),
         } as BusinessItem;
       });
       const locallyFiltered = applyLocalDateFilter(normalized);
@@ -398,7 +421,7 @@ const BusinessPage: React.FC = () => {
         listForTotals = finalWithPhones;
       } catch (e) {
         // ignore phone enrichment failures
-        console.warn('Failed to enrich hospitals with phone', e);
+        // console.warn('Failed to enrich hospitals with phone', e);
       }
       const fallbackTotal = res?.totalElements ?? (Array.isArray(res) ? res.length : content.length);
       setTotalItems(fallbackTotal);
@@ -425,6 +448,69 @@ const BusinessPage: React.FC = () => {
     return v ? (v.length === 16 ? `${v}:00` : v) : undefined;
   }
 
+  // Parse duration string để lấy số năm và số tháng
+  function parseWarrantyDuration(duration: string): { years: number; months: number } {
+    if (!duration || !duration.trim()) return { years: 0, months: 0 };
+    
+    // Tìm số năm: "1 năm", "2 năm", etc.
+    const yearMatch = duration.match(/(\d+)\s*năm/i);
+    const years = yearMatch ? parseInt(yearMatch[1], 10) : 0;
+    
+    // Tìm số tháng: "6 tháng", "3 tháng", etc.
+    const monthMatch = duration.match(/(\d+)\s*tháng/i);
+    const months = monthMatch ? parseInt(monthMatch[1], 10) : 0;
+    
+    return { years, months };
+  }
+
+  // Helper: Tính ngày kết thúc từ ngày bắt đầu + duration string
+  function calculateWarrantyEndDate(startDate: string, duration: string): string {
+    if (!startDate || !duration || !duration.trim()) return '';
+    
+    const { years, months } = parseWarrantyDuration(duration);
+    if (years === 0 && months === 0) return '';
+    
+    try {
+      const start = new Date(startDate);
+      if (isNaN(start.getTime())) return '';
+      
+      const end = new Date(start);
+      end.setFullYear(start.getFullYear() + years);
+      end.setMonth(start.getMonth() + months);
+      
+      // Format về datetime-local format (YYYY-MM-DDTHH:mm)
+      const yyyy = end.getFullYear();
+      const mm = String(end.getMonth() + 1).padStart(2, '0');
+      const dd = String(end.getDate()).padStart(2, '0');
+      const hh = String(start.getHours()).padStart(2, '0');
+      const min = String(start.getMinutes()).padStart(2, '0');
+      
+      return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+    } catch {
+      return '';
+    }
+  }
+
+  // Tự động tính ngày kết thúc khi thay đổi ngày bắt đầu hoặc duration
+  useEffect(() => {
+    // Chỉ tự động tính nếu người dùng chưa chỉnh sửa endDate thủ công
+    if (isWarrantyEndDateManuallyEdited) return;
+    
+    if (warrantyEnabled && warrantyStartDateValue && warrantyDuration && warrantyDuration.trim()) {
+      const calculatedEndDate = calculateWarrantyEndDate(warrantyStartDateValue, warrantyDuration);
+      if (calculatedEndDate) {
+        setWarrantyEndDateValue(calculatedEndDate);
+      }
+    }
+  }, [warrantyEnabled, warrantyStartDateValue, warrantyDuration, isWarrantyEndDateManuallyEdited]);
+
+  // Reset flag khi modal đóng hoặc warrantyEnabled thay đổi
+  useEffect(() => {
+    if (!showModal || !warrantyEnabled) {
+      setIsWarrantyEndDateManuallyEdited(false);
+    }
+  }, [showModal, warrantyEnabled]);
+
   async function loadBusinessPicOptions() {
     try {
       const list = await getBusinessPicOptions();
@@ -437,7 +523,10 @@ const BusinessPage: React.FC = () => {
           }))
         : [];
 
+      // ✅ Lấy tất cả users và filter SUPERADMIN - CHỈ GỌI KHI USER LÀ SUPERADMIN
       let superAdminOptions: Array<{ id: number; label: string; subLabel?: string }> = [];
+      // ✅ Guard: chỉ gọi getAllUsers() nếu user là SUPERADMIN
+      if (isSuperAdmin) {
       try {
         const res = await getAllUsers({ page: 0, size: 200 });
         const content = Array.isArray(res?.content)
@@ -465,7 +554,8 @@ const BusinessPage: React.FC = () => {
           }));
       } catch (err) {
         // ignore if superadmin endpoint not accessible
-        console.warn('Failed to fetch superadmin users for PIC options', err);
+        // console.warn('Failed to fetch superadmin users for PIC options', err);
+        }
       }
 
       const mergedMap = new Map<number, { id: number; label: string; subLabel?: string; phone?: string | null }>();
@@ -496,7 +586,8 @@ const BusinessPage: React.FC = () => {
 
   React.useEffect(() => {
     fetchHardwareOptions('');
-    fetchHospitalOptions('');
+    // KHÔNG load tất cả bệnh viện khi mount - chỉ load khi user search
+    // fetchHospitalOptions('');
     loadBusinessPicOptions();
   }, []);
   React.useEffect(() => {
@@ -522,15 +613,22 @@ const BusinessPage: React.FC = () => {
     reloadTimeoutRef.current = window.setTimeout(execute, delay > 0 ? delay : 0);
   }, []);
 
-  // Debounce hospital search
+  // Debounce hospital search - chỉ load khi user nhập ít nhất 2 ký tự
   React.useEffect(() => {
     const timer = setTimeout(() => {
-      if (hospitalSearchInput || hospitalDropdownOpen) {
+      // Chỉ search khi có ít nhất 2 ký tự để tránh load quá nhiều dữ liệu
+      if (hospitalSearchInput && hospitalSearchInput.trim().length >= 2) {
         fetchHospitalOptions(hospitalSearchInput);
+      } else if (hospitalSearchInput && hospitalSearchInput.trim().length === 0) {
+        // Nếu xóa hết, clear options
+        setHospitalOptions([]);
+      } else {
+        // Nếu chỉ có 1 ký tự, không load
+        setHospitalOptions([]);
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [hospitalSearchInput, hospitalDropdownOpen]);
+  }, [hospitalSearchInput]);
 
   React.useEffect(() => {
     if (!initialSearchAppliedRef.current) {
@@ -668,13 +766,13 @@ const BusinessPage: React.FC = () => {
           }
         } catch (err) {
           // If API fails, rely on items check only
-          console.warn('Failed to check duplicate contract code via API', err);
+          // console.warn('Failed to check duplicate contract code via API', err);
         }
       }
     }
     
     if (!selectedHospitalId) errors.selectedHospitalId = 'Vui lòng chọn bệnh viện';
-    if (!selectedHardwareId) errors.selectedHardwareId = 'Vui lòng chọn phần cứng';
+    // if (!selectedHardwareId) errors.selectedHardwareId = 'Vui lòng chọn phần cứng';
     if (businessPicOptionsState.length > 0 && !selectedPicId) errors.selectedPicId = 'Vui lòng chọn người phụ trách';
     if (!quantity || quantity < 1) errors.quantity = 'Số lượng phải lớn hơn hoặc bằng 1';
 
@@ -690,6 +788,30 @@ const BusinessPage: React.FC = () => {
         }
       } catch {
         // ignore parse errors, backend will validate further
+      }
+    }
+
+    // Optional warranty block validation
+    if (warrantyEnabled) {
+      if (!warrantyStartDateValue || warrantyStartDateValue.trim() === '') {
+        errors.warrantyStartDateValue = 'Vui lòng nhập ngày bắt đầu bảo hành';
+      }
+      // Chỉ require ngày kết thúc nếu không có duration
+      if (!warrantyEndDateValue || warrantyEndDateValue.trim() === '') {
+        if (!warrantyDuration || !warrantyDuration.trim()) {
+          errors.warrantyEndDateValue = 'Vui lòng nhập ngày hết hạn bảo hành hoặc thời hạn bảo hành';
+        }
+      }
+      if (warrantyStartDateValue && warrantyEndDateValue) {
+        try {
+          const wStart = new Date(warrantyStartDateValue);
+          const wEnd = new Date(warrantyEndDateValue);
+          if (wEnd.getTime() < wStart.getTime()) {
+            errors.warrantyEndDateValue = 'Ngày hết hạn bảo hành phải sau ngày bắt đầu bảo hành';
+          }
+        } catch {
+          // ignore parse errors, backend will validate further
+        }
       }
     }
 
@@ -713,15 +835,25 @@ const BusinessPage: React.FC = () => {
       completionDate: toLocalDateTimeStr(completionDateValue),
       // some backends use 'finishDate' instead of 'completionDate' — include both to be safe
       finishDate: toLocalDateTimeStr(completionDateValue),
+      warrantyEndDate: warrantyEnabled && warrantyEndDateValue && warrantyEndDateValue.trim() !== '' ? toLocalDateTimeStr(warrantyEndDateValue) : null,
+      hasWarranty: warrantyEnabled, // Gửi flag để backend biết có tự động tạo MaintainContract
       picUserId: selectedPicId ?? null,
       bankName: bankName?.trim() || null,
       bankContactPerson: bankContactPerson?.trim() || null,
       unitPrice: finalUnitPrice,
+      unitPriceNet: unitPriceNet !== '' ? Number(unitPriceNet) : null,
+      notes: notes?.trim() || null,
+      attachmentUrls: attachments.map(a => a.url),
     };
+    // Optional warranty start date (only send when enabled)
+    if (warrantyEnabled && warrantyStartDateValue && warrantyStartDateValue.trim() !== '') {
+      payload.warrantyStartDate = toLocalDateTimeStr(warrantyStartDateValue);
+    }
+
     // commission is entered directly as amount
     if (commission !== '') {
       const commissionValue = Number(commission);
-      console.log('Submitting commission:', commission, 'As number:', commissionValue);
+      // console.log('Submitting commission:', commission, 'As number:', commissionValue);
       payload.commission = commissionValue;
     }
 
@@ -766,7 +898,7 @@ const BusinessPage: React.FC = () => {
           return;
         }
       } catch (e) {
-        console.warn("Failed to check existing business contracts, proceeding anyway", e);
+        // console.warn("Failed to check existing business contracts, proceeding anyway", e);
       }
     }
     
@@ -791,15 +923,16 @@ const BusinessPage: React.FC = () => {
     try {
       if (isUpdate) {
         if (!editingId) throw new Error('Không xác định được ID để cập nhật');
-        await updateBusiness(editingId, payload);
+        await updateBusiness(editingId, payload, canManage);
       } else {
-        await createBusiness(payload);
+        await createBusiness(payload, canManage);
       }
       setToast({ message: successMessage ?? (isUpdate ? 'Cập nhật thành công' : 'Tạo thành công'), type: 'success' });
       setName('');
       setSelectedHardwareId(null);
       setSelectedHardwarePrice(null);
       setUnitPrice('');
+      setUnitPriceNet('');
       setQuantity(1);
       setStatusValue('CARING');
       setOriginalStatus('CARING');
@@ -810,18 +943,64 @@ const BusinessPage: React.FC = () => {
       setSelectedPicId(null);
       setHospitalSearchInput('');
       setCompletionDateValue('');
+      setWarrantyEnabled(false);
+      setWarrantyStartDateValue('');
+      setWarrantyEndDateValue('');
+      setWarrantyDuration('');
       setStartDateValue(nowDateTimeLocal());
       setBankName('');
       setBankContactPerson('');
+      setNotes('');
+      setAttachments([]);
       setEditingId(null);
       setShowModal(false);
       // reload the first page so the new item is visible
       setCurrentPage(0);
       await loadList(0, itemsPerPage);
       await loadBusinessPicOptions();
-    } catch (err: unknown) {
-      console.error(err);
-      setToast({ message: 'Lỗi khi lưu dữ liệu', type: 'error' });
+    } catch (err: any) {
+      console.error('Error saving business:', err);
+      console.error('Error response:', err?.response);
+      console.error('Error response data:', err?.response?.data);
+      
+      // Lấy message lỗi từ API response - thử nhiều cách
+      let errorMessage = 'Lỗi khi lưu dữ liệu';
+      
+      if (err?.response?.data) {
+        const data = err.response.data;
+        // Thử các trường có thể chứa message
+        errorMessage = data.message 
+          || data.data 
+          || data.error 
+          || (typeof data === 'string' ? data : JSON.stringify(data));
+      } else if (err?.message) {
+        errorMessage = err.message;
+      }
+      
+      // Log để debug
+      console.log('Extracted error message:', errorMessage);
+      
+      // Hiển thị toast notification ở góc phải trên để không bị che bởi modal
+      // Sử dụng hotToast.error với position top-right và z-index cao
+      hotToast.error(errorMessage, {
+        duration: 6000,
+        position: 'top-right',
+        style: {
+          background: '#fee2e2',
+          color: '#991b1b',
+          padding: '16px 20px',
+          borderRadius: '8px',
+          fontSize: '14px',
+          fontWeight: '500',
+          maxWidth: '600px',
+          zIndex: 100004, // Cao hơn modal (z-[110] = 110) và Toaster default
+          boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
+        },
+        className: 'business-error-toast',
+      });
+      
+      // Giữ lại toast cũ để tương thích (nếu có UI hiển thị toast cũ)
+      setToast({ message: errorMessage, type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -858,6 +1037,89 @@ const BusinessPage: React.FC = () => {
         return newErrors;
       });
     }
+  }
+
+  // Upload multiple files (Word/Excel)
+  async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const allowedExtensions = ['.doc', '.docx', '.xls', '.xlsx'];
+    const maxSize = 50 * 1024 * 1024; // 50MB per file
+    
+    // Validate all files first
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+      
+      if (!allowedExtensions.includes(fileExtension)) {
+        setToast({ message: `File "${file.name}": Chỉ hỗ trợ Word (.doc, .docx) hoặc Excel (.xls, .xlsx)`, type: 'error' });
+        event.target.value = '';
+        return;
+      }
+
+      if (file.size > maxSize) {
+        setToast({ message: `File "${file.name}": Kích thước vượt quá 50MB`, type: 'error' });
+        event.target.value = '';
+        return;
+      }
+    }
+
+    setUploadingFile(true);
+    try {
+      const API_ROOT = import.meta.env.VITE_API_URL || '';
+      const token =
+        localStorage.getItem('access_token') ||
+        sessionStorage.getItem('access_token') ||
+        localStorage.getItem('token');
+
+      const newAttachments: Array<{ url: string; fileName: string }> = [];
+
+      // Upload files one by one
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${API_ROOT}/api/v1/admin/business/upload-attachment`, {
+          method: 'POST',
+          headers: token
+            ? {
+                Authorization: `Bearer ${token}`,
+              }
+            : undefined,
+          credentials: 'include',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Upload file "${file.name}" thất bại: ${response.status}`);
+        }
+
+        const data = await response.json();
+        newAttachments.push({
+          url: data.url,
+          fileName: data.fileName || file.name,
+        });
+      }
+
+      // Add new files to existing attachments
+      setAttachments(prev => [...prev, ...newAttachments]);
+      setToast({ message: `Upload thành công ${newAttachments.length} file`, type: 'success' });
+    } catch (err: unknown) {
+      console.error('Upload file error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Lỗi upload file';
+      setToast({ message: errorMessage, type: 'error' });
+    } finally {
+      setUploadingFile(false);
+      event.target.value = ''; // Reset input
+    }
+  }
+  
+  // Remove attachment
+  function handleRemoveAttachment(index: number) {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
   }
 
   // when status is changed in the modal, handle auto-complete for CONTRACTED
@@ -933,6 +1195,63 @@ const BusinessPage: React.FC = () => {
     return <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${cls}`}>{statusLabel(status)}</span>;
   }
 
+  // Kiểm tra trạng thái bảo hành dựa trên warrantyEndDate
+  function getWarrantyStatus(warrantyEndDate?: string | null): 'expired' | 'expiring-soon' | null {
+    if (!warrantyEndDate) return null;
+    try {
+      const endDate = new Date(warrantyEndDate);
+      if (isNaN(endDate.getTime())) return null;
+      
+      // Normalize về đầu ngày (00:00:00) để so sánh chính xác theo ngày
+      endDate.setHours(0, 0, 0, 0);
+      
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      
+      const oneMonthFromNow = new Date();
+      oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
+      oneMonthFromNow.setHours(0, 0, 0, 0);
+      
+      // Hết hạn: đã đến hoặc quá ngày hết hạn (cùng ngày hoặc quá ngày)
+      if (endDate <= now) {
+        return 'expired';
+      }
+      
+      // Sắp hết hạn: trong vòng 1 tháng tới (còn <= 30 ngày)
+      if (endDate <= oneMonthFromNow) {
+        return 'expiring-soon';
+      }
+      
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Render badge trạng thái bảo hành
+  function renderWarrantyStatusBadge(warrantyEndDate?: string | null) {
+    const status = getWarrantyStatus(warrantyEndDate);
+    if (!status) return null;
+    
+    if (status === 'expired') {
+      return (
+        <span className="inline-block px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+          Hết hạn bảo hành
+        </span>
+      );
+    }
+    
+    if (status === 'expiring-soon') {
+      return (
+        <span className="inline-block px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-800">
+          Sắp hết hạn bảo hành
+        </span>
+      );
+    }
+    
+    return null;
+  }
+
   // formatting helpers removed (unused) to satisfy strict TypeScript noUnusedLocals
 
   async function openEditModal(id: number) {
@@ -962,7 +1281,7 @@ const BusinessPage: React.FC = () => {
         });
       }
       // support older API that may use finishDate as the key
-  const remoteCompletion = (res.completionDate ?? ((res as unknown as Record<string, unknown>).finishDate as string | undefined)) as string | undefined | null;
+      const remoteCompletion = (res.completionDate ?? ((res as unknown as Record<string, unknown>).finishDate as string | undefined)) as string | undefined | null;
       if (res.hospital?.id) {
         // use the auth/hospitals endpoint (works for non-superadmin roles too)
         api.get(`/api/v1/auth/hospitals/${res.hospital.id}`).then(r => {
@@ -978,6 +1297,18 @@ const BusinessPage: React.FC = () => {
       const remoteStart = (res.startDate ?? (res as unknown as Record<string, unknown>)['start_date'] ?? (res as unknown as Record<string, unknown>)['startDateTime']) as string | undefined | null;
       setStartDateValue(remoteStart ? (remoteStart.length === 16 ? remoteStart : remoteStart.substring(0, 16)) : '');
       setCompletionDateValue(remoteCompletion ? (remoteCompletion.length === 16 ? remoteCompletion : remoteCompletion.substring(0, 16)) : '');
+      const remoteWarrantyStart = ((res as Record<string, unknown>)['warrantyStartDate'] as string | undefined | null)
+        ?? ((res as Record<string, unknown>)['warranty_start_date'] as string | undefined | null);
+      const remoteWarrantyEnd = (res.warrantyEndDate ?? (res as Record<string, unknown>)['warranty_end_date']) as string | undefined | null;
+      const normalizedWarrantyStart = remoteWarrantyStart ? (remoteWarrantyStart.length === 16 ? remoteWarrantyStart : remoteWarrantyStart.substring(0, 16)) : '';
+      const normalizedWarrantyEnd = remoteWarrantyEnd ? (remoteWarrantyEnd.length === 16 ? remoteWarrantyEnd : remoteWarrantyEnd.substring(0, 16)) : '';
+      setWarrantyEnabled(Boolean(normalizedWarrantyStart || normalizedWarrantyEnd));
+      setWarrantyStartDateValue(normalizedWarrantyStart);
+      setWarrantyEndDateValue(normalizedWarrantyEnd);
+      // Reset flag khi load dữ liệu edit (ngày kết thúc từ server không phải chỉnh sửa thủ công)
+      setIsWarrantyEndDateManuallyEdited(false);
+      // Reset duration khi load data (người dùng có thể nhập lại nếu muốn)
+      setWarrantyDuration('');
       // Load commission directly as amount
       if (res.commission != null) {
         setCommission(Number(res.commission));
@@ -993,6 +1324,12 @@ const BusinessPage: React.FC = () => {
       } else {
         setUnitPrice('');
       }
+      // Load unitPriceNet từ response
+      if (res.unitPriceNet != null) {
+        setUnitPriceNet(Number(res.unitPriceNet));
+      } else {
+        setUnitPriceNet('');
+      }
       // fetch price từ phần cứng để hiển thị giá mặc định
       if (res.hardware?.id) {
         try {
@@ -1004,6 +1341,8 @@ const BusinessPage: React.FC = () => {
       } else setSelectedHardwarePrice(null);
       setBankName(res.bankName ?? '');
       setBankContactPerson(res.bankContactPerson ?? '');
+      setNotes(res.notes ?? '');
+      setAttachments(Array.isArray(res.attachments) ? res.attachments : []);
       setFieldErrors({});
       setPendingSubmit(null);
       setStatusConfirmOpen(false);
@@ -1023,7 +1362,7 @@ const BusinessPage: React.FC = () => {
     setPendingDeleteId(null);
     setDeletingId(idToDelete);
     try {
-      await deleteBusiness(idToDelete);
+      await deleteBusiness(idToDelete, canManage);
       setToast({ message: 'Đã xóa', type: 'success' });
       await loadList();
     } catch (e) { console.error(e); setToast({ message: 'Xóa thất bại', type: 'error' }); }
@@ -1258,7 +1597,7 @@ const BusinessPage: React.FC = () => {
         >
           <div className="absolute inset-0 bg-black/40" />
           <div className="relative w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-gray-900">Xác nhận chuyển trạng thái</h3>
+            <h3 className="text-lg font-semibold text-blue-800">Xác nhận chuyển trạng thái</h3>
             <p className="mt-3 text-sm text-red-600">
               Bạn có muốn chuyển trạng thái sang ký hợp đồng và chuyển sang phòng triển khai không?
             </p>
@@ -1401,6 +1740,7 @@ const BusinessPage: React.FC = () => {
               setSelectedHardwareId(null);
               setSelectedHardwarePrice(null);
               setUnitPrice('');
+              setUnitPriceNet('');
               setSelectedHospitalId(null);
               setSelectedHospitalPhone(null);
               setSelectedPicId(null);
@@ -1410,6 +1750,10 @@ const BusinessPage: React.FC = () => {
               setStatusValue('CARING');
               setStartDateValue(nowDateTimeLocal());
               setCompletionDateValue('');
+              setWarrantyEnabled(false);
+              setWarrantyStartDateValue('');
+              setWarrantyEndDateValue('');
+              setWarrantyDuration('');
               setCommission('');
         setCommissionDisplay('');
               setFieldErrors({});
@@ -1419,6 +1763,8 @@ const BusinessPage: React.FC = () => {
               setHospitalDropdownOpen(false);
               setBankName('');
               setBankContactPerson('');
+              setNotes('');
+              setAttachments([]);
               setShowModal(true);
             }}
             className="rounded-xl border px-6 py-3 text-sm font-medium text-white transition-all flex items-center gap-2 border-blue-500 bg-blue-500 hover:bg-blue-600 hover:shadow-md"
@@ -1571,7 +1917,7 @@ const BusinessPage: React.FC = () => {
         </div>
         <div className="mt-4 text-sm font-semibold text-gray-700">
           Tổng hợp đồng:
-          <span className="ml-1 text-gray-900">{totalItems}</span>
+          <span className="ml-1 text-blue-800">{totalItems}</span>
         </div>
         {(filterStartFrom || filterStartTo) && (
           <div className="mt-2 text-xs text-gray-500">
@@ -1633,7 +1979,7 @@ const BusinessPage: React.FC = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Đơn giá</label>
+              <label className="block text-sm font-medium mb-1">Đơn giá (Gross)</label>
               <input
                 type="number"
                 step="0.01"
@@ -1644,6 +1990,21 @@ const BusinessPage: React.FC = () => {
                   setUnitPrice(val === '' ? '' : Number(val));
                 }}
                 placeholder={selectedHardwarePrice != null ? `Giá mặc định: ${selectedHardwarePrice.toLocaleString()} ₫` : 'Nhập đơn giá'}
+                className="w-full rounded border px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Đơn giá (NET)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={unitPriceNet === '' ? '' : unitPriceNet}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setUnitPriceNet(val === '' ? '' : Number(val));
+                }}
+                placeholder="Nhập đơn giá (NET)"
                 className="w-full rounded border px-3 py-2"
               />
             </div>
@@ -1661,12 +2022,17 @@ const BusinessPage: React.FC = () => {
 
           {/* Create/Edit modal */}
           {showModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget && !saving) { setShowModal(false); setFieldErrors({}); } }}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget && !saving) { setShowModal(false); setFieldErrors({}); } }}>
               <div className="absolute inset-0 bg-black/50" />
-              <div className="relative bg-white rounded-xl p-6 w-[720px] shadow-lg">
-                <h3 className="text-xl font-semibold mb-4">{editingId ? 'Cập nhật Kinh doanh' : 'Thêm Kinh doanh'}</h3>
-                <form onSubmit={handleSubmit} className="space-y-3">
-                  <div className="grid grid-cols-2 gap-4">
+              <div className="relative bg-white rounded-xl shadow-lg w-full max-w-4xl max-h-[95vh] flex flex-col">
+                {/* Header - Fixed */}
+                <div className="flex-shrink-0 px-4 sm:px-6 pt-4 sm:pt-6 pb-3 border-b border-gray-200">
+                  <h3 className="text-lg sm:text-xl font-semibold">{editingId ? 'Cập nhật Kinh doanh' : 'Thêm Kinh doanh'}</h3>
+                </div>
+                {/* Form Content - Scrollable */}
+                <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6">
+                  <form id="business-form" onSubmit={handleSubmit} className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium mb-1">Mã hợp đồng</label>
                       <input 
@@ -1791,9 +2157,10 @@ const BusinessPage: React.FC = () => {
                           }}
                           onFocus={() => {
                             setHospitalDropdownOpen(true);
-                            if (!hospitalSearchInput) {
-                              fetchHospitalOptions('');
-                            }
+                            // Không load tất cả khi focus - chỉ load khi user nhập ít nhất 2 ký tự
+                            // if (!hospitalSearchInput) {
+                            //   fetchHospitalOptions('');
+                            // }
                           }}
                           placeholder="Tìm kiếm bệnh viện..."
                           className={`w-full rounded border px-3 py-2 ${fieldErrors.selectedHospitalId ? 'border-red-500' : ''}`}
@@ -1801,7 +2168,9 @@ const BusinessPage: React.FC = () => {
                         {hospitalDropdownOpen && (
                           <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg">
                             {hospitalOptions.length === 0 ? (
-                              <div className="px-4 py-2 text-sm text-gray-500">Không tìm thấy bệnh viện</div>
+                              <div className="px-4 py-2 text-sm text-gray-500">
+                                {hospitalSearchInput.trim().length < 2 ? "Nhập ít nhất 2 ký tự để tìm kiếm" : "Không tìm thấy bệnh viện"}
+                              </div>
                             ) : (
                               <div className="max-h-[200px] overflow-y-auto">
                                 {hospitalOptions.map((hospital) => (
@@ -1851,7 +2220,7 @@ const BusinessPage: React.FC = () => {
                           setQuantity(e.target.value ? Number(e.target.value) : '');
                           clearFieldError('quantity');
                         }}
-                        className={`w-40 rounded border px-3 py-2 ${fieldErrors.quantity ? 'border-red-500' : ''}`}
+                        className={`w-full rounded border px-3 py-2 ${fieldErrors.quantity ? 'border-red-500' : ''}`}
                       />
                       {fieldErrors.quantity && <div className="mt-1 text-sm text-red-600">{fieldErrors.quantity}</div>}
                     </div>
@@ -1893,7 +2262,7 @@ const BusinessPage: React.FC = () => {
                             }
                           }}
                           className="w-full rounded border px-3 py-2" 
-                          placeholder="Nhập số tiền hoa hồng (ví dụ: 7000000000 cho 7 tỷ)"
+                          placeholder="Nhập số tiền hoa hồng "
                         />
                       ) : (
                         <div className="p-2 text-gray-700">{commission !== '' ? formatNumber(commission) + ' ₫' : '—'}</div>
@@ -1919,8 +2288,9 @@ const BusinessPage: React.FC = () => {
                         placeholder="Nhập người liên hệ"
                       />
                     </div>
+                    
                     <div>
-                      <label className="block text-sm font-medium mb-1">Đơn giá (VND)</label>
+                      <label className="block text-sm font-medium mb-1">Đơn giá (Gross)</label>
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
@@ -1935,40 +2305,231 @@ const BusinessPage: React.FC = () => {
                             const parsed = parseFormattedNumber(e.target.value);
                             setUnitPrice(parsed);
                           }}
-                          placeholder={selectedHardwarePrice != null ? `Giá mặc định: ${formatNumber(selectedHardwarePrice)} ₫` : 'Nhập đơn giá'}
-                          className="flex-1 rounded border px-3 py-2"
+                          placeholder={selectedHardwarePrice != null ? `Giá mặc định: ${formatNumber(selectedHardwarePrice)} ₫` : 'Nhập đơn giá (Gross)'}
+                          className=" w-full flex-1 rounded border px-3 py-2"
                         />
                          
                       </div>
                       {fieldErrors.unitPrice && <div className="mt-1 text-sm text-red-600">{fieldErrors.unitPrice}</div>}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">Ngày bắt đầu</label>
-                      <input type="datetime-local" value={startDateValue} onChange={(e) => setStartDateValue(e.target.value)} className="w-full rounded border px-3 py-2" />
+                      <label className="block text-sm font-medium mb-1">Đơn giá (NET)</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={formatNumber(unitPriceNet)}
+                          onChange={(e) => {
+                            const parsed = parseFormattedNumber(e.target.value);
+                            setUnitPriceNet(parsed);
+                            clearFieldError('unitPriceNet');
+                          }}
+                          onBlur={(e) => {
+                            // Format lại khi blur
+                            const parsed = parseFormattedNumber(e.target.value);
+                            setUnitPriceNet(parsed);
+                          }}
+                          placeholder="Nhập đơn giá (NET)"
+                          className=" w-full flex-1 rounded border px-3 py-2"
+                        />
+                      </div>
+                      {fieldErrors.unitPriceNet && <div className="mt-1 text-sm text-red-600">{fieldErrors.unitPriceNet}</div>}
+                    </div>
+                    
+                    <div className="col-span-2 grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Ngày bắt đầu</label>
+                        <input
+                          type="datetime-local"
+                          value={startDateValue}
+                          onChange={(e) => setStartDateValue(e.target.value)}
+                          className="w-full rounded border px-3 py-2"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Ngày hoàn thành</label>
+                        <input 
+                          type="datetime-local" 
+                          value={completionDateValue} 
+                          onChange={(e) => {
+                            setCompletionDateValue(e.target.value);
+                            clearFieldError('completionDateValue');
+                          }} 
+                          min={startDateValue || undefined} 
+                          className={`w-full rounded border px-3 py-2 ${fieldErrors.completionDateValue ? 'border-red-500' : ''}`}
+                        />
+                        {fieldErrors.completionDateValue && <div className="mt-1 text-sm text-red-600">{fieldErrors.completionDateValue}</div>}
+                      </div>
                     </div>
                     <div className="col-span-2">
-                      <label className="block text-sm font-medium mb-1">Ngày hoàn thành</label>
-                      <input 
-                        type="datetime-local" 
-                        value={completionDateValue} 
-                        onChange={(e) => {
-                          setCompletionDateValue(e.target.value);
-                          clearFieldError('completionDateValue');
-                        }} 
-                        min={startDateValue || undefined} 
-                        className={`w-full rounded border px-3 py-2 ${fieldErrors.completionDateValue ? 'border-red-500' : ''}`}
+                      <label className="block text-sm font-medium mb-1">Ghi chú</label>
+                      <textarea
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className="w-full rounded border px-3 py-2 min-h-[100px] resize-y"
+                        placeholder="Nhập ghi chú (nếu có)"
+                        rows={4}
                       />
-                      {fieldErrors.completionDateValue && <div className="mt-1 text-sm text-red-600">{fieldErrors.completionDateValue}</div>}
                     </div>
-                  </div>
-                      <div className="flex items-center gap-3 justify-between">
-                    <div className="text-sm text-gray-600">Thành tiền: <span className="font-semibold">{computeTotal() > 0 ? computeTotal().toLocaleString() + ' ₫' : '—'}</span></div>
-                    <div className="flex items-center gap-3">
-                      <button type="button" onClick={() => { if (!saving) { setShowModal(false); setEditingId(null); setFieldErrors({}); } }} className="px-4 py-2 border rounded">Hủy</button>
-                      <button type="submit" disabled={saving} className={`px-4 py-2 rounded text-white ${saving ? 'bg-gray-400' : 'bg-blue-600'}`}>{saving ? 'Đang lưu...' : (editingId ? 'Cập nhật' : 'Lưu')}</button>
+
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium mb-1">File đính kèm (Word/Excel)</label>
+                      <div className="space-y-2">
+                        <input
+                          type="file"
+                          accept=".doc,.docx,.xls,.xlsx"
+                          multiple
+                          onChange={handleFileUpload}
+                          disabled={uploadingFile || saving}
+                          className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                        {uploadingFile && (
+                          <div className="text-sm text-gray-600">Đang upload file...</div>
+                        )}
+                        {attachments.length > 0 && (
+                          <div className="space-y-2">
+                            {attachments.map((attachment, index) => (
+                              <div key={index} className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded">
+                                <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span className="flex-1 text-sm text-gray-700 truncate" title={attachment.fileName}>
+                                  {attachment.fileName}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => window.open(attachment.url, '_blank')}
+                                  className="text-sm text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap"
+                                  title="Mở file trong tab mới"
+                                >
+                                  Mở
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveAttachment(index)}
+                                  className="text-sm text-red-600 hover:text-red-800 font-medium whitespace-nowrap"
+                                  title="Xóa file"
+                                  disabled={uploadingFile || saving}
+                                >
+                                  Xóa
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <p className="text-xs text-gray-500">Hỗ trợ nhiều file Word (.doc, .docx) hoặc Excel (.xls, .xlsx), mỗi file tối đa 50MB</p>
+                      </div>
                     </div>
+
+                    <div className="col-span-2">
+                      <label className="inline-flex items-center gap-2 text-sm font-medium">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={warrantyEnabled}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setWarrantyEnabled(checked);
+                            if (!checked) {
+                              setWarrantyStartDateValue('');
+                              setWarrantyEndDateValue('');
+                              setWarrantyDuration('');
+                              clearFieldError('warrantyStartDateValue');
+                              clearFieldError('warrantyEndDateValue');
+                            }
+                          }}
+                        />
+                        <span>Bảo hành</span>
+                      </label>
+                      <p className="text-xs text-gray-500 mt-1">Chỉ bật khi hợp đồng có bảo hành riêng.</p>
+                    </div>
+
+                    {warrantyEnabled && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Ngày bắt đầu bảo hành</label>
+                          <input
+                            type="datetime-local"
+                            value={warrantyStartDateValue}
+                            onChange={(e) => {
+                              setWarrantyStartDateValue(e.target.value);
+                              clearFieldError('warrantyStartDateValue');
+                              // Reset flag khi ngày bắt đầu thay đổi để tự động tính lại
+                              setIsWarrantyEndDateManuallyEdited(false);
+                            }}
+                            className={`w-full rounded border px-3 py-2 ${fieldErrors.warrantyStartDateValue ? 'border-red-500' : ''}`}
+                          />
+                          {fieldErrors.warrantyStartDateValue && <div className="mt-1 text-sm text-red-600">{fieldErrors.warrantyStartDateValue}</div>}
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-sm font-medium mb-1">Thời hạn bảo hành</label>
+                          <input
+                            type="text"
+                            value={warrantyDuration}
+                            onChange={(e) => {
+                              setWarrantyDuration(e.target.value);
+                              clearFieldError('warrantyEndDateValue');
+                              // Reset flag khi thời hạn thay đổi để tự động tính lại
+                              setIsWarrantyEndDateManuallyEdited(false);
+                            }}
+                            placeholder="Ví dụ: 1 năm 6 tháng ..."
+                            className="w-50% rounded border px-3 py-2"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Nhập thời hạn để tự động tính ngày kết thúc</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Ngày hết hạn bảo hành</label>
+                          <input
+                            type="datetime-local"
+                            value={warrantyEndDateValue}
+                            onChange={(e) => {
+                              setWarrantyEndDateValue(e.target.value);
+                              clearFieldError('warrantyEndDateValue');
+                              // Đánh dấu là người dùng đã chỉnh sửa thủ công
+                              setIsWarrantyEndDateManuallyEdited(true);
+                            }}
+                            min={warrantyStartDateValue || undefined}
+                            className={`w-full rounded border px-3 py-2 ${fieldErrors.warrantyEndDateValue ? 'border-red-500' : ''}`}
+                          />
+                          {fieldErrors.warrantyEndDateValue && <div className="mt-1 text-sm text-red-600">{fieldErrors.warrantyEndDateValue}</div>}
+                          {!isWarrantyEndDateManuallyEdited && warrantyStartDateValue && warrantyDuration && warrantyDuration.trim() && (
+                            <p className="mt-1 text-xs text-gray-500">Tự động tính từ ngày bắt đầu và thời hạn</p>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
                 </form>
+                </div>
+                {/* Footer - Fixed */}
+                <div className="flex-shrink-0 px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 justify-between">
+                    <div className="text-sm text-gray-600">Thành tiền: <span className="font-semibold">{computeTotal() > 0 ? computeTotal().toLocaleString() + ' ₫' : '—'}</span></div>
+                    <div className="flex items-center gap-3">
+                      <button 
+                        type="button" 
+                        onClick={() => { 
+                          if (!saving) { 
+                            const wasEditing = Boolean(editingId);
+                            setShowModal(false); 
+                            setEditingId(null); 
+                            setFieldErrors({});
+                            // Reset flag khi đóng modal
+                            setIsWarrantyEndDateManuallyEdited(false);
+                            // Clear attachments when canceling create mode (not edit mode)
+                            // In edit mode, attachments are loaded from server, so we reload them when reopening
+                            if (!wasEditing) {
+                              setAttachments([]);
+                            }
+                          } 
+                        }} 
+                        className="px-4 py-2 border rounded hover:bg-gray-50 transition"
+                      >
+                        Hủy
+                      </button>
+                      <button type="submit" form="business-form" disabled={saving} className={`px-4 py-2 rounded text-white transition ${saving ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>{saving ? 'Đang lưu...' : (editingId ? 'Cập nhật' : 'Lưu')}</button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1987,20 +2548,28 @@ const BusinessPage: React.FC = () => {
                     <div className="flex-1">
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                          <div className="text-lg font-semibold text-gray-900">{it.hospital?.label ?? '—'}</div>
+                          <div className="text-lg font-semibold text-blue-800">{it.hospital?.label ?? '—'}</div>
                           <div className="text-sm">
                             <span className="text-gray-500">Mã hợp đồng: </span>
                             <span className="font-medium text-blue-600">{it.name ?? '—'}</span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           {renderStatusBadge(it.status)}
+                          {it.implementationCompleted && it.status === 'CONTRACTED' && (
+                            <span className="inline-block px-3 py-1 rounded-full text-sm font-medium bg-emerald-100 text-emerald-700">
+                              Đã nghiệm thu
+                            </span>
+                          )}
+                          {renderWarrantyStatusBadge(it.warrantyEndDate)}
                         </div>
                       </div>
 
                       <div className="mt-2 grid grid-cols-2 md:grid-cols-2 gap-3 text-sm text-gray-600">
                         <div>Điện thoại: <div className="font-medium text-gray-800">{it.hospitalPhone ?? '—'}</div></div>
-                        <div>Phần cứng: <div className="font-medium text-gray-800">{it.hardware?.label ?? '—'}</div></div>
+                        <div>Phần cứng: <div className="font-medium text-gray-800">{it.hardware?.label ?? '—'}</div> 
+                        </div>
+                        <div>Thời hạn bảo hành: <div className="font-medium text-gray-800">{it.warrantyEndDate ? formatDateShort(it.warrantyEndDate) : '—'}</div></div>
                         <div className="col-span-2 md:col-span-2">Người phụ trách:
                           <div className="font-medium text-gray-800">
                             {it.picUser?.label ?? '—'}
@@ -2015,7 +2584,7 @@ const BusinessPage: React.FC = () => {
                       <div className="mt-3 flex items-center justify-between text-sm text-gray-700">
                         <div className="flex items-center gap-6">
                           <div>Số lượng: <span className="font-medium">{it.quantity ?? '—'}</span></div>
-                          <div>Đơn giá (VND): <span className="font-medium">{it.unitPrice != null ? it.unitPrice.toLocaleString() + ' ₫' : '—'}</span></div>
+                          <div>Đơn giá (Gross): <span className="font-medium">{it.unitPrice != null ? it.unitPrice.toLocaleString() + ' ₫' : '—'}</span></div>
                           <div>Thành tiền: <span className="font-semibold">{it.totalPrice != null ? it.totalPrice.toLocaleString() + ' ₫' : '—'}</span></div>
                         </div>
                         <div />
@@ -2078,28 +2647,170 @@ const BusinessPage: React.FC = () => {
       )}
       {/* Detail modal */}
       {viewItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onMouseDown={(e) => e.target === e.currentTarget && closeView()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm" onMouseDown={(e) => e.target === e.currentTarget && closeView()}>
           <div className="absolute inset-0 bg-black/50" />
-          <div className="relative bg-white rounded-xl p-6 w-[640px] shadow-lg">
-            <h3 className="text-lg font-semibold mb-4">Chi tiết Kinh doanh {formatBusinessId(viewItem.id)}</h3>
-            <div className="space-y-3 text-sm">
-              <Info label="Tên" value={<div className="font-medium">{viewItem.name ?? '—'}</div>} icon={<UserCircleIcon style={{ width: 18, height: 18 }} />} />
-              <Info label="Bệnh viện" value={<div className="font-medium">{viewItem.hospital?.label ?? '—'}</div>} icon={<GroupIcon style={{ width: 18, height: 18 }} />} />
-              <Info label="Điện thoại" value={<div className="font-medium">{viewItem.hospitalPhone ?? '—'}</div>} icon={<EnvelopeIcon style={{ width: 16, height: 16 }} />} />
-              <Info label="Phần cứng" value={<div className="font-medium">{viewItem.hardware?.label ?? '—'}</div>} icon={<BoxCubeIcon style={{ width: 16, height: 16 }} />} />
-              <Info label="Người phụ trách" value={<div className="font-medium">{viewItem.picUser?.label ?? '—'}{viewItem.picUser?.subLabel ? <span className="ml-2 text-xs text-gray-500">{viewItem.picUser?.subLabel}</span> : null}</div>} icon={<UserCircleIcon style={{ width: 18, height: 18 }} />} />
-              <Info label="Bắt đầu" value={<div className="font-medium">{formatDateShort(viewItem.startDate)}</div>} icon={<CalenderIcon style={{ width: 16, height: 16 }} />} />
-              <Info label="Hoàn thành" value={<div className="font-medium">{formatDateShort(viewItem.completionDate)}</div>} icon={<TimeIcon style={{ width: 16, height: 16 }} />} />
-              <Info label="Số lượng Kiosk" value={<div className="font-medium">{viewItem.quantity ?? '—'}</div>} icon={<BoxIconLine style={{ width: 16, height: 16 }} />} />
-              <Info label="Đơn giá" value={<div className="font-medium">{viewItem.unitPrice != null ? viewItem.unitPrice.toLocaleString() + ' ₫' : '—'}</div>} icon={<DollarLineIcon style={{ width: 16, height: 16 }} />} />
-              <Info label="Thành tiền" value={<div className="font-medium">{viewItem.totalPrice != null ? viewItem.totalPrice.toLocaleString() + ' ₫' : '—'}</div>} icon={<DollarLineIcon style={{ width: 16, height: 16 }} />} />
-              <Info label="Hoa hồng của viện" value={<div className="font-medium">{viewItem.commission != null ? (Number(viewItem.commission).toLocaleString() + ' ₫') : '—'} {viewItem.commission != null && viewItem.totalPrice ? `(${((Number(viewItem.commission) / Number(viewItem.totalPrice)) * 100).toFixed(2).replace(/\.00$/,'')}%)` : ''}</div>} icon={<CheckCircleIcon style={{ width: 16, height: 16 }} />} />
-              <Info label="Trạng thái" value={<div className="font-medium">{statusLabel(viewItem.status) ?? '—'}</div>} icon={<TaskIcon style={{ width: 16, height: 16 }} />} />
-              <Info label="Đơn vị tài trợ" value={<div className="font-medium">{viewItem.bankName ?? '—'}</div>} icon={<UserCircleIcon style={{ width: 18, height: 18 }} />} />
-              <Info label="Liên hệ đơn vị tài trợ" value={<div className="font-medium">{viewItem.bankContactPerson ?? '—'}</div>} icon={<UserCircleIcon style={{ width: 18, height: 18 }} />} />
+          <div className="relative bg-white rounded-xl shadow-lg w-full max-w-4xl max-h-[95vh] flex flex-col">
+            {/* Header - Fixed */}
+            <div className="flex-shrink-0 px-4 sm:px-6 pt-4 sm:pt-6 pb-3 border-b border-gray-200">
+              <h3 className="text-lg sm:text-xl font-semibold">Chi tiết Kinh doanh {formatBusinessId(viewItem.id)}</h3>
             </div>
-            <div className="mt-4 text-right">
-              <button onClick={closeView} className="px-3 py-1 bg-indigo-600 text-white rounded">Đóng</button>
+            {/* Content - Scrollable */}
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
+              <div className="space-y-5">
+                {/* General Info Section */}
+                <div>
+                  <h4 className="text-xs font-semibold text-black uppercase tracking-wider mb-3">Thông tin chung</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <DetailField label="Mã hợp đồng" value={viewItem.name} />
+                    <DetailField label="Bệnh viện" value={viewItem.hospital?.label} />
+                    {viewItem.hospitalPhone && <DetailField label="Điện thoại" value={viewItem.hospitalPhone} />}
+                    {viewItem.hardware?.label && <DetailField label="Phần cứng" value={viewItem.hardware.label} />}
+                    <DetailField 
+                      label="Người phụ trách" 
+                      value={viewItem.picUser?.label ? (
+                        <div>
+                          <div className="font-medium text-gray-900">{viewItem.picUser.label}</div>
+                          {viewItem.picUser.subLabel && (
+                            <div className="text-sm text-gray-500 mt-0.5">{viewItem.picUser.subLabel}</div>
+                          )}
+                        </div>
+                      ) : null}
+                    />
+                    <DetailField 
+                      label="Trạng thái" 
+                      value={viewItem.status ? (
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          viewItem.status === 'CONTRACTED' ? 'bg-green-100 text-green-800' :
+                          viewItem.status === 'CARING' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {statusLabel(viewItem.status)}
+                        </span>
+                      ) : null}
+                    />
+                    {viewItem.bankName && <DetailField label="Đơn vị tài trợ" value={viewItem.bankName} />}
+                    {viewItem.bankContactPerson && <DetailField label="Liên hệ đơn vị tài trợ" value={viewItem.bankContactPerson} />}
+                  </div>
+                </div>
+                <hr className="my-3 border-gray-200" />
+
+                {/* Financials Section */}
+                <div>
+                  <h4 className="text-xs font-semibold text-black uppercase tracking-wider mb-3">Thông tin tài chính</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {viewItem.quantity != null && (
+                      <DetailField label="Số lượng Kiosk" value={<span className="font-semibold text-gray-900">{viewItem.quantity}</span>} />
+                    )}
+                    {viewItem.unitPrice != null && (
+                      <DetailField 
+                        label="Đơn giá (Gross)" 
+                        value={<span className="font-semibold text-gray-900">{viewItem.unitPrice.toLocaleString()} VND</span>} 
+                      />
+                    )}
+                    {viewItem.unitPriceNet != null && (
+                      <DetailField 
+                        label="Đơn giá (NET)" 
+                        value={<span className="font-semibold text-gray-900">{viewItem.unitPriceNet.toLocaleString()} VND</span>} 
+                      />
+                    )}
+                    {viewItem.totalPrice != null && (
+                      <DetailField 
+                        label="Thành tiền" 
+                        value={<span className="font-semibold text-lg text-gray-900">{viewItem.totalPrice.toLocaleString()} VND</span>} 
+                      />
+                    )}
+                    {viewItem.commission != null && (
+                      <DetailField 
+                        label="Hoa hồng của viện" 
+                        value={
+                          <div>
+                            <span className="font-semibold text-gray-900">{Math.round(Number(viewItem.commission)).toLocaleString()} VND</span>
+                            {/* {viewItem.totalPrice && (
+                              <span className="ml-2 text-sm text-gray-500">
+                                ({((Number(viewItem.commission) / Number(viewItem.totalPrice)) * 100).toFixed(2).replace(/\.00$/, '')}%)
+                              </span>
+                            )} */}
+                          </div>
+                        } 
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* Timeline Section */}
+                <div>
+                  <h4 className="text-xs font-semibold text-black uppercase tracking-wider mb-3">Timeline</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {viewItem.startDate && <DetailField label="Ngày bắt đầu" value={formatDateShort(viewItem.startDate)} />}
+                    {viewItem.completionDate && <DetailField label="Ngày hoàn thành" value={formatDateShort(viewItem.completionDate)} />}
+                    {viewItem.warrantyStartDate && <DetailField label="Ngày bắt đầu bảo hành" value={formatDateShort(viewItem.warrantyStartDate)} />}
+                    {viewItem.warrantyEndDate && <DetailField label="Ngày hết hạn bảo hành" value={formatDateShort(viewItem.warrantyEndDate)} />}
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes Section - Full Width */}
+              {viewItem.notes && (
+                <div className="mt-5 pt-4 border-t border-gray-200">
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Ghi chú</h4>
+                    <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{viewItem.notes}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Attachments Section - Full Width */}
+              {viewItem.attachments && viewItem.attachments.length > 0 && (
+                <div className="mt-5 pt-4 border-t border-gray-200">
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                      File đính kèm ({viewItem.attachments.length})
+                    </h4>
+                    <div className="space-y-2">
+                      {viewItem.attachments.map((attachment, index) => (
+                        <div key={index} className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                          <svg className="w-6 h-6 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-gray-900 truncate" title={attachment.fileName}>
+                              {attachment.fileName || `File ${index + 1}`}
+                            </div>
+                            <div className="text-xs text-gray-500">Word/Excel</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => window.open(attachment.url, '_blank')}
+                            className="px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors whitespace-nowrap"
+                          >
+                            Mở file
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const link = document.createElement('a');
+                              link.href = attachment.url;
+                              link.download = attachment.fileName || `attachment-${index + 1}`;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }}
+                            className="px-3 py-1.5 text-sm font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded transition-colors whitespace-nowrap"
+                          >
+                            Tải xuống
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* Footer - Fixed */}
+            <div className="flex-shrink-0 px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+              <div className="flex justify-end">
+                <button onClick={closeView} className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition">Đóng</button>
+              </div>
             </div>
           </div>
         </div>

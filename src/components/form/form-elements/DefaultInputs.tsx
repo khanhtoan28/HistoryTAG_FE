@@ -14,7 +14,7 @@ export default function DefaultInputs() {
     { value: "development", label: "Development" },
   ];
   const handleSelectChange = (value: string) => {
-    console.log("Selected value:", value);
+    // console.log("Selected value:", value);
   };
 
   return (
@@ -64,7 +64,7 @@ export default function DefaultInputs() {
             placeholder="Select a date"
             onChange={(dates, currentDateString) => {
               // Handle your logic
-              console.log({ dates, currentDateString });
+              // console.log({ dates, currentDateString });
             }}
           />
         </div>

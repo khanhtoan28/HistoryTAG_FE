@@ -5,7 +5,11 @@ import TaskNotes from "../../components/TaskNotes";
 import { AiOutlineEye } from "react-icons/ai";
 import toast from "react-hot-toast";
 import { FaHospital } from "react-icons/fa";
-import { FiUser, FiLink, FiClock, FiTag, FiCheckCircle } from "react-icons/fi";
+import { FiUser, FiLink, FiClock, FiTag, FiCheckCircle, FiX } from "react-icons/fi";
+import { useWebSocket } from "../../contexts/WebSocketContext";
+import TicketsTab from "../../pages/CustomerCare/SubCustomerCare/TicketsTab";
+import { getHospitalTickets } from "../../api/ticket.api";
+import { useAuth } from '../../contexts/AuthContext';
 
 // Helper function để parse PIC IDs từ additionalRequest
 function parsePicIdsFromAdditionalRequest(additionalRequest?: string | null, picDeploymentId?: number | null): number[] {
@@ -72,7 +76,7 @@ function PendingTasksModal({
                     <div className="text-center text-gray-500 py-6">Đang tải...</div>
                 ) : list.length === 0 ? (
                     <div className="text-center text-gray-500 py-6">
-                        Không có công viện nào chờ tiếp nhận.
+                        Không có viện nào chờ tiếp nhận.
                     </div>
                 ) : (
                     <>
@@ -477,8 +481,13 @@ function RemoteSelect({
     const [options, setOptions] = useState<Array<{ id: number; name: string }>>([]);
     const [highlight, setHighlight] = useState<number>(-1);
 
-    // debounce search
+    // debounce search - chỉ search khi user nhập ít nhất 2 ký tự
     useEffect(() => {
+        // Chỉ search khi user nhập ít nhất 2 ký tự để tránh load quá nhiều dữ liệu
+        if (!q.trim() || q.trim().length < 2) {
+            setOptions([]);
+            return;
+        }
         let alive = true;
         const t = setTimeout(async () => {
             setLoading(true);
@@ -500,22 +509,23 @@ function RemoteSelect({
         };
     }, [q, fetchOptions, excludeIds]);
 
-    useEffect(() => {
-        if (open) {
-            // preload lần đầu
-            if (!options.length && !q.trim()) {
-                (async () => {
-                    setLoading(true);
-                    try {
-                        const res = await fetchOptions("");
-                        setOptions(res);
-                    } finally {
-                        setLoading(false);
-                    }
-                })();
-            }
-        }
-    }, [open]); // eslint-disable-line
+    // KHÔNG preload khi mở dropdown - chỉ load khi user nhập ít nhất 2 ký tự
+    // useEffect(() => {
+    //     if (open) {
+    //         // preload lần đầu
+    //         if (!options.length && !q.trim()) {
+    //             (async () => {
+    //                 setLoading(true);
+    //                 try {
+    //                     const res = await fetchOptions("");
+    //                     setOptions(res);
+    //                 } finally {
+    //                     setLoading(false);
+    //                 }
+    //             })();
+    //         }
+    //     }
+    // }, [open]); // eslint-disable-line
 
     return (
         <Field label={label} required={required}>
@@ -568,13 +578,12 @@ function RemoteSelect({
                         className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg"
                         onMouseLeave={() => setHighlight(-1)}
                     >
-                        {loading && (
-                            <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>
+                        {options.length === 0 && (
+                            <div className="px-3 py-2 text-sm text-gray-500">
+                                {q.trim().length < 2 ? "Nhập ít nhất 2 ký tự để tìm kiếm" : "Không tìm thấy"}
+                            </div>
                         )}
-                        {!loading && options.length === 0 && (
-                            <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>
-                        )}
-                        {!loading &&
+                        {options.length > 0 &&
                             options.map((opt, idx) => (
                                 <div
                                     key={opt.id}
@@ -1286,7 +1295,7 @@ function TaskFormModal({
 
                                                                 // Nếu data lỗi chỉ có ID mà không có tên => Bỏ qua luôn cho sạch
                                                                 if (!displayName) {
-                                                                    console.log("Selected item has no display name, ignoring");
+                                                                    // console.log("Selected item has no display name, ignoring");
                                                                     setCurrentPicInput(null);
                                                                     return;
                                                                 }
@@ -1573,8 +1582,8 @@ function DetailModal({
 
                     {/* Additional request */}
                     <div className="pt-6 mb-6">
-                        <p className="text-gray-500 mb-2">Yêu cầu bổ sung:</p>
-                        <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px]">
+                        <p className="text-gray-500 mb-2">Nội dung công việc:</p>
+                        <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-3 text-gray-800 dark:text-gray-300 min-h-[60px] whitespace-pre-wrap break-words">
                             {(() => {
                                 const notes = (item as any).notes || item.additionalRequest || "";
                                 // Loại bỏ phần [PIC_IDS: ...] khỏi hiển thị
@@ -1655,6 +1664,9 @@ const ImplementationTasksPage: React.FC = () => {
     const [size, setSize] = useState(10);
     const [totalCount, setTotalCount] = useState<number | null>(null);
     const [enableItemAnimation, setEnableItemAnimation] = useState<boolean>(true);
+
+    const { subscribe } = useWebSocket();
+
     const [hospitalQuery, setHospitalQuery] = useState<string>("");
     const [hospitalOptions, setHospitalOptions] = useState<Array<{ id: number; label: string }>>([]);
     const [detailOpen, setDetailOpen] = useState(false);
@@ -1669,6 +1681,7 @@ const ImplementationTasksPage: React.FC = () => {
         id: number;
         label: string;
         subLabel?: string;
+        hospitalCode?: string;
         taskCount: number;
         acceptedCount: number;
         nearDueCount?: number;
@@ -1677,12 +1690,14 @@ const ImplementationTasksPage: React.FC = () => {
         acceptedByMaintenance?: boolean;
         picDeploymentIds?: Array<string | number>;
         picDeploymentNames?: string[];
+        maintenancePersonInChargeName?: string;
     }>>([]);
     const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
     const [hospitalPage, setHospitalPage] = useState<number>(0);
     const [hospitalSize, setHospitalSize] = useState<number>(20);
     const [selectedHospital, setSelectedHospital] = useState<string | null>(null);
     const [hospitalSearch, setHospitalSearch] = useState<string>("");
+    const [hospitalCodeSearch, setHospitalCodeSearch] = useState<string>("");
     const [hospitalStatusFilter, setHospitalStatusFilter] = useState<string>("");
     const [hospitalPicFilter, setHospitalPicFilter] = useState<string[]>([]);
     const [picFilterOpen, setPicFilterOpen] = useState<boolean>(false);
@@ -1693,6 +1708,11 @@ const ImplementationTasksPage: React.FC = () => {
     const [hospitalSortDir, setHospitalSortDir] = useState<string>("asc");
     const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
     const [bulkCompleting, setBulkCompleting] = useState(false);
+    const [showTicketsModal, setShowTicketsModal] = useState(false);
+    const [selectedHospitalIdForTickets, setSelectedHospitalIdForTickets] = useState<number | null>(null);
+    const [selectedHospitalNameForTickets, setSelectedHospitalNameForTickets] = useState<string | null>(null);
+    const [ticketOpenCounts, setTicketOpenCounts] = useState<Record<number, number>>({});
+    const [ticketCountLoading, setTicketCountLoading] = useState<Set<number>>(new Set());
 
     // Click outside to close PIC filter dropdown
     useEffect(() => {
@@ -1723,13 +1743,58 @@ const ImplementationTasksPage: React.FC = () => {
         return picOptions.filter((opt) => opt.label.toLowerCase().includes(q));
     }, [picOptions, picFilterQuery]);
 
+    // ✅ Use AuthContext hook - Performance optimized với useMemo, reactive với token changes
+    const { isSuperAdmin, activeTeam } = useAuth();
     const currentUser = useMemo<UserInfo>(() => readStored<UserInfo>("user"), []);
-    const roles = useMemo<string[]>(() => {
-        const r = readStored<string[]>("roles");
-        return Array.isArray(r) ? r : [];
-    }, []);
-    const isSuperAdmin = roles.includes("SUPERADMIN");
-    const userTeam = (currentUser?.team || "").toString().toUpperCase();
+    // Prefer activeTeam from JWT (new way), fallback to localStorage (old way)
+    const userTeam = (activeTeam || currentUser?.team || "").toString().toUpperCase();
+
+    // ✅ Tự động set filter cho user hiện tại khi đăng nhập
+    const autoFilterSetRef = useRef<boolean>(false);
+    useEffect(() => {
+        // Chỉ set một lần khi picOptions đã load và filter chưa được set
+        if (autoFilterSetRef.current || hospitalPicFilter.length > 0 || picOptions.length === 0) {
+            return;
+        }
+
+        // Lấy userId hiện tại - thử nhiều cách
+        let userId: string | null = null;
+        
+        // Thử từ currentUser.id
+        if (currentUser?.id) {
+            userId = String(currentUser.id);
+        }
+        
+        // Nếu chưa có, thử từ localStorage/sessionStorage
+        if (!userId) {
+            userId = localStorage.getItem("userId") || sessionStorage.getItem("userId");
+        }
+        
+        // Nếu vẫn chưa có, thử parse từ currentUser object
+        if (!userId && currentUser && typeof currentUser === 'object') {
+            const userObj = currentUser as any;
+            if (userObj.userId) userId = String(userObj.userId);
+            if (!userId && userObj.id) userId = String(userObj.id);
+        }
+
+        if (!userId) return;
+
+        // Normalize userId (trim và đảm bảo là string)
+        userId = String(userId).trim();
+        if (!userId) return;
+
+        // Kiểm tra xem userId có trong picOptions không (so sánh cả string và number)
+        const userOption = picOptions.find(opt => {
+            const optId = String(opt.id).trim();
+            return optId === userId || optId === String(Number(userId)) || String(Number(optId)) === userId;
+        });
+        
+        if (userOption) {
+            // Sử dụng ID chính xác từ picOptions
+            setHospitalPicFilter([userOption.id]);
+            autoFilterSetRef.current = true;
+        }
+    }, [picOptions, currentUser, hospitalPicFilter.length]);
 
     const filtered = useMemo(() => data, [data]);
     const [completedCount, setCompletedCount] = useState<number | null>(null);
@@ -1937,6 +2002,18 @@ const ImplementationTasksPage: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // ✅ WebSocket subscription: Cập nhật danh sách chờ khi có thông báo
+    useEffect(() => {
+        const unsubscribe = subscribe("/topic/maintenance/pending-changed", (payload) => {
+            console.log("WebSocket: Pending maintenance tasks changed", payload);
+            fetchPendingTasks();
+            if (!showHospitalList && selectedHospital) {
+                fetchList();
+            }
+        });
+        return () => unsubscribe();
+    }, [subscribe, fetchPendingTasks, fetchList, showHospitalList, selectedHospital]);
+
     // when page or size changes, refetch
     useEffect(() => {
         if (!showHospitalList && selectedHospital) fetchList();
@@ -2037,7 +2114,7 @@ const ImplementationTasksPage: React.FC = () => {
             } catch (err) {
                 console.debug('Polling fetchPendingTasks failed', err);
             }
-        }, 40000);
+        }, 60000); // ✅ Đã có WebSocket, giảm polling xuống 60s làm fallback
 
         return () => {
             mounted = false;
@@ -2084,7 +2161,7 @@ const ImplementationTasksPage: React.FC = () => {
         setLoadingHospitals(true);
         setError(null);
         try {
-            // Fetch summary để lấy thông tin từ deployment và các bệnh viện đã accept
+            // ✅ Chỉ cần 1 API call - summary đã có đầy đủ thống kê và PIC info
             const summaryEndpoint = `${API_ROOT}/api/v1/admin/maintenance/hospitals/summary`;
             const summaryRes = await fetch(summaryEndpoint, {
                 method: "GET",
@@ -2095,121 +2172,236 @@ const ImplementationTasksPage: React.FC = () => {
             const summaryPayload = await summaryRes.json();
             const summaries = Array.isArray(summaryPayload) ? summaryPayload : [];
 
-            // Fetch tất cả maintenance tasks để đếm COMPLETED tasks
-            const tasksParams = new URLSearchParams({ page: "0", size: "2000", sortBy: "id", sortDir: "asc" });
-            const tasksEndpoint = `${API_ROOT}/api/v1/admin/maintenance/tasks?${tasksParams.toString()}`;
-            const tasksRes = await fetch(tasksEndpoint, {
-                method: "GET",
-                headers: authHeaders(),
-                credentials: "include",
-            });
-            if (!tasksRes.ok) throw new Error(`Failed to fetch maintenance tasks: ${tasksRes.status}`);
-            const tasksPayload = await tasksRes.json();
-            const tasks: ImplementationTaskResponseDTO[] = Array.isArray(tasksPayload?.content) ? tasksPayload.content : Array.isArray(tasksPayload) ? tasksPayload : [];
-
-            // Aggregate tasks by hospital để đếm taskCount, acceptedCount, và collect PIC info
-            const tasksByHospital = new Map<number, { taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number; picIds: Set<string>; picNames: Set<string> }>();
+            // Collect PIC options từ summary
             const picOptionMap = new Map<string, { id: string; label: string }>();
-
-            for (const task of tasks) {
-                const hospitalId = typeof task.hospitalId === "number" ? task.hospitalId : task.hospitalId != null ? Number(task.hospitalId) : null;
-                if (!hospitalId) continue;
-
-                const current = tasksByHospital.get(hospitalId) || { taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0, picIds: new Set<string>(), picNames: new Set<string>() };
-                current.taskCount += 1;
-
-                // Collect PIC info
-                const picIdValue = task.picDeploymentId != null ? String(task.picDeploymentId) : null;
-                const picLabel = (task.picDeploymentName || "").toString().trim();
-                if (picLabel) {
-                    if (picIdValue) {
-                        current.picIds.add(picIdValue);
-                        picOptionMap.set(picIdValue, { id: picIdValue, label: picLabel });
+            summaries.forEach((item: any) => {
+                // Collect từ picDeploymentIds và picDeploymentNames
+                const picIds = Array.isArray(item?.picDeploymentIds) ? item.picDeploymentIds : [];
+                const picNames = Array.isArray(item?.picDeploymentNames) ? item.picDeploymentNames : [];
+                picIds.forEach((picId: any, idx: number) => {
+                    const picIdStr = String(picId);
+                    const picName = picNames[idx] && String(picNames[idx]).trim() ? String(picNames[idx]).trim() : "";
+                    if (picName) {
+                        picOptionMap.set(picIdStr, { id: picIdStr, label: picName });
                     }
-                    current.picNames.add(picLabel);
+                });
+                
+                // ✅ Collect từ maintenancePersonInCharge (người phụ trách bảo trì)
+                const maintenancePicId = item?.maintenancePersonInChargeId;
+                const maintenancePicName = item?.maintenancePersonInChargeName;
+                if (maintenancePicId && maintenancePicName) {
+                    const maintenancePicIdStr = String(maintenancePicId);
+                    const maintenancePicNameStr = String(maintenancePicName).trim();
+                    // Chỉ thêm nếu chưa có trong map (tránh override nếu đã có từ picDeploymentIds)
+                    if (maintenancePicNameStr && !picOptionMap.has(maintenancePicIdStr)) {
+                        picOptionMap.set(maintenancePicIdStr, { id: maintenancePicIdStr, label: maintenancePicNameStr });
+                    }
                 }
-                if (Array.isArray(task.picDeploymentIds) && task.picDeploymentIds.length > 0) {
-                    const supporterNames = Array.isArray(task.picDeploymentNames) ? task.picDeploymentNames : [];
-                    task.picDeploymentIds.forEach((sid, idx) => {
-                        const supporterId = Number(sid);
-                        if (!Number.isFinite(supporterId)) return;
-                        const supporterIdStr = String(supporterId);
-                        current.picIds.add(supporterIdStr);
-                        const supporterName = supporterNames[idx] && String(supporterNames[idx]).trim()
-                            ? String(supporterNames[idx]).trim()
-                            : "";
-                        if (supporterName) {
-                            current.picNames.add(supporterName);
-                            picOptionMap.set(supporterIdStr, { id: supporterIdStr, label: supporterName });
+            });
+
+            // ✅ Fetch tất cả PICs từ API users để đảm bảo filter có đầy đủ options
+            try {
+                const params = new URLSearchParams();
+                // Không gửi parameter 'name' để lấy tất cả users
+                // Lọc theo team dựa trên user đăng nhập
+                if (userTeam === "MAINTENANCE") {
+                    params.set("team", "MAINTENANCE");
+                } else if (userTeam === "DEPLOYMENT") {
+                    params.set("team", "DEPLOYMENT");
+                }
+                // Nếu SUPERADMIN, không lọc team để hiện tất cả
+                const queryString = params.toString();
+                const usersUrl = queryString 
+                    ? `${API_ROOT}/api/v1/admin/users/search?${queryString}`
+                    : `${API_ROOT}/api/v1/admin/users/search`;
+                const usersRes = await fetch(usersUrl, { headers: authHeaders(), credentials: "include" });
+                if (usersRes.ok) {
+                    const usersList = await usersRes.json();
+                    const users = Array.isArray(usersList) ? usersList : [];
+                    users.forEach((u: any) => {
+                        const userId = String(u?.id);
+                        if (userId && !picOptionMap.has(userId)) {
+                            const userName = String(u?.label ?? u?.name ?? u?.fullName ?? u?.fullname ?? u?.username ?? u?.id ?? "");
+                            if (userName && userName.trim()) {
+                                picOptionMap.set(userId, { id: userId, label: userName.trim() });
+                            }
                         }
                     });
                 }
-
-                const taskStatus = normalizeStatus(task.status);
-                if (taskStatus === 'COMPLETED') {
-                    current.acceptedCount += 1;
-                }
-                // Count near due / overdue for non-completed
-                if (taskStatus !== 'COMPLETED' && task.deadline) {
-                    const d = new Date(task.deadline);
-                    if (!Number.isNaN(d.getTime())) {
-                        d.setHours(0, 0, 0, 0);
-                        const today = new Date();
-                        const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-                        const dayDiff = Math.round((d.getTime() - startToday) / (24 * 60 * 60 * 1000));
-                        // Quá hạn: deadline đã qua (dayDiff < 0)
-                        if (dayDiff < 0) current.overdueCount += 1;
-                        // Sắp đến hạn: hôm nay hoặc trong 3 ngày tới (0 <= dayDiff <= 3)
-                        if (dayDiff >= 0 && dayDiff <= 3) current.nearDueCount += 1;
-                    }
-                }
-                tasksByHospital.set(hospitalId, current);
+            } catch (err) {
+                // Nếu lỗi khi fetch users, vẫn dùng PICs từ summary
+                console.warn("Failed to fetch all users for PIC filter:", err);
             }
 
-            // Merge summary với task counts
-            const normalized = summaries.map((item: any, idx: number) => {
-                const hospitalId = Number(item?.hospitalId ?? -(idx + 1));
-                const taskStats = tasksByHospital.get(hospitalId) || { taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0, picIds: new Set<string>(), picNames: new Set<string>() };
-                return {
-                    id: hospitalId,
-                    label: String(item?.hospitalName ?? "—"),
-                    subLabel: item?.province ? String(item.province) : "",
-                    taskCount: taskStats.taskCount > 0 ? taskStats.taskCount : Number(item?.maintenanceTaskCount ?? 0),
-                    acceptedCount: taskStats.acceptedCount, // Số task COMPLETED
-                    nearDueCount: taskStats.nearDueCount,
-                    overdueCount: taskStats.overdueCount,
-                    fromDeployment: Boolean(item?.transferredFromDeployment),
-                    acceptedByMaintenance: Boolean(item?.acceptedByMaintenance),
-                    picDeploymentIds: Array.from(taskStats.picIds),
-                    picDeploymentNames: Array.from(taskStats.picNames),
-                };
+            // ✅ Fetch acceptedCount cho từng bệnh viện (backend không trả về trong summary)
+            const acceptedCountsMap = new Map<string, number>();
+            const allHospitalNames = new Set<string>();
+            summaries.forEach((item: any) => {
+                const hospitalName = String(item?.hospitalName ?? "").trim();
+                if (hospitalName) allHospitalNames.add(hospitalName);
             });
 
-            // Thêm các bệnh viện có tasks nhưng không có trong summary (nếu có)
-            for (const [hospitalId, taskStats] of tasksByHospital.entries()) {
-                if (!normalized.find(h => h.id === hospitalId)) {
-                    // Cần fetch thông tin hospital từ tasks
-                    const hospitalTask = tasks.find(t => {
-                        const tid = typeof t.hospitalId === "number" ? t.hospitalId : t.hospitalId != null ? Number(t.hospitalId) : null;
-                        return tid === hospitalId;
+            // Fetch acceptedCount cho tất cả bệnh viện
+            const acceptedCountsPromises = Array.from(allHospitalNames).map(async (hospitalName) => {
+                try {
+                    // Fetch count of COMPLETED tasks for this hospital (maintenance tasks use COMPLETED status)
+                    const params = new URLSearchParams({ page: "0", size: "1", status: "COMPLETED", hospitalName });
+                    const url = `${API_ROOT}/api/v1/admin/maintenance/tasks?${params.toString()}`;
+                    const res = await fetch(url, {
+                        method: "GET",
+                        headers: authHeaders(),
+                        credentials: "include",
                     });
-                    if (hospitalTask) {
-                        normalized.push({
-                            id: hospitalId,
-                            label: String(hospitalTask.hospitalName ?? "—"),
-                            subLabel: "",
-                            taskCount: taskStats.taskCount,
-                            acceptedCount: taskStats.acceptedCount,
-                            nearDueCount: taskStats.nearDueCount,
-                            overdueCount: taskStats.overdueCount,
-                            fromDeployment: false,
-                            acceptedByMaintenance: false,
-                            picDeploymentIds: Array.from(taskStats.picIds),
-                            picDeploymentNames: Array.from(taskStats.picNames),
-                        });
+                    if (!res.ok) return { hospitalName, count: 0 };
+                    const resp = await res.json();
+                    const count = resp && typeof resp.totalElements === "number" ? resp.totalElements : (Array.isArray(resp) ? resp.length : (Array.isArray(resp?.content) ? resp.content.length : 0));
+                    return { hospitalName, count };
+                } catch {
+                    return { hospitalName, count: 0 };
+                }
+            });
+            const acceptedCountsResults = await Promise.all(acceptedCountsPromises);
+            acceptedCountsResults.forEach(({ hospitalName, count }) => {
+                acceptedCountsMap.set(hospitalName, count);
+            });
+
+            // ✅ Fetch tasks để tính nearDueCount, overdueCount và collect PICs từ từng task
+            const nearDueOverdueMap = new Map<string, { nearDueCount: number; overdueCount: number }>();
+            const hospitalPicsFromTasks = new Map<string, { picIds: Set<string>; picNames: Set<string> }>();
+            try {
+                // Fetch tasks (cả completed và chưa completed để lấy đầy đủ PICs)
+                // ✅ Tối ưu: Fetch song song nhiều pages đầu để nhanh hơn, giới hạn tối đa để tránh chậm
+                let allTasks: any[] = [];
+                const pageSize = 1000; // Mỗi page 1000 items
+                const maxPages = 5; // Giới hạn tối đa 5 pages (5000 tasks) để tránh quá chậm
+                
+                // Fetch song song 3 pages đầu để nhanh hơn
+                const initialPages = Math.min(3, maxPages);
+                const initialPromises = Array.from({ length: initialPages }, (_, i) => {
+                    const tasksParams = new URLSearchParams({ page: String(i), size: String(pageSize), sortBy: "id", sortDir: "asc" });
+                    const tasksUrl = `${API_ROOT}/api/v1/admin/maintenance/tasks?${tasksParams.toString()}`;
+                    return fetch(tasksUrl, { headers: authHeaders(), credentials: "include" })
+                        .then(res => res.ok ? res.json() : null)
+                        .then(payload => {
+                            const tasks = Array.isArray(payload?.content) ? payload.content : Array.isArray(payload) ? payload : [];
+                            return { page: i, tasks, totalElements: payload?.totalElements || 0 };
+                        })
+                        .catch(() => ({ page: i, tasks: [], totalElements: 0 }));
+                });
+                
+                const initialResults = await Promise.all(initialPromises);
+                initialResults.forEach(({ tasks }) => {
+                    if (tasks.length > 0) allTasks = allTasks.concat(tasks);
+                });
+                
+                // Nếu còn nhiều tasks và chưa đạt maxPages, fetch thêm tuần tự
+                const firstResult = initialResults[0];
+                const totalTasks = firstResult?.totalElements || 0;
+                if (totalTasks > initialPages * pageSize && initialPages < maxPages) {
+                    for (let page = initialPages; page < maxPages; page++) {
+                        const tasksParams = new URLSearchParams({ page: String(page), size: String(pageSize), sortBy: "id", sortDir: "asc" });
+                        const tasksUrl = `${API_ROOT}/api/v1/admin/maintenance/tasks?${tasksParams.toString()}`;
+                        const tasksRes = await fetch(tasksUrl, { headers: authHeaders(), credentials: "include" });
+                        if (tasksRes.ok) {
+                            const tasksPayload = await tasksRes.json();
+                            const tasks = Array.isArray(tasksPayload?.content) ? tasksPayload.content : Array.isArray(tasksPayload) ? tasksPayload : [];
+                            if (tasks.length === 0) break;
+                            allTasks = allTasks.concat(tasks);
+                            if (tasks.length < pageSize) break; // Đã hết
+                        } else {
+                            break; // Lỗi, dừng
+                        }
                     }
                 }
+                
+                if (allTasks.length > 0) {
+                    const tasks = allTasks;
+                    
+                    const today = new Date();
+                    const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+                    
+                    tasks.forEach((task: any) => {
+                        const statusUp = String(task?.status || '').trim().toUpperCase();
+                        const hospitalName = String(task?.hospitalName || '').trim();
+                        if (!hospitalName) return;
+                        
+                        // ✅ Collect PICs từ từng task (quan trọng cho filter)
+                        const picId = task?.picDeploymentId ? String(task.picDeploymentId) : null;
+                        const picName = task?.picDeploymentName ? String(task.picDeploymentName).trim() : null;
+                        if (picId || picName) {
+                            const hospitalPics = hospitalPicsFromTasks.get(hospitalName) || { picIds: new Set<string>(), picNames: new Set<string>() };
+                            if (picId) hospitalPics.picIds.add(picId);
+                            if (picName) hospitalPics.picNames.add(picName);
+                            hospitalPicsFromTasks.set(hospitalName, hospitalPics);
+                        }
+                        
+                        // Collect PICs từ additionalRequest nếu có
+                        const additionalRequest = task?.additionalRequest || task?.notes || "";
+                        if (additionalRequest) {
+                            const picIds = parsePicIdsFromAdditionalRequest(additionalRequest, task?.picDeploymentId);
+                            if (picIds.length > 0) {
+                                const hospitalPics = hospitalPicsFromTasks.get(hospitalName) || { picIds: new Set<string>(), picNames: new Set<string>() };
+                                picIds.forEach(id => hospitalPics.picIds.add(String(id)));
+                                hospitalPicsFromTasks.set(hospitalName, hospitalPics);
+                            }
+                        }
+                        
+                        // Skip completed tasks khi tính nearDue/overdue
+                        const isCompleted = statusUp === 'COMPLETED' || statusUp === 'ACCEPTED' || statusUp === 'WAITING_FOR_DEV' || statusUp === 'TRANSFERRED';
+                        if (isCompleted) return;
+                        
+                        // Chỉ tính cho task có deadline
+                        if (!task?.deadline) return;
+                        const d = new Date(task.deadline);
+                        if (Number.isNaN(d.getTime())) return;
+                        d.setHours(0, 0, 0, 0);
+                        const dayDiff = Math.round((d.getTime() - startToday) / (24 * 60 * 60 * 1000));
+                        
+                        const current = nearDueOverdueMap.get(hospitalName) || { nearDueCount: 0, overdueCount: 0 };
+                        if (dayDiff < 0) {
+                            current.overdueCount += 1;
+                        } else if (dayDiff >= 0 && dayDiff <= 3) {
+                            current.nearDueCount += 1;
+                        }
+                        nearDueOverdueMap.set(hospitalName, current);
+                    });
+                }
+            } catch (err) {
+                console.warn("Failed to fetch tasks for nearDue/overdue calculation:", err);
             }
+
+            // Map summary - đã có đầy đủ thông tin từ backend
+            const normalized = summaries.map((item: any, idx: number) => {
+                const hospitalId = Number(item?.hospitalId ?? -(idx + 1));
+                const hospitalName = String(item?.hospitalName ?? "—");
+                const acceptedCount = acceptedCountsMap.get(hospitalName) ?? 0;
+                const dueStats = nearDueOverdueMap.get(hospitalName) || { nearDueCount: 0, overdueCount: 0 };
+                
+                // ✅ Merge PICs từ summary và từ tasks (ưu tiên từ tasks vì đầy đủ hơn)
+                const taskPics = hospitalPicsFromTasks.get(hospitalName) || { picIds: new Set<string>(), picNames: new Set<string>() };
+                const summaryPicIds = Array.isArray(item?.picDeploymentIds) ? item.picDeploymentIds.map((id: any) => String(id)) : [];
+                const summaryPicNames = Array.isArray(item?.picDeploymentNames) ? item.picDeploymentNames.map((name: any) => String(name)) : [];
+                
+                // Merge: thêm PICs từ summary vào set từ tasks
+                summaryPicIds.forEach(id => taskPics.picIds.add(id));
+                summaryPicNames.forEach(name => taskPics.picNames.add(name));
+                
+                return {
+                    id: hospitalId,
+                    label: hospitalName,
+                    subLabel: item?.province ? String(item.province) : "",
+                    hospitalCode: item?.hospitalCode || "",
+                    taskCount: Number(item?.maintenanceTaskCount ?? 0),
+                    acceptedCount: acceptedCount, // ✅ Fetch từ API riêng
+                    nearDueCount: dueStats.nearDueCount,   // ✅ Tính từ tasks chưa completed
+                    overdueCount: dueStats.overdueCount,  // ✅ Tính từ tasks chưa completed
+                    fromDeployment: Boolean(item?.transferredFromDeployment),
+                    acceptedByMaintenance: Boolean(item?.acceptedByMaintenance),
+                    picDeploymentIds: Array.from(taskPics.picIds), // ✅ Dùng PICs từ tasks (đầy đủ hơn)
+                    picDeploymentNames: Array.from(taskPics.picNames), // ✅ Dùng PICs từ tasks (đầy đủ hơn)
+                    maintenancePersonInChargeName: item?.maintenancePersonInChargeName || undefined,
+                };
+            });
 
             setPicOptions(Array.from(picOptionMap.values()));
 
@@ -2242,17 +2434,83 @@ const ImplementationTasksPage: React.FC = () => {
         let list = hospitalsWithTasks;
         const q = hospitalSearch.trim().toLowerCase();
         if (q) list = list.filter(h => h.label.toLowerCase().includes(q) || (h.subLabel || '').toLowerCase().includes(q));
+        
+        // Filter by hospital code
+        const codeQ = hospitalCodeSearch.trim().toLowerCase();
+        if (codeQ) list = list.filter(h => (h.hospitalCode || '').toLowerCase().includes(codeQ));
         if (hospitalStatusFilter === 'accepted') list = list.filter(h => h.acceptedByMaintenance);
         else if (hospitalStatusFilter === 'incomplete') list = list.filter(h => (h.acceptedCount || 0) < (h.taskCount || 0));
         else if (hospitalStatusFilter === 'unaccepted') list = list.filter(h => !h.acceptedByMaintenance);
+        else if (hospitalStatusFilter === 'hasOpenTickets') list = list.filter(h => h.id && (ticketOpenCounts[h.id] ?? 0) > 0);
 
         // Filter by PIC
         if (hospitalPicFilter.length > 0) {
-            const selected = new Set(hospitalPicFilter);
-            list = list.filter((h) =>
-                (h.picDeploymentIds || []).some((id) => selected.has(String(id))) ||
-                (h.picDeploymentNames || []).some((name) => selected.has(name))
-            );
+            // ✅ Normalize selected IDs - tạo Set với cả string và number format để match được cả hai
+            const selectedStrings = new Set<string>();
+            const selectedNumbers = new Set<number>();
+            hospitalPicFilter.forEach(id => {
+                const idStr = String(id).trim();
+                const idNum = Number(id);
+                selectedStrings.add(idStr);
+                if (!isNaN(idNum) && idNum > 0) {
+                    selectedNumbers.add(idNum);
+                    // Thêm cả number dạng string để match
+                    selectedStrings.add(String(idNum));
+                }
+            });
+            
+            // Tạo map từ picOptions để có thể lookup name từ ID và ngược lại
+            const picIdToNameMap = new Map<string, string>();
+            const picNameToIdMap = new Map<string, string>();
+            picOptions.forEach(opt => {
+                const idStr = String(opt.id).trim();
+                const nameStr = String(opt.label).trim();
+                picIdToNameMap.set(idStr, nameStr);
+                picNameToIdMap.set(nameStr, idStr);
+            });
+            
+            const beforeFilterCount = list.length;
+            list = list.filter((h) => {
+                // Check by ID (so sánh với picDeploymentIds) - normalize cả hai bên
+                const picIds = h.picDeploymentIds || [];
+                const hasMatchingId = picIds.some((id: any) => {
+                    // So sánh cả string và number format
+                    const idStr = String(id).trim();
+                    const idNum = Number(id);
+                    return selectedStrings.has(idStr) || 
+                           (!isNaN(idNum) && idNum > 0 && selectedNumbers.has(idNum)) ||
+                           (!isNaN(idNum) && idNum > 0 && selectedStrings.has(String(idNum)));
+                });
+                
+                // Check by name (so sánh với picDeploymentNames) - cần convert name sang ID trước
+                const picNames = (h.picDeploymentNames || []).map(name => String(name).trim());
+                const hasMatchingName = picNames.some((nameStr) => {
+                    // Tìm ID từ name, rồi check ID đó có trong selected không
+                    const idFromName = picNameToIdMap.get(nameStr);
+                    if (!idFromName) return false;
+                    // Check cả string và number format
+                    const idNum = Number(idFromName);
+                    return selectedStrings.has(idFromName) || 
+                           (!isNaN(idNum) && idNum > 0 && selectedNumbers.has(idNum)) ||
+                           (!isNaN(idNum) && idNum > 0 && selectedStrings.has(String(idNum)));
+                });
+                
+                // ✅ Check by maintenancePersonInChargeName (người phụ trách bảo trì)
+                const maintenancePicName = h.maintenancePersonInChargeName ? String(h.maintenancePersonInChargeName).trim() : "";
+                const hasMatchingMaintenancePic = maintenancePicName && (() => {
+                    // Tìm ID từ name, rồi check ID đó có trong selected không
+                    const idFromName = picNameToIdMap.get(maintenancePicName);
+                    if (!idFromName) return false;
+                    // Check cả string và number format
+                    const idNum = Number(idFromName);
+                    return selectedStrings.has(idFromName) || 
+                           (!isNaN(idNum) && idNum > 0 && selectedNumbers.has(idNum)) ||
+                           (!isNaN(idNum) && idNum > 0 && selectedStrings.has(String(idNum)));
+                })();
+                
+                const matches = hasMatchingId || hasMatchingName || hasMatchingMaintenancePic;
+                return matches;
+            });
         }
 
         const dir = hospitalSortDir === 'desc' ? -1 : 1;
@@ -2268,7 +2526,60 @@ const ImplementationTasksPage: React.FC = () => {
             return a.label.localeCompare(b.label) * dir;
         });
         return list;
-    }, [hospitalsWithTasks, hospitalSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir]);
+    }, [hospitalsWithTasks, hospitalSearch, hospitalCodeSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir, ticketOpenCounts, picOptions]);
+
+    const pagedHospitals = useMemo(() => {
+        return filteredHospitals.slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize);
+    }, [filteredHospitals, hospitalPage, hospitalSize]);
+
+    const getOpenTicketCount = useCallback((tickets: Array<{ status?: string }>) => {
+        return tickets.filter((t) => t.status !== "HOAN_THANH").length;
+    }, []);
+
+    const updateTicketOpenCount = useCallback((hospitalId: number, tickets: Array<{ status?: string }>) => {
+        setTicketOpenCounts((prev) => {
+            const newCount = getOpenTicketCount(tickets);
+            // Chỉ update nếu count thay đổi để tránh re-render không cần thiết
+            if (prev[hospitalId] === newCount) return prev;
+            return {
+                ...prev,
+                [hospitalId]: newCount,
+            };
+        });
+    }, [getOpenTicketCount]);
+
+    const handleTicketsChange = useCallback((tickets: Array<{ status?: string }>) => {
+        if (selectedHospitalIdForTickets) {
+            updateTicketOpenCount(selectedHospitalIdForTickets, tickets);
+        }
+    }, [selectedHospitalIdForTickets, updateTicketOpenCount]);
+
+    const loadTicketOpenCount = useCallback(async (hospitalId: number) => {
+        if (!hospitalId || hospitalId <= 0) return;
+        if (typeof ticketOpenCounts[hospitalId] === "number") return;
+        if (ticketCountLoading.has(hospitalId)) return;
+        setTicketCountLoading((prev) => new Set(prev).add(hospitalId));
+        try {
+            const tickets = await getHospitalTickets(hospitalId);
+            updateTicketOpenCount(hospitalId, tickets);
+        } catch {
+            // ignore errors to avoid noisy UI; badge just won't show
+        } finally {
+            setTicketCountLoading((prev) => {
+                const next = new Set(prev);
+                next.delete(hospitalId);
+                return next;
+            });
+        }
+    }, [ticketCountLoading, ticketOpenCounts, updateTicketOpenCount]);
+
+    useEffect(() => {
+        if (!showHospitalList) return;
+        const ids = pagedHospitals.map((h) => h.id).filter((id): id is number => typeof id === "number" && id > 0);
+        ids.forEach((id) => {
+            void loadTicketOpenCount(id);
+        });
+    }, [pagedHospitals, showHospitalList, loadTicketOpenCount]);
 
     useEffect(() => {
         if (!showHospitalList && selectedHospital) {
@@ -2454,21 +2765,29 @@ const ImplementationTasksPage: React.FC = () => {
                                                 value={hospitalSearch}
                                                 onChange={(e) => { setHospitalSearch(e.target.value); setHospitalPage(0); }}
                                             />
-                                            <select
+                                            <input
+                                                type="text"
                                                 className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[180px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                                                placeholder="Tìm theo mã bệnh viện"
+                                                value={hospitalCodeSearch}
+                                                onChange={(e) => { setHospitalCodeSearch(e.target.value); setHospitalPage(0); }}
+                                            />
+                                            <select
+                                                className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[200px] border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
                                                 value={hospitalStatusFilter}
                                                 onChange={(e) => { setHospitalStatusFilter(e.target.value); setHospitalPage(0); }}
                                             >
-                                                <option value="">— Tất cả —</option>
+                                                <option value="">— Trạng thái —</option>
                                                 <option value="accepted">Có nghiệm thu</option>
                                                 <option value="incomplete">Chưa nghiệm thu hết</option>
                                                 <option value="unaccepted">Chưa có nghiệm thu</option>
+                                                <option value="hasOpenTickets">Có tickets chưa hoàn thành</option>
                                             </select>
                                         </div>
 
                                         {/* PIC Filter Dropdown - second row */}
-                                        <div className="flex flex-wrap items-center gap-3 mt-3">
-                                            <div ref={picFilterDropdownRef} className="relative">
+                                        <div className="flex flex-col gap-0 mt-3">
+                                            <div ref={picFilterDropdownRef} className="relative w-full max-w-[200px]">
                                                 <button
                                                     type="button"
                                                     onClick={() => setPicFilterOpen(!picFilterOpen)}
@@ -2477,42 +2796,50 @@ const ImplementationTasksPage: React.FC = () => {
                                                     <span className="truncate">
                                                         {hospitalPicFilter.length === 0
                                                             ? "Lọc người phụ trách"
-                                                            : `${hospitalPicFilter.length} người được chọn`}
+                                                            : hospitalPicFilter.length === 1
+                                                                ? picOptions.find((opt) => opt.id === hospitalPicFilter[0])?.label ?? "Đã chọn 1"
+                                                                : `Đã chọn ${hospitalPicFilter.length} người phụ trách`}
                                                     </span>
-                                                    <svg className={`w-4 h-4 flex-shrink-0 transition-transform ${picFilterOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <svg className={`w-4 h-4 transition-transform ${picFilterOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                                     </svg>
                                                 </button>
                                                 {picFilterOpen && (
-                                                    <div className="absolute z-50 mt-2 w-[280px] max-h-[360px] overflow-hidden rounded-xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-lg p-3">
+                                                    <div className="absolute z-30 mt-2 w-60 max-h-[360px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl p-3 space-y-3 dark:border-gray-700 dark:bg-gray-800">
                                                         <input
                                                             type="text"
-                                                            className="w-full rounded-lg border px-3 py-2 text-sm mb-2 border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
-                                                            placeholder="Tìm người phụ trách"
                                                             value={picFilterQuery}
                                                             onChange={(e) => setPicFilterQuery(e.target.value)}
+                                                            placeholder="Tìm người phụ trách"
+                                                            className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 border-gray-200 dark:border-gray-700 dark:bg-gray-900"
                                                         />
-                                                        <div className="space-y-1 max-h-[220px] overflow-y-auto">
+                                                        <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1">
                                                             {filteredPicOptions.length === 0 ? (
-                                                                <div className="text-sm text-gray-500 dark:text-gray-400 py-2 text-center">Không tìm thấy</div>
+                                                                <div className="text-sm text-gray-500 text-center py-6">
+                                                                    Không có dữ liệu người phụ trách
+                                                                </div>
                                                             ) : (
-                                                                filteredPicOptions.map((opt) => (
-                                                                    <label key={opt.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 rounded cursor-pointer">
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={hospitalPicFilter.includes(opt.id)}
-                                                                            onChange={(e) => togglePicFilterValue(opt.id, e.target.checked)}
-                                                                            className="rounded"
-                                                                        />
-                                                                        <span className="text-sm">{opt.label}</span>
-                                                                    </label>
-                                                                ))
+                                                                filteredPicOptions.map((option) => {
+                                                                    const value = String(option.id);
+                                                                    const checked = hospitalPicFilter.includes(value);
+                                                                    return (
+                                                                        <label key={option.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 px-2 py-1.5 rounded cursor-pointer">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={checked}
+                                                                                onChange={(e) => togglePicFilterValue(value, e.target.checked)}
+                                                                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                                            />
+                                                                            <span className="truncate">{option.label}</span>
+                                                                        </label>
+                                                                    );
+                                                                })
                                                             )}
                                                         </div>
                                                         <div className="flex items-center justify-between">
                                                             <button
                                                                 type="button"
-                                                                className="px-3 py-1.5 text-sm text-blue-600 hover:underline focus:outline-none"
+                                                                className="px-3 py-1.5 text-sm text-blue-600 hover:underline focus:outline-none disabled:opacity-50"
                                                                 onClick={clearPicFilter}
                                                                 disabled={hospitalPicFilter.length === 0}
                                                             >
@@ -2520,24 +2847,22 @@ const ImplementationTasksPage: React.FC = () => {
                                                             </button>
                                                             <button
                                                                 type="button"
-                                                                className="px-3 py-1.5 text-sm rounded-full border border-gray-300 hover:bg-gray-50 text-gray-600 focus:outline-none"
+                                                                className="px-3 py-1.5 text-sm rounded-full border border-gray-300 text-gray-600 hover:bg-gray-50 focus:outline-none dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
                                                                 onClick={() => setPicFilterOpen(false)}
                                                             >
                                                                 Đóng
                                                             </button>
                                                         </div>
-                                                        {/* {hospitalPicFilter.length > 0 && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={clearPicFilter}
-                                                                className="mt-2 w-full rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-3 py-2 text-sm hover:bg-gray-200 dark:hover:bg-gray-700"
-                                                            >
-                                                                Bỏ lọc
-                                                            </button>
-                                                        )} */}
                                                     </div>
                                                 )}
                                             </div>
+                                            <button
+                                                type="button"
+                                                className={`self-start px-3 py-1.5 text-xs text-blue-600 hover:underline focus:outline-none ${hospitalPicFilter.length === 0 ? "invisible pointer-events-none" : ""}`}
+                                                onClick={clearPicFilter}
+                                            >
+                                                Bỏ lọc người phụ trách
+                                            </button>
                                         </div>
 
                                         <div className="mt-6 mb-0.5 text-sm text-gray-600 dark:text-gray-300">
@@ -2591,37 +2916,44 @@ const ImplementationTasksPage: React.FC = () => {
                                                     <tr>
                                                         <th className="px-6 w-10 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
                                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã bệnh viện</th>
                                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/Thành phố</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phụ trách bảo trì</th>
                                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượng task</th>
-                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
+                                                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="bg-white divide-y divide-gray-200">
-                                                    {filteredHospitals
-                                                        .slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize)
+                                                    {pagedHospitals
                                                         .map((hospital, index) => (
                                                             <tr key={hospital.id || `${hospital.label}-${index}`} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => { setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }}>
-                                                                <td className="px-6  whitespace-nowrap text-sm text-gray-500">{hospitalPage * hospitalSize + index + 1}</td>
-                                                                <td className="px-6  whitespace-nowrap">
-                                                                    <div className="flex items-center gap-3">
-
-                                                                        <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
-                                                                            <span>{hospital.label}</span>
-                                                                            {hospital.fromDeployment && !hospital.acceptedByMaintenance && (
-                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">
-                                                                                    Từ triển khai
-                                                                                </span>
-                                                                            )}
-                                                                            {hospital.fromDeployment && hospital.acceptedByMaintenance && (
-                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
-                                                                                    Nhận từ triển khai
-                                                                                </span>
-                                                                            )}
-                                                                        </div>
-                                                                    </div>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospitalPage * hospitalSize + index + 1}</td>
+                                                                <td className="px-6 py-4">
+                                                                    {(() => {
+                                                                        const longName = (hospital.label || "").length > 32;
+                                                                        return (
+                                                                            <div className={`flex gap-3 ${longName ? 'items-start' : 'items-center'}`}>
+                                                                                <div className={`text-sm font-medium text-gray-900 break-words max-w-[260px] flex flex-wrap gap-2 ${longName ? 'leading-snug' : ''}`}>
+                                                                                    <span>{hospital.label}</span>
+                                                                                    {hospital.fromDeployment && !hospital.acceptedByMaintenance && (
+                                                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">
+                                                                                            Từ triển khai
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {hospital.fromDeployment && hospital.acceptedByMaintenance && (
+                                                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                                                                                            Nhận từ triển khai
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })()}
                                                                 </td>
-                                                                <td className="px-6  whitespace-nowrap text-sm text-gray-500">{hospital.subLabel || "—"}</td>
-                                                                <td className="px-6  whitespace-nowrap text-sm align-center">
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.hospitalCode || "—"}</td>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.subLabel || "—"}</td>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.maintenancePersonInChargeName || "—"}</td>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm align-center">
                                                                     <div className="flex flex-col items-start gap-1">
                                                                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task</span>
                                                                         {(hospital.nearDueCount ?? 0) > 0 && (
@@ -2632,8 +2964,60 @@ const ImplementationTasksPage: React.FC = () => {
                                                                         )}
                                                                     </div>
                                                                 </td>
-                                                                <td className="px-6  whitespace-nowrap text-sm">
-                                                                    <button onClick={(e) => { e.stopPropagation(); setSelectedHospital(hospital.label); setShowHospitalList(false); setPage(0); }} className="p-6 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition" title="Xem công việc"><AiOutlineEye className="text-lg" /></button>
+                                                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                                    <div className="flex items-center justify-center gap-1">
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                setSelectedHospital(hospital.label);
+                                                                                setShowHospitalList(false);
+                                                                                setPage(0);
+                                                                            }}
+                                                                            className="p-1.5 rounded-lg text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition"
+                                                                            title="Xem công việc"
+                                                                        >
+                                                                            <AiOutlineEye className="h-4 w-4" />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={async (e) => {
+                                                                                e.stopPropagation();
+                                                                                // hospital.id từ summary API chính là hospitalId thực sự từ bảng hospitals
+                                                                                // Chỉ resolve lại nếu hospital.id không hợp lệ (số âm hoặc <= 0)
+                                                                                let finalHospitalId: number | null = null;
+                                                                                
+                                                                                if (hospital.id && hospital.id > 0) {
+                                                                                    // Dùng trực tiếp hospital.id vì nó đã là hospitalId thực sự từ summary API
+                                                                                    finalHospitalId = hospital.id;
+                                                                                    console.log("Using hospital.id directly:", finalHospitalId, "for hospital:", hospital.label);
+                                                                                } else {
+                                                                                    // Fallback: resolve từ tên nếu hospital.id không hợp lệ
+                                                                                    console.log("hospital.id is invalid, resolving from name:", hospital.id);
+                                                                                    const resolvedId = await resolveHospitalIdByName(hospital.label);
+                                                                                    if (resolvedId) {
+                                                                                        finalHospitalId = resolvedId;
+                                                                                        console.log("Resolved hospitalId:", finalHospitalId, "for hospital:", hospital.label);
+                                                                                    }
+                                                                                }
+                                                                                
+                                                                                if (finalHospitalId && finalHospitalId > 0) {
+                                                                                    setSelectedHospitalIdForTickets(finalHospitalId);
+                                                                                    setSelectedHospitalNameForTickets(hospital.label);
+                                                                                    setShowTicketsModal(true);
+                                                                                } else {
+                                                                                    toast.error("Không thể tìm thấy ID bệnh viện hợp lệ");
+                                                                                }
+                                                                            }}
+                                                                            className="relative rounded-lg p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 transition"
+                                                                            title="Xem danh sách tickets"
+                                                                        >
+                                                                            <FiTag className="h-4 w-4" />
+                                                                            {(ticketOpenCounts[hospital.id] ?? 0) > 0 && (
+                                                                                <span className="absolute -right-1 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
+                                                                                    {ticketOpenCounts[hospital.id]}
+                                                                                </span>
+                                                                            )}
+                                                                        </button>
+                                                                    </div>
                                                                 </td>
                                                             </tr>
                                                         ))}
@@ -2876,6 +3260,57 @@ const ImplementationTasksPage: React.FC = () => {
             })()}
 
             <DetailModal open={detailOpen} onClose={() => setDetailOpen(false)} item={detailItem} />
+
+            {/* Tickets Modal */}
+            <AnimatePresence>
+                {showTicketsModal && selectedHospitalIdForTickets && (
+                    <motion.div
+                        className="fixed inset-0 z-[120] flex items-center justify-center p-4 backdrop-blur-sm"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.15 }}
+                    >
+                        <motion.div
+                            className="absolute inset-0 bg-black/50"
+                            onClick={() => setShowTicketsModal(false)}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.15 }}
+                        />
+                        <motion.div
+                            className="relative z-[121] w-full max-w-6xl rounded-2xl bg-white shadow-2xl border border-gray-200 dark:bg-gray-800 dark:border-gray-700 max-h-[90vh] overflow-y-auto"
+                            initial={{ opacity: 0, scale: 0.98, y: 8 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.98, y: 8 }}
+                            transition={{ duration: 0.18 }}
+                        >
+                            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
+                                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                    Tickets của {selectedHospitalNameForTickets || hospitalsWithTasks.find(h => h.id === selectedHospitalIdForTickets)?.label || "Bệnh viện"}
+                                </h3>
+                                <button
+                                    onClick={() => {
+                                        setShowTicketsModal(false);
+                                        setSelectedHospitalIdForTickets(null);
+                                        setSelectedHospitalNameForTickets(null);
+                                    }}
+                                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
+                                >
+                                    <FiX className="h-5 w-5" />
+                                </button>
+                            </div>
+                            <div className="p-6">
+                                <TicketsTab
+                                    hospitalId={selectedHospitalIdForTickets}
+                                    onTicketsChange={handleTicketsChange}
+                                />
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

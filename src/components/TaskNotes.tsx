@@ -171,16 +171,16 @@ export default function TaskNotes({
     const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
     const userStr = localStorage.getItem("user") || sessionStorage.getItem("user");
     // eslint-disable-next-line no-console
-    console.log("TaskNotes Render:", { 
-      taskId, 
-      myRole, 
-      isAdmin, 
-      isSuperAdmin, 
-      canAddNote, 
-      currentUserId,
-      rolesFromStorage: rolesStr ? JSON.parse(rolesStr) : null,
-      userRoles: userStr ? JSON.parse(userStr)?.roles : null
-    });
+    // console.log("TaskNotes Render:", { 
+    //   taskId, 
+    //   myRole, 
+    //   isAdmin, 
+    //   isSuperAdmin, 
+    //   canAddNote, 
+    //   currentUserId,
+    //   rolesFromStorage: rolesStr ? JSON.parse(rolesStr) : null,
+    //   userRoles: userStr ? JSON.parse(userStr)?.roles : null
+    // });
   }, [taskId, myRole, isAdmin, isSuperAdmin, canAddNote, currentUserId]);
 
   const apiBase = taskType === "maintenance" 
@@ -220,10 +220,11 @@ export default function TaskNotes({
         const SockJS = sockjsMod.default;
 
         const token = authHeaders().Authorization?.replace("Bearer ", "") || "";
-        const wsUrl = token ? `${WS_URL}?token=${encodeURIComponent(token)}` : WS_URL;
-
+        // ✅ SECURITY FIX: Do NOT send token in query string (it will appear in logs)
+        // Token is sent via STOMP connectHeaders instead
         const client = new StompClient({
-          webSocketFactory: () => new SockJS(wsUrl) as any,
+          webSocketFactory: () => new SockJS(WS_URL) as any,
+          connectHeaders: token ? { Authorization: `Bearer ${token}` } : {},
           reconnectDelay: 5000,
           heartbeatIncoming: 4000,
           heartbeatOutgoing: 4000,
@@ -258,13 +259,13 @@ export default function TaskNotes({
               }
             });
             subscriptionRef.current = subscription;
-            console.log(`[TaskNotes] Subscribed to ${topic}`);
+            // console.log(`[TaskNotes] Subscribed to ${topic}`);
           },
           onStompError: (frame: any) => {
             console.error("[TaskNotes] STOMP error:", frame);
           },
           onWebSocketClose: () => {
-            console.log("[TaskNotes] WebSocket closed");
+            // console.log("[TaskNotes] WebSocket closed");
             subscriptionRef.current = null;
           }
         });

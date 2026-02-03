@@ -1,7 +1,8 @@
 import api, { getAuthToken } from './client';
 
 export async function searchHardware(q = '') {
-  const base = getBase();
+  // ✅ GET request: luôn dùng admin API
+  const base = getBase('GET', false);
   try {
     const res = await api.get(`${base}/hardware/search?search=${encodeURIComponent(q)}`);
     const data = res.data;
@@ -26,7 +27,8 @@ export async function searchHardware(q = '') {
 }
 
 export async function searchHospitals(q = '') {
-  const base = getBase();
+  // ✅ GET request: luôn dùng admin API
+  const base = getBase('GET', false);
   try {
     const res = await api.get(`${base}/hospitals/search?name=${encodeURIComponent(q)}`);
     return res.data; // expects array of { id, label }
@@ -36,60 +38,56 @@ export async function searchHospitals(q = '') {
   }
 }
 
-function getBase() {
-  if (typeof window === 'undefined') return '/api/v1/admin';
+import { isSuperAdmin as isSuperAdminPermission } from '../utils/permission';
+
+// ✅ Helper để check xem user có phải SUPERADMIN không (từ JWT token - source of truth)
+function isSuperAdmin(): boolean {
+  if (typeof window === 'undefined') return false;
   try {
-    // prefer pathname detection
-    if (window.location.pathname.startsWith('/superadmin')) return '/api/v1/superadmin';
-    // fallback: if roles contain SUPERADMIN
-    const roles = JSON.parse(localStorage.getItem('roles') || '[]');
-    if (Array.isArray(roles) && roles.some((r: unknown) => {
-      if (typeof r === 'string') return r.toUpperCase() === 'SUPERADMIN';
-      if (r && typeof r === 'object') {
-        const rr = r as Record<string, unknown>;
-        const rn = rr.roleName ?? rr.role_name ?? rr.role;
-        return typeof rn === 'string' && rn.toUpperCase() === 'SUPERADMIN';
-      }
-      return false;
-    })) {
+    // Check pathname
+    if (window.location.pathname.startsWith('/superadmin')) return true;
+    return isSuperAdminPermission();
+  } catch {
+    return false;
+  }
+}
+
+function getBase(method: string = 'GET', canManage: boolean = false) {
+  // ✅ GET requests: luôn dùng admin API (admin thường có thể xem)
+  if (method === 'GET') {
+    return '/api/v1/admin';
+  }
+  // ✅ Write operations (POST, PUT, DELETE): 
+  // Nếu canManage = true, có nghĩa là user có quyền (superadmin hoặc team SALES)
+  // Superadmin nên dùng superadmin API để bypass team check
+  // Team SALES có thể dùng admin API vì backend đã check team permission
+  if (canManage && (method === 'POST' || method === 'PUT' || method === 'DELETE')) {
+    // Nếu là superadmin, dùng superadmin API để đảm bảo bypass team check
+    if (isSuperAdmin()) {
       return '/api/v1/superadmin';
     }
-    // fallback 2: try to decode JWT token and inspect claims for roles/authorities
-    const token = getAuthToken();
-    if (token) {
-      try {
-        const parts = token.split('.');
-        if (parts.length >= 2) {
-          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-          const maybeRoles = payload.roles || payload.authorities || payload.role || payload.realm_access && payload.realm_access.roles;
-          if (Array.isArray(maybeRoles) && maybeRoles.some((r: unknown) => typeof r === 'string' && (r as string).toUpperCase() === 'SUPERADMIN')) {
-            return '/api/v1/superadmin';
-          }
-        }
-      } catch {
-        // ignore decode errors
-      }
-    }
-  } catch {
-    // ignore
+    // Nếu không phải superadmin nhưng canManage = true, có nghĩa là team SALES
+    // Team SALES có thể dùng admin API vì backend đã check team permission
   }
+  // Fallback: dùng admin API
   return '/api/v1/admin';
 }
 
-export async function createBusiness(payload: Record<string, unknown>) {
-  const base = getBase();
+export async function createBusiness(payload: Record<string, unknown>, canManage: boolean = false) {
+  const base = getBase('POST', canManage);
   const res = await api.post(`${base}/business`, payload);
   return res.data;
 }
 
-export async function updateBusiness(id: number, payload: Record<string, unknown>) {
-  const base = getBase();
+export async function updateBusiness(id: number, payload: Record<string, unknown>, canManage: boolean = false) {
+  const base = getBase('PUT', canManage);
   const res = await api.put(`${base}/business/${id}`, payload);
   return res.data;
 }
 
 export async function getBusinesses(params = {}) {
-  const base = getBase();
+  // ✅ GET request: luôn dùng admin API
+  const base = getBase('GET', false);
   const query = new URLSearchParams();
   Object.entries(params as Record<string, unknown>).forEach(([key, value]) => {
     if (value === undefined || value === null) return;
@@ -104,13 +102,15 @@ export async function getBusinesses(params = {}) {
 }
 
 export async function getBusinessById(id: number) {
-  const base = getBase();
+  // ✅ GET request: luôn dùng admin API
+  const base = getBase('GET', false);
   const res = await api.get(`${base}/business/${id}`);
   return res.data;
 }
 
 export async function getHardwareById(id: number) {
-  const base = getBase();
+  // ✅ GET request: luôn dùng admin API
+  const base = getBase('GET', false);
   try {
     const res = await api.get(`${base}/hardware/${id}`);
     return res.data;
@@ -121,20 +121,22 @@ export async function getHardwareById(id: number) {
   }
 }
 
-export async function deleteBusiness(id: number) {
-  const base = getBase();
+export async function deleteBusiness(id: number, canManage: boolean = false) {
+  const base = getBase('DELETE', canManage);
   const res = await api.delete(`${base}/business/${id}`);
   return res.data;
 }
 
 export async function getBusinessPicOptions() {
-  const base = getBase();
+  // ✅ GET request: luôn dùng admin API
+  const base = getBase('GET', false);
   const res = await api.get(`${base}/business/pic-options`);
   return res.data;
 }
 
 export async function getMonthlySalesStats(year?: number) {
-  const base = getBase();
+  // ✅ GET request: luôn dùng admin API
+  const base = getBase('GET', false);
   const query = year ? `?year=${year}` : '';
   const res = await api.get(`${base}/business/monthly-stats${query}`);
   return res.data;

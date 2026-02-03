@@ -167,11 +167,13 @@
 }
 html {
   scrollbar-gutter: stable;
+  overflow-x: hidden;
 }
 
 /* fallback cho trình duyệt chưa hỗ trợ */
 body {
   overflow-y: scroll;
+  overflow-x: hidden;
 }
 /*
   The default border color has changed to `currentColor` in Tailwind CSS v4,
@@ -344,11 +346,13 @@ table, td, th {
 }
 html {
   scrollbar-gutter: stable;
+  overflow-x: hidden;
 }
 
 /* fallback cho trình duyệt chưa hỗ trợ */
 body {
   overflow-y: scroll;
+  overflow-x: hidden;
 }
 @utility custom-scrollbar {
   &::-webkit-scrollbar {
@@ -375,6 +379,19 @@ body {
   input[type="time"]::-webkit-calendar-picker-indicator {
     display: none;
     -webkit-appearance: none;
+  }
+
+  /* ✅ Ẩn icon mắt mặc định của browser cho password input */
+  /* Chrome / Edge */
+  input[type="password"]::-webkit-credentials-auto-fill-button {
+    visibility: hidden;
+    position: absolute;
+    right: 0;
+  }
+
+  /* Edge */
+  input[type="password"]::-ms-reveal {
+    display: none;
   }
 }
 

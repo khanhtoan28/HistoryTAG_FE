@@ -4,6 +4,7 @@
 import { AiOutlineEdit, AiOutlineDelete, AiOutlineEye } from "react-icons/ai";
 import { FaTasks } from "react-icons/fa";
 import { ImplementationTaskResponseDTO } from "../PageClients/implementation-tasks";
+import { isBusinessContractTaskName as isBusinessContractTask } from "../../utils/businessContract";
 
 // 🔹 Base type chung cho cả Implementation và Maintenance tasks
 type BaseTask = {
@@ -162,9 +163,18 @@ export default function TaskCardNew({
   const headerAlignClass = titleIsLong ? "items-start" : "items-center";
   const iconOffsetClass = titleIsLong ? "mt-0.5" : "";
 
+  const fromBusiness =
+    Boolean((task as any)?.fromBusinessContract) ||
+    Boolean((task as any)?.businessProjectId) ||
+    isBusinessContractTask(taskTitle);
+
   return (
     <div
-      className="group relative w-full rounded-2xl bg-white dark:bg-gray-900 px-6 py-5 shadow-sm transition-all border border-gray-100 dark:border-gray-800 hover:border-blue-200 hover:shadow-lg"
+      className={`group relative w-full rounded-2xl bg-white dark:bg-gray-900 px-6 py-5 shadow-sm transition-all border ${
+        fromBusiness
+          ? "border-purple-300 dark:border-purple-600 ring-1 ring-purple-200/70"
+          : "border-gray-100 dark:border-gray-800 hover:border-blue-200"
+      } hover:shadow-lg`}
       style={style}
     >
       {leadingTopLeft && (
@@ -176,7 +186,11 @@ export default function TaskCardNew({
         {/* Left badge + icon */}
         <div className="flex items-center gap-3">
           <div className="flex flex-col items-center">
-            <div className="w-12 h-12 rounded-md bg-gray-50 dark:bg-blue-800 border flex items-center justify-center text-sm font-semibold text-gray-700 dark:text-gray-200">
+            <div className={`w-12 h-12 rounded-md border flex items-center justify-center text-sm font-semibold ${
+              fromBusiness
+                ? "bg-purple-50 border-purple-300 text-purple-800 dark:bg-purple-900 dark:border-purple-500 dark:text-purple-100"
+                : "bg-gray-50 dark:bg-blue-800 border-gray-200 text-gray-700 dark:text-gray-200"
+            }`}>
               {orderLabel}
             </div>
           </div>
@@ -186,30 +200,32 @@ export default function TaskCardNew({
         </div>
 
         {/* Main content */}
-        <div className="flex-1">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0">
-              <div className="flex items-center gap-3 flex-wrap">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
-                  { task.name}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start gap-3 flex-wrap">
+                <h3 className="text-lg font-semibold text-blue-800 dark:text-gray-100 break-words min-w-0 flex-1" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                  {task.name}
                 </h3>
 
-                {(statusValue || transferredToMaintenance) && (
-                  <span
-                    className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${badgeClass}`}
-                  >
-                    {badgeLabel}
-                  </span>
-                )}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {(statusValue || transferredToMaintenance) && (
+                    <span
+                      className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${badgeClass}`}
+                    >
+                      {badgeLabel}
+                    </span>
+                  )}
 
-                {/* Hiển thị badge "Quá hạn" hoặc "Sắp hạn" */}
-                {deadlineStatus && (
-                  <span
-                    className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${deadlineStatus.class}`}
-                  >
-                    {deadlineStatus.label}
-                  </span>
-                )}
+                  {/* Hiển thị badge "Quá hạn" hoặc "Sắp hạn" */}
+                  {deadlineStatus && (
+                    <span
+                      className={`inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${deadlineStatus.class}`}
+                    >
+                      {deadlineStatus.label}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {task.hisSystemName && (
