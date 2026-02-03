@@ -1125,7 +1125,8 @@ export default function ContractsTab({
                         <div className="flex items-center gap-1">
                           <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
                           {contract.expiryDate}
-                          {contract.daysLeft !== undefined && (
+                          {/* Ẩn phần hiển thị daysLeft nếu hợp đồng đã gia hạn */}
+                          {contract.daysLeft !== undefined && contract.status !== "DA_GIA_HAN" && (
                             <span className={`text-xs ml-2 ${
                               contract.daysLeft <= 30 ? "text-red-600" : "text-gray-500"
                             }`}>

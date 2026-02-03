@@ -485,12 +485,28 @@ export default function HospitalDetailView() {
           0;
 
         // Determine status from contracts
+        // Ưu tiên kiểm tra daysLeft trước để đảm bảo chính xác
         let status: "DANG_BAO_HANH" | "SAP_HET_HAN" | "HET_HAN" | "DA_hop_dong" = "DANG_BAO_HANH";
         if (latestContract) {
-          if (latestContract.status === "HET_HAN") status = "HET_HAN";
-          else if (latestContract.status === "SAP_HET_HAN") status = "SAP_HET_HAN";
-          else if (latestContract.status === "DA_GIA_HAN") status = "DA_hop_dong";
-          else if (latestContract.status === "DANG_HOAT_DONG") status = "DANG_BAO_HANH";
+          // Nếu daysLeft < 0, luôn là HET_HAN (quá hạn) bất kể status từ API
+          if (daysLeft < 0) {
+            status = "HET_HAN";
+          } else if (latestContract.status === "HET_HAN") {
+            status = "HET_HAN";
+          } else if (latestContract.status === "SAP_HET_HAN") {
+            // Chỉ là SAP_HET_HAN nếu daysLeft > 0 và <= 30
+            if (daysLeft > 0 && daysLeft <= 30) {
+              status = "SAP_HET_HAN";
+            } else if (daysLeft < 0) {
+              status = "HET_HAN";
+            } else {
+              status = "DANG_BAO_HANH";
+            }
+          } else if (latestContract.status === "DA_GIA_HAN") {
+            status = "DA_hop_dong";
+          } else if (latestContract.status === "DANG_HOAT_DONG") {
+            status = "DANG_BAO_HANH";
+          }
         }
 
         // Convert API response sang HospitalDetail format
@@ -847,11 +863,20 @@ export default function HospitalDetailView() {
                 <div>
                   <div className="flex flex-wrap items-center gap-3">
                     <h1 className="text-xl font-bold text-gray-900 dark:text-white">{hospital.name}</h1>
-                    {nextExpiringContract && nextExpiringContract.daysLeft !== undefined && nextExpiringContract.daysLeft <= 30 && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700 border border-amber-300">
-                        <FiAlertTriangle className="h-3 w-3" />
-                        SẮP HẾT HẠN ({nextExpiringContract.daysLeft} NGÀY)
-                      </span>
+                    {nextExpiringContract && nextExpiringContract.daysLeft !== undefined && (
+                      <>
+                        {nextExpiringContract.daysLeft < 0 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700 border border-red-300">
+                            <FiAlertTriangle className="h-3 w-3" />
+                            QUÁ HẠN ({Math.abs(nextExpiringContract.daysLeft)} NGÀY)
+                          </span>
+                        ) : nextExpiringContract.daysLeft <= 30 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700 border border-amber-300">
+                            <FiAlertTriangle className="h-3 w-3" />
+                            SẮP HẾT HẠN ({nextExpiringContract.daysLeft} NGÀY)
+                          </span>
+                        ) : null}
+                      </>
                     )}
                     {activeContractsCount > 1 && (
                       <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700 border border-blue-300">

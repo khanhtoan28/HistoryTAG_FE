@@ -156,31 +156,9 @@ function calculateHospitalStatus(hospital: Hospital): Hospital["status"] | null 
     return null;
   }
   
-  // 2. Ưu tiên kiểm tra hợp đồng quá hạn trước (quan trọng nhất)
-  const expiredContracts = hospital.contracts.filter(
-    contract => contract.status === "HET_HAN" || (contract.daysLeft !== undefined && contract.daysLeft < 0)
-  );
-  if (expiredContracts.length > 0) {
-    return "qua_han";
-  }
-  
-  // 3. Kiểm tra hợp đồng sắp hết hạn (ưu tiên cao)
-  const expiringContracts = hospital.contracts.filter(
-    contract => contract.status === "SAP_HET_HAN" || (contract.daysLeft !== undefined && contract.daysLeft > 0 && contract.daysLeft <= 30)
-  );
-  if (expiringContracts.length > 0) {
-    return "sap_het_han";
-  }
-  
-  // 4. Kiểm tra hợp đồng đã gia hạn
-  const renewedContracts = hospital.contracts.filter(
-    contract => contract.status === "DA_GIA_HAN"
-  );
-  if (renewedContracts.length > 0) {
-    return "da_gia_han";
-  }
-  
-  // 5. Kiểm tra hợp đồng đang hoạt động
+  // ✅ Logic mới: Ưu tiên hợp đồng đang hoạt động (hợp đồng mới sau khi gia hạn)
+  // Nếu có hợp đồng "DANG_HOAT_DONG" (hợp đồng mới), ưu tiên hiển thị "dang_hoat_dong"
+  // Vì hợp đồng mới đang hoạt động là quan trọng hơn hợp đồng cũ đã gia hạn
   const activeContracts = hospital.contracts.filter(
     contract => contract.status === "DANG_HOAT_DONG"
   );
@@ -188,7 +166,31 @@ function calculateHospitalStatus(hospital: Hospital): Hospital["status"] | null 
     return "dang_hoat_dong";
   }
   
-  // 6. Nếu không có hợp đồng nào khớp, không thể xác định trạng thái
+  // 2. Kiểm tra hợp đồng đã gia hạn (hợp đồng cũ sau khi gia hạn)
+  const renewedContracts = hospital.contracts.filter(
+    contract => contract.status === "DA_GIA_HAN"
+  );
+  if (renewedContracts.length > 0) {
+    return "da_gia_han";
+  }
+  
+  // 3. Kiểm tra hợp đồng quá hạn (chỉ khi chưa có hợp đồng đang hoạt động hoặc đã gia hạn)
+  const expiredContracts = hospital.contracts.filter(
+    contract => contract.status === "HET_HAN" || (contract.daysLeft !== undefined && contract.daysLeft < 0)
+  );
+  if (expiredContracts.length > 0) {
+    return "qua_han";
+  }
+  
+  // 4. Kiểm tra hợp đồng sắp hết hạn (ưu tiên cao)
+  const expiringContracts = hospital.contracts.filter(
+    contract => contract.status === "SAP_HET_HAN" || (contract.daysLeft !== undefined && contract.daysLeft > 0 && contract.daysLeft <= 30)
+  );
+  if (expiringContracts.length > 0) {
+    return "sap_het_han";
+  }
+  
+  // 5. Nếu không có hợp đồng nào khớp, không thể xác định trạng thái
   return null;
 }
 
@@ -650,7 +652,7 @@ export default function HospitalCareList() {
     setShowAddHospitalModal(false);
     setEditingHospital(null);
     
-    // Refresh list
+    // Refresh list và contract status counts
     try {
       const params: any = {
         page: currentPage,
@@ -673,6 +675,14 @@ export default function HospitalCareList() {
       setHospitals(convertedHospitals);
       setTotalItems(total);
       setTotalPages(pages);
+      
+      // ✅ Refresh contract status counts sau khi có thay đổi
+      try {
+        const counts = await getContractStatusCounts();
+        setContractStatusCounts(counts);
+      } catch (countsErr) {
+        console.warn("Error refreshing contract status counts:", countsErr);
+      }
     } catch (err) {
       console.error("Error refreshing list:", err);
     }
@@ -1217,9 +1227,126 @@ export default function HospitalCareList() {
         {selectedHospitalId && (
           <HospitalDetailView
             isOpen={showDetailModal}
-            onClose={() => {
+            onClose={async () => {
               setShowDetailModal(false);
               setSelectedHospitalId(null);
+              // ✅ Refresh contract status counts sau khi đóng modal (có thể đã gia hạn hợp đồng)
+              try {
+                const counts = await getContractStatusCounts();
+                setContractStatusCounts(counts);
+                // Refresh hospitals list để có data mới nhất
+                const params: any = {
+                  page: currentPage,
+                  size: itemsPerPage,
+                  sortBy: "lastContactDate",
+                  sortDir: "desc",
+                };
+                if (searchTerm) params.search = searchTerm;
+                if (priorityFilter) params.priority = priorityFilter;
+                if (activeTab && activeTab !== "all") params.contractStatus = activeTab;
+                
+                const response = await getAllCustomerCares(params);
+                const data = response.content || response.data || (Array.isArray(response) ? response : []);
+                const total = response.totalElements || response.total || data.length;
+                const pages = response.totalPages || Math.ceil(total / itemsPerPage);
+                
+                // Fetch contracts cho từng hospital
+                const hospitalsWithContracts = await Promise.all(
+                  (Array.isArray(data) ? data : []).map(async (hospital: CustomerCareResponseDTO) => {
+                    try {
+                      const contractsRes = await getMaintainContracts({
+                        careId: hospital.careId,
+                        page: 0,
+                        size: 1000,
+                      });
+                      const contractsData = Array.isArray(contractsRes?.content) 
+                        ? contractsRes.content 
+                        : Array.isArray(contractsRes?.data?.content)
+                        ? contractsRes.data.content
+                        : Array.isArray(contractsRes?.data) 
+                        ? contractsRes.data 
+                        : Array.isArray(contractsRes)
+                        ? contractsRes
+                        : [];
+                      
+                      const totalValue = contractsData.reduce((sum: number, c: any) => {
+                        const price = Number(c?.totalPrice || 0);
+                        return sum + (Number.isFinite(price) ? price : 0);
+                      }, 0);
+                      
+                      const contracts: Contract[] = contractsData.map((c: any) => {
+                        let expiryDate = "";
+                        if (c.endDate) {
+                          try {
+                            const [datePart] = c.endDate.split('T');
+                            if (datePart) {
+                              const [year, month, day] = datePart.split('-');
+                              expiryDate = `${day}/${month}/${year}`;
+                            }
+                          } catch {
+                            try {
+                              const d = new Date(c.endDate);
+                              if (!Number.isNaN(d.getTime())) {
+                                const day = String(d.getDate()).padStart(2, "0");
+                                const month = String(d.getMonth() + 1).padStart(2, "0");
+                                const year = d.getFullYear();
+                                expiryDate = `${day}/${month}/${year}`;
+                              }
+                            } catch {}
+                          }
+                        }
+                        
+                        let year = new Date().getFullYear();
+                        if (c.startDate) {
+                          try {
+                            const [datePart] = c.startDate.split('T');
+                            if (datePart) {
+                              year = parseInt(datePart.split('-')[0], 10);
+                            }
+                          } catch {
+                            try {
+                              const d = new Date(c.startDate);
+                              if (!Number.isNaN(d.getTime())) {
+                                year = d.getFullYear();
+                              }
+                            } catch {}
+                          }
+                        }
+                        
+                        return {
+                          id: String(c.id || ""),
+                          code: c.contractCode || "",
+                          type: c.type || "Bảo trì (Maintenance)",
+                          year,
+                          value: formatCurrency(c.totalPrice || 0),
+                          status: c.status || "DANG_HOAT_DONG",
+                          expiryDate,
+                          daysLeft: c.daysLeft !== undefined && c.daysLeft !== null ? c.daysLeft : undefined,
+                          kioskQuantity: c.kioskQuantity || null,
+                        };
+                      });
+                      
+                      return {
+                        ...hospital,
+                        contractValue: totalValue,
+                        contracts,
+                      };
+                    } catch (err) {
+                      console.warn(`Could not fetch contracts for hospital ${hospital.careId}:`, err);
+                      return {
+                        ...hospital,
+                        contracts: [],
+                      };
+                    }
+                  })
+                );
+                
+                setHospitals(hospitalsWithContracts.map(convertApiResponseToHospital));
+                setTotalItems(total);
+                setTotalPages(pages);
+              } catch (err) {
+                console.warn("Error refreshing after closing detail modal:", err);
+              }
             }}
             hospitalId={selectedHospitalId}
           />
