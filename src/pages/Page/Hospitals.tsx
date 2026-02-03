@@ -5,7 +5,7 @@ import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
 // removed unused icons import (use react-icons instead)
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
-import { FiMapPin, FiPhone, FiUser, FiClock, FiTag, FiImage, FiMap, FiDownload } from "react-icons/fi";
+import { FiMapPin, FiPhone, FiUser, FiClock, FiTag, FiImage, FiMap, FiDownload, FiFile } from "react-icons/fi";
 import { RiHistoryLine } from "react-icons/ri";
 import { FaHospitalAlt } from "react-icons/fa";
 import toast from "react-hot-toast";
@@ -26,7 +26,7 @@ export type Hospital = {
   deadline?: string | null;
   completionDate?: string | null;
   notes?: string | null;
-  imageUrl?: string | null;
+  apiFileUrl?: string | null;
   priority?: string | null;
   updatedAt?: string | null;
   assignedUserIds?: number[];
@@ -36,6 +36,10 @@ export type Hospital = {
   personInChargeName?: string | null;
   personInChargeEmail?: string | null;
   personInChargePhone?: string | null;
+  maintenancePersonInChargeId?: number | null;
+  maintenancePersonInChargeName?: string | null;
+  maintenancePersonInChargeEmail?: string | null;
+  maintenancePersonInChargePhone?: string | null;
   contractCount?: number; // Tổng số hợp đồng (business + warranty)
 };
 
@@ -51,12 +55,14 @@ export type HospitalForm = {
   hardwareName?: string;
   projectStatus: string;
   notes?: string;
-  imageFile?: File | null;
-  imageUrl?: string | null;
+  apiFile?: File | null;
+  apiFileUrl?: string | null;
   priority: string;
   // assignedUserIds removed from Hospital form UI; assignment managed elsewhere
   personInChargeId?: number;
   personInChargeName?: string;
+  maintenancePersonInChargeId?: number;
+  maintenancePersonInChargeName?: string;
 };
 
 type ITUserOption = {
@@ -71,6 +77,20 @@ const API_BASE = import.meta.env.VITE_API_URL ?? "";
 const BASE = `${API_BASE}/api/v1/auth/hospitals`; // GET, Search endpoints
 const SUPERADMIN_BASE = `${API_BASE}/api/v1/superadmin/hospitals`; // CREATE, UPDATE, DELETE
 
+// ✅ Helper để build URL an toàn (xử lý cả relative và absolute URLs)
+function buildUrl(path: string): URL {
+  // Nếu path đã là absolute URL (có protocol), dùng trực tiếp
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return new URL(path);
+  }
+  // Nếu API_BASE có giá trị, dùng nó làm base
+  if (API_BASE) {
+    return new URL(path, API_BASE);
+  }
+  // Nếu không có API_BASE, dùng window.location.origin làm base
+  return new URL(path, window.location.origin);
+}
+
 const MIN_LOADING_MS = 800;
 
 function authHeader(): Record<string, string> {
@@ -81,6 +101,70 @@ function authHeader(): Record<string, string> {
       Accept: "application/json"
     }
     : { Accept: "application/json" };
+}
+
+/**
+ * Download file API bệnh viện qua secure endpoint
+ * @param hospitalId ID bệnh viện
+ * @param apiFileUrl URL hoặc path của file (để kiểm tra loại file)
+ */
+async function downloadHospitalApiFile(hospitalId: number, apiFileUrl: string | null | undefined) {
+  if (!apiFileUrl) return;
+  
+  // Nếu là URL công khai (Cloudinary) → download trực tiếp (backward compatibility)
+  if (apiFileUrl.startsWith('http://') || apiFileUrl.startsWith('https://')) {
+    window.open(apiFileUrl, '_blank');
+    return;
+  }
+  
+  // Nếu là local file path → download qua secure endpoint
+  try {
+    const url = `${API_BASE}/api/v1/admin/hospitals/${hospitalId}/api-file/download`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: authHeader(),
+      credentials: 'include',
+    });
+    
+    if (!response.ok) {
+      if (response.status === 401) {
+        toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
+      if (response.status === 403) {
+        toast.error('Bạn không có quyền truy cập file này.');
+        return;
+      }
+      const errorText = await response.text();
+      throw new Error(errorText || `Lỗi ${response.status}`);
+    }
+    
+    // Lấy filename từ Content-Disposition header
+    const contentDisposition = response.headers.get('Content-Disposition');
+    let filename = 'api-file';
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      if (filenameMatch && filenameMatch[1]) {
+        filename = filenameMatch[1].replace(/['"]/g, '');
+      }
+    }
+    
+    // Download file
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(downloadUrl);
+    
+    toast.success('Tải file thành công');
+  } catch (error) {
+    console.error('Error downloading file:', error);
+    toast.error('Lỗi khi tải file: ' + (error instanceof Error ? error.message : 'Unknown error'));
+  }
 }
 
 function toFormData(payload: Record<string, any>) {
@@ -111,6 +195,7 @@ const PRIORITY_FALLBACK: EnumOption[] = [
 ];
 
 const STATUS_FALLBACK: EnumOption[] = [
+  { name: "NOT_DEPLOYED", displayName: "Chưa triển khai" },
   { name: "IN_PROGRESS", displayName: "Đang thực hiện" },
   { name: "COMPLETED", displayName: "Hoàn thành" },
   { name: "ISSUE", displayName: "Gặp sự cố" },
@@ -139,6 +224,8 @@ function disp(map: Record<string, string>, key?: string | null) {
 // Hàm lấy màu cho trạng thái
 function getStatusColor(status?: string | null): string {
   switch (status) {
+    case "NOT_DEPLOYED":
+      return "text-gray-600";
     case "IN_PROGRESS":
       return "text-orange-600";
     case "COMPLETED":
@@ -171,6 +258,8 @@ function getPriorityColor(priority?: string | null): string {
 // Background color helpers for small status/priority indicators
 function getStatusBg(status?: string | null): string {
   switch (status) {
+    case "NOT_DEPLOYED":
+      return "bg-gray-400";
     case "IN_PROGRESS":
       return "bg-orange-500";
     case "COMPLETED":
@@ -324,11 +413,22 @@ function DetailModal({
             />
 
             <Info
-              label="Phụ trách chính"
+              label="Phụ trách triển khai"
               icon={<FiUser />}
               value={
                 item.personInChargeName ? (
                   <span className="font-medium text-gray-900 dark:text-gray-100">{item.personInChargeName}</span>
+                ) : (
+                  "—"
+                )
+              }
+            />
+            <Info
+              label="Phụ trách bảo trì"
+              icon={<FiUser />}
+              value={
+                item.maintenancePersonInChargeName ? (
+                  <span className="font-medium text-gray-900 dark:text-gray-100">{item.maintenancePersonInChargeName}</span>
                 ) : (
                   "—"
                 )
@@ -342,19 +442,21 @@ function DetailModal({
             <Info label="Cập nhật lúc" icon={<FiClock />} value={fmt(item.updatedAt)} />
           </div>
 
-          {/* Image */}
-          {item.imageUrl && (
+          {/* API File */}
+          {item.apiFileUrl && (
             <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
-              <p className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Ảnh bệnh viện:</p>
-              <div className="rounded-xl overflow-hidden">
-                <img
-                  src={item.imageUrl}
-                  alt="Ảnh bệnh viện"
-                  className="max-w-full h-auto object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
-                />
+              <p className="font-semibold text-gray-900 dark:text-gray-100 mb-2">File API bệnh viện:</p>
+              <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-4">
+                <button
+                  onClick={() => downloadHospitalApiFile(item.id, item.apiFileUrl)}
+                  className="flex items-center gap-3 text-blue-700 hover:text-blue-800 transition-colors cursor-pointer"
+                >
+                  <FiDownload className="w-5 h-5" />
+                  <span className="font-medium">Tải file API</span>
+                </button>
+                <p className="mt-2 text-xs text-gray-600 dark:text-gray-400 break-all">
+                  {item.apiFileUrl.startsWith('http') ? item.apiFileUrl : 'File được lưu trên server (bảo mật)'}
+                </p>
               </div>
             </div>
           )}
@@ -386,18 +488,11 @@ function DetailModal({
   );
 }
 
+import { useAuth } from "../../contexts/AuthContext";
+
 export default function HospitalsPage() {
-  // Determine if current user can perform write actions (SUPERADMIN)
-  const canEdit = (() => {
-    try {
-      const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
-      if (!rolesStr) return false;
-      const roles = JSON.parse(rolesStr);
-      return Array.isArray(roles) && roles.some((r: string) => r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin");
-    } catch (e) {
-      return false;
-    }
-  })();
+  // ✅ Use AuthContext hook - Performance optimized với useMemo, reactive với token changes
+  const { canEdit } = useAuth();
   const [items, setItems] = useState<Hospital[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -414,11 +509,14 @@ export default function HospitalsPage() {
   // Filters (server-side)
   const [qName, setQName] = useState("");
   const [debouncedQName, setDebouncedQName] = useState(""); // Debounced version for API calls
+  const [qCode, setQCode] = useState("");
+  const [debouncedQCode, setDebouncedQCode] = useState(""); // Debounced version for API calls
   const [qProvince, setQProvince] = useState("");
   const [qStatus, setQStatus] = useState("");
   const [qPriority, setQPriority] = useState("");
   const [qPersonInCharge, setQPersonInCharge] = useState("");
   const nameSearchDebounceRef = useRef<number | null>(null);
+  const codeSearchDebounceRef = useRef<number | null>(null);
   
   // Debounce name search input: update debouncedQName after 300ms of no typing
   useEffect(() => {
@@ -434,11 +532,25 @@ export default function HospitalsPage() {
       }
     };
   }, [qName]);
+
+  useEffect(() => {
+    if (codeSearchDebounceRef.current) {
+      window.clearTimeout(codeSearchDebounceRef.current);
+    }
+    codeSearchDebounceRef.current = window.setTimeout(() => {
+      setDebouncedQCode(qCode);
+    }, 300);
+    return () => {
+      if (codeSearchDebounceRef.current) {
+        window.clearTimeout(codeSearchDebounceRef.current);
+      }
+    };
+  }, [qCode]);
   
   // Reset về trang đầu khi filter thay đổi
   useEffect(() => {
     setPage(0);
-  }, [debouncedQName, qProvince, qStatus, qPriority, qPersonInCharge]);
+  }, [debouncedQName, debouncedQCode, qProvince, qStatus, qPriority, qPersonInCharge]);
 
   const [priorityOptions] = useState<EnumOption[]>(PRIORITY_FALLBACK);
   const [statusOptions] = useState<EnumOption[]>(STATUS_FALLBACK);
@@ -453,7 +565,7 @@ export default function HospitalsPage() {
   const [contractsHospital, setContractsHospital] = useState<Hospital | null>(null);
   const [contractsData, setContractsData] = useState<{
     businessContracts: any[];
-    warrantyContracts: any[];
+    maintainContracts: any[];
     totalCount: number;
   } | null>(null);
   const [contractsLoading, setContractsLoading] = useState(false);
@@ -496,11 +608,13 @@ export default function HospitalsPage() {
     projectStatus: "IN_PROGRESS",
   // Project dates are now managed by BusinessProject (master)
     notes: "",
-    imageFile: null,
-    imageUrl: null,
+    apiFile: null,
+    apiFileUrl: null,
   priority: "P2",
     personInChargeId: undefined,
     personInChargeName: "",
+    maintenancePersonInChargeId: undefined,
+    maintenancePersonInChargeName: "",
   });
 
   const isEditing = !!editing?.id;
@@ -530,12 +644,14 @@ export default function HospitalsPage() {
       projectStatus: h.projectStatus ?? "IN_PROGRESS",
   // project dates are managed by BusinessProject
       notes: h.notes ?? "",
-      imageFile: null,
-      imageUrl: (h.imageUrl && h.imageUrl.trim()) ? h.imageUrl : null,
+      apiFile: null,
+      apiFileUrl: (h.apiFileUrl && h.apiFileUrl.trim()) ? h.apiFileUrl : null,
       priority: h.priority ?? "P2",
       // assignedUserIds removed from form; we don't populate it here
       personInChargeId: h.personInChargeId ?? undefined,
       personInChargeName: h.personInChargeName ?? "",
+      maintenancePersonInChargeId: h.maintenancePersonInChargeId ?? undefined,
+      maintenancePersonInChargeName: h.maintenancePersonInChargeName ?? "",
     });
   }
 
@@ -543,7 +659,8 @@ export default function HospitalsPage() {
   const searchHardwares = useMemo(
     () => async (term: string) => {
       try {
-        const url = `${API_BASE}/api/v1/superadmin/hardware/search?search=${encodeURIComponent(term)}`;
+        // ✅ Dùng /api/v1/admin thay vì /api/v1/superadmin để admin thường cũng có thể dùng
+        const url = `${API_BASE}/api/v1/admin/hardware/search?search=${encodeURIComponent(term)}`;
         const res = await fetch(url, { headers: { ...authHeader() }, credentials: "include" } as any);
         if (!res.ok) return [];
         const list = await res.json();
@@ -559,27 +676,62 @@ export default function HospitalsPage() {
   const searchItUsers = useMemo(
     () => async (term: string) => {
       try {
+        // ✅ Dùng /api/v1/admin thay vì /api/v1/superadmin để admin thường cũng có thể dùng
         const params = new URLSearchParams({
           department: "IT",
-          status: "true",
         });
         if (term && term.trim()) {
-          params.set("fullName", term.trim());
+          params.set("name", term.trim()); // admin API dùng "name" thay vì "fullName"
         }
-        const res = await fetch(`${API_BASE}/api/v1/superadmin/users/filter?${params.toString()}`, {
+        const res = await fetch(`${API_BASE}/api/v1/admin/users/search?${params.toString()}`, {
           headers: { ...authHeader() },
           credentials: "include",
         } as any);
         if (!res.ok) return [];
         const list = await res.json();
         const array = Array.isArray(list) ? list : [];
+        // ✅ Map từ EntitySelectDTO format (id, label, subLabel) sang ITUserOption
         return array
           .map((u: any) => ({
             id: Number(u.id),
-            name: String(u.fullname ?? u.username ?? u.email ?? u.id),
-            username: u.username ?? undefined,
-            email: u.email ?? null,
-            phone: u.phone ?? null,
+            name: String(u.label ?? u.name ?? u.id),
+            username: undefined, // admin API không trả về username
+            email: u.subLabel ?? null, // subLabel là email trong admin API
+            phone: null, // admin API không trả về phone
+          }))
+          .filter((u: ITUserOption) => Number.isFinite(u.id) && u.name);
+      } catch (e) {
+        return [];
+      }
+    },
+    []
+  );
+
+  const searchMaintenanceUsers = useMemo(
+    () => async (term: string) => {
+      try {
+        // ✅ Dùng /api/v1/admin/users/search với filter department: "IT" giống như "Phụ trách triển khai"
+        const params = new URLSearchParams({
+          department: "IT",
+        });
+        if (term && term.trim()) {
+          params.set("name", term.trim()); // admin API dùng "name" thay vì "fullName"
+        }
+        const res = await fetch(`${API_BASE}/api/v1/admin/users/search?${params.toString()}`, {
+          headers: { ...authHeader() },
+          credentials: "include",
+        } as any);
+        if (!res.ok) return [];
+        const list = await res.json();
+        const array = Array.isArray(list) ? list : [];
+        // ✅ Map từ EntitySelectDTO format (id, label, subLabel) sang ITUserOption
+        return array
+          .map((u: any) => ({
+            id: Number(u.id),
+            name: String(u.label ?? u.name ?? u.id),
+            username: undefined, // admin API không trả về username
+            email: u.subLabel ?? null, // subLabel là email trong admin API
+            phone: null, // admin API không trả về phone
           }))
           .filter((u: ITUserOption) => Number.isFinite(u.id) && u.name);
       } catch (e) {
@@ -823,6 +975,7 @@ export default function HospitalsPage() {
 
   const [hardwareOpt, setHardwareOpt] = useState<{ id: number; name: string } | null>(null);
   const [personInChargeOpt, setPersonInChargeOpt] = useState<ITUserOption | null>(null);
+  const [maintenancePersonInChargeOpt, setMaintenancePersonInChargeOpt] = useState<ITUserOption | null>(null);
 
   const [hisOptions, setHisOptions] = useState<Array<{ id: number; name: string }>>([]);
   const [itUserOptions, setItUserOptions] = useState<ITUserOption[]>([]);
@@ -832,7 +985,8 @@ export default function HospitalsPage() {
     let alive = true;
     (async () => {
       try {
-        const url = `${API_BASE}/api/v1/superadmin/his?page=0&size=200`;
+        // ✅ Dùng /api/v1/admin thay vì /api/v1/superadmin để admin thường cũng có thể dùng
+        const url = `${API_BASE}/api/v1/admin/his?page=0&size=200`;
         const res = await fetch(url, { headers: { ...authHeader() } });
         if (!res.ok) return;
         const data = await res.json();
@@ -861,6 +1015,7 @@ export default function HospitalsPage() {
   useEffect(() => {
     if (!open) {
       setPersonInChargeOpt(null);
+      setMaintenancePersonInChargeOpt(null);
       return;
     }
     if (form.personInChargeId) {
@@ -880,31 +1035,49 @@ export default function HospitalsPage() {
     } else {
       setPersonInChargeOpt(null);
     }
-  }, [open, form.personInChargeId, form.personInChargeName, viewing, editing]);
+    if (form.maintenancePersonInChargeId) {
+      const name =
+        viewing?.maintenancePersonInChargeName ??
+        editing?.maintenancePersonInChargeName ??
+        form.maintenancePersonInChargeName ??
+        `#${form.maintenancePersonInChargeId}`;
+      const email = viewing?.maintenancePersonInChargeEmail ?? editing?.maintenancePersonInChargeEmail ?? null;
+      const phone = viewing?.maintenancePersonInChargePhone ?? editing?.maintenancePersonInChargePhone ?? null;
+      setMaintenancePersonInChargeOpt({
+        id: form.maintenancePersonInChargeId,
+        name,
+        email: email ?? null,
+        phone: phone ?? null,
+      });
+    } else {
+      setMaintenancePersonInChargeOpt(null);
+    }
+  }, [open, form.personInChargeId, form.personInChargeName, form.maintenancePersonInChargeId, form.maintenancePersonInChargeName, viewing, editing]);
 
   // Load danh sách IT users cho dropdown filter
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
+        // ✅ Dùng /api/v1/admin thay vì /api/v1/superadmin để admin thường cũng có thể dùng
         const params = new URLSearchParams({
           department: "IT",
-          status: "true",
         });
-        const res = await fetch(`${API_BASE}/api/v1/superadmin/users/filter?${params.toString()}`, {
+        const res = await fetch(`${API_BASE}/api/v1/admin/users/search?${params.toString()}`, {
           headers: { ...authHeader() },
           credentials: "include",
         } as any);
         if (!res.ok) return;
         const list = await res.json();
         const array = Array.isArray(list) ? list : [];
+        // ✅ Map từ EntitySelectDTO format (id, label, subLabel) sang ITUserOption
         const mapped = array
           .map((u: any) => ({
             id: Number(u.id),
-            name: String(u.fullname ?? u.username ?? u.email ?? u.id),
-            username: u.username ?? undefined,
-            email: u.email ?? null,
-            phone: u.phone ? String(u.phone) : null,
+            name: String(u.label ?? u.name ?? u.id),
+            username: undefined, // admin API không trả về username
+            email: u.subLabel ?? null, // subLabel là email trong admin API
+            phone: null, // admin API không trả về phone
           }))
           .filter((u: ITUserOption) => Number.isFinite(u.id) && u.name);
         if (alive) setItUserOptions(mapped);
@@ -940,25 +1113,26 @@ export default function HospitalsPage() {
     setLoading(true);
     setError(null);
     try {
-      const url = new URL(BASE);
+      const url = buildUrl(BASE);
       url.searchParams.set("page", String(page));
       url.searchParams.set("size", String(size));
       
       // Thêm filter params
       if (debouncedQName.trim()) url.searchParams.set("name", debouncedQName.trim());
+      if (debouncedQCode.trim()) url.searchParams.set("hospitalCode", debouncedQCode.trim());
       if (qProvince.trim()) url.searchParams.set("province", qProvince.trim());
       if (qStatus.trim()) url.searchParams.set("status", qStatus.trim());
       if (qPriority.trim()) url.searchParams.set("priority", qPriority.trim());
       if (qPersonInCharge.trim()) url.searchParams.set("personInChargeId", qPersonInCharge.trim());
       
-      console.log("🔍 Fetching hospitals with filters:", {
-        name: qName,
-        province: qProvince,
-        status: qStatus,
-        priority: qPriority,
-        personInCharge: qPersonInCharge,
-        url: url.toString()
-      });
+      // console.log("🔍 Fetching hospitals with filters:", {
+      //   name: qName,
+      //   province: qProvince,
+      //   status: qStatus,
+      //   priority: qPriority,
+      //   personInCharge: qPersonInCharge,
+      //   url: url.toString()
+      // });
       
       const res = await fetch(url.toString(), { headers: { ...authHeader() } });
       if (!res.ok) throw new Error(`GET failed ${res.status}`);
@@ -998,7 +1172,7 @@ export default function HospitalsPage() {
 
   useEffect(() => {
     fetchList();
-  }, [page, size, debouncedQName, qProvince, qStatus, qPriority, qPersonInCharge]);
+  }, [page, size, debouncedQName, debouncedQCode, qProvince, qStatus, qPriority, qPersonInCharge]);
 
   // Server đã filter rồi, dùng trực tiếp items
   const filtered = items;
@@ -1019,12 +1193,14 @@ export default function HospitalsPage() {
       projectStatus: "IN_PROGRESS",
   // project dates are managed by BusinessProject
       notes: "",
-      imageFile: null,
-      imageUrl: null,
+      apiFile: null,
+      apiFileUrl: null,
       priority: "P2",
       // assignedUserIds removed from form
       personInChargeId: undefined,
       personInChargeName: "",
+      maintenancePersonInChargeId: undefined,
+      maintenancePersonInChargeName: "",
     });
     setOpen(true);
   }
@@ -1078,7 +1254,8 @@ export default function HospitalsPage() {
 
     // Kiểm tra xem bệnh viện có hợp đồng (BusinessProject) không
     try {
-      const businessUrl = `${API_BASE}/api/v1/superadmin/business?search=${encodeURIComponent(hospital.name)}&page=0&size=50`;
+      // ✅ Dùng /api/v1/admin thay vì /api/v1/superadmin để admin thường cũng có thể dùng
+      const businessUrl = `${API_BASE}/api/v1/admin/business?search=${encodeURIComponent(hospital.name)}&page=0&size=50`;
       const businessRes = await fetch(businessUrl, {
         headers: { ...authHeader() },
       });
@@ -1092,7 +1269,7 @@ export default function HospitalsPage() {
         setHasContracts(foundContracts);
       }
     } catch (e) {
-      console.warn("Không thể kiểm tra hợp đồng:", e);
+      // console.warn("Không thể kiểm tra hợp đồng:", e);
       setHasContracts(false);
     } finally {
       setCheckingContracts(false);
@@ -1159,14 +1336,14 @@ export default function HospitalsPage() {
       const data = await res.json();
       setContractsData({
         businessContracts: data.businessContracts || [],
-        warrantyContracts: data.warrantyContracts || [],
+        maintainContracts: data.maintainContracts || [],
         totalCount: data.totalCount || 0,
       });
     } catch (e: any) {
       toast.error(e?.message || "Lỗi tải danh sách hợp đồng");
       setContractsData({
         businessContracts: [],
-        warrantyContracts: [],
+        maintainContracts: [],
         totalCount: 0,
       });
     } finally {
@@ -1258,9 +1435,10 @@ export default function HospitalsPage() {
     projectStatus: form.projectStatus,
   // project dates are handled by BusinessProject; do not send from Hospital
     notes: form.notes?.trim() || undefined,
-    imageFile: form.imageFile || undefined,
+    apiFile: form.apiFile || undefined,
     priority: form.priority,
     personInChargeId: form.personInChargeId ?? undefined,
+    maintenancePersonInChargeId: form.maintenancePersonInChargeId ?? undefined,
     // assignedUserIds intentionally not sent from Hospital form
   };
 
@@ -1281,7 +1459,10 @@ export default function HospitalsPage() {
       }
 
       closeModal();
-      setPage(0); // Reset trang 1
+      // Chỉ reset về trang 1 khi tạo mới, giữ nguyên trang hiện tại khi sửa
+      if (!isEditing) {
+        setPage(0); // Reset trang 1 chỉ khi tạo mới
+      }
       await fetchList();
       toast.success(isEditing ? "Cập nhật thành công" : "Tạo thành công");
     } catch (e: any) {
@@ -1686,6 +1867,13 @@ export default function HospitalsPage() {
               value={qName}
               onChange={(e) => setQName(e.target.value)}
             />
+            <input
+              type="text"
+              className="rounded-full border px-4 py-3 text-sm shadow-sm min-w-[220px] border-gray-300 bg-white"
+              placeholder="Tìm theo mã BV"
+              value={qCode}
+              onChange={(e) => setQCode(e.target.value)}
+            />
             <FilterProvinceSelect
               value={qProvince}
               onChange={setQProvince}
@@ -1720,6 +1908,7 @@ export default function HospitalsPage() {
               type="button"
               onClick={() => {
                 setQName("");
+                setQCode("");
                 setQProvince("");
                 setQStatus("");
                 setQPriority("");
@@ -1731,7 +1920,7 @@ export default function HospitalsPage() {
             </button>
           </div>
           <div className="mt-6 flex items-center justify-between">
-            <p className="text-sm text-gray-600">Tổng: <span className="font-semibold text-gray-900">{totalElements}</span></p>
+            <p className="text-sm text-gray-600">Tổng: <span className="font-semibold text-blue-800">{totalElements}</span></p>
             <div className="flex items-center gap-3">
               {canEdit && (
                 <button className={`rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md`} onClick={onCreate}> + Thêm bệnh viện</button>
@@ -1815,7 +2004,7 @@ export default function HospitalsPage() {
                         <div className="flex items-center gap-3">
                           <h4
                             title={h.name}
-                            className="text-lg font-semibold text-gray-900 group-hover:text-blue-800 break-words whitespace-normal"
+                            className="text-lg font-semibold text-blue-800 group-hover:text-blue-800 break-words whitespace-normal"
                           >
                             {h.name}
                           </h4>
@@ -1843,8 +2032,12 @@ export default function HospitalsPage() {
                           <div className="truncate">{h.address || "—"}</div>
                           <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-700">
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-400">Người phụ trách chính:</span>
+                              <span className="text-xs text-gray-400">Phụ trách triển khai:</span>
                               <span className="font-medium text-gray-800">{h.personInChargeName || "—"}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400">Phụ trách bảo trì:</span>
+                              <span className="font-medium text-gray-800">{h.maintenancePersonInChargeName || "—"}</span>
                             </div>
                             {h.contactNumber && (
                               <div className="flex items-center gap-2">
@@ -2073,7 +2266,7 @@ export default function HospitalsPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <RemoteSelectPersonInCharge
-                      label="Người phụ trách chính (IT)"
+                      label="Phụ trách triển khai"
                       placeholder="Chọn người phụ trách..."
                       fetchOptions={searchItUsers}
                       value={personInChargeOpt}
@@ -2105,6 +2298,24 @@ export default function HospitalsPage() {
                       </select>
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <RemoteSelectPersonInCharge
+                      label="Phụ trách bảo trì"
+                      placeholder="Chọn người phụ trách bảo trì..."
+                      fetchOptions={searchMaintenanceUsers}
+                      value={maintenancePersonInChargeOpt}
+                      onChange={(v) => {
+                        setMaintenancePersonInChargeOpt(v);
+                        setForm((s) => ({
+                          ...s,
+                          maintenancePersonInChargeId: v ? v.id : undefined,
+                          maintenancePersonInChargeName: v ? v.name : "",
+                        }));
+                      }}
+                      disabled={isViewing || !canEdit}
+                    />
+                    <div className="hidden md:block" />
+                  </div>
                   {/* Hardware selector - Đã bỏ: Phần cứng sẽ được lấy từ hợp đồng (BusinessProject) */}
                   {/* <div className="mt-2">
                     <RemoteSelectHardware
@@ -2121,52 +2332,52 @@ export default function HospitalsPage() {
                 {/* RIGHT */}
                 <div className="space-y-3">
                   <div>
-                    <label className="mb-1 block text-sm font-medium">Ảnh bệnh viện</label>
+                    <label className="mb-1 block text-sm font-medium">File API bệnh viện</label>
                     
-                    {/* Preview ảnh hiện tại hoặc ảnh mới chọn */}
-                    {(form.imageUrl || form.imageFile) && (
-                      <div className="mb-3 relative">
-                        <div className="relative group">
-                          <img
-                            src={form.imageFile ? URL.createObjectURL(form.imageFile) : (form.imageUrl ?? undefined)}
-                            alt="Ảnh bệnh viện"
-                            className="w-full h-48 object-cover rounded-lg border-2 border-gray-200 shadow-sm"
-                            onError={(e) => {
-                              console.error("Image load error:", form.imageUrl);
-                              (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                            onLoad={(e) => {
-                              // Cleanup object URL when image loads (for new files)
-                              if (form.imageFile) {
-                                const img = e.target as HTMLImageElement;
-                                const oldSrc = img.src;
-                                // URL will be cleaned up when component unmounts or file changes
-                              }
-                            }}
-                          />
-                          {form.imageFile && (
+                    {/* Hiển thị file API hiện tại hoặc file mới chọn */}
+                    {(form.apiFileUrl || form.apiFile) && (
+                      <div className="mb-3 p-4 border-2 border-blue-200 bg-blue-50 rounded-lg">
+                        {form.apiFile ? (
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <FiFile className="w-6 h-6 text-blue-600 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-blue-800 truncate">{form.apiFile.name}</p>
+                                <p className="text-xs text-blue-600">
+                                  {(form.apiFile.size / 1024 / 1024).toFixed(2)} MB
+                                </p>
+                              </div>
+                            </div>
                             <button
                               type="button"
                               onClick={() => {
-                                // Cleanup object URL before removing file
-                                const img = document.querySelector('img[alt="Ảnh bệnh viện"]') as HTMLImageElement;
-                                if (img && img.src.startsWith('blob:')) {
-                                  URL.revokeObjectURL(img.src);
-                                }
-                                setForm((s) => ({ ...s, imageFile: null }));
+                                setForm((s) => ({ ...s, apiFile: null }));
                               }}
-                              className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 shadow-lg"
-                              title="Xóa ảnh đã chọn"
+                              className="ml-3 text-red-500 hover:text-red-700 transition-colors"
+                              title="Xóa file đã chọn"
                             >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                               </svg>
                             </button>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {form.imageFile ? "Ảnh mới đã chọn" : "Ảnh hiện tại"}
-                        </p>
+                          </div>
+                        ) : form.apiFileUrl ? (
+                          <div className="flex items-center gap-3">
+                            <FiFile className="w-6 h-6 text-blue-600 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <button
+                                onClick={() => editing?.id && downloadHospitalApiFile(editing.id, form.apiFileUrl)}
+                                className="text-sm font-medium text-blue-700 hover:text-blue-800 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                              >
+                                <FiDownload className="w-4 h-4" />
+                                Tải file API hiện tại
+                              </button>
+                              <p className="text-xs text-gray-600 mt-1 break-all">
+                                {form.apiFileUrl.startsWith('http') ? form.apiFileUrl : 'File được lưu trên server (bảo mật)'}
+                              </p>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     )}
 
@@ -2174,23 +2385,23 @@ export default function HospitalsPage() {
                     <div className="relative">
                       <input
                         type="file"
-                        accept="image/*"
-                        id="hospital-image-input"
+                        accept=".pdf,.zip,.json,.doc,.docx,.txt,.xlsx,.xls"
+                        id="hospital-api-file-input"
                         className="hidden"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            if (file.size > 10 * 1024 * 1024) {
-                              toast.error("File ảnh không được vượt quá 10MB");
+                            if (file.size > 50 * 1024 * 1024) {
+                              toast.error("File API không được vượt quá 50MB");
                               return;
                             }
-                            setForm((s) => ({ ...s, imageFile: file }));
+                            setForm((s) => ({ ...s, apiFile: file }));
                           }
                         }}
                         disabled={isViewing || !canEdit}
                       />
                       <label
-                        htmlFor="hospital-image-input"
+                        htmlFor="hospital-api-file-input"
                         onDragEnter={(e) => {
                           if (!isViewing && canEdit) {
                             e.preventDefault();
@@ -2211,14 +2422,18 @@ export default function HospitalsPage() {
                             e.preventDefault();
                             setIsDragging(false);
                             const file = e.dataTransfer.files[0];
-                            if (file && file.type.startsWith('image/')) {
-                              if (file.size > 10 * 1024 * 1024) {
-                                toast.error("File ảnh không được vượt quá 10MB");
+                            if (file) {
+                              const allowedTypes = ['.pdf', '.zip', '.json', '.doc', '.docx', '.txt', '.xlsx', '.xls'];
+                              const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+                              if (!allowedTypes.includes(fileExtension)) {
+                                toast.error("Vui lòng chọn file hợp lệ (PDF, ZIP, JSON, DOC, DOCX, TXT, XLSX, XLS)");
                                 return;
                               }
-                              setForm((s) => ({ ...s, imageFile: file }));
-                            } else {
-                              toast.error("Vui lòng chọn file ảnh");
+                              if (file.size > 50 * 1024 * 1024) {
+                                toast.error("File API không được vượt quá 50MB");
+                                return;
+                              }
+                              setForm((s) => ({ ...s, apiFile: file }));
                             }
                           }
                         }}
@@ -2231,28 +2446,14 @@ export default function HospitalsPage() {
                         }`}
                       >
                         <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                          <FiImage className={`w-10 h-10 mb-3 ${isDragging ? 'text-blue-500' : 'text-gray-400'}`} />
+                          <FiFile className={`w-10 h-10 mb-3 ${isDragging ? 'text-blue-500' : 'text-gray-400'}`} />
                           <p className="mb-2 text-sm text-gray-500">
-                            <span className="font-semibold">Click để chọn ảnh</span> hoặc kéo thả vào đây
+                            <span className="font-semibold">Click để chọn file API</span> hoặc kéo thả vào đây
                           </p>
-                          <p className="text-xs text-gray-500">PNG, JPG, GIF (MAX. 10MB)</p>
+                          <p className="text-xs text-gray-500">PDF, ZIP, JSON, DOC, DOCX, TXT, XLSX, XLS (MAX. 50MB)</p>
                         </div>
                       </label>
                     </div>
-                    
-                    {form.imageFile && (
-                      <div className="mt-2 flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-lg">
-                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-green-800 truncate">{form.imageFile.name}</p>
-                          <p className="text-xs text-green-600">
-                            {(form.imageFile.size / 1024 / 1024).toFixed(2)} MB
-                          </p>
-                        </div>
-                      </div>
-                    )}
                   </div>
 
                   <div>
@@ -2392,9 +2593,9 @@ export default function HospitalsPage() {
                         "MAINTENANCE_ACCEPTED_HOSPITAL": "Bảo trì tiếp nhận bệnh viện",
                         "MAINTENANCE_TASK_CREATED": "Bảo trì tạo công việc",
                         "MAINTENANCE_TASK_STATUS_CHANGED": "Thay đổi trạng thái bảo trì",
-                        "WARRANTY_CONTRACT_CREATED": "Tạo hợp đồng bảo hành",
-                        "WARRANTY_CONTRACT_UPDATED": "Cập nhật hợp đồng bảo hành",
-                        "WARRANTY_CONTRACT_DELETED": "Xóa hợp đồng bảo hành",
+                        "WARRANTY_CONTRACT_CREATED": "Tạo hợp đồng bảo trì",
+                        "WARRANTY_CONTRACT_UPDATED": "Cập nhật hợp đồng bảo trì",
+                        "WARRANTY_CONTRACT_DELETED": "Xóa hợp đồng bảo trì",
                       };
                       return map[type] || type;
                     };
@@ -2420,7 +2621,7 @@ export default function HospitalsPage() {
                                 {item.eventDate ? new Date(item.eventDate).toLocaleString("vi-VN") : "—"}
                               </span>
                             </div>
-                            <h4 className="font-semibold text-gray-900 mb-1">{item.description.replace(/task/gi, 'công việc')}</h4>
+                            <h4 className="font-semibold text-blue-800 mb-1">{item.description.replace(/task/gi, 'công việc')}</h4>
                             {item.performedBy && (
                               <p className="text-sm text-gray-600 mb-2">
                                 Người thực hiện: <span className="font-medium">{item.performedBy}</span>
@@ -2654,7 +2855,7 @@ export default function HospitalsPage() {
                   {/* Business Contracts */}
                   {contractsData.businessContracts.length > 0 && (
                     <div>
-                      <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                      <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-blue-500"></span>
                         Hợp đồng kinh doanh ({contractsData.businessContracts.length})
                       </h4>
@@ -2682,7 +2883,7 @@ export default function HospitalsPage() {
                                       <span className="font-medium">Số lượng:</span> {contract.quantity}
                                     </div>
                                   )}
-                                  {contract.unitPrice && (
+                                  {/* {contract.unitPrice && (
                                     <div className="flex items-start gap-1">
                                       <span className="font-medium">Đơn giá:</span> <span className="whitespace-nowrap inline-block">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.unitPrice)}</span>
                                     </div>
@@ -2691,7 +2892,7 @@ export default function HospitalsPage() {
                                     <div className="flex items-start gap-1">
                                       <span className="font-medium">Tổng giá:</span> <span className="whitespace-nowrap inline-block">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.totalPrice)}</span>
                                     </div>
-                                  )}
+                                  )} */}
                                   {contract.picUser && (
                                     <div>
                                       <span className="font-medium">Người phụ trách:</span> {contract.picUser.label || "—"}
@@ -2717,14 +2918,14 @@ export default function HospitalsPage() {
                   )}
 
                   {/* Warranty Contracts */}
-                  {contractsData.warrantyContracts.length > 0 && (
+                  {contractsData.maintainContracts.length > 0 && (
                     <div>
-                      <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                      <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                        Hợp đồng bảo hành ({contractsData.warrantyContracts.length})
+                        Hợp đồng bảo trì ({contractsData.maintainContracts.length})
                       </h4>
                       <div className="space-y-3">
-                        {contractsData.warrantyContracts.map((contract: any) => (
+                        {contractsData.maintainContracts.map((contract: any) => (
                           <div key={contract.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition">
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
@@ -2732,10 +2933,10 @@ export default function HospitalsPage() {
                                 <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
                                   {contract.durationYears && (
                                     <div>
-                                      <span className="font-medium">Thời hạn:</span> {contract.durationYears} năm
+                                      <span className="font-medium">Thời hạn:</span> {contract.durationYears} 
                                     </div>
                                   )}
-                                  {contract.yearlyPrice && (
+                                  {/* {contract.yearlyPrice && (
                                     <div className="flex items-start gap-1">
                                       <span className="font-medium">Giá hàng năm:</span> <span className="whitespace-nowrap inline-block">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.yearlyPrice)}</span>
                                     </div>
@@ -2744,7 +2945,7 @@ export default function HospitalsPage() {
                                     <div className="flex items-start gap-1">
                                       <span className="font-medium">Tổng giá:</span> <span className="whitespace-nowrap inline-block">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(contract.totalPrice)}</span>
                                     </div>
-                                  )}
+                                  )} */}
                                   {contract.picUser && (
                                     <div>
                                       <span className="font-medium">Người phụ trách:</span> {contract.picUser.label || "—"}

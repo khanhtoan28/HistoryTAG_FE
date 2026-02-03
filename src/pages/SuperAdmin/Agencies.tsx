@@ -31,6 +31,20 @@ type AgencyForm = {
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
 const BASE = `${API_BASE}/api/v1/superadmin/agencies`;
 
+// ✅ Helper để build URL an toàn (xử lý cả relative và absolute URLs)
+function buildUrl(path: string): URL {
+  // Nếu path đã là absolute URL (có protocol), dùng trực tiếp
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return new URL(path);
+  }
+  // Nếu API_BASE có giá trị, dùng nó làm base
+  if (API_BASE) {
+    return new URL(path, API_BASE);
+  }
+  // Nếu không có API_BASE, dùng window.location.origin làm base
+  return new URL(path, window.location.origin);
+}
+
 function authHeader(): Record<string, string> {
   const token = localStorage.getItem("access_token");
   return token
@@ -113,7 +127,7 @@ export default function AgenciesPage() {
           {IconCol}
           <div className="flex-1 min-w-0">
             <div className="min-w-[140px] font-semibold text-gray-800">{label}</div>
-            <div className="mt-2 text-gray-600 text-sm text-left truncate">{value ?? "—"}</div>
+            <div className="mt-2 text-gray-600 text-sm text-left break-words whitespace-normal">{value ?? "—"}</div>
           </div>
         </div>
       );
@@ -123,8 +137,8 @@ export default function AgenciesPage() {
       <div className="flex items-start gap-3">
         {IconCol}
         <div className="flex-1 flex items-start">
-          <div className="min-w-[140px] font-semibold text-gray-800">{label}</div>
-          <div className="text-gray-600 flex-1 text-left whitespace-nowrap overflow-hidden text-ellipsis">{value ?? "—"}</div>
+          <div className="min-w-[120px] font-semibold text-gray-800">{label}</div>
+          <div className="text-gray-600 flex-1 text-left break-words whitespace-normal">{value ?? "—"}</div>
         </div>
       </div>
     );
@@ -170,7 +184,7 @@ export default function AgenciesPage() {
     setLoading(true);
     setError(null);
     try {
-      const url = new URL(BASE);
+      const url = buildUrl(BASE);
       url.searchParams.set("page", String(page));
       url.searchParams.set("size", String(size));
       url.searchParams.set("sortBy", sortBy);
@@ -429,20 +443,24 @@ export default function AgenciesPage() {
             {isModalLoading ? (
               <div className="text-center py-12 text-gray-500">Đang tải chi tiết...</div>
             ) : isViewing ? (
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <div className="space-y-5">
-                  <Info icon={<FiHash className="w-5 h-5" />} label="Tên đại lý:" value={<div className="text-lg font-semibold text-gray-900">{viewing?.name ?? "—"}</div>} />
-                  <Info icon={<FiMapPin className="w-5 h-5" />} label="Địa chỉ" value={viewing?.address ?? "—"} stacked />
+              <div>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <div className="space-y-5">
+                    <Info icon={<FiHash className="w-5 h-5" />} label="Tên đại lý:" value={<div className="text-lg font-semibold text-blue-800">{viewing?.name ?? "—"}</div>} />
+                    <Info icon={<FiMapPin className="w-5 h-5" />} label="Địa chỉ:" value={viewing?.address ?? "—"} />
+                    <Info icon={<FiClock className="w-5 h-5" />} label="Cập nhật:" value={formatDateTime(viewing?.updatedAt)} />
+                  </div>
+                  <div className="space-y-5">
+                    <Info icon={<FiUser className="w-5 h-5" />} label="Người liên hệ:" value={viewing?.contactPerson ?? "—"} />
+                    <Info icon={<FiPhone className="w-5 h-5" />} label="Điện thoại:" value={viewing?.phoneNumber ?? "—"} />
+                    <Info icon={<FiMail className="w-5 h-5" />} label="Email:" value={viewing?.email ?? "—"} />
+                    <Info icon={<FiClock className="w-5 h-5" />} label="Ngày tạo:" value={formatDateTime(viewing?.createdAt)} />
+                  </div>
+                </div>
+                <div className="mt-6 pt-6 border-t border-gray-200">
                   <Info icon={<FiFileText className="w-5 h-5" />} label="Ghi chú" value={viewing?.notes ?? "—"} stacked />
                 </div>
-                <div className="space-y-5">
-                  <Info icon={<FiUser className="w-5 h-5" />} label="Người liên hệ:" value={viewing?.contactPerson ?? "—"} />
-                  <Info icon={<FiPhone className="w-5 h-5" />} label="Điện thoại:" value={viewing?.phoneNumber ?? "—"} />
-                  <Info icon={<FiMail className="w-5 h-5" />} label="Email:" value={viewing?.email ?? "—"} />
-                  <Info icon={<FiClock className="w-5 h-5" />} label="Ngày tạo:" value={formatDateTime(viewing?.createdAt)} />
-                  <Info icon={<FiClock className="w-5 h-5" />} label="Cập nhật:" value={formatDateTime(viewing?.updatedAt)} />
-                </div>
-                <div className="col-span-1 md:col-span-2 mt-4 flex items-center justify-end border-t border-gray-200 pt-6">
+                <div className="mt-6 flex items-center justify-end border-t border-gray-200 pt-6">
                   <button type="button" className="rounded-xl border-2 border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400" onClick={closeModal}>Đóng</button>
                 </div>
               </div>

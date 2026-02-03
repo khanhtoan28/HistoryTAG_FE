@@ -29,7 +29,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
-    name: "Bảng điều khiển",
+    name: "Dashboard",
     subItems: [{ name: "Báo cáo tổng quan", path: "/home", pro: false }],
   },
   {
@@ -39,7 +39,7 @@ const navItems: NavItem[] = [
       { name: "Lịch cá nhân", path: "/calendar", pro: false },
       { name: "Lịch phòng kinh doanh", path: "/calendar/business", pro: false },
       { name: "Lịch team triển khai", path: "/calendar/deployment", pro: false },
-      { name: "Lịch team bảo hành", path: "/calendar/maintenance", pro: false },
+      { name: "Lịch team bảo trì", path: "/calendar/maintenance", pro: false },
     ],
   },
   // {
@@ -56,20 +56,29 @@ const navItems: NavItem[] = [
     ],
   },
   {
-    name: "Công việc",
-    icon: <TaskIcon />,
-    subItems: [
-      { name: "Công việc triển khai", path: "/implementation-tasks", pro: false },
-      { name: "Công việc DEV", path: "/dev-tasks", pro: false },
-      { name: "Công việc bảo trì", path: "/maintenance-tasks", pro: false },
-    ],
-  },
-  {
     name: "Phòng kinh doanh",
     icon: <BoxIconLine />,
     subItems: [
       { name: "Hợp đồng kinh doanh", path: "/admin/business", pro: false },
-      { name: "Hợp đồng bảo hành", path: "/admin/warranty-contracts", pro: false },
+      // { name: "Hợp đồng bảo trì", path: "/admin/maintain-contracts", pro: false },
+
+    ],
+  },
+  {
+    name: "Công việc",
+    icon: <TaskIcon />,
+    subItems: [
+      { name: "Công việc triển khai", path: "/implementation-tasks", pro: false },
+      // { name: "Công việc DEV", path: "/dev-tasks", pro: false },
+      { name: "Công việc bảo trì", path: "/maintenance-tasks", pro: false },
+    ],
+  },
+  
+  {
+    name: "Phòng CSKH",
+    icon: <BoxIconLine />,
+    subItems: [
+      { name: "Chăm sóc khách hàng", path: "/admin/hospital-care", pro: false },
     ],
   },
 ];
@@ -166,7 +175,7 @@ const AppSidebar: React.FC = () => {
         { name: "Lịch cá nhân", path: "/calendar", pro: false },
         { name: "Lịch phòng kinh doanh", path: "/calendar/business", pro: false },
         { name: "Lịch team triển khai", path: "/calendar/deployment", pro: false },
-        { name: "Lịch team bảo hành", path: "/calendar/maintenance", pro: false },
+        { name: "Lịch team bảo trì", path: "/calendar/maintenance", pro: false },
       ];
     }
 
@@ -185,22 +194,30 @@ const AppSidebar: React.FC = () => {
 
     // Add maintenance calendar for MAINTENANCE team
     if (userTeam === "MAINTENANCE") {
-      items.push({ name: "Lịch team bảo hành", path: "/calendar/maintenance", pro: false });
+      items.push({ name: "Lịch team bảo trì", path: "/calendar/maintenance", pro: false });
     }
 
     return items;
   };
 
   // Create filtered nav items
-  const filteredNavItems = navItems.map((item) => {
-    if (item.name === "Lịch" && item.subItems) {
-      return {
-        ...item,
-        subItems: getCalendarMenuItems(),
-      };
-    }
-    return item;
-  });
+  const filteredNavItems = navItems
+    .filter((item) => {
+      // Chỉ hiển thị menu "Phòng CSKH" cho user thuộc phòng kinh doanh hoặc SuperAdmin
+      if (item.name === "Phòng CSKH") {
+        return isSuperAdmin || userDepartment === "BUSINESS";
+      }
+      return true;
+    })
+    .map((item) => {
+      if (item.name === "Lịch" && item.subItems) {
+        return {
+          ...item,
+          subItems: getCalendarMenuItems(),
+        };
+      }
+      return item;
+    });
 
   // Kiểm tra xem đường dẫn hiện tại có trùng khớp hay không
   const isActive = useCallback(

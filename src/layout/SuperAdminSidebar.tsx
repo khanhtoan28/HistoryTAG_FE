@@ -39,7 +39,7 @@ const navItems: NavItem[] = [
       { name: "Lịch cá nhân", path: "/superadmin/calendar", pro: false },
       { name: "Lịch phòng kinh doanh", path: "/superadmin/calendar/business", pro: false },
       { name: "Lịch team triển khai", path: "/superadmin/calendar/deployment", pro: false },
-      { name: "Lịch team bảo hành", path: "/superadmin/calendar/maintenance", pro: false },
+      { name: "Lịch team bảo trì", path: "/superadmin/calendar/maintenance", pro: false },
     ],
   },
   {
@@ -64,7 +64,8 @@ const navItems: NavItem[] = [
     icon: <BoxIconLine />,
     subItems: [
       { name: "Hợp đồng kinh doanh", path: "/superadmin/business", pro: false },
-      { name: "Hợp đồng bảo hành", path: "/superadmin/warranty-contracts", pro: false },
+      // { name: "Hợp đồng bảo trì", path: "/superadmin/maintain-contracts", pro: false },
+
     ],
   },
   {
@@ -72,8 +73,17 @@ const navItems: NavItem[] = [
     icon: <TaskIcon />,
     subItems: [
       { name: "Công việc Triển khai ", path: "/superadmin/implementation-tasks", pro: false },
-      { name: "Công việc Dev", path: "/superadmin/dev-tasks", pro: false },
+      // { name: "Công việc Dev", path: "/superadmin/dev-tasks", pro: false },
       { name: "Công việc Bảo Trì", path: "/superadmin/maintenance-tasks", pro: false },
+    ],
+  },
+  
+  {
+    name: "Phòng CSKH",
+    icon: <BoxIconLine />,
+    subItems: [
+      { name: "Chăm sóc khách hàng", path: "/superadmin/hospital-care", pro: false },
+      // { name: "Viện có hợp đồng", path: "/superadmin/hospitals-with-contracts", pro: false },
     ],
   },
 ];

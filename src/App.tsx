@@ -38,13 +38,17 @@ import DevSuperTaskPage from "./pages/SuperAdmin/devsupertask";
 import MaintenanceSuperTaskPage from "./pages/SuperAdmin/maintenacesuper-task";
 import AllNotificationsPage from "./pages/Notifications/AllNotificationsPage";
 import BusinessPage from "./pages/Admin/Business";
-import WarrantyContractsPage from "./pages/SuperAdmin/WarrantyContracts";
+import MaintainContractsPage from "./pages/CustomerCare/MaintainContracts";
+import HospitalCareList from "./pages/CustomerCare/HospitalCareList";
+import HospitalDetailView from "./pages/CustomerCare/View/HospitalDetailView";
+import HospitalDetail from "./pages/CustomerCare/HospitalDetail";
+import { AuthProvider } from "./contexts/AuthContext";
 
 // Protected Route Component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
   
-  if (!token) {
+  if (!token) { 
     return <Navigate to="/signin" replace />;
   }
   
@@ -59,58 +63,42 @@ export default function App() {
     return !!token;
   };
 
-  // Get user roles
-  const getUserRoles = () => {
-    try {
-      const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
-      if (rolesStr) {
-        return JSON.parse(rolesStr);
-      }
-    } catch (e) {
-      console.error("Error parsing roles:", e);
-    }
-    return [];
-  };
-
-  // Check if user is super admin
-  // @ts-ignore
-  const isSuperAdmin = () => {
-    const roles = getUserRoles();
-    return roles.some((role: string) => role === "SUPERADMIN" || role === "SUPER_ADMIN" || role === "Super Admin");
-  };
+  // ✅ Note: getUserRoles và isSuperAdmin functions giữ lại để backward compatibility
+  // ✅ Nhưng trong components, nên dùng useAuth() hook từ AuthContext
 
   return (
-    <div className="font-outfit">
-      <Toaster
-        position="top-right"
-        containerStyle={{
-          zIndex: 100002,
-        }}
-        toastOptions={{
-          duration: 3000,
-          style: {
-            background: '#fff',
-            color: '#363636',
-            padding: '16px',
-            borderRadius: '8px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-            zIndex: 100002,
-          },
-          success: {
-            iconTheme: {
-              primary: '#10b981',
-              secondary: '#fff',
-            },
-          },
-          error: {
-            iconTheme: {
-              primary: '#ef4444',
-              secondary: '#fff',
-            },
-          },
-        }}
-      />
-      <Router>
+    <div className="font-outfit overflow-x-hidden w-full max-w-full">
+          <Toaster
+            position="top-right"
+            containerStyle={{
+              zIndex: 100003,
+            }}
+            toastOptions={{
+              duration: 3000,
+              style: {
+                background: '#fff',
+                color: '#363636',
+                padding: '16px',
+                borderRadius: '8px',
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                zIndex: 100003,
+              },
+              success: {
+                iconTheme: {
+                  primary: '#10b981',
+                  secondary: '#fff',
+                },
+              },
+              error: {
+                iconTheme: {
+                  primary: '#ef4444',
+                  secondary: '#fff',
+                },
+                duration: 6000, // Lỗi hiển thị lâu hơn
+              },
+            }}
+          />
+          <Router>
         <ScrollToTop />
         <Routes>
           {/* Default redirect to Sign In */}
@@ -132,12 +120,15 @@ export default function App() {
             {/* SuperAdmin notifications - keep layout consistent for superadmin users */}
             {/* SuperAdmin Business (reuse Admin Business page) */}
             <Route path="/superadmin/business" element={<BusinessPage />} />
-            <Route path="/superadmin/warranty-contracts" element={<WarrantyContractsPage />} />
+            <Route path="/superadmin/maintain-contracts" element={<MaintainContractsPage />} />
             <Route path="/superadmin/notifications" element={<AllNotificationsPage />} />
             <Route path="/superadmin/calendar" element={<Calendar />} />
             <Route path="/superadmin/calendar/business" element={<BusinessCalendar />} />
             <Route path="/superadmin/calendar/deployment" element={<DeploymentCalendar />} />
             <Route path="/superadmin/calendar/maintenance" element={<MaintenanceCalendar />} />
+            <Route path="/superadmin/hospital-care" element={<HospitalCareList />} />
+            <Route path="/superadmin/hospital-care/:id" element={<HospitalDetail />} />
+
           </Route>
 
           {/* Dashboard Layout - Protected */}
@@ -146,7 +137,9 @@ export default function App() {
 
             {/* Admin - Business department */}
             <Route path="/admin/business" element={<BusinessPage />} />
-            <Route path="/admin/warranty-contracts" element={<WarrantyContractsPage />} />
+            <Route path="/admin/maintain-contracts" element={<MaintainContractsPage />} />
+            <Route path="/admin/hospital-care" element={<HospitalCareList />} />
+            <Route path="/admin/hospital-care/:id" element={<HospitalDetail />} />
 
             {/* Others Page */}
             <Route path="/profile" element={<UserProfiles />} />

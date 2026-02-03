@@ -134,17 +134,16 @@ function RemoteSelect({ label, placeholder, fetchOptions, value, onChange, requi
         }
     }, [filteredOptions.length, highlight]);
 
-    // Debounced search (skip empty queries)
+    // Debounced search - chỉ search khi user nhập ít nhất 2 ký tự
     useEffect(() => {
+        // Chỉ search khi user nhập ít nhất 2 ký tự để tránh load quá nhiều dữ liệu
+        if (!q.trim() || q.trim().length < 2) {
+            setOptions([]);
+            setLoading(false);
+            return;
+        }
         let alive = true;
         const t = setTimeout(async () => {
-            if (!q.trim()) {
-                if (alive) {
-                    setOptions([]);
-                    setLoading(false);
-                }
-                return;
-            }
             setLoading(true);
             try {
                 const res = await fetchOptions(q.trim());
@@ -159,23 +158,23 @@ function RemoteSelect({ label, placeholder, fetchOptions, value, onChange, requi
         };
     }, [q, fetchOptions]);
 
-    // Load initial options once when opening
-    useEffect(() => {
-        if (open && !prevOpenRef.current) {
-            if (!options.length && !q.trim()) {
-                (async () => {
-                    setLoading(true);
-                    try {
-                        const res = await fetchOptions("");
-                        setOptions(res);
-                    } finally {
-                        setLoading(false);
-                    }
-                })();
-            }
-        }
-        prevOpenRef.current = open;
-    }, [open, options.length, q, fetchOptions]);
+    // KHÔNG load initial options khi mở - chỉ load khi user nhập ít nhất 2 ký tự
+    // useEffect(() => {
+    //     if (open && !prevOpenRef.current) {
+    //         if (!options.length && !q.trim()) {
+    //             (async () => {
+    //                 setLoading(true);
+    //                 try {
+    //                     const res = await fetchOptions("");
+    //                     setOptions(res);
+    //                 } finally {
+    //                     setLoading(false);
+    //                 }
+    //             })();
+    //         }
+    //     }
+    //     prevOpenRef.current = open;
+    // }, [open, options.length, q, fetchOptions]);
 
     // Close on click outside
     useEffect(() => {
@@ -237,9 +236,12 @@ function RemoteSelect({ label, placeholder, fetchOptions, value, onChange, requi
 
                 {open && (
                     <div className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg" onMouseLeave={() => setHighlight(-1)} style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
-                        {loading && <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>}
-                        {!loading && filteredOptions.length === 0 && <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>}
-                        {!loading && filteredOptions.map((opt, idx) => (
+                        {filteredOptions.length === 0 && (
+                            <div className="px-3 py-2 text-sm text-gray-500">
+                                {q.trim().length < 2 ? "Nhập ít nhất 2 ký tự để tìm kiếm" : "Không tìm thấy"}
+                            </div>
+                        )}
+                        {filteredOptions.length > 0 && filteredOptions.map((opt, idx) => (
                             <div key={opt.id} className={clsx("px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800", idx === highlight ? "bg-gray-100 dark:bg-gray-800" : "")} onMouseEnter={() => setHighlight(idx)} onMouseDown={(e) => { e.preventDefault(); onChange(opt); setOpen(false); setQ(""); }}>
                                 {opt.name}
                             </div>
@@ -561,7 +563,10 @@ export default function TaskFormModal({
 
     if (!open) return null;
 
-    const lockHospital = !initial?.id && (Boolean(initial?.hospitalId) || Boolean(initial?.hospitalName));
+    const fromBusinessContract =
+        Boolean((initial as any)?.fromBusinessContract) || Boolean((initial as any)?.businessProjectId);
+
+    const lockHospital = fromBusinessContract || (!initial?.id && (Boolean(initial?.hospitalId) || Boolean(initial?.hospitalName)));
 
     // Determine if this task has been transferred to maintenance.
     // Sources: explicit prop, initial payload flag, or status === 'TRANSFERRED'
@@ -614,7 +619,7 @@ export default function TaskFormModal({
             hospitalId: hospitalOpt.id,
             picDeploymentId: picOpts[0].id, // Gửi PIC đầu tiên làm chính
             // Gửi danh sách tất cả PICs (bao gồm cả PIC chính) để backend xử lý
-            picDeploymentIds: allPicIds.length > 1 ? allPicIds : undefined,
+            picDeploymentIds: allPicIds,
             agencyId: null,
             hisSystemId: null,
             hardwareId: null,
@@ -632,8 +637,8 @@ export default function TaskFormModal({
 
         try {
             setSubmitting(true);
-            console.log('Submitting with PICs:', picOpts.map(p => ({ id: p.id, name: p.name })));
-            console.log('Payload additionalRequest:', payload.additionalRequest);
+            // console.log('Submitting with PICs:', picOpts.map(p => ({ id: p.id, name: p.name })));
+            // console.log('Payload additionalRequest:', payload.additionalRequest);
             await onSubmit(payload, initial?.id);
             // Không hiển thị toast ở đây vì handleSubmit trong implementsuper-task.tsx đã có toast rồi
             onClose();
@@ -669,10 +674,25 @@ export default function TaskFormModal({
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
                                 <Field label="Tên công việc" required>
-                                    <TextInput disabled={readOnly} value={model.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModel((s) => ({ ...s, name: e.target.value }))} placeholder="Nhập tên công việc" />
+                                    <TextInput
+                                        disabled={readOnly || fromBusinessContract}
+                                        value={model.name}
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                            setModel((s) => ({ ...s, name: e.target.value }))
+                                        }
+                                        placeholder="Nhập tên công việc"
+                                    />
                                 </Field>
 
-                                <RemoteSelect label="Bệnh viện" required placeholder="Nhập tên bệnh viện để tìm…" fetchOptions={searchHospitals} value={hospitalOpt} onChange={setHospitalOpt} disabled={readOnly || lockHospital} />
+                                <RemoteSelect
+                                    label="Bệnh viện"
+                                    required
+                                    placeholder="Nhập tên bệnh viện để tìm…"
+                                    fetchOptions={searchHospitals}
+                                    value={hospitalOpt}
+                                    onChange={setHospitalOpt}
+                                    disabled={readOnly || lockHospital}
+                                />
 
                                 <div className="col-span-2">
                                     <Field label="Người phụ trách (PIC)" required>
@@ -718,12 +738,12 @@ export default function TaskFormModal({
                                                                     const newPic = { ...selected, _uid: `pic-${Date.now()}-${selected.id}-${Math.random().toString(36).substring(2, 9)}` };
                                                                     setPicOpts((prev) => {
                                                                         const updated = [...prev, newPic];
-                                                                        console.log('Added PIC:', selected.name, 'Total PICs:', updated.length);
+                                                                        // console.log('Added PIC:', selected.name, 'Total PICs:', updated.length);
                                                                         return updated;
                                                                     });
                                                                     setCurrentPicInput(null);
                                                                 } else {
-                                                                    console.log('PIC already selected:', selected.name);
+                                                                    // console.log('PIC already selected:', selected.name);
                                                                 }
                                                             }
                                                         }}

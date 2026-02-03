@@ -55,10 +55,10 @@ interface SpringPage<T> {
 // ===================== Config & helpers ===================== //
 // ⚠️ Fix env access for Vite-based projects
 const API_BASE = import.meta.env.VITE_API_URL ?? ""; // same-origin if not set
-const BASES = [
-  `${API_BASE}/api/v1/superadmin/his`,
-  `${API_BASE}/api/v1/admin/his`,
-] as const;
+// ✅ Dùng admin API cho GET requests (admin thường có thể dùng)
+const ADMIN_BASE = `${API_BASE}/api/v1/admin/his`;
+// ✅ Chỉ dùng superadmin API cho CREATE/UPDATE/DELETE (khi canEdit = true)
+const SUPERADMIN_BASE = `${API_BASE}/api/v1/superadmin/his`;
 
 function authHeader(): Record<string, string> {
   const token = localStorage.getItem("access_token");
@@ -67,20 +67,34 @@ function authHeader(): Record<string, string> {
     : { "Content-Type": "application/json", Accept: "application/json" };
 }
 
-async function fetchWithFallback(inputFactory: (base: string) => string, init?: RequestInit) {
-  let lastError: unknown = null;
-  for (const base of BASES) {
-    try {
-      const url = inputFactory(base);
-      const res = await fetch(url, init);
-      if (!res.ok) throw new Error(`${init?.method ?? "GET"} ${res.status}`);
-      return res;
-    } catch (e) {
-      lastError = e;
-      continue;
-    }
+// ✅ Helper để build URL an toàn (xử lý cả relative và absolute URLs)
+function buildUrl(path: string): URL {
+  // Nếu path đã là absolute URL (có protocol), dùng trực tiếp
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return new URL(path);
   }
-  throw lastError ?? new Error("All endpoints failed");
+  // Nếu API_BASE có giá trị, dùng nó làm base
+  if (API_BASE) {
+    return new URL(path, API_BASE);
+  }
+  // Nếu không có API_BASE, dùng window.location.origin làm base
+  return new URL(path, window.location.origin);
+}
+
+// ✅ Helper để chọn API base dựa trên method và user role
+function getApiBase(method: string = "GET", isSuperAdminUser: boolean = false): string {
+  // GET requests: luôn dùng admin API (admin thường có thể dùng)
+  if (method === "GET") {
+    return ADMIN_BASE;
+  }
+  // Write operations (POST, PUT, DELETE): 
+  // - Nếu là superadmin → dùng superadmin API
+  // - Nếu là admin → dùng admin API
+  if (method === "POST" || method === "PUT" || method === "DELETE") {
+    return isSuperAdminUser ? SUPERADMIN_BASE : ADMIN_BASE;
+  }
+  // Fallback: dùng admin API
+  return ADMIN_BASE;
 }
 
 function validate(values: HisRequestDTO) {
@@ -112,6 +126,8 @@ function errMsg(err: unknown, fallback = "Lỗi xảy ra") {
 // Helper functions for status colors
 function getStatusBg(status?: string | null): string {
   switch (status) {
+    case "NOT_DEPLOYED":
+      return "bg-gray-400";
     case "IN_PROGRESS":
       return "bg-orange-500";
     case "COMPLETED":
@@ -138,6 +154,8 @@ function getStatusColor(status?: string | null): string {
 
 function getStatusLabel(status?: string | null): string {
   switch (status) {
+    case "NOT_DEPLOYED":
+      return "Chưa triển khai";
     case "IN_PROGRESS":
       return "Đang thực hiện";
     case "COMPLETED":
@@ -240,17 +258,35 @@ const HisSystemPage: React.FC = () => {
   const [selectedHisId, setSelectedHisId] = useState<number | null>(null);
   const [selectedHospitals, setSelectedHospitals] = useState<HospitalStat[]>([]);
   const [hospitalsLoading, setHospitalsLoading] = useState(false);
+  const [hospitalByHisCache, setHospitalByHisCache] = useState<Record<number, HospitalStat[]>>({});
+  const hospitalsCacheRef = React.useRef<{ data: any[]; fetchedAt: number } | null>(null);
 
   const isEditing = !!editing?.id;
   const isViewing = !!viewing?.id;
 
-  // Determine if current user can perform write actions (SUPERADMIN)
+  // Determine if current user can perform write actions (ADMIN or SUPERADMIN)
   const canEdit = (() => {
     try {
       const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
       if (!rolesStr) return false;
       const roles = JSON.parse(rolesStr);
-      return Array.isArray(roles) && roles.some((r: string) => r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin");
+      return Array.isArray(roles) && roles.some((r: string) => 
+        r === "ADMIN" || r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin"
+      );
+    } catch (e) {
+      return false;
+    }
+  })();
+
+  // Check if user is superadmin (to decide which API to use)
+  const isSuperAdmin = (() => {
+    try {
+      const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
+      if (!rolesStr) return false;
+      const roles = JSON.parse(rolesStr);
+      return Array.isArray(roles) && roles.some((r: string) => 
+        r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin"
+      );
     } catch (e) {
       return false;
     }
@@ -261,15 +297,16 @@ const HisSystemPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchWithFallback((base) => {
-        const url = new URL(base);
+      // ✅ GET request: luôn dùng admin API
+      const base = getApiBase("GET", false);
+      const url = buildUrl(base);
         url.searchParams.set("search", "");
         url.searchParams.set("page", String(page));
         url.searchParams.set("size", String(size));
         url.searchParams.set("sortBy", String(sortBy));
         url.searchParams.set("sortDir", sortDir);
-        return url.toString();
-      }, { headers: { ...authHeader() } });
+      const res = await fetch(url.toString(), { headers: { ...authHeader() } });
+      if (!res.ok) throw new Error(`GET ${res.status}`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setItems(data);
@@ -296,30 +333,53 @@ const HisSystemPage: React.FC = () => {
   }, [page, size, sortBy, sortDir]);
 
 
-  // Load hospital counts for all HIS items (optimized: fetch with reasonable size instead of 10000)
+  // Cache hospitals list to avoid refetching on every modal open / stats calc
+  async function fetchHospitalsCached() {
+    const cache = hospitalsCacheRef.current;
+    const now = Date.now();
+    if (cache && now - cache.fetchedAt < 2 * 60 * 1000) {
+      return cache.data;
+    }
+
+    const url = buildUrl(`${API_BASE}/api/v1/auth/hospitals`);
+    url.searchParams.set("page", "0");
+    url.searchParams.set("size", "500"); // Reduced from 10000 to 500 for better performance
+
+    const res = await fetch(url.toString(), { headers: { ...authHeader() } });
+    if (!res.ok) return cache?.data ?? [];
+
+    const data = await res.json();
+    const allHospitals = Array.isArray(data) ? data : (data.content ?? []);
+    hospitalsCacheRef.current = { data: allHospitals, fetchedAt: now };
+    return allHospitals;
+  }
+
+  // Load hospital counts for all HIS items (prefer server-side count)
   useEffect(() => {
     if (items.length === 0) return;
     
     const loadCounts = async () => {
       try {
-        // Optimized: Fetch hospitals with reasonable size (500) instead of all 10000
-        // If there are more than 500 hospitals, we'll count what we can get
-        const url = new URL(`${API_BASE}/api/v1/auth/hospitals`);
-        url.searchParams.set("page", "0");
-        url.searchParams.set("size", "500"); // Reduced from 10000 to 500 for better performance
-        
+        const url = buildUrl(`${API_BASE}/api/v1/auth/hospitals/count-by-his`);
         const res = await fetch(url.toString(), { headers: { ...authHeader() } });
-        if (!res.ok) return;
-        
-        const data = await res.json();
-        const allHospitals = Array.isArray(data) ? data : (data.content ?? []);
-        
-        // Count hospitals per HIS
+        if (res.ok) {
+          const data = await res.json();
+          if (data && typeof data === "object") {
+            const counts: Record<number, number> = {};
+            items.forEach((his) => {
+              counts[his.id] = Number(data[String(his.id)]) || 0;
+            });
+            setHospitalStats(counts);
+            return;
+          }
+        }
+
+        // Fallback: reuse cached hospitals list if endpoint not available
+        const allHospitals = await fetchHospitalsCached();
         const counts: Record<number, number> = {};
         items.forEach((his) => {
           counts[his.id] = allHospitals.filter((h: any) => h.hisSystemId === his.id).length;
         });
-        
         setHospitalStats(counts);
       } catch (e) {
         console.error("Error loading hospital counts:", e);
@@ -329,14 +389,18 @@ const HisSystemPage: React.FC = () => {
     loadCounts();
   }, [items]);
 
-  // Fetch hospitals when modal opens (optimized: try to use filter if available, otherwise fetch with reasonable size)
+  // Fetch hospitals when modal opens (use cache for faster display)
   async function loadHospitalsForHis(hisId: number) {
-    setHospitalsLoading(true);
+    const cached = hospitalByHisCache[hisId];
+    if (cached) {
+      setSelectedHospitals(cached);
+    }
+    setHospitalsLoading(!cached);
     try {
-      const url = new URL(`${API_BASE}/api/v1/auth/hospitals`);
+      const url = buildUrl(`${API_BASE}/api/v1/auth/hospitals`);
       url.searchParams.set("page", "0");
-      // Optimized: Try to use filter if backend supports it, otherwise fetch with reasonable size
-      // If backend supports hisSystemId filter, add it here: url.searchParams.set("hisSystemId", String(hisId));
+      // Try to use backend filter (if supported)
+      url.searchParams.set("hisSystemId", String(hisId));
       url.searchParams.set("size", "500"); // Reduced from 10000 to 500 for better performance
       
       const res = await fetch(url.toString(), { headers: { ...authHeader() } });
@@ -347,11 +411,13 @@ const HisSystemPage: React.FC = () => {
       
       const data = await res.json();
       const allHospitals = Array.isArray(data) ? data : (data.content ?? []);
+
+      // If backend ignores hisSystemId, filter on client
+      const filteredHospitals = allHospitals.every((h: any) => h.hisSystemId === hisId)
+        ? allHospitals
+        : allHospitals.filter((h: any) => h.hisSystemId === hisId);
       
-      // Filter hospitals by hisSystemId
-      const hospitals = allHospitals
-        .filter((h: any) => h.hisSystemId === hisId)
-        .map((h: any) => ({
+      const hospitals = filteredHospitals.map((h: any) => ({
           id: h.id,
           name: h.name,
           province: h.province,
@@ -361,6 +427,7 @@ const HisSystemPage: React.FC = () => {
         }));
       
       setSelectedHospitals(hospitals);
+      setHospitalByHisCache((prev) => ({ ...prev, [hisId]: hospitals }));
     } catch (e) {
       console.error("Error loading hospitals:", e);
       setSelectedHospitals([]);
@@ -550,7 +617,10 @@ const HisSystemPage: React.FC = () => {
     setViewing(null);
     setIsModalLoading(true);
     try {
-      const res = await fetchWithFallback((base) => `${base}/${h.id}`, { headers: { ...authHeader() } });
+      // ✅ GET request: luôn dùng admin API
+      const base = getApiBase("GET", false);
+      const res = await fetch(`${base}/${h.id}`, { headers: { ...authHeader() } });
+      if (!res.ok) throw new Error(`GET ${res.status}`);
       const detail = (await res.json()) as HisResponseDTO;
       setEditing(detail);
       setForm({
@@ -578,7 +648,10 @@ const HisSystemPage: React.FC = () => {
     setOpen(true);
     setIsModalLoading(true);
     try {
-      const res = await fetchWithFallback((base) => `${base}/${h.id}`, { headers: { ...authHeader() } });
+      // ✅ GET request: luôn dùng admin API
+      const base = getApiBase("GET", false);
+      const res = await fetch(`${base}/${h.id}`, { headers: { ...authHeader() } });
+      if (!res.ok) throw new Error(`GET ${res.status}`);
       const detail = (await res.json()) as HisResponseDTO;
       setViewing(detail);
       setForm({
@@ -608,8 +681,10 @@ const HisSystemPage: React.FC = () => {
     if (!confirm("Xóa HIS này?")) return;
     setLoading(true);
     try {
-      // @ts-ignore
-      await fetchWithFallback((base) => `${base}/${id}`, { method: "DELETE", headers: { ...authHeader() } });
+      // ✅ DELETE request: dùng admin API nếu là admin, superadmin API nếu là superadmin
+      const base = getApiBase("DELETE", isSuperAdmin);
+      const res = await fetch(`${base}/${id}`, { method: "DELETE", headers: { ...authHeader() } });
+      if (!res.ok) throw new Error(`DELETE ${res.status}`);
       // adjust page when last item removed
       if (items.length === 1 && page > 0) setPage((p) => p - 1);
       await fetchList();
@@ -637,12 +712,15 @@ const HisSystemPage: React.FC = () => {
     }
     try {
       const method = isEditing ? "PUT" : "POST";
-      // @ts-ignore
-      await fetchWithFallback((base) => (isEditing ? `${base}/${editing!.id}` : base), {
+      // ✅ POST/PUT request: dùng admin API nếu là admin, superadmin API nếu là superadmin
+      const base = getApiBase(method, isSuperAdmin);
+      const url = isEditing ? `${base}/${editing!.id}` : base;
+      const res = await fetch(url, {
         method,
         headers: { ...authHeader() },
         body: JSON.stringify(form),
       });
+      if (!res.ok) throw new Error(`${method} ${res.status}`);
       // if not thrown, res.ok already ensured by fetchWithFallback
       setOpen(false);
       setEditing(null);

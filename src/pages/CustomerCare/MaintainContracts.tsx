@@ -8,17 +8,18 @@ import { FiUser, FiClock, FiCalendar, FiDollarSign, FiFileText } from "react-ico
 import { FaHospitalAlt } from "react-icons/fa";
 import toast from "react-hot-toast";
 import {
-  createWarrantyContract,
-  updateWarrantyContract,
-  deleteWarrantyContract,
-  getWarrantyContractById,
-  getWarrantyContracts,
-  getWarrantyPicOptions,
-  type WarrantyContractResponseDTO,
-  type WarrantyContractRequestDTO,
-} from "../../api/warranty.api";
+  createMaintainContract,
+  updateMaintainContract,
+  deleteMaintainContract,
+  getMaintainContractById,
+  getMaintainContracts,
+  getMaintainContractPicOptions,
+  type MaintainContractResponseDTO,
+  type MaintainContractRequestDTO,
+} from "../../api/maintain.api";
 import { searchHospitals } from "../../api/business.api";
 import { PlusIcon } from "../../icons";
+import MaintainContractForm, { type WarrantyContractForm } from "./Form/MaintainContractForm";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
@@ -116,18 +117,9 @@ function normalizeDateForEnd(value?: string | null) {
   return value;
 }
 
-export type WarrantyContract = WarrantyContractResponseDTO;
+export type WarrantyContract = MaintainContractResponseDTO;
 
-export type WarrantyContractForm = {
-  contractCode: string;
-  picUserId?: number;
-  hospitalId?: number;
-  durationYears: string; // Người dùng nhập dạng chuỗi (ví dụ: "1 năm 6 tháng")
-  yearlyPrice: number | "";
-  totalPrice: number | ""; // Tổng tiền người dùng nhập
-  startDate?: string | null;
-  endDate?: string | null;
-};
+export type { WarrantyContractForm } from "./Form/MaintainContractForm";
 
 type PicUserOption = {
   id: number;
@@ -150,16 +142,30 @@ const DURATION_OPTIONS = [
   { value: 7, label: "7 năm" },
 ];
 
-export default function WarrantyContractsPage() {
+export default function MaintainContractsPage() {
   // Determine if current user can perform write actions
+  // Allow SUPERADMIN or team CUSTOMER_SERVICE
   const canEdit = (() => {
     try {
+      // Check SUPERADMIN role
       const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
-      if (!rolesStr) return false;
-      const roles = JSON.parse(rolesStr);
-      return Array.isArray(roles) && roles.some((r: string) => 
-        r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin"
-      );
+      if (rolesStr) {
+        const roles = JSON.parse(rolesStr);
+        const isSuperAdmin = Array.isArray(roles) && roles.some((r: string) => 
+          r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin"
+        );
+        if (isSuperAdmin) return true;
+      }
+
+      // Check CUSTOMER_SERVICE team from user object
+      const userStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        const userTeam = user?.team ? String(user.team).toUpperCase() : null;
+        if (userTeam === "CUSTOMER_SERVICE") return true;
+      }
+
+      return false;
     } catch (e) {
       return false;
     }
@@ -216,7 +222,7 @@ export default function WarrantyContractsPage() {
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [confirmCreateOpen, setConfirmCreateOpen] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState<{
-    payload: WarrantyContractRequestDTO;
+    payload: MaintainContractRequestDTO;
     isEditing: boolean;
   } | null>(null);
   const [hospitalNameForConfirm, setHospitalNameForConfirm] = useState<string>("");
@@ -313,6 +319,7 @@ export default function WarrantyContractsPage() {
       durationYears: item.durationYears ? String(item.durationYears) : "",
       yearlyPrice: yearlyPrice,
       totalPrice: totalPrice,
+      kioskQuantity: item.kioskQuantity || "",
       startDate: startDateForInput,
       endDate: endDateForInput,
     });
@@ -340,7 +347,7 @@ export default function WarrantyContractsPage() {
     let alive = true;
     (async () => {
       try {
-        const options = await getWarrantyPicOptions();
+        const options = await getMaintainContractPicOptions();
         if (alive) setPicOptions(options);
       } catch (e) {
         console.error("Failed to load pic options:", e);
@@ -349,25 +356,25 @@ export default function WarrantyContractsPage() {
     return () => { alive = false; };
   }, []);
 
-  // Load hospital options khi mở modal hoặc khi cần cho filter
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const options = await searchHospitals("");
-        if (alive) {
-          const mapped = Array.isArray(options) ? options.map((h: any) => ({
-            id: Number(h.id),
-            label: String(h.label || h.name || h.id),
-          })) : [];
-          setHospitalOptions(mapped);
-        }
-      } catch (e) {
-        console.error("Failed to load hospitals:", e);
-      }
-    })();
-    return () => { alive = false; };
-  }, []);
+  // KHÔNG load tất cả bệnh viện khi mount - chỉ load khi user search
+  // useEffect(() => {
+  //   let alive = true;
+  //   (async () => {
+  //     try {
+  //       const options = await searchHospitals("");
+  //       if (alive) {
+  //         const mapped = Array.isArray(options) ? options.map((h: any) => ({
+  //           id: Number(h.id),
+  //           label: String(h.label || h.name || h.id),
+  //         })) : [];
+  //         setHospitalOptions(mapped);
+  //       }
+  //     } catch (e) {
+  //       console.error("Failed to load hospitals:", e);
+  //     }
+  //   })();
+  //   return () => { alive = false; };
+  // }, []);
 
   // Set selected values khi mở modal với dữ liệu
   useEffect(() => {
@@ -406,7 +413,7 @@ export default function WarrantyContractsPage() {
       // Note: Date filtering will be implemented in backend later
       // For now, date filter UI is shown but filtering is done client-side if needed
 
-      const data = await getWarrantyContracts(params);
+      const data = await getMaintainContracts(params);
       setItems(data.content || []);
       setTotalElements(data.totalElements || 0);
       setTotalPages(data.totalPages || 0);
@@ -439,7 +446,7 @@ export default function WarrantyContractsPage() {
     setIsModalLoading(true);
     setError(null);
     try {
-      const data = await getWarrantyContractById(id);
+      const data = await getMaintainContractById(id);
       return data;
     } catch (e: any) {
       setError(e.message || "Lỗi tải chi tiết");
@@ -459,6 +466,7 @@ export default function WarrantyContractsPage() {
       hospitalId: undefined,
       durationYears: "",
       yearlyPrice: "",
+      kioskQuantity: "",
       totalPrice: "",
       startDate: null,
       endDate: null,
@@ -498,7 +506,7 @@ export default function WarrantyContractsPage() {
 
   function onDelete(id: number) {
     if (!canEdit) {
-      toast.error("Bạn không có quyền xóa hợp đồng bảo hành");
+      toast.error("Bạn không có quyền xóa hợp đồng bảo trì");
       return;
     }
     setPendingDeleteId(id);
@@ -512,7 +520,7 @@ export default function WarrantyContractsPage() {
     setPendingDeleteId(null);
     setLoading(true);
     try {
-      await deleteWarrantyContract(idToDelete);
+      await deleteMaintainContract(idToDelete, canEdit);
       await fetchList();
       if (isViewing && viewing?.id === idToDelete) closeModal();
       toast.success("Xóa thành công");
@@ -611,22 +619,25 @@ export default function WarrantyContractsPage() {
       }
     }
 
-    const payload: WarrantyContractRequestDTO = {
+    const payload: MaintainContractRequestDTO = {
       contractCode: form.contractCode.trim(),
+      type: "Bảo trì (Maintenance)",
       picUserId: form.picUserId!,
       hospitalId: form.hospitalId!,
       durationYears: form.durationYears.trim(), // Gửi dạng string
       yearlyPrice: typeof form.yearlyPrice === "number" ? form.yearlyPrice : 0,
       totalPrice: typeof form.totalPrice === "number" ? form.totalPrice : 0,
+      kioskQuantity: form.kioskQuantity && typeof form.kioskQuantity === "number" ? form.kioskQuantity : (form.kioskQuantity === "" ? null : Number(form.kioskQuantity)),
       startDate: startDateForPayload,
       endDate: endDateForPayload,
+      // careId không có trong trang này, backend sẽ tự tìm từ hospitalId
     };
 
     // Check nếu đang tạo mới (không phải edit) và bệnh viện đã có hợp đồng
     if (!isEditing && form.hospitalId) {
       try {
         setLoading(true);
-        const existingContracts = await getWarrantyContracts({ hospitalId: form.hospitalId, page: 0, size: 1 });
+        const existingContracts = await getMaintainContracts({ hospitalId: form.hospitalId, page: 0, size: 1 });
         setLoading(false);
         const hasExisting = (existingContracts.content && existingContracts.content.length > 0) || 
                            (Array.isArray(existingContracts) && existingContracts.length > 0);
@@ -643,7 +654,7 @@ export default function WarrantyContractsPage() {
         }
       } catch (e) {
         setLoading(false);
-        console.warn("Failed to check existing warranty contracts, proceeding anyway", e);
+        // console.warn("Failed to check existing warranty contracts, proceeding anyway", e);
       }
     }
 
@@ -661,9 +672,9 @@ export default function WarrantyContractsPage() {
       }
 
       if (isEditing) {
-        await updateWarrantyContract(editing!.id, payload);
+        await updateMaintainContract(editing!.id, payload, canEdit);
       } else {
-        await createWarrantyContract(payload);
+        await createMaintainContract(payload, canEdit);
       }
 
       closeModal();
@@ -704,9 +715,9 @@ export default function WarrantyContractsPage() {
       }
 
       if (pendingSubmit.isEditing) {
-        await updateWarrantyContract(editing!.id, pendingSubmit.payload);
+        await updateMaintainContract(editing!.id, pendingSubmit.payload, canEdit);
       } else {
-        await createWarrantyContract(pendingSubmit.payload);
+        await createMaintainContract(pendingSubmit.payload, canEdit);
       }
       closeModal();
       setPage(0);
@@ -735,333 +746,6 @@ export default function WarrantyContractsPage() {
     setHospitalNameForConfirm("");
   }
 
-  // Component RemoteSelect cho Pic User
-  function RemoteSelectPic({
-    label,
-    placeholder,
-    options,
-    value,
-    onChange,
-    disabled,
-  }: {
-    label: string;
-    placeholder?: string;
-    options: PicUserOption[];
-    value: PicUserOption | null;
-    onChange: (v: PicUserOption | null) => void;
-    disabled?: boolean;
-  }) {
-    const [openBox, setOpenBox] = useState(false);
-    const [q, setQ] = useState("");
-    const [highlight, setHighlight] = useState(-1);
-    const inputRef = useRef<HTMLDivElement>(null);
-    const dropdownRef = useRef<HTMLDivElement>(null);
-
-    const filteredOptions = useMemo(() => {
-      if (!q.trim()) return options;
-      const searchLower = q.toLowerCase().trim();
-      return options.filter((opt) =>
-        opt.label.toLowerCase().includes(searchLower) ||
-        opt.subLabel?.toLowerCase().includes(searchLower) ||
-        opt.phone?.includes(q)
-      );
-    }, [options, q]);
-
-    useEffect(() => {
-      const handleClickOutside = (e: MouseEvent) => {
-        if (
-          dropdownRef.current &&
-          !dropdownRef.current.contains(e.target as Node) &&
-          inputRef.current &&
-          !inputRef.current.contains(e.target as Node)
-        ) {
-          setOpenBox(false);
-          setQ("");
-        }
-      };
-      if (openBox) {
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-      }
-    }, [openBox]);
-
-    return (
-      <div>
-        <label className="mb-1 block text-sm font-medium">{label}</label>
-        <div className="relative">
-          <div
-            ref={inputRef}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm cursor-pointer focus-within:ring-1 focus-within:ring-[#4693FF] focus-within:border-[#4693FF]"
-            onClick={() => {
-              if (!disabled) setOpenBox(!openBox);
-            }}
-          >
-            {openBox ? (
-              <input
-                type="text"
-                className="w-full outline-none bg-transparent"
-                placeholder={placeholder || "Tìm kiếm..."}
-                value={q}
-                onChange={(e) => {
-                  setQ(e.target.value);
-                  setHighlight(-1);
-                }}
-                onKeyDown={(e) => {
-                  if (!openBox) return;
-                  if (e.key === "ArrowDown") {
-                    e.preventDefault();
-                    setHighlight((h) => Math.min(h + 1, filteredOptions.length - 1));
-                  } else if (e.key === "ArrowUp") {
-                    e.preventDefault();
-                    setHighlight((h) => Math.max(h - 1, 0));
-                  } else if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (highlight >= 0 && filteredOptions[highlight]) {
-                      onChange(filteredOptions[highlight]);
-                      setOpenBox(false);
-                    }
-                  } else if (e.key === "Escape") {
-                    setOpenBox(false);
-                  }
-                }}
-                onClick={(e) => e.stopPropagation()}
-                autoFocus
-                disabled={disabled}
-              />
-            ) : (
-              <div className="flex items-center justify-between">
-                <span className={value ? "text-gray-900" : "text-gray-500"}>
-                  {value ? value.label : placeholder || "Chọn..."}
-                </span>
-                {!value && (
-                  <svg className={`w-4 h-4 transition-transform ${openBox ? 'rotate-180' : ''} text-gray-400`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                )}
-              </div>
-            )}
-          </div>
-          {value && !openBox && (
-            <button
-              type="button"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              onClick={(e) => {
-                e.stopPropagation();
-                onChange(null);
-              }}
-              aria-label="Clear"
-            >
-              ✕
-            </button>
-          )}
-          {openBox && !disabled && (
-            <div
-              ref={dropdownRef}
-              className="absolute z-[110] mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg"
-              style={{ maxHeight: "200px", overflowY: "auto" }}
-            >
-              {filteredOptions.length === 0 ? (
-                <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>
-              ) : (
-                filteredOptions.map((opt, idx) => (
-                  <div
-                    key={opt.id}
-                    className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 ${
-                      idx === highlight ? "bg-gray-100" : ""
-                    }`}
-                    onMouseEnter={() => setHighlight(idx)}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      onChange(opt);
-                      setOpenBox(false);
-                      setQ("");
-                    }}
-                  >
-                    <div className="font-medium text-gray-800">{opt.label}</div>
-                    {opt.subLabel && (
-                      <div className="text-xs text-gray-500">{opt.subLabel}</div>
-                    )}
-                    {opt.phone && (
-                      <div className="text-xs text-gray-500">{opt.phone}</div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Component RemoteSelect cho Hospital
-  function RemoteSelectHospital({
-    label,
-    placeholder,
-    fetchOptions,
-    value,
-    onChange,
-    disabled,
-  }: {
-    label: string;
-    placeholder?: string;
-    fetchOptions: (q: string) => Promise<HospitalOption[]>;
-    value: HospitalOption | null;
-    onChange: (v: HospitalOption | null) => void;
-    disabled?: boolean;
-  }) {
-    const [openBox, setOpenBox] = useState(false);
-    const [q, setQ] = useState("");
-    const [loadingBox, setLoadingBox] = useState(false);
-    const [options, setOptions] = useState<HospitalOption[]>([]);
-    const [highlight, setHighlight] = useState(-1);
-
-    useEffect(() => {
-      if (!q.trim()) return;
-      let alive = true;
-      const t = setTimeout(async () => {
-        setLoadingBox(true);
-        try {
-          const res = await fetchOptions(q.trim());
-          if (alive) setOptions(res);
-        } finally {
-          if (alive) setLoadingBox(false);
-        }
-      }, 250);
-      return () => {
-        alive = false;
-        clearTimeout(t);
-      };
-    }, [q, fetchOptions]);
-
-    useEffect(() => {
-      let alive = true;
-      if (openBox && options.length === 0 && !q.trim()) {
-        (async () => {
-          setLoadingBox(true);
-          try {
-            const res = await fetchOptions("");
-            if (alive) setOptions(res);
-          } finally {
-            if (alive) setLoadingBox(false);
-          }
-        })();
-      }
-      return () => { alive = false; };
-    }, [openBox, fetchOptions]);
-
-    const searchHospitalsWrapped = useMemo(
-      () => async (term: string) => {
-        try {
-          const list = await searchHospitals(term);
-          const mapped = Array.isArray(list) ? list.map((h: any) => ({
-            id: Number(h.id),
-            label: String(h.label || h.name || h.id),
-          })) : [];
-          return mapped.filter((h) => Number.isFinite(h.id) && h.label);
-        } catch (e) {
-          return [];
-        }
-      },
-      []
-    );
-
-    return (
-      <div>
-        <label className="mb-1 block text-sm font-medium">{label}</label>
-        <div className="relative">
-          <div
-            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm cursor-pointer focus-within:ring-1 focus-within:ring-[#4693FF] focus-within:border-[#4693FF]"
-            onClick={() => {
-              if (!disabled) setOpenBox(!openBox);
-            }}
-          >
-            {openBox ? (
-              <input
-                type="text"
-                className="w-full outline-none bg-transparent"
-                placeholder={placeholder || "Nhập để tìm bệnh viện..."}
-                value={q}
-                onChange={(e) => {
-                  setQ(e.target.value);
-                  if (!openBox) setOpenBox(true);
-                }}
-                onFocus={() => setOpenBox(true)}
-                onKeyDown={(e) => {
-                  if (!openBox) return;
-                  if (e.key === "ArrowDown") {
-                    e.preventDefault();
-                    setHighlight((h) => Math.min(h + 1, options.length - 1));
-                  } else if (e.key === "ArrowUp") {
-                    e.preventDefault();
-                    setHighlight((h) => Math.max(h - 1, 0));
-                  } else if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (highlight >= 0 && options[highlight]) {
-                      onChange(options[highlight]);
-                      setOpenBox(false);
-                    }
-                  } else if (e.key === "Escape") {
-                    setOpenBox(false);
-                  }
-                }}
-                disabled={disabled}
-              />
-            ) : (
-              <div className="flex items-center justify-between">
-                <span className={value ? "text-gray-900" : "text-gray-500"}>
-                  {value ? value.label : placeholder || "Chọn bệnh viện..."}
-                </span>
-                {!value && (
-                  <svg className={`w-4 h-4 transition-transform ${openBox ? 'rotate-180' : ''} text-gray-400`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                )}
-              </div>
-            )}
-          </div>
-          {value && !openBox && (
-            <button
-              type="button"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              onClick={(e) => {
-                e.stopPropagation();
-                onChange(null);
-              }}
-              aria-label="Clear"
-            >
-              ✕
-            </button>
-          )}
-          {openBox && !disabled && (
-            <div className="absolute z-[110] mt-1 max-h-56 w-full overflow-auto rounded-xl border border-gray-200 bg-white shadow-lg">
-              {loadingBox && <div className="px-3 py-2 text-sm text-gray-500">Đang tải...</div>}
-              {!loadingBox && options.length === 0 && (
-                <div className="px-3 py-2 text-sm text-gray-500">Không có kết quả</div>
-              )}
-              {!loadingBox &&
-                options.map((opt, idx) => (
-                  <div
-                    key={opt.id}
-                    className={`px-3 py-2 text-sm cursor-pointer ${
-                      idx === highlight ? "bg-gray-100" : ""
-                    }`}
-                    onMouseEnter={() => setHighlight(idx)}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      onChange(opt);
-                      setOpenBox(false);
-                    }}
-                  >
-                    {opt.label}
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
 
   // Helper functions để format số với dấu chấm phân cách hàng nghìn
   function formatNumber(value: number | ''): string {
@@ -1310,14 +994,14 @@ export default function WarrantyContractsPage() {
   return (
     <>
       <PageMeta
-        title="Hợp đồng bảo hành | TAGTECH"
-        description="Quản lý hợp đồng bảo hành: danh sách, tìm kiếm, tạo, sửa, xóa"
+        title="Hợp đồng bảo trì | TAGTECH"
+        description="Quản lý hợp đồng bảo trì: danh sách, tìm kiếm, tạo, sửa, xóa"
       />
 
       <div className="space-y-10">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-extrabold mb-0">Hợp đồng bảo hành</h1>
+          <h1 className="text-3xl font-extrabold mb-0">Hợp đồng bảo trì</h1>
           {canEdit && (
             <button
               className="rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md flex items-center gap-2"
@@ -1470,7 +1154,7 @@ export default function WarrantyContractsPage() {
           </div>
           <div className="mt-4 text-sm font-semibold text-gray-700">
             Tổng hợp đồng:
-            <span className="ml-1 text-gray-900">{totalElements}</span>
+            <span className="ml-1 text-blue-800">{totalElements}</span>
           </div>
           {(filterStartFrom || filterStartTo) && (
             <div className="mt-2 text-xs text-gray-500">
@@ -1487,7 +1171,7 @@ export default function WarrantyContractsPage() {
         </ComponentCard>
 
         {/* Card list */}
-        <ComponentCard title="Danh sách hợp đồng bảo hành">
+        <ComponentCard title="Danh sách hợp đồng bảo trì">
           <div className="space-y-4">
             {items.map((item) => (
               <div
@@ -1504,7 +1188,7 @@ export default function WarrantyContractsPage() {
                 <div className="flex-1">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-lg font-semibold text-gray-900">{item.hospital?.label ?? '—'}</div>
+                      <div className="text-lg font-semibold text-blue-800">{item.hospital?.label ?? '—'}</div>
                       <div className="text-sm">
                         <span className="text-gray-500">Mã hợp đồng: </span>
                         <span className="font-medium text-blue-600">{item.contractCode ?? '—'}</span>
@@ -1519,7 +1203,7 @@ export default function WarrantyContractsPage() {
                           {item.picUser?.subLabel ? <span className="ml-2 text-xs text-gray-500">{item.picUser?.subLabel}</span> : null}
                         </div>
                       </div>
-                      <div>Thời hạn hợp đồng: <div className="font-medium text-gray-800">{item.durationYears} năm</div></div>
+                      <div>Thời hạn hợp đồng: <div className="font-medium text-gray-800">{item.durationYears} </div></div>
                       <div>Thời gian bắt đầu hợp đồng: <div className="font-medium text-gray-800">{fmtDate(item.startDate) || '—'}</div></div>
                       <div>Ngày kết thúc hợp đồng: <div className="font-medium text-gray-800">{fmtDate(item.endDate) || '—'}</div></div>
                     </div>
@@ -1621,7 +1305,7 @@ export default function WarrantyContractsPage() {
               <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-6 py-4">
                 <div className="flex justify-between items-center">
                   <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                    📋 Chi tiết hợp đồng bảo hành
+                    📋 Chi tiết hợp đồng bảo trì
                   </h2>
                 </div>
               </div>
@@ -1746,239 +1430,34 @@ export default function WarrantyContractsPage() {
       </AnimatePresence>
 
       {/* Form Modal */}
-      {open && !isViewing && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeModal} />
-          <div className="relative z-[1] w-full max-w-4xl rounded-3xl bg-white shadow-2xl max-h-[90vh] flex flex-col">
-            <div className="sticky top-0 z-20 bg-white rounded-t-3xl px-8 pt-8 pb-4 border-b border-gray-200">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-2xl font-bold text-gray-900">
-                  {isEditing ? "Cập nhật hợp đồng bảo hành" : "Thêm hợp đồng bảo hành"}
-                </h3>
-              </div>
-            </div>
-
-            <div
-              className="overflow-y-auto px-8 pb-8 [&::-webkit-scrollbar]:hidden mt-6"
-              style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-            >
-              {isModalLoading ? (
-                <div className="flex flex-col items-center justify-center py-16 text-gray-500">
-                  <svg
-                    className="mb-4 h-12 w-12 animate-spin text-primary"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                  <span>Đang tải chi tiết...</span>
-                </div>
-              ) : (
-                <form onSubmit={onSubmit} className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                  {/* LEFT */}
-                  <div className="space-y-5">
-                    <div>
-                      <label className="mb-2 block text-sm font-semibold text-gray-700">
-                        Mã hợp đồng*
-                      </label>
-                      <input
-                        required
-                        type="text"
-                        className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50"
-                        value={form.contractCode}
-                        onChange={(e) =>
-                          setForm((s) => ({ ...s, contractCode: e.target.value }))
-                        }
-                        disabled={isViewing || !canEdit}
-                        placeholder="VD: HD-BH-001"
-                      />
-                    </div>
-
-                    <RemoteSelectHospital
-                      label="Bệnh viện*"
-                      placeholder="Chọn bệnh viện..."
-                      fetchOptions={searchHospitals}
-                      value={selectedHospital}
-                      onChange={(v) => {
-                        setSelectedHospital(v);
-                        setForm((s) => ({ ...s, hospitalId: v ? v.id : undefined }));
-                      }}
-                      disabled={isViewing || !canEdit}
-                    />
-
-                    <RemoteSelectPic
-                      label="Người phụ trách*"
-                      placeholder="Chọn người phụ trách..."
-                      options={picOptions}
-                      value={selectedPic}
-                      onChange={(v) => {
-                        setSelectedPic(v);
-                        setForm((s) => ({ ...s, picUserId: v ? v.id : undefined }));
-                      }}
-                      disabled={isViewing || !canEdit}
-                    />
-
-                    <div>
-                      <label className="mb-2 block text-sm font-semibold text-gray-700">
-                        Thời hạn hợp đồng*
-                      </label>
-                      <input
-                        required
-                        type="text"
-                        className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50"
-                        value={form.durationYears}
-                        onChange={(e) =>
-                          setForm((s) => ({ ...s, durationYears: e.target.value }))
-                        }
-                        disabled={isViewing || !canEdit}
-                        placeholder="Ví dụ: 1 năm 6 tháng, 2 năm 3 tháng..."
-                      />
-                    </div>
-                  </div>
-
-                  {/* RIGHT */}
-                  <div className="space-y-5">
-                    <div>
-                      <label className="mb-2 block text-sm font-semibold text-gray-700">
-                        Giá hợp đồng (1 năm)*
-                      </label>
-                      <input
-                        required
-                        type="text"
-                        className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50"
-                        value={yearlyPriceDisplay || formatNumber(form.yearlyPrice)}
-                        onChange={(e) => handlePriceChange(e.target.value)}
-                        onBlur={handlePriceBlur}
-                        onFocus={handlePriceFocus}
-                        disabled={isViewing || !canEdit}
-                        placeholder="Nhập số tiền..."
-                      />
-                      
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-semibold text-gray-700">
-                        Tổng tiền*
-                      </label>
-                      <input
-                        required
-                        type="text"
-                        className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50"
-                        value={totalPriceDisplay || formatNumber(form.totalPrice)}
-                        onChange={(e) => handleTotalPriceChange(e.target.value)}
-                        onBlur={handleTotalPriceBlur}
-                        onFocus={handleTotalPriceFocus}
-                        disabled={isViewing || !canEdit}
-                        placeholder="Nhập tổng tiền..."
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-semibold text-gray-700">
-                        Thời gian bắt đầu hợp đồng
-                      </label>
-                      <input
-                        type="datetime-local"
-                        className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50"
-                        value={form.startDate || ""}
-                        onChange={(e) =>
-                          setForm((s) => ({ ...s, startDate: e.target.value || null }))
-                        }
-                        disabled={isViewing || !canEdit}
-                      />
-                      {form.startDate && (
-                        <div className="mt-2 text-sm text-gray-700 font-medium">
-                          {(() => {
-                            // Parse từ format "yyyy-MM-ddTHH:mm" và format thành "HH:mm-dd/MM/yyyy"
-                            const match = form.startDate.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
-                            if (match) {
-                              const [, year, month, day, hours, minutes] = match;
-                              return `${hours}:${minutes}-${day}/${month}/${year}`;
-                            }
-                            // Fallback: dùng hàm fmt
-                            return fmt(form.startDate);
-                          })()}
-                        </div>
-                      )}
-                      
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-semibold text-gray-700">
-                        Ngày kết thúc hợp đồng
-                      </label>
-                      <input
-                        type="datetime-local"
-                        className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50"
-                        value={form.endDate || ""}
-                        onChange={(e) =>
-                          setForm((s) => ({ ...s, endDate: e.target.value || null }))
-                        }
-                        disabled={isViewing || !canEdit}
-                      />
-                      {form.endDate && (
-                        <div className="mt-2 text-sm text-gray-700 font-medium">
-                          {(() => {
-                            // Parse từ format "yyyy-MM-ddTHH:mm" và format thành "HH:mm-dd/MM/yyyy"
-                            const match = form.endDate.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
-                            if (match) {
-                              const [, year, month, day, hours, minutes] = match;
-                              return `${hours}:${minutes}-${day}/${month}/${year}`;
-                            }
-                            // Fallback: dùng hàm fmt
-                            return fmt(form.endDate);
-                          })()}
-                        </div>
-                      )}
-                      
-                    </div>
-                  </div>
-
-                  {/* Footer */}
-                  <div className="col-span-1 md:col-span-2 mt-4 flex items-center justify-between border-t border-gray-200 pt-6">
-                    {error && (
-                      <div className="rounded-xl border-2 border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-                        {error}
-                      </div>
-                    )}
-                    <div className="ml-auto flex items-center gap-3">
-                      <button
-                        type="button"
-                        className="rounded-xl border-2 border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-400"
-                        onClick={closeModal}
-                      >
-                        Huỷ
-                      </button>
-                      {canEdit && (
-                        <button
-                          type="submit"
-                          className="rounded-xl border-2 border-blue-500 bg-blue-500 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-blue-600 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                          disabled={loading}
-                        >
-                          {loading ? "Đang lưu..." : isEditing ? "Cập nhật" : "Tạo mới"}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </form>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <MaintainContractForm
+        open={open && !isViewing}
+        isViewing={isViewing}
+        isEditing={isEditing}
+        isModalLoading={isModalLoading}
+        form={form}
+        setForm={setForm}
+        onSubmit={onSubmit}
+        onClose={closeModal}
+        error={error}
+        loading={loading}
+        canEdit={canEdit}
+        selectedHospital={selectedHospital}
+        setSelectedHospital={setSelectedHospital}
+        selectedPic={selectedPic}
+        setSelectedPic={setSelectedPic}
+        picOptions={picOptions}
+        yearlyPriceDisplay={yearlyPriceDisplay}
+        setYearlyPriceDisplay={setYearlyPriceDisplay}
+        totalPriceDisplay={totalPriceDisplay}
+        setTotalPriceDisplay={setTotalPriceDisplay}
+        handlePriceChange={handlePriceChange}
+        handlePriceBlur={handlePriceBlur}
+        handlePriceFocus={handlePriceFocus}
+        handleTotalPriceChange={handleTotalPriceChange}
+        handleTotalPriceBlur={handleTotalPriceBlur}
+        handleTotalPriceFocus={handleTotalPriceFocus}
+      />
 
       {/* Confirm Create Modal */}
       <AnimatePresence>
@@ -2004,7 +1483,7 @@ export default function WarrantyContractsPage() {
                     </h3>
                     <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
                       <p className="text-sm text-orange-700">
-                        Bệnh viện <span className="font-bold">"{hospitalNameForConfirm}"</span> đã có hợp đồng bảo hành. Bạn có muốn tạo thêm hợp đồng mới không?
+                        Bệnh viện <span className="font-bold">"{hospitalNameForConfirm}"</span> đã có hợp đồng bảo trì. Bạn có muốn tạo thêm hợp đồng mới không?
                       </p>
                     </div>
                   </div>
@@ -2054,11 +1533,11 @@ export default function WarrantyContractsPage() {
                   </div>
                   <div className="flex-1">
                     <h3 className="text-lg font-bold text-gray-900 mb-1">
-                      Xác nhận xóa hợp đồng bảo hành
+                      Xác nhận xóa hợp đồng bảo trì
                     </h3>
                     <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
                       <p className="text-sm text-red-700">
-                        Bạn có chắc chắn muốn xóa hợp đồng bảo hành này? Hành động này không thể hoàn tác.
+                        Bạn có chắc chắn muốn xóa hợp đồng bảo trì này? Hành động này không thể hoàn tác.
                       </p>
                     </div>
                   </div>

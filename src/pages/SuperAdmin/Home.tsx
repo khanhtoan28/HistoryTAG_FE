@@ -10,6 +10,10 @@ import { getBusinesses } from "../../api/business.api";
 import { getAuthToken } from "../../api/client";
 import toast from "react-hot-toast";
 import Pagination from "../../components/common/Pagination";
+import TetCelebration from "../../components/common/TetCelebration";
+import FlowerFall from "../../components/common/FlowerFall";
+
+
 // ExcelJS is heavy; import dynamically inside export functions to reduce initial bundle size
 
 function StatCard({ title, value, icon, color }: { title: string; value: string | number; icon?: React.ReactNode; color?: string }) {
@@ -90,7 +94,7 @@ export default function SuperAdminHome() {
         const deps = Array.from(new Set(uList.map((u: any) => (u?.department ?? null)).filter(Boolean))).sort();
         if (mounted) setDepartments(deps as string[]);
       } catch (err) {
-        console.warn('Failed to load departments', err);
+        // console.warn('Failed to load departments', err);
       }
     })();
     return () => { mounted = false; };
@@ -532,7 +536,7 @@ export default function SuperAdminHome() {
         const teams = Array.from(new Set(uList.map((u) => u.team).filter(Boolean))).sort() as string[];
         if (mounted) setAvailableTeams(teams);
       } catch (err) {
-        console.warn('Failed to load teams', err);
+        // console.warn('Failed to load teams', err);
         if (mounted) setAvailableTeams([]);
       }
     })();
@@ -654,7 +658,7 @@ export default function SuperAdminHome() {
         });
         setProfileUsers(Array.from(userMap.values()));
       } catch (err) {
-        console.warn('load users for team failed', err);
+        // console.warn('load users for team failed', err);
         setProfileUsers([]);
       }
 
@@ -813,7 +817,7 @@ export default function SuperAdminHome() {
         hwList.forEach((h: any) => { map[String(h.id)] = (h.name ?? h.hardwareName ?? h.label ?? String(h.id)); });
         setHardwareMap(map);
       } catch (err) {
-        console.warn('hardware map load failed', err);
+        // console.warn('hardware map load failed', err);
         setHardwareMap({});
       }
 
@@ -833,6 +837,7 @@ export default function SuperAdminHome() {
     if (teamUpper === 'DEV' || teamUpper === 'DEVELOPMENT' || teamUpper.includes('PHÁT TRIỂN') || teamUpper.includes('PHATTRIEN')) return 'Phát triển';
     if (teamUpper === 'MAINTENANCE' || teamUpper.includes('BẢO TRÌ') || teamUpper.includes('BAOTRI')) return 'Bảo trì';
     if (teamUpper === 'SALES' || teamUpper.includes('KINH DOANH') || teamUpper.includes('KINHDOANH')) return 'Kinh doanh';
+    if (teamUpper === 'CUSTOMER_SERVICE' || teamUpper.includes('CHĂM SÓC KHÁCH HÀNG') || teamUpper.includes('CHAMSOCKHACHHANG')) return 'CSKH';
     return team; // Return original if no match
   };
 
@@ -862,6 +867,9 @@ export default function SuperAdminHome() {
         'APPROVING': 'Đang duyệt',
         'ON_HOLD': 'Tạm dừng',
         'ARCHIVED': 'Đã lưu trữ',
+        'ISSUE': 'Gặp sự cố',
+        'FAILED': 'Gặp sự cố',
+        'ERROR': 'Gặp sự cố',
       };
       const key = String(s).toUpperCase();
       return m[key] ?? String(s).replace(/_/g, ' ');
@@ -1136,7 +1144,7 @@ export default function SuperAdminHome() {
       const allTasks = [
         ...profileImplTasks.map(t => ({ ...t, type: 'impl' as const, hospitalName: t.hospitalName, receivedDate: (t as any).receivedDate ?? (t as any).startDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name })),
         ...profileDevTasks.map(t => ({ ...t, type: 'dev' as const, hospitalName: (t as any).hospitalName, receivedDate: (t as any).receivedDate ?? (t as any).startDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name })),
-        ...profileMaintTasks.map(t => ({ ...t, type: 'maint' as const, hospitalName: (t as any).hospitalName, receivedDate: (t as any).receivedDate ?? (t as any).startDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name })),
+        ...profileMaintTasks.map(t => ({ ...t, type: 'maint' as const, hospitalName: (t as any).hospitalName, receivedDate: (t as any).receivedDate ?? (t as any).startDate ?? (t as any).createdDate, completionDate: (t as any).completionDate ?? (t as any).endDate, status: (t as any).status, name: t.name })),
         ...profileBusinesses.map(t => ({
           ...t,
           type: 'business' as const,
@@ -1333,7 +1341,7 @@ export default function SuperAdminHome() {
       allTasks.push(...implTasksPicFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
     }
     if (isMaintenanceTeam) {
-      allTasks.push(...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
+      allTasks.push(...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).completionDate ?? (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
     }
     if (isDevTeam) {
       allTasks.push(...devTasksPicFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
@@ -1343,7 +1351,7 @@ export default function SuperAdminHome() {
       allTasks.push(
         ...implTasksPicFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
         ...devTasksPicFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
-        ...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' }))
+        ...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).completionDate ?? (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' }))
       );
     }
 
@@ -1523,7 +1531,7 @@ export default function SuperAdminHome() {
         allTasks.push(...implTasksPicFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
       }
       if (isMaintenanceTeam) {
-        allTasks.push(...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
+        allTasks.push(...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).completionDate ?? (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
       }
       if (isDevTeam) {
         allTasks.push(...devTasksPicFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
@@ -1532,13 +1540,144 @@ export default function SuperAdminHome() {
         allTasks.push(
           ...implTasksPicFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
           ...devTasksPicFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
-          ...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' }))
+          ...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).completionDate ?? (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' }))
         );
       }
       
       return allTasks.length;
     }
   }, [isSalesSelected, salesFilteredBusinesses, profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, profileDateFrom, profileDateTo, implStatusFilter, devStatusFilter, maintStatusFilter, profileStatusFilter, profilePicFilter, profileUsers, normalizedSelectedTeam]);
+
+  // All tasks by hospital (without pagination) - used for Excel export
+  // Same filtering logic as tasksByHospital but returns all groups without pagination
+  const allTasksByHospital = useMemo(() => {
+    if (isSalesSelected) {
+      return [];
+    }
+    // Same logic as tasksByHospital but without pagination
+    const matchesDateRangeFilter = (startDate?: string | null) => {
+      if (profileDateFrom || profileDateTo) {
+        if (!startDate) return false;
+        const d = new Date(startDate);
+        if (Number.isNaN(d.getTime())) return false;
+        const taskDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        if (profileDateFrom) {
+          const fromDate = new Date(profileDateFrom);
+          fromDate.setHours(0, 0, 0, 0);
+          if (taskDate < fromDate) return false;
+        }
+        if (profileDateTo) {
+          const toDate = new Date(profileDateTo);
+          toDate.setHours(23, 59, 59, 999);
+          if (taskDate > toDate) return false;
+        }
+        return true;
+      }
+      if (profileQuarter === 'all' && (!profileYear || profileYear === '')) return true;
+      if (!startDate) {
+        return profileQuarter === 'all' && (!profileYear || profileYear === '');
+      }
+      const d = new Date(startDate);
+      if (Number.isNaN(d.getTime())) {
+        return profileQuarter === 'all' && (!profileYear || profileYear === '');
+      }
+      if (profileYear && profileYear !== '' && String(d.getFullYear()) !== profileYear) return false;
+      if (profileQuarter === 'all') return true;
+      const month = d.getMonth();
+      const q = Math.floor(month / 3) + 1;
+      return `Q${q}` === profileQuarter;
+    };
+
+    const allImplTasks = profileImplTasks.filter(t => {
+      const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
+      return matchesDateRangeFilter(startDate);
+    });
+    const allDevTasks = profileDevTasks.filter(t => {
+      const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
+      return matchesDateRangeFilter(startDate);
+    });
+    const allMaintTasks = profileMaintTasks.filter(t => {
+      const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
+      return matchesDateRangeFilter(startDate);
+    });
+
+    const normalizeStatusToCanonical = (status?: string | null): string | null => {
+      if (!status) return null;
+      const s = String(status).trim().toUpperCase();
+      if (s === 'RECEIVED' || s === 'NOT_STARTED' || s === 'PENDING') return 'RECEIVED';
+      if (s === 'IN_PROCESS' || s === 'IN_PROGRESS' || s === 'API_TESTING' || s === 'INTEGRATING' || s === 'WAITING_FOR_DEV' || s === 'WAITING_FOR_DEPLOY') return 'IN_PROCESS';
+      if (s === 'COMPLETED' || s === 'DONE' || s === 'FINISHED' || s === 'ACCEPTED' || s === 'TRANSFERRED' || s === 'PENDING_TRANSFER' || s === 'TRANSFERRED_TO_CUSTOMER') return 'COMPLETED';
+      if (s === 'ISSUE' || s === 'FAILED' || s === 'ERROR') return 'ISSUE';
+      if (s === 'RECEIVED' || s === 'IN_PROCESS' || s === 'COMPLETED' || s === 'ISSUE') return s;
+      return s;
+    };
+    
+    const statusFilter = profileStatusFilter !== 'all' ? profileStatusFilter : null;
+    const implTasksFiltered = statusFilter 
+      ? allImplTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
+      : (implStatusFilter === 'all' ? allImplTasks : allImplTasks.filter(t => String((t as any).status ?? '').toUpperCase() === implStatusFilter));
+    const devTasksFiltered = statusFilter
+      ? allDevTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
+      : (devStatusFilter === 'all' ? allDevTasks : allDevTasks.filter(t => String((t as any).status ?? '').toUpperCase() === devStatusFilter));
+    const maintTasksFiltered = statusFilter
+      ? allMaintTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
+      : (maintStatusFilter === 'all' ? allMaintTasks : allMaintTasks.filter(t => String((t as any).status ?? '').toUpperCase() === maintStatusFilter));
+
+    const implTasksPicFiltered = implTasksFiltered.filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+    const devTasksPicFiltered = devTasksFiltered.filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+    const maintTasksPicFiltered = maintTasksFiltered.filter((t) => matchesProfilePicFilter(t as unknown as Record<string, unknown>));
+
+    const normalizedTeam = normalizedSelectedTeam;
+    const isDeploymentTeam = normalizedTeam.includes('DEPLOY') || normalizedTeam.includes('TRIỂN KHAI') || normalizedTeam.includes('TRIENKHAI');
+    const isMaintenanceTeam = normalizedTeam.includes('MAINT') || normalizedTeam.includes('BẢO TRÌ') || normalizedTeam.includes('BAOTRI');
+    const isDevTeam = normalizedTeam.includes('DEV') || normalizedTeam.includes('PHÁT TRIỂN') || normalizedTeam.includes('PHATTRIEN');
+
+    type TaskWithType = {
+      type: 'Triển khai' | 'Bảo trì' | 'Phát triển';
+      hospitalName: string | null | undefined;
+      startDate: string | null | undefined;
+      completionDate: string | null | undefined;
+      status: string | null | undefined;
+      name: string;
+      picName: string;
+      [key: string]: unknown;
+    };
+    const allTasks: TaskWithType[] = [];
+    if (isDeploymentTeam) {
+      allTasks.push(...implTasksPicFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
+    }
+    if (isMaintenanceTeam) {
+      allTasks.push(...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).completionDate ?? (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
+    }
+    if (isDevTeam) {
+      allTasks.push(...devTasksPicFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })));
+    }
+    if (!isDeploymentTeam && !isMaintenanceTeam && !isDevTeam) {
+      allTasks.push(
+        ...implTasksPicFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
+        ...devTasksPicFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
+        ...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).completionDate ?? (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' }))
+      );
+    }
+
+    const grouped = new Map<string, TaskWithType[]>();
+    allTasks.forEach(task => {
+      const hospitalName = task.hospitalName || 'Không xác định';
+      if (!grouped.has(hospitalName)) {
+        grouped.set(hospitalName, []);
+      }
+      grouped.get(hospitalName)!.push(task);
+    });
+
+    return Array.from(grouped.entries()).map(([hospitalName, tasks]) => ({
+      hospitalName,
+      tasks: tasks.sort((a, b) => {
+        const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
+        const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
+        return dateB - dateA;
+      })
+    }));
+  }, [profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, profileDateFrom, profileDateTo, implStatusFilter, devStatusFilter, maintStatusFilter, profileStatusFilter, profilePicFilter, profileUsers, isSalesSelected, normalizedSelectedTeam]);
 
   // Update pagination totals when computed value changes
   useEffect(() => {
@@ -1591,6 +1730,7 @@ export default function SuperAdminHome() {
       'Phát triển': 'Phat_trien',
       'Bảo trì': 'Bao_tri',
       'Kinh doanh': 'Kinh_doanh',
+      'CSKH': 'Cham_soc_khach_hang',
     };
     return mapping[translated] || translated.replace(/[^a-z0-9\-_]/gi, '_').replace(/\s+/g, '_');
   };
@@ -1723,7 +1863,7 @@ export default function SuperAdminHome() {
       // SALES team has 8 columns (including Doanh thu), others have 7
       const headers = isSalesSelected
         ? ['Tên bệnh viện', 'Mã hợp đồng', 'Ngày bắt đầu', 'Người phụ trách', 'Trạng thái', 'Ngày hoàn thành', 'Số ngày thực hiện', 'Doanh thu']
-        : ['Tên bệnh viện', 'Nội dung công việc', 'Ngày bắt đầu', 'Người phụ trách', 'Trạng thái', 'Ngày hoàn thành', 'Số ngày thực hiện'];
+        : ['Tên bệnh viện', 'Nội dung công việc', 'Ngày bắt đầu', 'Người phụ trách', 'Trạng thái', 'Ngày hoàn thành', 'Thời gian thực hiện'];
       const headerRow = worksheet.addRow(headers);
       
       // Style header row with yellow background
@@ -1764,7 +1904,7 @@ export default function SuperAdminHome() {
       worksheet.getColumn(4).width = 20; // Người phụ trách
       worksheet.getColumn(5).width = 18; // Trạng thái
       worksheet.getColumn(6).width = 18; // Ngày hoàn thành
-      worksheet.getColumn(7).width = 18; // Số ngày thực hiện
+      worksheet.getColumn(7).width = 22; // Số ngày thực hiện (tăng width để hiển thị "X ngày Y giờ")
       if (isSalesSelected) {
         worksheet.getColumn(8).width = 20; // Doanh thu
       }
@@ -1809,16 +1949,30 @@ export default function SuperAdminHome() {
               translateStatus(String((biz as any)?.status ?? '')),
               (biz as any)?.completionDate ? new Date((biz as any).completionDate).toLocaleDateString('vi-VN') : '—',
               (() => {
+                // ✅ Tính chi tiết đến giờ: "X ngày Y giờ" hoặc "Y giờ" (nếu < 1 ngày)
                 const startDate = (biz as any)?.startDate;
                 if (!startDate) return '—';
                 const start = new Date(startDate);
                 const endDate = (biz as any)?.completionDate ? new Date((biz as any).completionDate) : new Date();
                 if (Number.isNaN(start.getTime()) || Number.isNaN(endDate.getTime())) return '—';
-                const startDateOnly = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-                const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-                const diffTime = endDateOnly.getTime() - startDateOnly.getTime();
-                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                return diffDays >= 0 ? `${diffDays} ngày` : '—';
+                
+                // ✅ Tính diff time (milliseconds) - giữ nguyên timestamp để tính chính xác đến giờ
+                const diffTime = endDate.getTime() - start.getTime();
+                
+                // ✅ Kiểm tra số âm (completionDate < startDate → lỗi data)
+                if (diffTime < 0) return '—';
+                
+                // ✅ Tính số ngày và số giờ
+                const totalHours = Math.floor(diffTime / (1000 * 60 * 60));
+                const days = Math.floor(totalHours / 24);
+                const hours = totalHours % 24;
+                
+                // ✅ Format: "X ngày Y giờ" hoặc "Y giờ" (nếu < 1 ngày)
+                if (days > 0) {
+                  return hours > 0 ? `${days} ngày ${hours} giờ` : `${days} ngày`;
+                } else {
+                  return hours > 0 ? `${hours} giờ` : '< 1 giờ';
+                }
               })(),
               // Doanh thu column (only for SALES)
               new Intl.NumberFormat('vi-VN').format(Number((biz as any)?.totalPrice ?? (biz as any)?.unitPrice ?? 0)) + ' ₫'
@@ -1862,102 +2016,9 @@ export default function SuperAdminHome() {
           }
         }
       } else {
-      // Get all groups (not paginated) - reuse logic from tasksByHospital
-      const allGroups = (() => {
-        // Same logic as tasksByHospital but without pagination
-        const matchesDateRangeFilter = (startDate?: string | null) => {
-          if (profileDateFrom || profileDateTo) {
-            if (!startDate) return false;
-            const d = new Date(startDate);
-            if (Number.isNaN(d.getTime())) return false;
-            const taskDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-            
-            if (profileDateFrom) {
-              const fromDate = new Date(profileDateFrom);
-              fromDate.setHours(0, 0, 0, 0);
-              if (taskDate < fromDate) return false;
-            }
-            if (profileDateTo) {
-              const toDate = new Date(profileDateTo);
-              toDate.setHours(23, 59, 59, 999);
-              if (taskDate > toDate) return false;
-            }
-            return true;
-          }
-          if (profileQuarter === 'all' && (!profileYear || profileYear === '')) return true;
-          if (!startDate) {
-            return profileQuarter === 'all' && (!profileYear || profileYear === '');
-          }
-          const d = new Date(startDate);
-          if (Number.isNaN(d.getTime())) {
-            return profileQuarter === 'all' && (!profileYear || profileYear === '');
-          }
-          if (profileYear && profileYear !== '' && String(d.getFullYear()) !== profileYear) return false;
-          if (profileQuarter === 'all') return true;
-          const month = d.getMonth();
-          const q = Math.floor(month / 3) + 1;
-          return `Q${q}` === profileQuarter;
-        };
-
-        const allImplTasks = profileImplTasks.filter(t => {
-          const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
-          return matchesDateRangeFilter(startDate);
-        });
-        const allDevTasks = profileDevTasks.filter(t => {
-          const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
-          return matchesDateRangeFilter(startDate);
-        });
-        const allMaintTasks = profileMaintTasks.filter(t => {
-          const startDate = (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate;
-          return matchesDateRangeFilter(startDate);
-        });
-
-        const normalizeStatusToCanonical = (status?: string | null): string | null => {
-          if (!status) return null;
-          const s = String(status).trim().toUpperCase();
-          if (s === 'RECEIVED' || s === 'NOT_STARTED' || s === 'PENDING') return 'RECEIVED';
-          if (s === 'IN_PROCESS' || s === 'IN_PROGRESS' || s === 'API_TESTING' || s === 'INTEGRATING' || s === 'WAITING_FOR_DEV' || s === 'WAITING_FOR_DEPLOY') return 'IN_PROCESS';
-          if (s === 'COMPLETED' || s === 'DONE' || s === 'FINISHED' || s === 'ACCEPTED' || s === 'TRANSFERRED' || s === 'PENDING_TRANSFER' || s === 'TRANSFERRED_TO_CUSTOMER') return 'COMPLETED';
-          if (s === 'ISSUE' || s === 'FAILED' || s === 'ERROR') return 'ISSUE';
-          if (s === 'RECEIVED' || s === 'IN_PROCESS' || s === 'COMPLETED' || s === 'ISSUE') return s;
-          return s;
-        };
-
-        const statusFilter = profileStatusFilter !== 'all' ? profileStatusFilter : null;
-        const implTasksFiltered = statusFilter 
-          ? allImplTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
-          : allImplTasks;
-        const devTasksFiltered = statusFilter
-          ? allDevTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
-          : allDevTasks;
-        const maintTasksFiltered = statusFilter
-          ? allMaintTasks.filter(t => normalizeStatusToCanonical((t as any).status) === statusFilter)
-          : allMaintTasks;
-
-        const allTasks = [
-          ...implTasksFiltered.map(t => ({ ...t, type: 'Triển khai' as const, hospitalName: t.hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: t.completionDate ?? (t as any).finishDate, status: t.status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
-          ...devTasksFiltered.map(t => ({ ...t, type: 'Phát triển' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
-          ...maintTasksFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' })),
-        ];
-
-        const grouped = new Map<string, Array<typeof allTasks[0]>>();
-        allTasks.forEach(task => {
-          const hospitalName = task.hospitalName || 'Không xác định';
-          if (!grouped.has(hospitalName)) {
-            grouped.set(hospitalName, []);
-          }
-          grouped.get(hospitalName)!.push(task);
-        });
-
-        return Array.from(grouped.entries()).map(([hospitalName, tasks]) => ({
-          hospitalName,
-          tasks: tasks.sort((a, b) => {
-            const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
-            const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
-            return dateB - dateA;
-          })
-        }));
-      })();
+      // Use allTasksByHospital (already filtered, just not paginated) instead of re-filtering
+      // This ensures export uses the exact same filters as the displayed data
+      const allGroups = allTasksByHospital;
 
       // Add hospital groups - hospital name in first column, tasks below with empty first column
       for (const group of allGroups) {
@@ -2064,6 +2125,9 @@ export default function SuperAdminHome() {
   return (
     <>
       <PageMeta title="Quản lý công việc | TAGTECH" description="" />
+      {/* <FlowerFall /> */}
+
+      {/* <TetCelebration /> */}
 
       <div className="space-y-6">
         <header className="relative overflow-hidden rounded-2xl p-6 text-white shadow-md">
@@ -2095,7 +2159,7 @@ export default function SuperAdminHome() {
           <main className="col-span-12 xl:col-span-8 space-y-6">
             
             <section className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900">Quản lý nhanh</h2>
+              <h2 className="text-lg font-semibold text-blue-800">Quản lý nhanh</h2>
               <p className="text-sm text-gray-500 mt-1">Các hành động thường dùng được gom lại để bạn thao tác nhanh.</p>
 
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -2196,7 +2260,7 @@ export default function SuperAdminHome() {
         {/* Full-width Business Report placed below the grid */}
         <section className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100 w-full">
           <div className="max-w-full">
-            <h2 className="text-lg font-semibold text-gray-900">Báo cáo Kinh doanh</h2>
+            <h2 className="text-lg font-semibold text-blue-800">Báo cáo Kinh doanh</h2>
             <p className="text-sm text-gray-500 mt-1">Doanh thu & hoa hồng theo dự án. Lọc theo khoảng thời gian.</p>
 
             <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2287,7 +2351,7 @@ export default function SuperAdminHome() {
           <div className="max-w-full">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Báo cáo Hiệu suất Nhân viên</h2>
+                <h2 className="text-lg font-semibold text-blue-800">Báo cáo Hiệu suất Nhân viên</h2>
               </div>
             </div>
 
@@ -2392,7 +2456,7 @@ export default function SuperAdminHome() {
           <div className="max-w-full">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Báo cáo chi tiết theo Team</h2>
+                <h2 className="text-lg font-semibold text-blue-800">Báo cáo chi tiết theo Team</h2>
               </div>
               <div className="flex items-center gap-2">
                 
@@ -2449,13 +2513,7 @@ export default function SuperAdminHome() {
                     </button>
                     {teamDropdownOpen && (
                       <div className="absolute z-30 mt-2 w-full rounded-xl border border-gray-200 bg-white shadow-xl p-3 space-y-3">
-                        <input
-                          type="text"
-                          value={teamSearchQuery}
-                          onChange={(e) => setTeamSearchQuery(e.target.value)}
-                          placeholder="Tìm team..."
-                          className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
-                        />
+                        
                         <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
                           {filteredTeams.length === 0 ? (
                             <div className="text-sm text-gray-500 text-center py-6">
@@ -2847,22 +2905,40 @@ export default function SuperAdminHome() {
                             <th className="px-3 py-2 text-left w-[15%]">Người phụ trách</th>
                             <th className="px-3 py-2 text-center w-[10%]">Trạng thái</th>
                             <th className="px-3 py-2 text-center w-[10%]">Ngày hoàn thành</th>
-                            <th className="px-3 py-2 text-center w-[10%]">Số ngày thực hiện</th>
+                            <th className="px-3 py-2 text-center w-[10%]">Thời gian thực hiện</th>
                           </tr>
                         </thead>
                         <tbody>
                           {tasksByHospital.map((group, groupIdx) => {
-                            const calculateDays = (startDate: string | null | undefined, completionDate: string | null | undefined): number => {
-                              if (!startDate || !completionDate) return 0;
+                            // ✅ Tính chi tiết đến giờ: "X ngày Y giờ" hoặc "Y giờ" (nếu < 1 ngày)
+                            // - Giữ nguyên timestamp (không normalize) để tính chính xác đến giờ
+                            // - Kiểm tra diffTime >= 0 để phát hiện lỗi data (completionDate < startDate)
+                            const calculateDuration = (startDate: string | null | undefined, completionDate: string | null | undefined): string => {
+                              if (!startDate || !completionDate) return '—';
                               try {
                                 const start = new Date(startDate);
                                 const end = new Date(completionDate);
-                                if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
-                                const diffTime = Math.abs(end.getTime() - start.getTime());
-                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                return diffDays;
+                                if (isNaN(start.getTime()) || isNaN(end.getTime())) return '—';
+                                
+                                // ✅ Tính diff time (milliseconds) - giữ nguyên timestamp để tính chính xác đến giờ
+                                const diffTime = end.getTime() - start.getTime();
+                                
+                                // ✅ Kiểm tra số âm (completionDate < startDate → lỗi data)
+                                if (diffTime < 0) return '—';
+                                
+                                // ✅ Tính số ngày và số giờ
+                                const totalHours = Math.floor(diffTime / (1000 * 60 * 60));
+                                const days = Math.floor(totalHours / 24);
+                                const hours = totalHours % 24;
+                                
+                                // ✅ Format: "X ngày Y giờ" hoặc "Y giờ" (nếu < 1 ngày)
+                                if (days > 0) {
+                                  return hours > 0 ? `${days} ngày ${hours} giờ` : `${days} ngày`;
+                                } else {
+                                  return hours > 0 ? `${hours} giờ` : '< 1 giờ';
+                                }
                               } catch {
-                                return 0;
+                                return '—';
                               }
                             };
 
@@ -2913,6 +2989,8 @@ export default function SuperAdminHome() {
                                           ? 'bg-green-100 text-green-800'
                                           : String(task.status ?? '').toUpperCase() === 'IN_PROCESS' || String(task.status ?? '').toUpperCase() === 'ĐANG XỬ LÝ'
                                           ? 'bg-blue-100 text-blue-800'
+                                          : String(task.status ?? '').toUpperCase() === 'ISSUE' || String(task.status ?? '').toUpperCase() === 'FAILED' || String(task.status ?? '').toUpperCase() === 'ERROR'
+                                          ? 'bg-red-100 text-red-800'
                                           : 'bg-yellow-100 text-yellow-800'
                                       }`}>
                                         {translateStatus(String(task.status ?? ''))}
@@ -2921,9 +2999,9 @@ export default function SuperAdminHome() {
                                     <td className="px-3 py-2 text-center">{task.completionDate ? new Date(task.completionDate).toLocaleDateString('vi-VN') : '—'}</td>
                                     <td className="px-3 py-2 text-center">
                                       {task.startDate && task.completionDate ? (
-                                        <span className="text-gray-700">{calculateDays(task.startDate, task.completionDate)} ngày</span>
+                                        <span className="text-gray-700">{calculateDuration(task.startDate, task.completionDate)}</span>
                                       ) : task.startDate ? (
-                                        <span className="text-gray-500">{calculateDays(task.startDate, new Date().toISOString())} ngày</span>
+                                        <span className="text-gray-500">{calculateDuration(task.startDate, new Date().toISOString())}</span>
                                       ) : (
                                         <span className="text-gray-400">—</span>
                                       )}
@@ -3176,7 +3254,7 @@ export default function SuperAdminHome() {
           <div className="max-w-full">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Báo cáo Phần cứng</h2>
+                <h2 className="text-lg font-semibold text-blue-800">Báo cáo Phần cứng</h2>
                 <p className="text-sm text-gray-500 mt-1">Sản phẩm bán chạy & mức độ sử dụng (top theo doanh thu)</p>
               </div>
               <div className="flex items-center gap-3">
