@@ -1690,7 +1690,7 @@ const ImplementationTasksPage: React.FC = () => {
   const [detailItem, setDetailItem] = useState<ImplementationTaskResponseDTO | null>(null);
   // hospital list view state (like SuperAdmin page)
   const [showHospitalList, setShowHospitalList] = useState<boolean>(true);
-  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number | null; label: string; subLabel?: string; hospitalCode?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean; personInChargeId?: number | null; personInChargeName?: string | null; hiddenPendingCount?: number; hiddenTaskCount?: number; acceptedFromBusiness?: boolean; hasBusinessPlaceholder?: boolean }>>([]);
+  const [hospitalsWithTasks, setHospitalsWithTasks] = useState<Array<{ id: number | null; label: string; subLabel?: string; hospitalCode?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean; personInChargeId?: number | null; personInChargeName?: string | null; hiddenPendingCount?: number; hiddenTaskCount?: number; acceptedFromBusiness?: boolean; hasBusinessPlaceholder?: boolean; picDeploymentIds?: Array<string | number>; picDeploymentNames?: string[] }>>([]);
   const [loadingHospitals, setLoadingHospitals] = useState<boolean>(false);
   const [hospitalPage, setHospitalPage] = useState<number>(0);
   const [hospitalSize, setHospitalSize] = useState<number>(20);
@@ -1812,6 +1812,53 @@ const ImplementationTasksPage: React.FC = () => {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [picFilterOpen]);
+
+  // ✅ Tự động set filter cho user hiện tại khi đăng nhập
+  const autoFilterSetRef = useRef<boolean>(false);
+  useEffect(() => {
+    // Chỉ set một lần khi picOptions đã load và filter chưa được set
+    if (autoFilterSetRef.current || hospitalPicFilter.length > 0 || picOptions.length === 0) {
+      return;
+    }
+
+    // Lấy userId hiện tại - thử nhiều cách
+    let userId: string | null = null;
+    
+    // Thử từ currentUser.id
+    if (currentUser?.id) {
+      userId = String(currentUser.id);
+    }
+    
+    // Nếu chưa có, thử từ localStorage/sessionStorage
+    if (!userId) {
+      userId = localStorage.getItem("userId") || sessionStorage.getItem("userId");
+    }
+    
+    // Nếu vẫn chưa có, thử parse từ currentUser object
+    if (!userId && currentUser && typeof currentUser === 'object') {
+      const userObj = currentUser as any;
+      if (userObj.userId) userId = String(userObj.userId);
+      if (!userId && userObj.id) userId = String(userObj.id);
+    }
+
+    if (!userId) return;
+
+    // Normalize userId (trim và đảm bảo là string)
+    userId = String(userId).trim();
+    if (!userId) return;
+
+    // Kiểm tra xem userId có trong picOptions không (so sánh cả string và number)
+    const userOption = picOptions.find(opt => {
+      const optId = String(opt.id).trim();
+      return optId === userId || optId === String(Number(userId)) || String(Number(optId)) === userId;
+    });
+    
+    if (userOption) {
+      // Sử dụng ID chính xác từ picOptions
+      setHospitalPicFilter([userOption.id]);
+      autoFilterSetRef.current = true;
+    }
+  }, [picOptions, currentUser, hospitalPicFilter.length]);
 
   const handleNewTaskClick = async () => {
     if (!canManage) return;
@@ -2371,15 +2418,36 @@ const ImplementationTasksPage: React.FC = () => {
       });
 
       // Aggregate by hospitalName
-      const acc = new Map<string, { id: number | null; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number; transferredCount: number; acceptedByMaintenanceCount: number; hiddenPendingCount: number; hiddenTaskCount: number }>();
+      const acc = new Map<string, { id: number | null; label: string; subLabel?: string; taskCount: number; acceptedCount: number; nearDueCount: number; overdueCount: number; transferredCount: number; acceptedByMaintenanceCount: number; hiddenPendingCount: number; hiddenTaskCount: number; picDeploymentIds: Set<string | number>; picDeploymentNames: Set<string> }>();
       for (const it of visibleItems) {
         const name = (it.hospitalName || "").toString().trim() || "—";
         const hospitalId = typeof it.hospitalId === "number" ? it.hospitalId : it.hospitalId != null ? Number(it.hospitalId) : null;
         const key = hospitalId != null ? `id-${hospitalId}` : `name-${name}`;
-        const current = acc.get(key) || { id: hospitalId, label: name, subLabel: "", taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0, transferredCount: 0, acceptedByMaintenanceCount: 0, hiddenPendingCount: 0, hiddenTaskCount: 0 };
+        const current = acc.get(key) || { id: hospitalId, label: name, subLabel: "", taskCount: 0, acceptedCount: 0, nearDueCount: 0, overdueCount: 0, transferredCount: 0, acceptedByMaintenanceCount: 0, hiddenPendingCount: 0, hiddenTaskCount: 0, picDeploymentIds: new Set<string | number>(), picDeploymentNames: new Set<string>() };
         if (current.id == null && hospitalId != null) current.id = hospitalId;
         if (!current.label && name) current.label = name;
         current.taskCount += 1;
+        
+        // ✅ Collect PICs từ task
+        if (it.picDeploymentIds && Array.isArray(it.picDeploymentIds)) {
+          it.picDeploymentIds.forEach((picId: any) => {
+            if (picId != null) current.picDeploymentIds.add(picId);
+          });
+        }
+        if (it.picDeploymentNames && Array.isArray(it.picDeploymentNames)) {
+          it.picDeploymentNames.forEach((picName: any) => {
+            const nameStr = String(picName || "").trim();
+            if (nameStr) current.picDeploymentNames.add(nameStr);
+          });
+        }
+        // Fallback: nếu không có picDeploymentIds nhưng có picDeploymentId
+        if (!it.picDeploymentIds && it.picDeploymentId) {
+          current.picDeploymentIds.add(it.picDeploymentId);
+        }
+        if (!it.picDeploymentNames && it.picDeploymentName) {
+          const nameStr = String(it.picDeploymentName || "").trim();
+          if (nameStr) current.picDeploymentNames.add(nameStr);
+        }
         const taskStatus = normalizeStatus(it.status);
         if (taskStatus === 'COMPLETED') current.acceptedCount += 1;
         // Count transferred tasks
@@ -2432,6 +2500,26 @@ const ImplementationTasksPage: React.FC = () => {
         if (current) {
           current.hiddenPendingCount += 1;
           current.hiddenTaskCount += 1;
+          // ✅ Collect PICs từ hidden task
+          if (it.picDeploymentIds && Array.isArray(it.picDeploymentIds)) {
+            it.picDeploymentIds.forEach((picId: any) => {
+              if (picId != null) current.picDeploymentIds.add(picId);
+            });
+          }
+          if (it.picDeploymentNames && Array.isArray(it.picDeploymentNames)) {
+            it.picDeploymentNames.forEach((picName: any) => {
+              const nameStr = String(picName || "").trim();
+              if (nameStr) current.picDeploymentNames.add(nameStr);
+            });
+          }
+          // Fallback: nếu không có picDeploymentIds nhưng có picDeploymentId
+          if (!it.picDeploymentIds && it.picDeploymentId) {
+            current.picDeploymentIds.add(it.picDeploymentId);
+          }
+          if (!it.picDeploymentNames && it.picDeploymentName) {
+            const nameStr = String(it.picDeploymentName || "").trim();
+            if (nameStr) current.picDeploymentNames.add(nameStr);
+          }
         }
       }
 
@@ -2481,8 +2569,31 @@ const ImplementationTasksPage: React.FC = () => {
           transferredCount: 0,
           acceptedByMaintenanceCount: 0,
           hiddenPendingCount: 0,
-          hiddenTaskCount: 0
+          hiddenTaskCount: 0,
+          picDeploymentIds: new Set<string | number>(),
+          picDeploymentNames: new Set<string>()
         };
+        
+        // ✅ Collect PICs từ pending task
+        if (it.picDeploymentIds && Array.isArray(it.picDeploymentIds)) {
+          it.picDeploymentIds.forEach((picId: any) => {
+            if (picId != null) current.picDeploymentIds.add(picId);
+          });
+        }
+        if (it.picDeploymentNames && Array.isArray(it.picDeploymentNames)) {
+          it.picDeploymentNames.forEach((picName: any) => {
+            const nameStr = String(picName || "").trim();
+            if (nameStr) current.picDeploymentNames.add(nameStr);
+          });
+        }
+        // Fallback: nếu không có picDeploymentIds nhưng có picDeploymentId
+        if (!it.picDeploymentIds && it.picDeploymentId) {
+          current.picDeploymentIds.add(it.picDeploymentId);
+        }
+        if (!it.picDeploymentNames && it.picDeploymentName) {
+          const nameStr = String(it.picDeploymentName || "").trim();
+          if (nameStr) current.picDeploymentNames.add(nameStr);
+        }
         if (current.id == null && hospitalId != null) current.id = hospitalId;
         if (!current.label && name) current.label = name;
         current.hiddenPendingCount += 1;
@@ -2532,6 +2643,9 @@ const ImplementationTasksPage: React.FC = () => {
             hiddenTaskCount: hiddenTaskCount,
             acceptedFromBusiness: acceptedFromBusiness,
             hasBusinessPlaceholder: Boolean(businessInfo?.hasGeneratedTask) || hiddenTaskCount > 0,
+            // ✅ Merge PICs từ aggregated
+            picDeploymentIds: aggregated ? Array.from(aggregated.picDeploymentIds) : undefined,
+            picDeploymentNames: aggregated ? Array.from(aggregated.picDeploymentNames) : undefined,
             // Transfer status đã có từ backend endpoint
           };
         })
@@ -2539,7 +2653,7 @@ const ImplementationTasksPage: React.FC = () => {
 
       // Thêm các bệnh viện chỉ có pending tasks (không có trong baseList)
       // Đảm bảo TẤT CẢ các bệnh viện trong pendingTasksFromBusiness đều được hiển thị
-      const hospitalsWithOnlyPending: Array<{ id: number | null; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean; personInChargeId?: number | null; personInChargeName?: string | null; hiddenPendingCount?: number; hiddenTaskCount?: number; acceptedFromBusiness?: boolean; hasBusinessPlaceholder?: boolean }> = [];
+      const hospitalsWithOnlyPending: Array<{ id: number | null; label: string; subLabel?: string; taskCount?: number; acceptedCount?: number; nearDueCount?: number; overdueCount?: number; transferredCount?: number; allTransferred?: boolean; allAccepted?: boolean; personInChargeId?: number | null; personInChargeName?: string | null; hiddenPendingCount?: number; hiddenTaskCount?: number; acceptedFromBusiness?: boolean; hasBusinessPlaceholder?: boolean; picDeploymentIds?: Array<string | number>; picDeploymentNames?: string[] }> = [];
       const addedHospitalKeys = new Set<string>();
 
       // First, add hospitals from acc that are not in baseList
@@ -2571,6 +2685,9 @@ const ImplementationTasksPage: React.FC = () => {
               personInChargeName: null,
               acceptedFromBusiness: acceptedFromBusiness,
               hasBusinessPlaceholder: Boolean(businessInfo?.hasGeneratedTask) || hiddenPendingCount > 0,
+              // ✅ Merge PICs từ aggregated
+              picDeploymentIds: Array.from(aggregated.picDeploymentIds),
+              picDeploymentNames: Array.from(aggregated.picDeploymentNames),
             });
           }
         }
@@ -2820,11 +2937,67 @@ const ImplementationTasksPage: React.FC = () => {
       list = list.filter(h => h.id && (ticketOpenCounts[h.id] ?? 0) > 0);
     }
 
-    // Apply PIC filter - filter by personInChargeId from hospital summary
+    // Apply PIC filter - filter by picDeploymentIds/picDeploymentNames from tasks (giống bên bảo trì)
     if (hospitalPicFilter.length > 0) {
-      list = list.filter(h => {
-        if (!h.personInChargeId) return false;
-        return hospitalPicFilter.includes(String(h.personInChargeId));
+      // ✅ Normalize selected IDs - tạo Set với cả string và number format để match được cả hai
+      const selectedStrings = new Set<string>();
+      const selectedNumbers = new Set<number>();
+      hospitalPicFilter.forEach(id => {
+        const idStr = String(id).trim();
+        const idNum = Number(id);
+        selectedStrings.add(idStr);
+        if (!isNaN(idNum) && idNum > 0) {
+          selectedNumbers.add(idNum);
+          // Thêm cả number dạng string để match
+          selectedStrings.add(String(idNum));
+        }
+      });
+      
+      // Tạo map từ picOptions để có thể lookup name từ ID và ngược lại
+      const picIdToNameMap = new Map<string, string>();
+      const picNameToIdMap = new Map<string, string>();
+      picOptions.forEach(opt => {
+        const idStr = String(opt.id).trim();
+        const nameStr = String(opt.label).trim();
+        picIdToNameMap.set(idStr, nameStr);
+        picNameToIdMap.set(nameStr, idStr);
+      });
+
+      list = list.filter((h) => {
+        // Check by ID (so sánh với picDeploymentIds) - normalize cả hai bên
+        const picIds = h.picDeploymentIds || [];
+        const hasMatchingId = picIds.some((id: any) => {
+          // So sánh cả string và number format
+          const idStr = String(id).trim();
+          const idNum = Number(id);
+          return selectedStrings.has(idStr) || 
+                 (!isNaN(idNum) && idNum > 0 && selectedNumbers.has(idNum)) ||
+                 (!isNaN(idNum) && idNum > 0 && selectedStrings.has(String(idNum)));
+        });
+        
+        // Check by name (so sánh với picDeploymentNames) - cần convert name sang ID trước
+        const picNames = (h.picDeploymentNames || []).map(name => String(name).trim());
+        const hasMatchingName = picNames.some((nameStr) => {
+          // Tìm ID từ name, rồi check ID đó có trong selected không
+          const idFromName = picNameToIdMap.get(nameStr);
+          if (!idFromName) return false;
+          // Check cả string và number format
+          const idNum = Number(idFromName);
+          return selectedStrings.has(idFromName) || 
+                 (!isNaN(idNum) && idNum > 0 && selectedNumbers.has(idNum)) ||
+                 (!isNaN(idNum) && idNum > 0 && selectedStrings.has(String(idNum)));
+        });
+        
+        // Fallback: Check by personInChargeId nếu không có picDeploymentIds
+        const hasMatchingPersonInCharge = h.personInChargeId && (() => {
+          const picIdStr = String(h.personInChargeId).trim();
+          const picIdNum = Number(h.personInChargeId);
+          return selectedStrings.has(picIdStr) || 
+                 (!isNaN(picIdNum) && picIdNum > 0 && selectedNumbers.has(picIdNum)) ||
+                 (!isNaN(picIdNum) && picIdNum > 0 && selectedStrings.has(String(picIdNum)));
+        })();
+        
+        return hasMatchingId || hasMatchingName || hasMatchingPersonInCharge;
       });
     }
 
@@ -2841,7 +3014,7 @@ const ImplementationTasksPage: React.FC = () => {
       return a.label.localeCompare(b.label) * dir;
     });
     return list;
-  }, [hospitalsWithTasks, hospitalSearch, hospitalCodeSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir, ticketOpenCounts]);
+  }, [hospitalsWithTasks, hospitalSearch, hospitalCodeSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir, ticketOpenCounts, picOptions]);
 
   const pagedHospitals = useMemo(() => {
     return filteredHospitals.slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize);

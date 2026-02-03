@@ -1008,16 +1008,23 @@ export default function SuperAdminUsers() {
 
                                       // Update team roles
                                       const teamRoles = { ...s.teamRoles };
+                                      let primaryTeam = s.primaryTeam;
+                                      
                                       if (checked) {
                                         teamRoles[team] = 'MEMBER'; // Default role
+                                        // ✅ Tự động set đội chính khi tick đội đầu tiên
+                                        if (selectedTeams.length === 1 && !primaryTeam) {
+                                          primaryTeam = team;
+                                        }
                                       } else {
                                         delete teamRoles[team];
-                                        // If removing primary team, clear it
-                                        const primaryTeam = s.primaryTeam === team ? '' : s.primaryTeam;
-                                        return { ...s, selectedTeams, teamRoles, primaryTeam };
+                                        // If removing primary team, clear it or set to first remaining team
+                                        if (primaryTeam === team) {
+                                          primaryTeam = selectedTeams.length > 0 ? selectedTeams[0] : '';
+                                        }
                                       }
 
-                                      return { ...s, selectedTeams, teamRoles };
+                                      return { ...s, selectedTeams, teamRoles, primaryTeam };
                                     });
                                   }}
                                   disabled={isViewing}
@@ -1066,7 +1073,7 @@ export default function SuperAdminUsers() {
                       )}
 
                       {/* Primary Team Selection */}
-                      {form.selectedTeams.length > 1 && (
+                      {form.selectedTeams.length > 0 && (
                         <div className="rounded-lg border border-gray-300 p-3">
                           <div className="mb-2">
                             <label className="text-sm font-medium text-gray-700">Đội chính <span className="text-red-500">*</span>:</label>
@@ -1075,16 +1082,28 @@ export default function SuperAdminUsers() {
                             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4693FF] disabled:bg-gray-50"
                             value={form.primaryTeam}
                             onChange={(e) => setForm((s) => ({ ...s, primaryTeam: e.target.value }))}
-                            disabled={isViewing}
+                            disabled={isViewing || form.selectedTeams.length === 1}
                           >
-                            <option value="">— Chọn đội chính —</option>
-                            {form.selectedTeams.map((team) => (
-                              <option key={team} value={team}>
-                                {getTeamLabel(team)} {form.teamRoles[team] === 'LEADER' ? '(Trưởng đội)' : '(Thành viên)'}
+                            {form.selectedTeams.length === 1 ? (
+                              <option value={form.selectedTeams[0]}>
+                                {getTeamLabel(form.selectedTeams[0])} {form.teamRoles[form.selectedTeams[0]] === 'LEADER' ? '(Trưởng đội)' : '(Thành viên)'}
                               </option>
-                            ))}
+                            ) : (
+                              <>
+                                <option value="">— Chọn đội chính —</option>
+                                {form.selectedTeams.map((team) => (
+                                  <option key={team} value={team}>
+                                    {getTeamLabel(team)} {form.teamRoles[team] === 'LEADER' ? '(Trưởng đội)' : '(Thành viên)'}
+                                  </option>
+                                ))}
+                              </>
+                            )}
                       </select>
-                          <p className="mt-1 text-xs text-gray-500">Đội chính sẽ được sử dụng mặc định khi đăng nhập</p>
+                          <p className="mt-1 text-xs text-gray-500">
+                            {form.selectedTeams.length === 1 
+                              ? "Đội chính đã được tự động chọn (bắt buộc khi chỉ có 1 đội)"
+                              : "Đội chính sẽ được sử dụng mặc định khi đăng nhập"}
+                          </p>
                         </div>
                       )}
 

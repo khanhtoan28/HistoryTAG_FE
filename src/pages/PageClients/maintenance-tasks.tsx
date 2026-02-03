@@ -1749,6 +1749,53 @@ const ImplementationTasksPage: React.FC = () => {
     // Prefer activeTeam from JWT (new way), fallback to localStorage (old way)
     const userTeam = (activeTeam || currentUser?.team || "").toString().toUpperCase();
 
+    // ✅ Tự động set filter cho user hiện tại khi đăng nhập
+    const autoFilterSetRef = useRef<boolean>(false);
+    useEffect(() => {
+        // Chỉ set một lần khi picOptions đã load và filter chưa được set
+        if (autoFilterSetRef.current || hospitalPicFilter.length > 0 || picOptions.length === 0) {
+            return;
+        }
+
+        // Lấy userId hiện tại - thử nhiều cách
+        let userId: string | null = null;
+        
+        // Thử từ currentUser.id
+        if (currentUser?.id) {
+            userId = String(currentUser.id);
+        }
+        
+        // Nếu chưa có, thử từ localStorage/sessionStorage
+        if (!userId) {
+            userId = localStorage.getItem("userId") || sessionStorage.getItem("userId");
+        }
+        
+        // Nếu vẫn chưa có, thử parse từ currentUser object
+        if (!userId && currentUser && typeof currentUser === 'object') {
+            const userObj = currentUser as any;
+            if (userObj.userId) userId = String(userObj.userId);
+            if (!userId && userObj.id) userId = String(userObj.id);
+        }
+
+        if (!userId) return;
+
+        // Normalize userId (trim và đảm bảo là string)
+        userId = String(userId).trim();
+        if (!userId) return;
+
+        // Kiểm tra xem userId có trong picOptions không (so sánh cả string và number)
+        const userOption = picOptions.find(opt => {
+            const optId = String(opt.id).trim();
+            return optId === userId || optId === String(Number(userId)) || String(Number(optId)) === userId;
+        });
+        
+        if (userOption) {
+            // Sử dụng ID chính xác từ picOptions
+            setHospitalPicFilter([userOption.id]);
+            autoFilterSetRef.current = true;
+        }
+    }, [picOptions, currentUser, hospitalPicFilter.length]);
+
     const filtered = useMemo(() => data, [data]);
     const [completedCount, setCompletedCount] = useState<number | null>(null);
 
@@ -2398,34 +2445,71 @@ const ImplementationTasksPage: React.FC = () => {
 
         // Filter by PIC
         if (hospitalPicFilter.length > 0) {
-            const selected = new Set(hospitalPicFilter.map(id => String(id).trim()));
-            // Tạo map từ picOptions để có thể lookup name từ ID
-            const picIdToNameMap = new Map<string, string>();
-            picOptions.forEach(opt => {
-                picIdToNameMap.set(String(opt.id).trim(), String(opt.label).trim());
+            // ✅ Normalize selected IDs - tạo Set với cả string và number format để match được cả hai
+            const selectedStrings = new Set<string>();
+            const selectedNumbers = new Set<number>();
+            hospitalPicFilter.forEach(id => {
+                const idStr = String(id).trim();
+                const idNum = Number(id);
+                selectedStrings.add(idStr);
+                if (!isNaN(idNum) && idNum > 0) {
+                    selectedNumbers.add(idNum);
+                    // Thêm cả number dạng string để match
+                    selectedStrings.add(String(idNum));
+                }
             });
             
+            // Tạo map từ picOptions để có thể lookup name từ ID và ngược lại
+            const picIdToNameMap = new Map<string, string>();
+            const picNameToIdMap = new Map<string, string>();
+            picOptions.forEach(opt => {
+                const idStr = String(opt.id).trim();
+                const nameStr = String(opt.label).trim();
+                picIdToNameMap.set(idStr, nameStr);
+                picNameToIdMap.set(nameStr, idStr);
+            });
+            
+            const beforeFilterCount = list.length;
             list = list.filter((h) => {
-                // Check by ID (so sánh với picDeploymentIds)
-                const picIds = (h.picDeploymentIds || []).map(id => String(id).trim());
-                const hasMatchingId = picIds.some((idStr) => selected.has(idStr));
+                // Check by ID (so sánh với picDeploymentIds) - normalize cả hai bên
+                const picIds = h.picDeploymentIds || [];
+                const hasMatchingId = picIds.some((id: any) => {
+                    // So sánh cả string và number format
+                    const idStr = String(id).trim();
+                    const idNum = Number(id);
+                    return selectedStrings.has(idStr) || 
+                           (!isNaN(idNum) && idNum > 0 && selectedNumbers.has(idNum)) ||
+                           (!isNaN(idNum) && idNum > 0 && selectedStrings.has(String(idNum)));
+                });
                 
-                // Check by name (so sánh với picDeploymentNames)
+                // Check by name (so sánh với picDeploymentNames) - cần convert name sang ID trước
                 const picNames = (h.picDeploymentNames || []).map(name => String(name).trim());
-                const hasMatchingName = picNames.some((nameStr) => selected.has(nameStr));
+                const hasMatchingName = picNames.some((nameStr) => {
+                    // Tìm ID từ name, rồi check ID đó có trong selected không
+                    const idFromName = picNameToIdMap.get(nameStr);
+                    if (!idFromName) return false;
+                    // Check cả string và number format
+                    const idNum = Number(idFromName);
+                    return selectedStrings.has(idFromName) || 
+                           (!isNaN(idNum) && idNum > 0 && selectedNumbers.has(idNum)) ||
+                           (!isNaN(idNum) && idNum > 0 && selectedStrings.has(String(idNum)));
+                });
                 
                 // ✅ Check by maintenancePersonInChargeName (người phụ trách bảo trì)
                 const maintenancePicName = h.maintenancePersonInChargeName ? String(h.maintenancePersonInChargeName).trim() : "";
-                const hasMatchingMaintenancePic = maintenancePicName && (
-                    selected.has(maintenancePicName) || 
-                    // Cũng kiểm tra xem ID trong filter có match với name này không
-                    Array.from(selected).some(selectedValue => {
-                        const nameFromId = picIdToNameMap.get(selectedValue);
-                        return nameFromId && nameFromId === maintenancePicName;
-                    })
-                );
+                const hasMatchingMaintenancePic = maintenancePicName && (() => {
+                    // Tìm ID từ name, rồi check ID đó có trong selected không
+                    const idFromName = picNameToIdMap.get(maintenancePicName);
+                    if (!idFromName) return false;
+                    // Check cả string và number format
+                    const idNum = Number(idFromName);
+                    return selectedStrings.has(idFromName) || 
+                           (!isNaN(idNum) && idNum > 0 && selectedNumbers.has(idNum)) ||
+                           (!isNaN(idNum) && idNum > 0 && selectedStrings.has(String(idNum)));
+                })();
                 
-                return hasMatchingId || hasMatchingName || hasMatchingMaintenancePic;
+                const matches = hasMatchingId || hasMatchingName || hasMatchingMaintenancePic;
+                return matches;
             });
         }
 
@@ -2442,7 +2526,7 @@ const ImplementationTasksPage: React.FC = () => {
             return a.label.localeCompare(b.label) * dir;
         });
         return list;
-    }, [hospitalsWithTasks, hospitalSearch, hospitalCodeSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir, ticketOpenCounts]);
+    }, [hospitalsWithTasks, hospitalSearch, hospitalCodeSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir, ticketOpenCounts, picOptions]);
 
     const pagedHospitals = useMemo(() => {
         return filteredHospitals.slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize);
@@ -2702,8 +2786,8 @@ const ImplementationTasksPage: React.FC = () => {
                                         </div>
 
                                         {/* PIC Filter Dropdown - second row */}
-                                        <div className="flex flex-wrap items-center gap-3 mt-3">
-                                            <div ref={picFilterDropdownRef} className="relative">
+                                        <div className="flex flex-col gap-0 mt-3">
+                                            <div ref={picFilterDropdownRef} className="relative w-full max-w-[200px]">
                                                 <button
                                                     type="button"
                                                     onClick={() => setPicFilterOpen(!picFilterOpen)}
@@ -2712,42 +2796,50 @@ const ImplementationTasksPage: React.FC = () => {
                                                     <span className="truncate">
                                                         {hospitalPicFilter.length === 0
                                                             ? "Lọc người phụ trách"
-                                                            : `${hospitalPicFilter.length} người được chọn`}
+                                                            : hospitalPicFilter.length === 1
+                                                                ? picOptions.find((opt) => opt.id === hospitalPicFilter[0])?.label ?? "Đã chọn 1"
+                                                                : `Đã chọn ${hospitalPicFilter.length} người phụ trách`}
                                                     </span>
-                                                    <svg className={`w-4 h-4 flex-shrink-0 transition-transform ${picFilterOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <svg className={`w-4 h-4 transition-transform ${picFilterOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                                     </svg>
                                                 </button>
                                                 {picFilterOpen && (
-                                                    <div className="absolute z-50 mt-2 w-[280px] max-h-[360px] overflow-hidden rounded-xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-lg p-3">
+                                                    <div className="absolute z-30 mt-2 w-60 max-h-[360px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl p-3 space-y-3 dark:border-gray-700 dark:bg-gray-800">
                                                         <input
                                                             type="text"
-                                                            className="w-full rounded-lg border px-3 py-2 text-sm mb-2 border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
-                                                            placeholder="Tìm người phụ trách"
                                                             value={picFilterQuery}
                                                             onChange={(e) => setPicFilterQuery(e.target.value)}
+                                                            placeholder="Tìm người phụ trách"
+                                                            className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 border-gray-200 dark:border-gray-700 dark:bg-gray-900"
                                                         />
-                                                        <div className="space-y-1 max-h-[220px] overflow-y-auto">
+                                                        <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1">
                                                             {filteredPicOptions.length === 0 ? (
-                                                                <div className="text-sm text-gray-500 dark:text-gray-400 py-2 text-center">Không tìm thấy</div>
+                                                                <div className="text-sm text-gray-500 text-center py-6">
+                                                                    Không có dữ liệu người phụ trách
+                                                                </div>
                                                             ) : (
-                                                                filteredPicOptions.map((opt) => (
-                                                                    <label key={opt.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 rounded cursor-pointer">
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={hospitalPicFilter.includes(opt.id)}
-                                                                            onChange={(e) => togglePicFilterValue(opt.id, e.target.checked)}
-                                                                            className="rounded"
-                                                                        />
-                                                                        <span className="text-sm">{opt.label}</span>
-                                                                    </label>
-                                                                ))
+                                                                filteredPicOptions.map((option) => {
+                                                                    const value = String(option.id);
+                                                                    const checked = hospitalPicFilter.includes(value);
+                                                                    return (
+                                                                        <label key={option.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 px-2 py-1.5 rounded cursor-pointer">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={checked}
+                                                                                onChange={(e) => togglePicFilterValue(value, e.target.checked)}
+                                                                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                                            />
+                                                                            <span className="truncate">{option.label}</span>
+                                                                        </label>
+                                                                    );
+                                                                })
                                                             )}
                                                         </div>
                                                         <div className="flex items-center justify-between">
                                                             <button
                                                                 type="button"
-                                                                className="px-3 py-1.5 text-sm text-blue-600 hover:underline focus:outline-none"
+                                                                className="px-3 py-1.5 text-sm text-blue-600 hover:underline focus:outline-none disabled:opacity-50"
                                                                 onClick={clearPicFilter}
                                                                 disabled={hospitalPicFilter.length === 0}
                                                             >
@@ -2755,24 +2847,22 @@ const ImplementationTasksPage: React.FC = () => {
                                                             </button>
                                                             <button
                                                                 type="button"
-                                                                className="px-3 py-1.5 text-sm rounded-full border border-gray-300 hover:bg-gray-50 text-gray-600 focus:outline-none"
+                                                                className="px-3 py-1.5 text-sm rounded-full border border-gray-300 text-gray-600 hover:bg-gray-50 focus:outline-none dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
                                                                 onClick={() => setPicFilterOpen(false)}
                                                             >
                                                                 Đóng
                                                             </button>
                                                         </div>
-                                                        {/* {hospitalPicFilter.length > 0 && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={clearPicFilter}
-                                                                className="mt-2 w-full rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-3 py-2 text-sm hover:bg-gray-200 dark:hover:bg-gray-700"
-                                                            >
-                                                                Bỏ lọc
-                                                            </button>
-                                                        )} */}
                                                     </div>
                                                 )}
                                             </div>
+                                            <button
+                                                type="button"
+                                                className={`self-start px-3 py-1.5 text-xs text-blue-600 hover:underline focus:outline-none ${hospitalPicFilter.length === 0 ? "invisible pointer-events-none" : ""}`}
+                                                onClick={clearPicFilter}
+                                            >
+                                                Bỏ lọc người phụ trách
+                                            </button>
                                         </div>
 
                                         <div className="mt-6 mb-0.5 text-sm text-gray-600 dark:text-gray-300">
