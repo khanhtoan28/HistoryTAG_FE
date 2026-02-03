@@ -41,6 +41,12 @@ export type UserResponseDTO = {
   department?: string | null;
   team?: string | null;
   roles?: { roleId: number; roleName: string }[];
+  /** teamId -> LEADER | MEMBER (for showing "Leader" on profile) */
+  teamRoles?: Record<string, string> | null;
+  /** Đội chính (main team) - dùng để hiển thị trên profile thay vì đội chọn trước */
+  primaryTeam?: string | null;
+  /** Danh sách team (từ user_teams) dùng làm fallback khi không có primaryTeam */
+  availableTeams?: string[] | null;
 };
 
 export type UserUpdateRequestDTO = {

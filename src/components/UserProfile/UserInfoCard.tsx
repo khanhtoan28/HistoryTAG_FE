@@ -29,6 +29,16 @@ const VN_TEAM: Record<string, string> = {
   CUSTOMER_SERVICE: "Chăm sóc khách hàng",
 };
 
+const TEAM_LABELS_SHORT: Record<string, string> = {
+  DEV: "Phát triển",
+  DEPLOYMENT: "Triển khai",
+  MAINTENANCE: "Bảo trì",
+  SALES: "Kinh doanh",
+  CUSTOMER_SERVICE: "CSKH",
+};
+const getTeamLabel = (teamId: string) => TEAM_LABELS_SHORT[teamId] || VN_TEAM[teamId] || teamId;
+const isLeaderRole = (r: string | undefined) => r != null && String(r).toUpperCase() === "LEADER";
+
 export default function UserInfoCard() {
   const { isOpen, openModal, closeModal } = useModal();
   const { isOpen: isPasswordModalOpen, openModal: openPasswordModal, closeModal: closePasswordModal } = useModal();
@@ -115,7 +125,7 @@ export default function UserInfoCard() {
           workStatus: (me as any).workStatus ?? null,
           workStatusDate: (me as any).workStatusDate ?? null,
           department: (me.department as any) ?? null,
-          team: (me.team as any) ?? null,
+          team: (me.primaryTeam ?? me.team) as any ?? null,
           avatar: null,
         });
       } finally {
@@ -129,13 +139,29 @@ export default function UserInfoCard() {
       ? VN_DEPARTMENT[user.department]
       : "Chưa cập nhật phòng ban";
 
-  const teamLabel =
-    user?.team && VN_TEAM[user.team] ? `Team ${VN_TEAM[user.team]}` : "Chưa cập nhật team";
+  // Đội chính: primaryTeam > team mà user là Leader > team cũ (user.team)
+  const mainTeamId =
+    user?.primaryTeam ??
+    (user?.availableTeams && user?.teamRoles
+      ? user.availableTeams.find((t) => user.teamRoles![t] === "LEADER") ?? null
+      : null) ??
+    user?.team ??
+    null;
+  const teamsRaw = (user?.availableTeams && user.availableTeams.length > 0)
+    ? user.availableTeams
+    : (user?.team ? [user.team] : []);
+  const primaryTeamId =
+    (user?.primaryTeam && teamsRaw.includes(user.primaryTeam) ? user.primaryTeam : null) ??
+    (user?.teamRoles ? teamsRaw.find((t) => (user.teamRoles![t] != null && String(user.teamRoles![t]).toUpperCase() === "LEADER")) ?? null : null);
+  const teams = primaryTeamId
+    ? [primaryTeamId, ...teamsRaw.filter((t) => t !== primaryTeamId)]
+    : teamsRaw;
 
   const name =
     (user?.fullname && user.fullname !== "Chưa cập nhật" && user.fullname) ||
     user?.username ||
     "Chưa cập nhật";
+
 
   const onChange = <K extends keyof UserUpdateRequestDTO>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -319,9 +345,35 @@ export default function UserInfoCard() {
 
               <div>
                 <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">Team</p>
-                <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                  {teamLabel}
-                </p>
+                {teams.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {teams.map((teamId) => {
+                      const role = user?.teamRoles?.[teamId] ?? "MEMBER";
+                      const isLeader = isLeaderRole(role);
+                      const isPrimary = primaryTeamId != null && teamId === primaryTeamId;
+                      return (
+                        <span
+                          key={teamId}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${
+                            isPrimary
+                              ? "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-700"
+                              : "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700"
+                          }`}
+                        >
+                          {getTeamLabel(teamId)}
+                          {isPrimary && (
+                            <span className="text-indigo-600 dark:text-indigo-400 font-semibold" title="Đội chính">★</span>
+                          )}
+                          <span className={isLeader ? "text-orange-600 dark:text-orange-400 font-semibold" : "text-gray-500 dark:text-gray-400"}>
+                            ({isLeader ? "Trưởng đội" : "Thành viên"})
+                          </span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm font-medium text-gray-800 dark:text-white/90">Chưa cập nhật team</p>
+                )}
               </div>
             </div>
           </div>
