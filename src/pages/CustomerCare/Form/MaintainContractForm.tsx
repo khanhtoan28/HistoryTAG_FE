@@ -757,6 +757,27 @@ export default function MaintainContractForm({
                   disabled={isViewing || !canEdit}
                 />
 
+                {/* Thời gian bắt đầu hợp đồng */}
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                    Thời gian bắt đầu hợp đồng
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="datetime-local"
+                      className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50"
+                      value={form.startDate || ""}
+                      onChange={(e) => {
+                        setForm((s) => ({ ...s, startDate: e.target.value || null }));
+                        // Reset flag khi ngày bắt đầu thay đổi để tự động tính lại
+                        setIsEndDateManuallyEdited(false);
+                      }}
+                      disabled={isViewing || !canEdit}
+                    />
+                  </div>
+                </div>
+
+                {/* Thời hạn hợp đồng */}
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-gray-700">
                     Thời hạn hợp đồng*
@@ -777,6 +798,26 @@ export default function MaintainContractForm({
                   <p className="mt-1 text-xs text-gray-500">
                     Nhập thời hạn để tự động tính ngày kết thúc
                   </p>
+                </div>
+
+                {/* Ngày kết thúc hợp đồng */}
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                    Ngày kết thúc hợp đồng
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="datetime-local"
+                      className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50"
+                      value={form.endDate || ""}
+                      onChange={(e) => {
+                        setForm((s) => ({ ...s, endDate: e.target.value || null }));
+                        // Đánh dấu là người dùng đã chỉnh sửa thủ công
+                        setIsEndDateManuallyEdited(true);
+                      }}
+                      disabled={isViewing || !canEdit}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -888,72 +929,14 @@ export default function MaintainContractForm({
                   />
                 </div>
 
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
-                    Thời gian bắt đầu hợp đồng
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="datetime-local"
-                      className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50"
-                      value={form.startDate || ""}
-                      onChange={(e) => {
-                        setForm((s) => ({ ...s, startDate: e.target.value || null }));
-                        // Reset flag khi ngày bắt đầu thay đổi để tự động tính lại
-                        setIsEndDateManuallyEdited(false);
-                      }}
-                      disabled={isViewing || !canEdit}
-                    />
-                  </div>
-                  {/* {form.startDate && (
-                    <div className="mt-2 text-sm text-gray-700 font-medium">
-                      {(() => {
-                        const match = form.startDate.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
-                        if (match) {
-                          const [, year, month, day, hours, minutes] = match;
-                          return `${hours}:${minutes}-${day}/${month}/${year}`;
-                        }
-                        return fmt(form.startDate);
-                      })()}
-                    </div>
-                  )} */}
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
-                    Ngày kết thúc hợp đồng
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="datetime-local"
-                      className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50"
-                      value={form.endDate || ""}
-                      onChange={(e) => {
-                        setForm((s) => ({ ...s, endDate: e.target.value || null }));
-                        // Đánh dấu là người dùng đã chỉnh sửa thủ công
-                        setIsEndDateManuallyEdited(true);
-                      }}
-                      disabled={isViewing || !canEdit}
-                    />
-                  </div>
-                  {/* {form.endDate && (
-                    <div className="mt-2 text-sm text-gray-700 font-medium">
-                      {(() => {
-                        const match = form.endDate.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
-                        if (match) {
-                          const [, year, month, day, hours, minutes] = match;
-                          return `${hours}:${minutes}-${day}/${month}/${year}`;
-                        }
-                        return fmt(form.endDate);
-                      })()}
-                    </div>
-                  )} */}
-                  {!isEndDateManuallyEdited && form.startDate && form.durationYears && (
+                {/* Ghi chú auto-tính cho ngày kết thúc (khi chưa sửa tay) */}
+                {!isEndDateManuallyEdited && form.startDate && form.durationYears && (
+                  <div>
                     <p className="mt-1 text-xs text-gray-500">
-                      Tự động tính từ ngày bắt đầu và thời hạn
+                      Ngày kết thúc sẽ được tự động tính từ ngày bắt đầu và thời hạn.
                     </p>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
 
               {/* Footer */}
