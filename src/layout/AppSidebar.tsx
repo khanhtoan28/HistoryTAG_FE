@@ -60,7 +60,7 @@ const navItems: NavItem[] = [
     icon: <BoxIconLine />,
     subItems: [
       { name: "Hợp đồng kinh doanh", path: "/admin/business", pro: false },
-      // { name: "Hợp đồng bảo trì", path: "/admin/maintain-contracts", pro: false },
+      { name: "Hợp đồng bảo trì", path: "/admin/maintain-contracts", pro: false },
 
     ],
   },
