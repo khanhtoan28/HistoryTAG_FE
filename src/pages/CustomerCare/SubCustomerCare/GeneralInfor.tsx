@@ -15,6 +15,8 @@ export interface Contract {
   daysLeft?: number;
   picUser?: { id: number; label: string; subLabel?: string; phone?: string | null } | null;
   kioskQuantity?: number | null;
+  paidAmount?: number | null;
+  paymentStatus?: "CHUA_THANH_TOAN" | "DA_THANH_TOAN";
 }
 
 export interface Ticket {

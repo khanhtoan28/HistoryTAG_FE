@@ -73,11 +73,15 @@ export default function ContractsTab({
     durationYears: "",
     yearlyPrice: "",
     totalPrice: "",
+    paymentStatus: "CHUA_THANH_TOAN",
+    paidAmount: "",
     startDate: null,
     endDate: null,
   });
   const [yearlyPriceDisplay, setYearlyPriceDisplay] = useState<string>("");
   const [totalPriceDisplay, setTotalPriceDisplay] = useState<string>("");
+  const [paidAmountDisplay, setPaidAmountDisplay] = useState<string>("");
+  const [paidAmountError, setPaidAmountError] = useState<string | null>(null);
   const [picOptions, setPicOptions] = useState<PicUserOption[]>([]);
   const [selectedPic, setSelectedPic] = useState<PicUserOption | null>(null);
   const [selectedHospital, setSelectedHospital] = useState<HospitalOption | null>(null);
@@ -192,10 +196,14 @@ export default function ContractsTab({
           durationYears: "",
           yearlyPrice: "",
           totalPrice: "",
+          paymentStatus: "CHUA_THANH_TOAN",
+          paidAmount: "",
           startDate: null,
           endDate: null,
         });
         setYearlyPriceDisplay("");
+        setPaidAmountDisplay("");
+        setPaidAmountError(null);
         setTotalPriceDisplay("");
         setSelectedPic(null);
         setError(null);
@@ -311,9 +319,13 @@ export default function ContractsTab({
       yearlyPrice: "",
       totalPrice: "",
       kioskQuantity: "",
+      paymentStatus: "CHUA_THANH_TOAN",
+      paidAmount: "",
       startDate: null,
       endDate: null,
     });
+    setPaidAmountDisplay("");
+    setPaidAmountError(null);
     setYearlyPriceDisplay("");
     setTotalPriceDisplay("");
     setSelectedPic(null);
@@ -399,6 +411,12 @@ export default function ContractsTab({
       console.log("Formatted startDate:", startDateFormatted);
       console.log("Formatted endDate:", endDateFormatted);
       
+      // Parse paymentStatus và paidAmount
+      const paymentStatus = (contractDetail as any)?.paymentStatus ? String((contractDetail as any).paymentStatus) : "CHUA_THANH_TOAN";
+      const paidAmount = typeof (contractDetail as any).paidAmount === 'number'
+        ? (contractDetail as any).paidAmount
+        : ((contractDetail as any).paidAmount ? Number((contractDetail as any).paidAmount) : "");
+
       setForm({
         contractCode: contractDetail.contractCode || contract.code || '',
         picUserId: contractDetail.picUser?.id,
@@ -407,6 +425,8 @@ export default function ContractsTab({
         yearlyPrice: contractDetail.yearlyPrice || '',
         totalPrice: contractDetail.totalPrice || '',
         kioskQuantity: contractDetail.kioskQuantity || '',
+        paymentStatus: (paymentStatus === "DA_THANH_TOAN" ? "DA_THANH_TOAN" : "CHUA_THANH_TOAN"),
+        paidAmount: (paymentStatus === "DA_THANH_TOAN" ? paidAmount : ""),
         startDate: startDateFormatted,
         endDate: endDateFormatted,
       });
@@ -414,6 +434,13 @@ export default function ContractsTab({
       // Set display values cho price
       setYearlyPriceDisplay(contractDetail.yearlyPrice ? formatNumber(contractDetail.yearlyPrice) : '');
       setTotalPriceDisplay(contractDetail.totalPrice ? formatNumber(contractDetail.totalPrice) : '');
+      
+      // Set display value cho paidAmount
+      if (paymentStatus === "DA_THANH_TOAN" && paidAmount !== '') {
+        setPaidAmountDisplay(formatNumber(paidAmount as any));
+      } else {
+        setPaidAmountDisplay('');
+      }
       
       // Set selected hospital
       if (contractDetail.hospital) {
@@ -447,9 +474,13 @@ export default function ContractsTab({
         yearlyPrice: '',
         totalPrice: '',
         kioskQuantity: '',
+        paymentStatus: "CHUA_THANH_TOAN",
+        paidAmount: "",
         startDate: null,
         endDate: null,
       });
+      setPaidAmountDisplay("");
+      setPaidAmountError(null);
       setYearlyPriceDisplay('');
       setTotalPriceDisplay('');
       setSelectedHospital(null);
@@ -502,6 +533,8 @@ export default function ContractsTab({
           daysLeft: c.daysLeft,
           picUser: c.picUser || null,
           kioskQuantity: c.kioskQuantity || null,
+          paidAmount: typeof c.paidAmount === 'number' ? c.paidAmount : (c.paidAmount ? Number(c.paidAmount) : null),
+          paymentStatus: c.paymentStatus ? (c.paymentStatus === "DA_THANH_TOAN" ? "DA_THANH_TOAN" : "CHUA_THANH_TOAN") : "CHUA_THANH_TOAN",
         }));
         onContractsChange(updatedContracts);
       } else {
@@ -552,9 +585,13 @@ export default function ContractsTab({
         yearlyPrice: contractDetail.yearlyPrice || '',
         totalPrice: contractDetail.totalPrice || '',
         kioskQuantity: contractDetail.kioskQuantity || '',
+        paymentStatus: "CHUA_THANH_TOAN",
+        paidAmount: "",
         startDate: startDateFormatted,
         endDate: null, // Sẽ được tính tự động dựa trên durationYears
       });
+      setPaidAmountDisplay("");
+      setPaidAmountError(null);
       
       // Set display values cho price
       setYearlyPriceDisplay(contractDetail.yearlyPrice ? formatNumber(contractDetail.yearlyPrice) : '');
@@ -689,6 +726,34 @@ export default function ContractsTab({
     }
   }
 
+  // Handler cho paidAmount tương tự yearlyPrice/totalPrice
+  function handlePaidAmountChange(value: string) {
+    setPaidAmountDisplay(value);
+    const parsed = parseFormattedNumber(value);
+    setForm((s) => ({ ...s, paidAmount: parsed }));
+    
+    // Validation real-time: kiểm tra số tiền thanh toán không vượt quá tổng tiền
+    if (typeof parsed === "number" && typeof form.totalPrice === "number" && parsed > form.totalPrice) {
+      setPaidAmountError("Số tiền thanh toán không được vượt quá tổng tiền hợp đồng");
+    } else {
+      setPaidAmountError(null);
+    }
+  }
+
+  function handlePaidAmountBlur() {
+    if (form.paidAmount !== '' && typeof form.paidAmount === 'number') {
+      setPaidAmountDisplay(formatNumber(form.paidAmount));
+    } else {
+      setPaidAmountDisplay('');
+    }
+  }
+
+  function handlePaidAmountFocus() {
+    if (typeof form.paidAmount === "number") {
+      setPaidAmountDisplay(formatNumber(form.paidAmount));
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.contractCode.trim()) {
@@ -718,6 +783,19 @@ export default function ContractsTab({
     if (!form.totalPrice || (typeof form.totalPrice === "number" && form.totalPrice <= 0)) {
       setError("Tổng tiền phải lớn hơn 0");
       return;
+    }
+    
+    // Validate payment status và paid amount
+    if ((form.paymentStatus || "CHUA_THANH_TOAN") === "DA_THANH_TOAN") {
+      if (!form.paidAmount || (typeof form.paidAmount === "number" && form.paidAmount <= 0)) {
+        setError("Khi trạng thái là 'Đã thanh toán', số tiền thanh toán phải lớn hơn 0");
+        return;
+      }
+      // Kiểm tra số tiền thanh toán không được vượt quá tổng tiền
+      if (typeof form.paidAmount === "number" && typeof form.totalPrice === "number" && form.paidAmount > form.totalPrice) {
+        setError("Số tiền thanh toán không được vượt quá tổng tiền hợp đồng");
+        return;
+      }
     }
 
     // Validate và convert prices
@@ -797,6 +875,8 @@ export default function ContractsTab({
         yearlyPrice: yearlyPriceNum,
         totalPrice: totalPriceNum,
         kioskQuantity: form.kioskQuantity && typeof form.kioskQuantity === "number" ? form.kioskQuantity : (form.kioskQuantity === "" ? null : Number(form.kioskQuantity)),
+        paymentStatus: form.paymentStatus || "CHUA_THANH_TOAN",
+        paidAmount: (form.paymentStatus === "DA_THANH_TOAN" && typeof form.paidAmount === "number") ? form.paidAmount : null,
         startDate: formatDateTimeForBackend(form.startDate),
         endDate: formatDateTimeForBackend(form.endDate),
         linkedContractId: renewingContractId || null, // Link với hợp đồng gốc nếu đang gia hạn
@@ -844,6 +924,8 @@ export default function ContractsTab({
           daysLeft: c.daysLeft,
           picUser: c.picUser || null,
           kioskQuantity: c.kioskQuantity || null,
+          paidAmount: typeof c.paidAmount === 'number' ? c.paidAmount : (c.paidAmount ? Number(c.paidAmount) : null),
+          paymentStatus: c.paymentStatus ? (c.paymentStatus === "DA_THANH_TOAN" ? "DA_THANH_TOAN" : "CHUA_THANH_TOAN") : "CHUA_THANH_TOAN",
         }));
         onContractsChange(updatedContracts);
       }
@@ -870,6 +952,8 @@ export default function ContractsTab({
     setError(null);
     setYearlyPriceDisplay("");
     setTotalPriceDisplay("");
+    setPaidAmountDisplay("");
+    setPaidAmountError(null);
     
     // Xóa query params khi đóng modal
     const newParams = new URLSearchParams(searchParams);
@@ -878,7 +962,12 @@ export default function ContractsTab({
   };
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('vi-VN').format(value) + " VNĐ";
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: "VND",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
   };
 
   return (
@@ -1034,6 +1123,9 @@ export default function ContractsTab({
                 Giá Trị
               </th>
               <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
+                Thanh toán
+              </th>
+              <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
                 Ngày Bắt Đầu
               </th>
               <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
@@ -1056,7 +1148,7 @@ export default function ContractsTab({
           <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-900 dark:divide-gray-700">
             {filteredContracts.length === 0 ? (
               <tr>
-                <td colSpan={11} className="py-12 text-center">
+                <td colSpan={12} className="py-12 text-center">
                   <FiFileText className="h-12 w-12 mx-auto text-gray-300 mb-4" />
                   <p className="text-gray-500 dark:text-gray-400">
                     {searchQuery || statusFilter !== "all" || typeFilter !== "all"
@@ -1109,6 +1201,24 @@ export default function ContractsTab({
                     </td>
                     <td className="py-3 px-4 text-sm text-gray-700 dark:text-gray-300">
                       {contract.value}
+                    </td>
+                    <td className="py-3 px-4">
+                      {contract.paymentStatus === "DA_THANH_TOAN" ? (
+                        <div className="flex flex-col gap-1">
+                          <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-100 text-green-700">
+                            Đã thanh toán
+                          </span>
+                          {typeof contract.paidAmount === "number" && contract.paidAmount > 0 && (
+                            <span className="text-xs text-center text-gray-600">
+                              {formatCurrency(contract.paidAmount)}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-700">
+                          Chưa thanh toán
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-sm text-gray-700 dark:text-gray-300">
                       {contract.startDate ? (
@@ -1255,6 +1365,12 @@ export default function ContractsTab({
         handleTotalPriceChange={handleTotalPriceChange}
         handleTotalPriceBlur={handleTotalPriceBlur}
         handleTotalPriceFocus={handleTotalPriceFocus}
+        paidAmountDisplay={paidAmountDisplay}
+        setPaidAmountDisplay={setPaidAmountDisplay}
+        handlePaidAmountChange={handlePaidAmountChange}
+        handlePaidAmountBlur={handlePaidAmountBlur}
+        handlePaidAmountFocus={handlePaidAmountFocus}
+        paidAmountError={paidAmountError}
         careId={careId}
       />
     </div>

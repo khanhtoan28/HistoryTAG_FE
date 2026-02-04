@@ -59,6 +59,8 @@ export type WarrantyContractForm = {
   startDate?: string | null;
   endDate?: string | null;
   kioskQuantity?: number | "";
+  paymentStatus: "CHUA_THANH_TOAN" | "DA_THANH_TOAN";
+  paidAmount?: number | "";
 };
 
 // Component RemoteSelect cho Pic User
@@ -475,6 +477,12 @@ type MaintainContractFormProps = {
   handleTotalPriceChange: (value: string) => void;
   handleTotalPriceBlur: () => void;
   handleTotalPriceFocus: () => void;
+  paidAmountDisplay: string;
+  setPaidAmountDisplay: (v: string) => void;
+  handlePaidAmountChange: (value: string) => void;
+  handlePaidAmountBlur: () => void;
+  handlePaidAmountFocus: () => void;
+  paidAmountError?: string | null;
   careId?: number; // ID của CustomerCareHospital - nếu có thì disable hospital field
 };
 
@@ -505,6 +513,12 @@ export default function MaintainContractForm({
   handleTotalPriceChange,
   handleTotalPriceBlur,
   handleTotalPriceFocus,
+  paidAmountDisplay,
+  setPaidAmountDisplay,
+  handlePaidAmountChange,
+  handlePaidAmountBlur,
+  handlePaidAmountFocus,
+  paidAmountError,
   careId,
 }: MaintainContractFormProps) {
   const [isEndDateManuallyEdited, setIsEndDateManuallyEdited] = useState(false);
@@ -802,6 +816,56 @@ export default function MaintainContractForm({
                     placeholder="Nhập tổng tiền..."
                   />
                 </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                    Trạng thái thanh toán*
+                  </label>
+                  <select
+                    className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50"
+                    value={form.paymentStatus || "CHUA_THANH_TOAN"}
+                    onChange={(e) => {
+                      const next = (e.target.value || "CHUA_THANH_TOAN") as "CHUA_THANH_TOAN" | "DA_THANH_TOAN";
+                      setForm((s) => ({
+                        ...s,
+                        paymentStatus: next,
+                        paidAmount: next === "DA_THANH_TOAN" ? s.paidAmount : "",
+                      }));
+                      if (next !== "DA_THANH_TOAN") {
+                        setPaidAmountDisplay("");
+                      }
+                    }}
+                    disabled={isViewing || !canEdit}
+                  >
+                    <option value="CHUA_THANH_TOAN">Chưa thanh toán</option>
+                    <option value="DA_THANH_TOAN">Đã thanh toán</option>
+                  </select>
+                </div>
+
+                {((form.paymentStatus || "CHUA_THANH_TOAN") === "DA_THANH_TOAN") && (
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">
+                      Số tiền thanh toán*
+                    </label>
+                    <input
+                      required
+                      type="text"
+                      className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 ${
+                        paidAmountError ? "border-red-500" : "border-gray-300"
+                      }`}
+                      value={paidAmountDisplay ?? (form.paidAmount ? formatNumber(form.paidAmount as any) : '')}
+                      onChange={(e) => handlePaidAmountChange(e.target.value)}
+                      onBlur={handlePaidAmountBlur}
+                      onFocus={handlePaidAmountFocus}
+                      placeholder="Nhập số tiền đã thanh toán..."
+                    />
+                    {paidAmountError ? (
+                      <p className="mt-1 text-xs text-red-500">{paidAmountError}</p>
+                    ) : (
+                      <p className="mt-1 text-xs text-gray-500">Ví dụ: 1.000.000</p>
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-gray-700">

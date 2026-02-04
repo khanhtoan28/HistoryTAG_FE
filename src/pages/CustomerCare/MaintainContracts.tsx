@@ -4,7 +4,7 @@ import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
-import { FiUser, FiClock, FiCalendar, FiDollarSign, FiFileText } from "react-icons/fi";
+import { FiUser, FiClock, FiCalendar, FiDollarSign, FiFileText, FiEye, FiEdit3, FiTrash2, FiArrowUp, FiArrowDown, FiX, FiBriefcase, FiTag, FiCheckCircle, FiAlertCircle } from "react-icons/fi";
 import { FaHospitalAlt } from "react-icons/fa";
 import toast from "react-hot-toast";
 import {
@@ -142,6 +142,13 @@ const DURATION_OPTIONS = [
   { value: 7, label: "7 năm" },
 ];
 
+const statusConfig: Record<string, { label: string; bgColor: string; textColor: string; borderColor?: string }> = {
+  SAP_HET_HAN: { label: "Sắp hết hạn", bgColor: "bg-amber-100", textColor: "text-amber-700", borderColor: "border-amber-300" },
+  DA_GIA_HAN: { label: "Đã gia hạn", bgColor: "bg-green-100", textColor: "text-green-700", borderColor: "border-green-300" },
+  HET_HAN: { label: "Hết hạn", bgColor: "bg-red-100", textColor: "text-red-700", borderColor: "border-red-300" },
+  DANG_HOAT_DONG: { label: "Đang hoạt động", bgColor: "bg-blue-100", textColor: "text-blue-700", borderColor: "border-blue-300" },
+};
+
 export default function MaintainContractsPage() {
   // Determine if current user can perform write actions
   // Allow SUPERADMIN or team CUSTOMER_SERVICE
@@ -182,6 +189,10 @@ export default function MaintainContractsPage() {
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
+  // Sorting
+  const [sortBy, setSortBy] = useState<string>("id");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
   // Filters
   const [qSearch, setQSearch] = useState("");
   const [debouncedQSearch, setDebouncedQSearch] = useState(""); // Debounced version for API calls
@@ -213,7 +224,7 @@ export default function MaintainContractsPage() {
 
   useEffect(() => {
     setPage(0);
-  }, [debouncedQSearch, qPicUserId, filterStartFrom, filterStartTo]);
+  }, [debouncedQSearch, qPicUserId, filterStartFrom, filterStartTo, sortBy, sortDir]);
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<WarrantyContract | null>(null);
@@ -236,6 +247,8 @@ export default function MaintainContractsPage() {
     durationYears: "",
     yearlyPrice: "",
     totalPrice: "",
+    paymentStatus: "CHUA_THANH_TOAN",
+    paidAmount: "",
     startDate: null,
     endDate: null,
   });
@@ -251,6 +264,9 @@ export default function MaintainContractsPage() {
     setError(null);
     setIsModalLoading(false);
     setYearlyPriceDisplay("");
+    setTotalPriceDisplay("");
+    setPaidAmountDisplay("");
+    setPaidAmountError(null);
   }
 
   function fillForm(item: WarrantyContract) {
@@ -311,6 +327,11 @@ export default function MaintainContractsPage() {
 
     // Parse totalPrice
     const totalPrice = typeof item.totalPrice === 'number' ? item.totalPrice : (item.totalPrice ? Number(item.totalPrice) : "");
+
+    const paymentStatus = (item as any)?.paymentStatus ? String((item as any).paymentStatus) : "CHUA_THANH_TOAN";
+    const paidAmount = typeof (item as any).paidAmount === 'number'
+      ? (item as any).paidAmount
+      : ((item as any).paidAmount ? Number((item as any).paidAmount) : "");
     
     setForm({
       contractCode: item.contractCode || "",
@@ -320,6 +341,8 @@ export default function MaintainContractsPage() {
       yearlyPrice: yearlyPrice,
       totalPrice: totalPrice,
       kioskQuantity: item.kioskQuantity || "",
+      paymentStatus: (paymentStatus === "DA_THANH_TOAN" ? "DA_THANH_TOAN" : "CHUA_THANH_TOAN"),
+      paidAmount: (paymentStatus === "DA_THANH_TOAN" ? paidAmount : ""),
       startDate: startDateForInput,
       endDate: endDateForInput,
     });
@@ -333,6 +356,12 @@ export default function MaintainContractsPage() {
       setTotalPriceDisplay(formatNumber(totalPrice));
     } else {
       setTotalPriceDisplay('');
+    }
+
+    if (paymentStatus === "DA_THANH_TOAN" && paidAmount !== '') {
+      setPaidAmountDisplay(formatNumber(paidAmount as any));
+    } else {
+      setPaidAmountDisplay('');
     }
   }
 
@@ -395,6 +424,8 @@ export default function MaintainContractsPage() {
 
   // State cho totalPrice display
   const [totalPriceDisplay, setTotalPriceDisplay] = useState<string>("");
+  const [paidAmountDisplay, setPaidAmountDisplay] = useState<string>("");
+  const [paidAmountError, setPaidAmountError] = useState<string | null>(null);
 
 
   async function fetchList() {
@@ -404,8 +435,8 @@ export default function MaintainContractsPage() {
       const params: any = {
         page,
         size,
-        sortBy: "id",
-        sortDir: "desc",
+        sortBy,
+        sortDir,
       };
       if (debouncedQSearch.trim()) params.search = debouncedQSearch.trim();
       if (qPicUserId) params.picUserId = Number(qPicUserId);
@@ -428,7 +459,32 @@ export default function MaintainContractsPage() {
 
   useEffect(() => {
     fetchList();
-  }, [page, size, debouncedQSearch, qPicUserId, filterStartFrom, filterStartTo]);
+  }, [page, size, debouncedQSearch, qPicUserId, filterStartFrom, filterStartTo, sortBy, sortDir]);
+
+  // Handle column sorting
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      // Toggle direction if same column
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      // New column, default to desc
+      setSortBy(column);
+      setSortDir("desc");
+    }
+    setPage(0); // Reset to first page when sorting
+  };
+
+  // Helper to render sort icon
+  const renderSortIcon = (column: string) => {
+    if (sortBy !== column) {
+      return <FiArrowUp className="ml-1 h-3 w-3 text-gray-400 opacity-50" />;
+    }
+    return sortDir === "asc" ? (
+      <FiArrowUp className="ml-1 h-3 w-3 text-blue-600" />
+    ) : (
+      <FiArrowDown className="ml-1 h-3 w-3 text-blue-600" />
+    );
+  };
 
   // Handle click outside date filter
   useEffect(() => {
@@ -468,11 +524,15 @@ export default function MaintainContractsPage() {
       yearlyPrice: "",
       kioskQuantity: "",
       totalPrice: "",
+      paymentStatus: "CHUA_THANH_TOAN",
+      paidAmount: "",
       startDate: null,
       endDate: null,
     });
     setYearlyPriceDisplay("");
     setTotalPriceDisplay("");
+    setPaidAmountDisplay("");
+    setPaidAmountError(null);
     setOpen(true);
   }
 
@@ -562,6 +622,17 @@ export default function MaintainContractsPage() {
       setError("Tổng tiền phải lớn hơn 0");
       return;
     }
+    if ((form.paymentStatus || "CHUA_THANH_TOAN") === "DA_THANH_TOAN") {
+      if (!form.paidAmount || (typeof form.paidAmount === "number" && form.paidAmount <= 0)) {
+        setError("Khi trạng thái là 'Đã thanh toán', số tiền thanh toán phải lớn hơn 0");
+        return;
+      }
+      // Kiểm tra số tiền thanh toán không được vượt quá tổng tiền
+      if (typeof form.paidAmount === "number" && typeof form.totalPrice === "number" && form.paidAmount > form.totalPrice) {
+        setError("Số tiền thanh toán không được vượt quá tổng tiền hợp đồng");
+        return;
+      }
+    }
     if (isViewing) return;
     if (!canEdit) {
       setError("Bạn không có quyền thực hiện thao tác này");
@@ -630,6 +701,12 @@ export default function MaintainContractsPage() {
       kioskQuantity: form.kioskQuantity && typeof form.kioskQuantity === "number" ? form.kioskQuantity : (form.kioskQuantity === "" ? null : Number(form.kioskQuantity)),
       startDate: startDateForPayload,
       endDate: endDateForPayload,
+      paymentStatus: form.paymentStatus || "CHUA_THANH_TOAN",
+      paidAmount:
+        (form.paymentStatus === "DA_THANH_TOAN" && typeof form.paidAmount === "number")
+          ? form.paidAmount
+          : null,
+      
       // careId không có trong trang này, backend sẽ tự tìm từ hospitalId
     };
 
@@ -796,6 +873,13 @@ export default function MaintainContractsPage() {
     setTotalPriceDisplay(value);
     const parsed = parseFormattedNumber(value);
     setForm((s) => ({ ...s, totalPrice: parsed }));
+    
+    // Re-validate paid amount khi total price thay đổi
+    if (typeof form.paidAmount === "number" && typeof parsed === "number" && form.paidAmount > parsed) {
+      setPaidAmountError("Số tiền thanh toán không được vượt quá tổng tiền hợp đồng");
+    } else {
+      setPaidAmountError(null);
+    }
   }
 
   function handleTotalPriceBlur() {
@@ -809,6 +893,34 @@ export default function MaintainContractsPage() {
   function handleTotalPriceFocus() {
     if (typeof form.totalPrice === "number") {
       setTotalPriceDisplay(formatNumber(form.totalPrice));
+    }
+  }
+
+  // Handler cho paidAmount tương tự yearlyPrice/totalPrice
+  function handlePaidAmountChange(value: string) {
+    setPaidAmountDisplay(value);
+    const parsed = parseFormattedNumber(value);
+    setForm((s) => ({ ...s, paidAmount: parsed }));
+    
+    // Validation real-time: kiểm tra số tiền thanh toán không vượt quá tổng tiền
+    if (typeof parsed === "number" && typeof form.totalPrice === "number" && parsed > form.totalPrice) {
+      setPaidAmountError("Số tiền thanh toán không được vượt quá tổng tiền hợp đồng");
+    } else {
+      setPaidAmountError(null);
+    }
+  }
+
+  function handlePaidAmountBlur() {
+    if (form.paidAmount !== '' && typeof form.paidAmount === 'number') {
+      setPaidAmountDisplay(formatNumber(form.paidAmount));
+    } else {
+      setPaidAmountDisplay('');
+    }
+  }
+
+  function handlePaidAmountFocus() {
+    if (typeof form.paidAmount === "number") {
+      setPaidAmountDisplay(formatNumber(form.paidAmount));
     }
   }
 
@@ -1170,259 +1282,651 @@ export default function MaintainContractsPage() {
           )}
         </ComponentCard>
 
-        {/* Card list */}
-        <ComponentCard title="Danh sách hợp đồng bảo trì">
-          <div className="space-y-4">
-            {items.map((item) => (
-              <div
-                key={item.id}
-                className={`flex items-start gap-4 p-4 bg-white border border-gray-100 rounded-lg shadow-sm transition-all duration-150 ${hoveredId === item.id ? 'shadow-lg scale-101 bg-indigo-50 border-green-400' : 'hover:shadow hover:border-green-300'}`}
-                onMouseEnter={() => setHoveredId(item.id)}
-                onMouseLeave={() => setHoveredId(null)}
-              >
-                <div className="flex-shrink-0">
-                  <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-gray-50 text-sm font-semibold text-gray-700">
-                    BH{item.id}
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="text-lg font-semibold text-blue-800">{item.hospital?.label ?? '—'}</div>
-                      <div className="text-sm">
-                        <span className="text-gray-500">Mã hợp đồng: </span>
-                        <span className="font-medium text-blue-600">{item.contractCode ?? '—'}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                    <div className="mt-2 grid grid-cols-2 md:grid-cols-2 gap-3 text-sm text-gray-600">
-                      <div>Người phụ trách:
-                        <div className="font-medium text-gray-800">
-                          {item.picUser?.label ?? '—'}
-                          {item.picUser?.subLabel ? <span className="ml-2 text-xs text-gray-500">{item.picUser?.subLabel}</span> : null}
-                        </div>
-                      </div>
-                      <div>Thời hạn hợp đồng: <div className="font-medium text-gray-800">{item.durationYears} </div></div>
-                      <div>Thời gian bắt đầu hợp đồng: <div className="font-medium text-gray-800">{fmtDate(item.startDate) || '—'}</div></div>
-                      <div>Ngày kết thúc hợp đồng: <div className="font-medium text-gray-800">{fmtDate(item.endDate) || '—'}</div></div>
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-between text-sm text-gray-700">
-                      <div className="flex items-center gap-6">
-                        <div>Giá hợp đồng (1 năm): <span className="font-medium whitespace-nowrap">{formatCurrency(item.yearlyPrice)}</span></div>
-                        <div>Tổng tiền: <span className="font-semibold whitespace-nowrap">{formatCurrency(item.totalPrice)}</span></div>
-                      </div>
-                      <div />
-                    </div>
-                </div>
-
-                <div className="flex flex-col items-end gap-2">
-                    <button
-                      onClick={() => onView(item)}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-100 text-blue-600 bg-white hover:bg-blue-50"
+        {/* Table list */}
+        <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+          <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-800">
+            <h3 className="text-base font-medium text-gray-800 dark:text-white/90">
+              Danh sách hợp đồng bảo trì
+            </h3>
+          </div>
+          <div className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full divide-y divide-gray-200 dark:divide-gray-800">
+                <thead className="bg-gray-50 dark:bg-gray-800/50">
+                  <tr>
+                    <th 
+                      className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                      onClick={() => handleSort("id")}
                     >
-                      <AiOutlineEye className="w-4 h-4" />
-                      <span className="text-sm">Xem</span>
-                    </button>
-                    {canEdit && (
-                      <>
-                        <button
-                          onClick={() => onEdit(item)}
-                          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-yellow-100 text-orange-600 bg-yellow-50 hover:bg-yellow-100"
+                      <div className="flex items-center justify-center gap-1">
+                        STT
+                        {renderSortIcon("id")}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                      onClick={() => handleSort("hospital")}
+                    >
+                      <div className="flex items-center gap-1">
+                        Bệnh viện
+                        {renderSortIcon("hospital")}
+                      </div>
+                    </th>
+                    <th 
+                      className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                      onClick={() => handleSort("contractCode")}
+                    >
+                      <div className="flex items-center gap-1">
+                        Mã hợp đồng
+                        {renderSortIcon("contractCode")}
+                      </div>
+                    </th>
+                    <th 
+                      className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                      onClick={() => handleSort("picUser")}
+                    >
+                      <div className="flex items-center gap-1">
+                        Người phụ trách
+                        {renderSortIcon("picUser")}
+                      </div>
+                    </th>
+                    <th 
+                      className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                      onClick={() => handleSort("durationYears")}
+                    >
+                      <div className="flex items-center gap-1">
+                        Thời hạn
+                        {renderSortIcon("durationYears")}
+                      </div>
+                    </th>
+                    <th
+                      className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400"
+                    >
+                      Số Kiosk BT
+                    </th>
+                    <th 
+                      className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                      onClick={() => handleSort("startDate")}
+                    >
+                      <div className="flex items-center gap-1">
+                        Ngày bắt đầu
+                        {renderSortIcon("startDate")}
+                      </div>
+                    </th>
+                    <th 
+                      className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                      onClick={() => handleSort("endDate")}
+                    >
+                      <div className="flex items-center gap-1">
+                        Ngày kết thúc
+                        {renderSortIcon("endDate")}
+                      </div>
+                    </th>
+                    <th 
+                      className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                      onClick={() => handleSort("status")}
+                    >
+                      <div className="flex items-center gap-1">
+                        Trạng thái
+                        {renderSortIcon("status")}
+                      </div>
+                    </th>
+                    <th
+                      className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                      onClick={() => handleSort("paymentStatus")}
+                    >
+                      <div className="flex items-center gap-1">
+                        Thanh toán
+                        {renderSortIcon("paymentStatus")}
+                      </div>
+                    </th>
+                    {/* <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                      Giá (1 năm)
+                    </th> */}
+                    <th 
+                      className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                      onClick={() => handleSort("totalPrice")}
+                    >
+                      <div className="flex items-center gap-1">
+                        Tổng tiền
+                        {renderSortIcon("totalPrice")}
+                      </div>
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                      Còn lại
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                      Thao tác
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={14} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
+                          <span>Đang tải dữ liệu...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : error ? (
+                    <tr>
+                      <td colSpan={14} className="px-3 py-12 text-center text-red-500 dark:text-red-400">
+                        {error}
+                      </td>
+                    </tr>
+                  ) : items.length === 0 ? (
+                    <tr>
+                      <td colSpan={14} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
+                        <div className="flex flex-col items-center">
+                          <svg
+                            className="mb-3 h-12 w-12 text-gray-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="1.5"
+                              d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
+                            />
+                          </svg>
+                          <span className="text-sm">Không có dữ liệu</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    items.map((item, index) => {
+                      const stt = page * size + index + 1;
+                      return (
+                        <tr
+                          key={item.id}
+                          className="transition hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                          onMouseEnter={() => setHoveredId(item.id)}
+                          onMouseLeave={() => setHoveredId(null)}
                         >
-                          <AiOutlineEdit className="w-4 h-4" />
-                          <span className="text-sm">Sửa</span>
-                        </button>
-                        <button
-                          onClick={() => onDelete(item.id)}
-                          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-red-100 text-red-600 bg-red-50 hover:bg-red-100"
-                        >
-                          <AiOutlineDelete className="w-4 h-4" />
-                          <span className="text-sm">Xóa</span>
-                        </button>
-                      </>
-                    )}
-                </div>
-              </div>
-            ))}
-
-            {!loading && items.length === 0 && (
-              <div className="py-12 text-center text-gray-400">
-                <div className="flex flex-col items-center">
-                  <svg
-                    className="mb-3 h-12 w-12 text-gray-300"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="1.5"
-                      d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
-                    />
-                  </svg>
-                  <span className="text-sm">Không có dữ liệu</span>
-                </div>
-              </div>
-            )}
+                          {/* STT */}
+                          <td className="whitespace-nowrap px-4 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
+                            {stt}
+                          </td>
+                          {/* Bệnh viện */}
+                          <td className="min-w-[180px] px-4 py-3">
+                            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                              {item.hospital?.label ?? '—'}
+                            </div>
+                          </td>
+                          {/* Mã hợp đồng */}
+                          <td className="whitespace-nowrap px-4 py-3">
+                            <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                              {item.contractCode ?? '—'}
+                            </span>
+                          </td>
+                          {/* Người phụ trách */}
+                          <td className="whitespace-nowrap px-4 py-3 min-w-[140px]">
+                            <div className="text-sm text-gray-700 dark:text-gray-300">
+                              <div className="font-medium">{item.picUser?.label ?? '—'}</div>
+                              {item.picUser?.subLabel && (
+                                <div className="text-xs text-gray-500">{item.picUser.subLabel}</div>
+                              )}
+                            </div>
+                          </td>
+                          {/* Thời hạn */}
+                          <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                            {item.durationYears ? `${item.durationYears} ` : '—'}
+                          </td>
+                          {/* Số Kiosk BT */}
+                          <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                            {typeof item.kioskQuantity === "number" ? item.kioskQuantity : (item.kioskQuantity ?? "—")}
+                          </td>
+                          {/* Ngày bắt đầu */}
+                          <td className="whitespace-nowrap px-4 py-3">
+                            {item.startDate ? (
+                              <div className="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300">
+                                <FiCalendar className="h-4 w-4 text-gray-400" />
+                                <span>{fmtDate(item.startDate)}</span>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-gray-400">—</span>
+                            )}
+                          </td>
+                          {/* Ngày kết thúc */}
+                          <td className="whitespace-nowrap px-4 py-3">
+                            {item.endDate ? (
+                              <div className="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300">
+                                <FiCalendar className="h-4 w-4 text-gray-400" />
+                                <span>{fmtDate(item.endDate)}</span>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-gray-400">—</span>
+                            )}
+                          </td>
+                          {/* Trạng thái */}
+                          <td className="whitespace-nowrap px-4 py-3">
+                            {item.status ? (
+                              (() => {
+                                const config = statusConfig[item.status] || { label: item.status, bgColor: "bg-gray-100", textColor: "text-gray-700" };
+                                return (
+                                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${config.bgColor} ${config.textColor}`}>
+                                    {config.label}
+                                  </span>
+                                );
+                              })()
+                            ) : (
+                              <span className="text-sm text-gray-400">—</span>
+                            )}
+                          </td>
+                          {/* Thanh toán */}
+                          <td className="whitespace-nowrap px-4 py-3">
+                            {item.paymentStatus === "DA_THANH_TOAN" ? (
+                              <div className="flex flex-col gap-1">
+                                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-100 text-green-700">
+                                  Đã thanh toán
+                                </span>
+                                {typeof item.paidAmount === "number" && (
+                                  <span className="text-xs text-center text-gray-600">
+                                    {formatCurrency(item.paidAmount)}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-700">
+                                Chưa thanh toán
+                              </span>
+                            )}
+                          </td>
+                          {/* Giá (1 năm) */}
+                          {/* <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                            {formatCurrency(item.yearlyPrice)}
+                          </td> */}
+                          {/* Tổng tiền */}
+                          <td className="whitespace-nowrap px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white">
+                            {formatCurrency(item.totalPrice)}
+                          </td>
+                          {/* Còn lại */}
+                          <td className="whitespace-nowrap px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white">
+                            {(() => {
+                              const totalPrice = item.totalPrice || 0;
+                              const paidAmount = (typeof item.paidAmount === "number" ? item.paidAmount : 0) || 0;
+                              const remaining = totalPrice - paidAmount;
+                              return formatCurrency(remaining);
+                            })()}
+                          </td>
+                          {/* Thao tác */}
+                          <td className="whitespace-nowrap px-4 py-3">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                title="Xem chi tiết"
+                                onClick={() => onView(item)}
+                                className="rounded-lg p-1.5 text-gray-500 transition hover:bg-blue-100 hover:text-blue-600"
+                              >
+                                <FiEye className="h-4 w-4" />
+                              </button>
+                              {canEdit && (
+                                <>
+                                  <button
+                                    title="Sửa"
+                                    onClick={() => onEdit(item)}
+                                    className="rounded-lg p-1.5 text-gray-500 transition hover:bg-yellow-100 hover:text-yellow-600"
+                                  >
+                                    <FiEdit3 className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    title="Xóa"
+                                    onClick={() => onDelete(item.id)}
+                                    className="rounded-lg p-1.5 text-gray-500 transition hover:bg-red-100 hover:text-red-600"
+                                  >
+                                    <FiTrash2 className="h-4 w-4" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Pagination */}
-          <Pagination
-            currentPage={page}
-            totalPages={totalPages}
-            totalItems={totalElements}
-            itemsPerPage={size}
-            onPageChange={setPage}
-            onItemsPerPageChange={(newSize) => {
-              setSize(newSize);
-              setPage(0);
-            }}
-            itemsPerPageOptions={[10, 20, 50]}
-          />
-
-          {loading && <div className="mt-3 text-sm text-gray-500">Đang tải...</div>}
-          {error && (
-            <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              {error}
+          {!loading && totalElements > 0 && (
+            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800">
+              <Pagination
+                currentPage={page}
+                totalPages={totalPages}
+                totalItems={totalElements}
+                itemsPerPage={size}
+                onPageChange={setPage}
+                onItemsPerPageChange={(newSize) => {
+                  setSize(newSize);
+                  setPage(0);
+                }}
+                itemsPerPageOptions={[10, 20, 50]}
+              />
             </div>
           )}
-        </ComponentCard>
+        </div>
       </div>
 
       {/* View Modal */}
       <AnimatePresence>
         {open && isViewing && viewing && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 20, scale: 0.95 }}
-              className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl border border-gray-200 overflow-hidden max-h-[90vh] flex flex-col"
+              className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col dark:bg-gray-800"
             >
-              <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-6 py-4">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                    📋 Chi tiết hợp đồng bảo trì
-                  </h2>
+              {/* Header */}
+              <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white text-xl font-bold">
+                    📋
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {isModalLoading ? "Đang tải..." : "Chi tiết hợp đồng bảo trì"}
+                    </h3>
+                    {viewing && !isModalLoading && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        {viewing.contractCode || "Hợp đồng bảo trì"}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-
-              <div
-                className="overflow-y-auto px-6 py-6 space-y-6 text-sm text-gray-800 [&::-webkit-scrollbar]:hidden"
-                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-              >
-                {isModalLoading ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-gray-500">
-                    <svg
-                      className="mb-4 h-12 w-12 animate-spin text-primary"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    <span>Đang tải chi tiết...</span>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-4">
-                    <div className="flex items-start gap-4">
-                      <div className="min-w-[150px] flex items-center gap-3">
-                        <FiFileText className="text-gray-500 text-lg" />
-                        <span className="font-semibold text-gray-900">Mã hợp đồng:</span>
-                      </div>
-                      <div className="flex-1 text-gray-700">{viewing.contractCode}</div>
-                    </div>
-
-                    <div className="flex items-start gap-4">
-                      <div className="min-w-[150px] flex items-center gap-3">
-                        <FaHospitalAlt className="text-gray-500 text-lg" />
-                        <span className="font-semibold text-gray-900">Bệnh viện:</span>
-                      </div>
-                      <div className="flex-1 text-gray-700">{viewing.hospital?.label || "—"}</div>
-                    </div>
-
-                    <div className="flex items-start gap-4">
-                      <div className="min-w-[150px] flex items-center gap-3">
-                        <FiUser className="text-gray-500 text-lg" />
-                        <span className="font-semibold text-gray-900">Người phụ trách:</span>
-                      </div>
-                      <div className="flex-1 text-gray-700">
-                        {viewing.picUser?.label || "—"}
-                        {viewing.picUser?.subLabel && (
-                          <div className="text-xs text-gray-500 mt-1">{viewing.picUser.subLabel}</div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-4">
-                      <div className="min-w-[150px] flex items-center gap-3">
-                        <FiClock className="text-gray-500 text-lg" />
-                        <span className="font-semibold text-gray-900">Thời hạn:</span>
-                      </div>
-                      <div className="flex-1 text-gray-700">{viewing.durationYears}</div>
-                    </div>
-
-                    <div className="flex items-start gap-4">
-                      <div className="min-w-[150px] flex items-center gap-3">
-                        <FiDollarSign className="text-gray-500 text-lg" />
-                        <span className="font-semibold text-gray-900">Giá/năm:</span>
-                      </div>
-                      <div className="flex-1 text-gray-700 font-medium text-green-600 whitespace-nowrap">
-                        {formatCurrency(viewing.yearlyPrice)}
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-4">
-                      <div className="min-w-[150px] flex items-center gap-3">
-                        <FiDollarSign className="text-gray-500 text-lg" />
-                        <span className="font-semibold text-gray-900">Tổng tiền:</span>
-                      </div>
-                      <div className="flex-1 text-gray-700 font-medium text-blue-600 whitespace-nowrap">
-                        {formatCurrency(viewing.totalPrice)}
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-4">
-                      <div className="min-w-[150px] flex items-center gap-3">
-                        <FiCalendar className="text-gray-500 text-lg" />
-                        <span className="font-semibold text-gray-900">Bắt đầu:</span>
-                      </div>
-                      <div className="flex-1 text-gray-700">{fmt(viewing.startDate)}</div>
-                    </div>
-
-                    <div className="flex items-start gap-4">
-                      <div className="min-w-[150px] flex items-center gap-3">
-                        <FiCalendar className="text-gray-500 text-lg" />
-                        <span className="font-semibold text-gray-900">Ngày kết thúc:</span>
-                      </div>
-                      <div className="flex-1 text-gray-700">{fmt(viewing.endDate)}</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="sticky bottom-0 flex justify-end px-6 py-4 border-t border-gray-200 bg-gray-10">
                 <button
                   onClick={closeModal}
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-gray-800 bg-white border border-gray-300 hover:bg-gray-100 transition"
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
                 >
-                  Đóng
+                  <FiX className="h-5 w-5" />
                 </button>
+              </div>
+
+              {/* Content */}
+              <div className="overflow-y-auto flex-1">
+                {isModalLoading ? (
+                  <div className="flex items-center justify-center py-20">
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                      <p className="text-gray-600 dark:text-gray-400">Đang tải...</p>
+                    </div>
+                  </div>
+                ) : viewing ? (
+                  <div className="p-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      
+                      {/* Main Content */}
+                      <div className="lg:col-span-2 space-y-6">
+                        
+                        {/* Thông tin hợp đồng */}
+                        <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                            <h2 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                              <FiBriefcase className="h-4 w-4 text-blue-600" />
+                              Thông tin hợp đồng
+                            </h2>
+                          </div>
+                          <div className="p-4 space-y-4">
+                            
+                            {/* Mã hợp đồng */}
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                                Mã hợp đồng
+                              </label>
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                {viewing.contractCode || "—"}
+                              </p>
+                            </div>
+
+                            <div className="border-t border-gray-200 dark:border-gray-700"></div>
+
+                            {/* Bệnh viện */}
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                                Bệnh viện
+                              </label>
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                {viewing.hospital?.label || "—"}
+                              </p>
+                            </div>
+
+                            <div className="border-t border-gray-200 dark:border-gray-700"></div>
+
+                            {/* Người phụ trách */}
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                                Người phụ trách
+                              </label>
+                              <p className="text-sm text-gray-900 dark:text-white">
+                                {viewing.picUser?.label || "—"}
+                                {viewing.picUser?.subLabel && (
+                                  <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
+                                    ({viewing.picUser.subLabel})
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+
+                            <div className="border-t border-gray-200 dark:border-gray-700"></div>
+
+                            {/* Thời hạn */}
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                                Thời hạn
+                              </label>
+                              <p className="text-sm text-gray-900 dark:text-white">
+                                {viewing.durationYears || "—"}
+                              </p>
+                            </div>
+
+                            <div className="border-t border-gray-200 dark:border-gray-700"></div>
+
+                            {/* Giá/năm */}
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                                Giá/năm
+                              </label>
+                              <p className="text-sm font-medium text-green-600 dark:text-green-400">
+                                {formatCurrency(viewing.yearlyPrice)}
+                              </p>
+                            </div>
+
+                            <div className="border-t border-gray-200 dark:border-gray-700"></div>
+
+                            {/* Tổng tiền */}
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                                Tổng tiền
+                              </label>
+                              <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                                {formatCurrency(viewing.totalPrice)}
+                              </p>
+                            </div>
+
+                            <div className="border-t border-gray-200 dark:border-gray-700"></div>
+
+                            {/* Ngày bắt đầu */}
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                                Ngày bắt đầu
+                              </label>
+                              <div className="flex items-center gap-2">
+                                <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
+                                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                  {fmt(viewing.startDate)}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="border-t border-gray-200 dark:border-gray-700"></div>
+
+                            {/* Ngày kết thúc */}
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                                Ngày kết thúc
+                              </label>
+                              <div className="flex items-center gap-2">
+                                <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
+                                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                  {fmt(viewing.endDate)}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Trạng thái hợp đồng */}
+                            {(viewing as any).status && (
+                              <>
+                                <div className="border-t border-gray-200 dark:border-gray-700"></div>
+                                <div>
+                                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                                    Trạng thái hợp đồng
+                                  </label>
+                                  <div className="flex flex-wrap gap-2">
+                                    {(() => {
+                                      const status = (viewing as any).status;
+                                      const config = statusConfig[status] || statusConfig.DANG_HOAT_DONG;
+                                      return (
+                                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${config.bgColor} ${config.textColor} border ${config.borderColor || 'border-transparent'}`}>
+                                          {config.label}
+                                        </span>
+                                      );
+                                    })()}
+                                  </div>
+                                </div>
+                              </>
+                            )}
+
+                            {/* Trạng thái thanh toán */}
+                            {((viewing as any).paymentStatus || (viewing as any).paidAmount) && (
+                              <>
+                                <div className="border-t border-gray-200 dark:border-gray-700"></div>
+                                <div>
+                                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                                    Trạng thái thanh toán
+                                  </label>
+                                  <div className="space-y-2">
+                                    {((viewing as any).paymentStatus === "DA_THANH_TOAN") ? (
+                                      <div className="flex items-center gap-2">
+                                        <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300">
+                                          <FiCheckCircle className="h-3 w-3 mr-1" />
+                                          Đã thanh toán
+                                        </span>
+                                        {typeof (viewing as any).paidAmount === 'number' && (viewing as any).paidAmount > 0 && (
+                                          <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                            {formatCurrency((viewing as any).paidAmount)}
+                                          </span>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                                        <FiAlertCircle className="h-3 w-3 mr-1" />
+                                        Chưa thanh toán
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </>
+                            )}
+
+                          </div>
+                        </div>
+
+                      </div>
+
+                      {/* Sidebar */}
+                      <div className="space-y-4">
+                        
+                        {/* Thông tin người phụ trách */}
+                        {viewing.picUser && (
+                          <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                              <h2 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                                <FiUser className="h-4 w-4 text-blue-600" />
+                                Người phụ trách
+                              </h2>
+                            </div>
+                            <div className="p-4">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-sm font-semibold dark:bg-blue-900/20 dark:text-blue-400">
+                                  {viewing.picUser.label?.charAt(0).toUpperCase() || "—"}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                                    {viewing.picUser.label || "—"}
+                                  </p>
+                                  {viewing.picUser.subLabel && (
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                      {viewing.picUser.subLabel}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Thông tin thời gian */}
+                        <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                            <h2 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                              <FiCalendar className="h-4 w-4 text-blue-600" />
+                              Thời gian
+                            </h2>
+                          </div>
+                          <div className="p-4 space-y-3">
+                            
+                            {/* Ngày bắt đầu */}
+                            {viewing.startDate && (
+                              <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                                  Ngày bắt đầu
+                                </label>
+                                <div className="flex items-center gap-2">
+                                  <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
+                                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                    {fmt(viewing.startDate)}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Ngày kết thúc */}
+                            {viewing.endDate && (
+                              <>
+                                {viewing.startDate && (
+                                  <div className="border-t border-gray-200 dark:border-gray-700"></div>
+                                )}
+                                <div>
+                                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                                    Ngày kết thúc
+                                  </label>
+                                  <div className="flex items-center gap-2">
+                                    <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
+                                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                      {fmt(viewing.endDate)}
+                                    </p>
+                                  </div>
+                                </div>
+                              </>
+                            )}
+
+                          </div>
+                        </div>
+
+                      </div>
+
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center py-20">
+                    <p className="text-gray-500 dark:text-gray-400">Không tìm thấy thông tin</p>
+                  </div>
+                )}
               </div>
             </motion.div>
           </div>
@@ -1457,6 +1961,12 @@ export default function MaintainContractsPage() {
         handleTotalPriceChange={handleTotalPriceChange}
         handleTotalPriceBlur={handleTotalPriceBlur}
         handleTotalPriceFocus={handleTotalPriceFocus}
+        paidAmountDisplay={paidAmountDisplay}
+        setPaidAmountDisplay={setPaidAmountDisplay}
+        handlePaidAmountChange={handlePaidAmountChange}
+        handlePaidAmountBlur={handlePaidAmountBlur}
+        handlePaidAmountFocus={handlePaidAmountFocus}
+        paidAmountError={paidAmountError}
       />
 
       {/* Confirm Create Modal */}

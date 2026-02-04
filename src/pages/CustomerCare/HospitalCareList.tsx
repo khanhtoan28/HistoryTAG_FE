@@ -41,6 +41,8 @@ interface Contract {
   expiryDate?: string;
   daysLeft?: number;
   kioskQuantity?: number | null;
+  paidAmount?: number | null;
+  paymentStatus?: "CHUA_THANH_TOAN" | "DA_THANH_TOAN";
 }
 
 interface Hospital {
@@ -446,6 +448,8 @@ export default function HospitalCareList() {
                   expiryDate,
                   daysLeft: c.daysLeft !== undefined && c.daysLeft !== null ? c.daysLeft : undefined,
                   kioskQuantity: c.kioskQuantity || null,
+                  paidAmount: typeof c.paidAmount === 'number' ? c.paidAmount : (c.paidAmount ? Number(c.paidAmount) : null),
+                  paymentStatus: c.paymentStatus ? (c.paymentStatus === "DA_THANH_TOAN" ? "DA_THANH_TOAN" : "CHUA_THANH_TOAN") : "CHUA_THANH_TOAN",
                 };
               });
               
@@ -898,6 +902,9 @@ export default function HospitalCareList() {
                   <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 min-w-[150px]">
                     Tổng giá trị HĐ
                   </th>
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 min-w-[150px]">
+                    Tổng thanh toán
+                  </th>
                   <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                     Ngày thêm
                   </th>
@@ -915,7 +922,7 @@ export default function HospitalCareList() {
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                 {loading ? (
                   <tr>
-                    <td colSpan={13} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={14} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
                       <div className="flex items-center justify-center gap-2">
                         <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
                         <span>Đang tải dữ liệu...</span>
@@ -924,13 +931,13 @@ export default function HospitalCareList() {
                   </tr>
                 ) : error ? (
                   <tr>
-                    <td colSpan={13} className="px-3 py-12 text-center text-red-500 dark:text-red-400">
+                    <td colSpan={14} className="px-3 py-12 text-center text-red-500 dark:text-red-400">
                       {error}
                     </td>
                   </tr>
                 ) : paginatedHospitals.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={14} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
                       Không tìm thấy bệnh viện nào
                     </td>
                   </tr>
@@ -1062,6 +1069,21 @@ export default function HospitalCareList() {
                         {/* Giá trị HĐ */}
                         <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-900 dark:text-white min-w-[150px]">
                           {formatCurrency(hospital.contractValue)}
+                        </td>
+
+                        {/* Tổng thanh toán */}
+                        <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-900 dark:text-white min-w-[150px]">
+                          {(() => {
+                            if (!hospital.contracts || hospital.contracts.length === 0) return "-";
+                            const totalPaid = hospital.contracts.reduce((sum: number, c: Contract) => {
+                              // Chỉ tính số tiền thanh toán khi paymentStatus === "DA_THANH_TOAN"
+                              if (c.paymentStatus === "DA_THANH_TOAN" && typeof c.paidAmount === 'number' && c.paidAmount > 0) {
+                                return sum + c.paidAmount;
+                              }
+                              return sum;
+                            }, 0);
+                            return totalPaid > 0 ? formatCurrency(totalPaid) : "-";
+                          })()}
                         </td>
 
                         {/* Ngày thêm */}
@@ -1323,6 +1345,7 @@ export default function HospitalCareList() {
                           expiryDate,
                           daysLeft: c.daysLeft !== undefined && c.daysLeft !== null ? c.daysLeft : undefined,
                           kioskQuantity: c.kioskQuantity || null,
+                          paidAmount: typeof c.paidAmount === 'number' ? c.paidAmount : (c.paidAmount ? Number(c.paidAmount) : null),
                         };
                       });
                       

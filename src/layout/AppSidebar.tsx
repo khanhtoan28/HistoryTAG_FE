@@ -203,6 +203,14 @@ const AppSidebar: React.FC = () => {
   // Create filtered nav items
   const filteredNavItems = navItems
     .filter((item) => {
+      // Chỉ hiển thị menu "Phòng kinh doanh" cho user thuộc phòng kinh doanh hoặc SuperAdmin
+      if (item.name === "Phòng kinh doanh") {
+        return isSuperAdmin || userDepartment === "BUSINESS";
+      }
+      // Chỉ hiển thị menu "Công việc" cho user thuộc IT doanh hoặc SuperAdmin
+      if (item.name === "Công việc") {
+        return isSuperAdmin || userDepartment === "IT" ;
+      }
       // Chỉ hiển thị menu "Phòng CSKH" cho user thuộc phòng kinh doanh hoặc SuperAdmin
       if (item.name === "Phòng CSKH") {
         return isSuperAdmin || userDepartment === "BUSINESS";
