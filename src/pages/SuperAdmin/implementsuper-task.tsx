@@ -1100,13 +1100,15 @@ const ImplementSuperTaskPage: React.FC = () => {
     }
   }, [ticketCountLoading, ticketOpenCounts, updateTicketOpenCount]);
 
+  // ✅ Load ticket counts cho TẤT CẢ hospitals (không chỉ trang hiện tại) để sort đúng
   useEffect(() => {
     if (!showHospitalList) return;
-    const ids = pagedHospitals.map((h) => h.id).filter((id): id is number => typeof id === "number" && id > 0);
+    // Load cho tất cả hospitals để có thể sort theo ticket trước khi phân trang
+    const ids = hospitalsWithTasks.map((h) => h.id).filter((id): id is number => typeof id === "number" && id > 0);
     ids.forEach((id) => {
       void loadTicketOpenCount(id);
     });
-  }, [pagedHospitals, showHospitalList, loadTicketOpenCount]);
+  }, [hospitalsWithTasks, showHospitalList, loadTicketOpenCount]);
 
   useEffect(() => {
     if (!selectedHospital) {
