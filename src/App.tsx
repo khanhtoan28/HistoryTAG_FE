@@ -44,6 +44,37 @@ import HospitalDetailView from "./pages/CustomerCare/View/HospitalDetailView";
 import HospitalDetail from "./pages/CustomerCare/HospitalDetail";
 import { AuthProvider } from "./contexts/AuthContext";
 
+// Helper to check SuperAdmin role
+function checkIsSuperAdmin(): boolean {
+  try {
+    const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
+    if (!rolesStr) return false;
+    const roles = JSON.parse(rolesStr);
+    if (!Array.isArray(roles)) return false;
+    
+    const normalizeRole = (r: unknown): string => {
+      if (typeof r === "string") return r.toUpperCase();
+      if (r && typeof r === "object") {
+        const rr = r as Record<string, unknown>;
+        const roleName = rr.roleName || rr.role_name || rr.role;
+        if (typeof roleName === "string") return roleName.toUpperCase();
+      }
+      return "";
+    };
+    
+    return roles.map(normalizeRole).some(r => r === "SUPERADMIN" || r === "SUPER_ADMIN");
+  } catch {
+    return false;
+  }
+}
+
+// Profile Route - redirect based on role BEFORE rendering any layout
+const ProfileRoute = () => {
+  const isSuperAdmin = checkIsSuperAdmin();
+  // Redirect ngay lập tức, không render layout nào cả
+  return <Navigate to={isSuperAdmin ? "/superadmin/profile" : "/admin/profile"} replace />;
+};
+
 // Protected Route Component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
@@ -103,6 +134,9 @@ export default function App() {
         <Routes>
           {/* Default redirect to Sign In */}
           <Route path="/" element={<Navigate to="/signin" replace />} />
+          
+          {/* Profile redirect - check role before entering any layout */}
+          <Route path="/profile" element={<ProtectedRoute><ProfileRoute /></ProtectedRoute>} />
 
           {/* Super Admin Layout - Protected */}
           <Route element={<ProtectedRoute><SuperAdminLayout /></ProtectedRoute>}>
@@ -142,7 +176,7 @@ export default function App() {
             <Route path="/admin/hospital-care/:id" element={<HospitalDetail />} />
 
             {/* Others Page */}
-            <Route path="/profile" element={<UserProfiles />} />
+            <Route path="/admin/profile" element={<UserProfiles />} />
             <Route path="/calendar" element={<Calendar />} />
             <Route path="/calendar/business" element={<BusinessCalendar />} />
             <Route path="/calendar/deployment" element={<DeploymentCalendar />} />

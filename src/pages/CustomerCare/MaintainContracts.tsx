@@ -1349,7 +1349,7 @@ export default function MaintainContractsPage() {
                       onClick={() => handleSort("startDate")}
                     >
                       <div className="flex items-center gap-1">
-                        Ngày bắt đầu
+                        Ngày ký HD
                         {renderSortIcon("startDate")}
                       </div>
                     </th>
@@ -1358,7 +1358,7 @@ export default function MaintainContractsPage() {
                       onClick={() => handleSort("endDate")}
                     >
                       <div className="flex items-center gap-1">
-                        Ngày kết thúc
+                        Ngày hết hạn HD
                         {renderSortIcon("endDate")}
                       </div>
                     </th>
@@ -1480,7 +1480,7 @@ export default function MaintainContractsPage() {
                           <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
                             {typeof item.kioskQuantity === "number" ? item.kioskQuantity : (item.kioskQuantity ?? "—")}
                           </td>
-                          {/* Ngày bắt đầu */}
+                          {/* Ngày ký HD */}
                           <td className="whitespace-nowrap px-4 py-3">
                             {item.startDate ? (
                               <div className="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300">
@@ -1884,7 +1884,7 @@ export default function MaintainContractsPage() {
                             {viewing.startDate && (
                               <div>
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                                  Ngày bắt đầu
+                                  Ngày ký HD
                                 </label>
                                 <div className="flex items-center gap-2">
                                   <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
@@ -1903,7 +1903,7 @@ export default function MaintainContractsPage() {
                                 )}
                                 <div>
                                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                                    Ngày kết thúc
+                                    Ngày hết hạn HD
                                   </label>
                                   <div className="flex items-center gap-2">
                                     <FiCalendar className="h-3.5 w-3.5 text-gray-400" />

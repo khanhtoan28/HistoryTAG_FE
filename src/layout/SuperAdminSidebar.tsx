@@ -283,7 +283,7 @@ const SuperAdminSidebar: React.FC = () => {
       onMouseLeave={() => setIsHovered(false)}
     >
       <div className="py-8 flex justify-center">
-        <Link to="/home" className="block">
+        <Link to="/superadmin/home" className="block">
           {isExpanded || isHovered || isMobileOpen ? (
             <>
               <img

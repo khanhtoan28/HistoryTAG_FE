@@ -1,7 +1,7 @@
 import UserProfiles from "../UserProfiles";
 
 export default function SuperAdminProfile() {
-  return <UserProfiles />;
+  return <UserProfiles isSuperAdmin={true} />;
 }
 
 

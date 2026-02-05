@@ -2514,7 +2514,26 @@ const ImplementationTasksPage: React.FC = () => {
         }
 
         const dir = hospitalSortDir === 'desc' ? -1 : 1;
+        // Chỉ sort theo ticket khi tất cả hospitals đã load xong ticket count (tránh nháy)
+        const allTicketsLoaded = ticketCountLoading.size === 0;
+        
         list = [...list].sort((a, b) => {
+            // Chỉ áp dụng sort theo ticket khi đã load xong tất cả
+            if (allTicketsLoaded) {
+                const aTickets = a.id ? (ticketOpenCounts[a.id] ?? 0) : 0;
+                const bTickets = b.id ? (ticketOpenCounts[b.id] ?? 0) : 0;
+                
+                // Bệnh viện có ticket > 0 luôn lên trước
+                if (aTickets > 0 && bTickets === 0) return -1;
+                if (aTickets === 0 && bTickets > 0) return 1;
+                
+                // Nếu cả 2 đều có ticket, sort theo số ticket giảm dần
+                if (aTickets > 0 && bTickets > 0 && aTickets !== bTickets) {
+                    return bTickets - aTickets;
+                }
+            }
+            
+            // Sau đó áp dụng sort theo user chọn
             if (hospitalSortBy === 'taskCount') return ((a.taskCount || 0) - (b.taskCount || 0)) * dir;
             if (hospitalSortBy === 'accepted') return ((Number(Boolean(a.acceptedByMaintenance)) - Number(Boolean(b.acceptedByMaintenance)))) * dir;
             if (hospitalSortBy === 'ratio') {
@@ -2523,10 +2542,10 @@ const ImplementationTasksPage: React.FC = () => {
                 return (ra - rb) * dir;
             }
             // label
-            return a.label.localeCompare(b.label) * dir;
+            return a.label.localeCompare(b.label, "vi", { sensitivity: "base" }) * dir;
         });
         return list;
-    }, [hospitalsWithTasks, hospitalSearch, hospitalCodeSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir, ticketOpenCounts, picOptions]);
+    }, [hospitalsWithTasks, hospitalSearch, hospitalCodeSearch, hospitalStatusFilter, hospitalPicFilter, hospitalSortBy, hospitalSortDir, ticketOpenCounts, ticketCountLoading, picOptions]);
 
     const pagedHospitals = useMemo(() => {
         return filteredHospitals.slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize);

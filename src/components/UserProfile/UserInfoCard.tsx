@@ -39,7 +39,11 @@ const TEAM_LABELS_SHORT: Record<string, string> = {
 const getTeamLabel = (teamId: string) => TEAM_LABELS_SHORT[teamId] || VN_TEAM[teamId] || teamId;
 const isLeaderRole = (r: string | undefined) => r != null && String(r).toUpperCase() === "LEADER";
 
-export default function UserInfoCard() {
+interface UserInfoCardProps {
+  isSuperAdmin?: boolean;
+}
+
+export default function UserInfoCard({ isSuperAdmin = false }: UserInfoCardProps) {
   const { isOpen, openModal, closeModal } = useModal();
   const { isOpen: isPasswordModalOpen, openModal: openPasswordModal, closeModal: closePasswordModal } = useModal();
 
@@ -48,34 +52,41 @@ export default function UserInfoCard() {
     return s ? Number(s) : undefined;
   }, []);
 
+  const [user, setUser] = useState<UserResponseDTO | null>(null);
+
   // Check if user is admin (not superadmin)
+  // Admin thường bị disable các field Department/Team, nhưng SuperAdmin được phép chỉnh
+  // Nếu prop isSuperAdmin=true thì bỏ qua check (SuperAdmin có quyền đầy đủ)
   const isAdmin = useMemo(() => {
+    // SuperAdmin được truyền từ prop → có quyền đầy đủ
+    if (isSuperAdmin) return false;
+    
     try {
       const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
-      if (rolesStr) {
-        const roles = JSON.parse(rolesStr);
-        if (Array.isArray(roles)) {
-          return roles.some((r: unknown) => {
-            if (typeof r === "string") {
-              return r.toUpperCase() === "ADMIN" && r.toUpperCase() !== "SUPERADMIN";
-            }
-            if (r && typeof r === "object") {
-              const roleName = (r as Record<string, unknown>).roleName || (r as Record<string, unknown>).role_name || (r as Record<string, unknown>).role;
-              if (typeof roleName === "string") {
-                return roleName.toUpperCase() === "ADMIN" && roleName.toUpperCase() !== "SUPERADMIN";
-              }
-            }
-            return false;
-          });
+      if (!rolesStr) return false;
+      
+      const roles = JSON.parse(rolesStr);
+      if (!Array.isArray(roles)) return false;
+      
+      // Normalize role name
+      const normalizeRole = (r: unknown): string => {
+        if (typeof r === "string") return r.toUpperCase();
+        if (r && typeof r === "object") {
+          const rr = r as Record<string, unknown>;
+          const roleName = rr.roleName || rr.role_name || rr.role;
+          if (typeof roleName === "string") return roleName.toUpperCase();
         }
-      }
+        return "";
+      };
+      
+      const normalizedRoles = roles.map(normalizeRole);
+      
+      // ADMIN bị disable department/team
+      return normalizedRoles.includes("ADMIN");
     } catch {
-      // ignore parsing errors
+      return false;
     }
-    return false;
-  }, []);
-
-  const [user, setUser] = useState<UserResponseDTO | null>(null);
+  }, [isSuperAdmin]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);

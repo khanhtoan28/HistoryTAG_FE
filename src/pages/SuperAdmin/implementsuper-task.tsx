@@ -1029,9 +1029,31 @@ const ImplementSuperTaskPage: React.FC = () => {
         return false;
       });
     }
-    list = [...list].sort((a, b) => a.label.localeCompare(b.label, 'vi', { sensitivity: 'base' }));
+    // ✅ Sort: Ưu tiên bệnh viện có ticket mở lên đầu, sau đó sort theo tên
+    // Chỉ sort theo ticket khi tất cả hospitals đã load xong ticket count (tránh nháy)
+    const allTicketsLoaded = ticketCountLoading.size === 0;
+    
+    list = [...list].sort((a, b) => {
+      // Chỉ áp dụng sort theo ticket khi đã load xong tất cả
+      if (allTicketsLoaded) {
+        const aTickets = a.id ? (ticketOpenCounts[a.id] ?? 0) : 0;
+        const bTickets = b.id ? (ticketOpenCounts[b.id] ?? 0) : 0;
+        
+        // Ưu tiên bệnh viện có ticket > 0 lên trước
+        if (aTickets > 0 && bTickets === 0) return -1;
+        if (aTickets === 0 && bTickets > 0) return 1;
+        
+        // Nếu cả 2 đều có ticket, sort theo số ticket giảm dần
+        if (aTickets > 0 && bTickets > 0 && aTickets !== bTickets) {
+          return bTickets - aTickets;
+        }
+      }
+      
+      // Sort theo tên
+      return a.label.localeCompare(b.label, 'vi', { sensitivity: 'base' });
+    });
     return list;
-  }, [hospitalsWithTasks, hospitalSearch, hospitalCodeSearch, hospitalStatusFilter, hospitalPicFilter, ticketOpenCounts]);
+  }, [hospitalsWithTasks, hospitalSearch, hospitalCodeSearch, hospitalStatusFilter, hospitalPicFilter, ticketOpenCounts, ticketCountLoading, picOptionLabelMap]);
 
   const pagedHospitals = React.useMemo(() => {
     return filteredHospitals.slice(hospitalPage * hospitalSize, (hospitalPage + 1) * hospitalSize);

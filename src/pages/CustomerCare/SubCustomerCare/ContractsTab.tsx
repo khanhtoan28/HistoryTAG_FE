@@ -1126,10 +1126,10 @@ export default function ContractsTab({
                 Thanh toán
               </th>
               <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
-                Ngày Bắt Đầu
+                Ngày Ký HD
               </th>
               <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
-                Ngày Hết Hạn
+                Ngày Hết Hạn HD
               </th>
               <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider dark:text-gray-400">
                 Trạng Thái
