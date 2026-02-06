@@ -207,6 +207,11 @@ export default function MaintainContractsPage() {
   const pendingEndInputRef = useRef<HTMLInputElement | null>(null);
   const searchDebounceTimeoutRef = useRef<number | null>(null);
 
+  // ✅ New filter states
+  const [filterStatus, setFilterStatus] = useState<string>(""); // DANG_HOAT_DONG, SAP_HET_HAN, HET_HAN, DA_GIA_HAN
+  const [filterPaymentStatus, setFilterPaymentStatus] = useState<string>(""); // CHUA_THANH_TOAN, DA_THANH_TOAN
+  const [filterExpiresWithinDays, setFilterExpiresWithinDays] = useState<string>(""); // 7, 30, 60, 90
+
   // Debounce search input: update debouncedQSearch after 300ms of no typing
   useEffect(() => {
     if (searchDebounceTimeoutRef.current) {
@@ -224,7 +229,7 @@ export default function MaintainContractsPage() {
 
   useEffect(() => {
     setPage(0);
-  }, [debouncedQSearch, qPicUserId, filterStartFrom, filterStartTo, sortBy, sortDir]);
+  }, [debouncedQSearch, qPicUserId, filterStartFrom, filterStartTo, filterStatus, filterPaymentStatus, filterExpiresWithinDays, sortBy, sortDir]);
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<WarrantyContract | null>(null);
@@ -441,8 +446,14 @@ export default function MaintainContractsPage() {
       if (debouncedQSearch.trim()) params.search = debouncedQSearch.trim();
       if (qPicUserId) params.picUserId = Number(qPicUserId);
       
-      // Note: Date filtering will be implemented in backend later
-      // For now, date filter UI is shown but filtering is done client-side if needed
+      // ✅ New filters
+      if (filterStatus) params.status = filterStatus;
+      if (filterPaymentStatus) params.paymentStatus = filterPaymentStatus;
+      if (filterExpiresWithinDays) params.expiresWithinDays = Number(filterExpiresWithinDays);
+      
+      // ✅ Date range filter
+      if (filterStartFrom) params.startDateFrom = normalizeDateForStart(filterStartFrom);
+      if (filterStartTo) params.startDateTo = normalizeDateForEnd(filterStartTo);
 
       const data = await getMaintainContracts(params);
       setItems(data.content || []);
@@ -459,7 +470,7 @@ export default function MaintainContractsPage() {
 
   useEffect(() => {
     fetchList();
-  }, [page, size, debouncedQSearch, qPicUserId, filterStartFrom, filterStartTo, sortBy, sortDir]);
+  }, [page, size, debouncedQSearch, qPicUserId, filterStartFrom, filterStartTo, filterStatus, filterPaymentStatus, filterExpiresWithinDays, sortBy, sortDir]);
 
   // Handle column sorting
   const handleSort = (column: string) => {
@@ -1146,7 +1157,7 @@ export default function MaintainContractsPage() {
                 className="rounded-full border border-gray-200 px-4 py-2.5 text-sm shadow-sm hover:bg-gray-50 transition flex items-center gap-2"
               >
                 <span>📅</span>
-                <span>Lọc theo thời gian</span>
+                <span>Lọc theo ngày ký HD</span>
               </button>
               {dateFilterOpen && (
                 <div className="absolute z-40 mt-2 w-72 rounded-xl border border-gray-200 bg-white shadow-xl p-4 space-y-3">
@@ -1237,8 +1248,54 @@ export default function MaintainContractsPage() {
                 }))}
               />
             </div>
+          </div>
+          {/* ✅ New filter row */}
+          <div className="flex flex-wrap items-center gap-3 mt-3">
+            {/* Trạng thái hợp đồng */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Trạng thái HĐ</span>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="rounded-full border border-gray-200 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition min-w-[150px]"
+              >
+                <option value="">Tất cả</option>
+                <option value="DANG_HOAT_DONG">🔵 Đang hoạt động</option>
+                <option value="SAP_HET_HAN">🟡 Sắp hết hạn</option>
+                <option value="HET_HAN">🔴 Hết hạn</option>
+                <option value="DA_GIA_HAN">🟢 Đã gia hạn</option>
+              </select>
+            </div>
+            {/* Trạng thái thanh toán */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Thanh toán</span>
+              <select
+                value={filterPaymentStatus}
+                onChange={(e) => setFilterPaymentStatus(e.target.value)}
+                className="rounded-full border border-gray-200 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition min-w-[150px]"
+              >
+                <option value="">Tất cả</option>
+                <option value="DA_THANH_TOAN">✅ Đã thanh toán</option>
+                <option value="CHUA_THANH_TOAN">⏳ Chưa thanh toán</option>
+              </select>
+            </div>
+            {/* Hết hạn trong X ngày */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Hết hạn trong</span>
+              <select
+                value={filterExpiresWithinDays}
+                onChange={(e) => setFilterExpiresWithinDays(e.target.value)}
+                className="rounded-full border border-gray-200 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition min-w-[130px]"
+              >
+                <option value="">Tất cả</option>
+                <option value="7">7 ngày</option>
+                <option value="30">30 ngày</option>
+                <option value="60">60 ngày</option>
+                <option value="90">90 ngày</option>
+              </select>
+            </div>
             <div className="ml-auto flex items-center gap-2">
-              <button
+              {/* <button
                 type="button"
                 onClick={() => {
                   setFilterStartFrom(pendingFilterStart);
@@ -1247,7 +1304,7 @@ export default function MaintainContractsPage() {
                 className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700 transition"
               >
                 <span>Lọc</span>
-              </button>
+              </button> */}
               <button
                 type="button"
                 onClick={() => {
@@ -1257,6 +1314,9 @@ export default function MaintainContractsPage() {
                   setFilterStartTo("");
                   setPendingFilterStart("");
                   setPendingFilterEnd("");
+                  setFilterStatus("");
+                  setFilterPaymentStatus("");
+                  setFilterExpiresWithinDays("");
                 }}
                 className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
               >
@@ -1268,16 +1328,36 @@ export default function MaintainContractsPage() {
             Tổng hợp đồng:
             <span className="ml-1 text-blue-800">{totalElements}</span>
           </div>
-          {(filterStartFrom || filterStartTo) && (
-            <div className="mt-2 text-xs text-gray-500">
-              Đang lọc từ{" "}
-              <span className="font-semibold text-blue-600">
-                {formatFilterDateLabel(filterStartFrom)}
-              </span>{" "}
-              đến{" "}
-              <span className="font-semibold text-blue-600">
-                {formatFilterDateLabel(filterStartTo)}
-              </span>
+          {/* ✅ Active filters display */}
+          {(filterStartFrom || filterStartTo || filterStatus || filterPaymentStatus || filterExpiresWithinDays) && (
+            <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500">
+              {(filterStartFrom || filterStartTo) && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-1 text-blue-700">
+                  📅 {formatFilterDateLabel(filterStartFrom)} - {formatFilterDateLabel(filterStartTo)}
+                  <button onClick={() => { setFilterStartFrom(""); setFilterStartTo(""); setPendingFilterStart(""); setPendingFilterEnd(""); }} className="ml-1 text-blue-500 hover:text-blue-700">×</button>
+                </span>
+              )}
+              {filterStatus && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-1 text-blue-700">
+                  {filterStatus === "DANG_HOAT_DONG" && "🔵 Đang hoạt động"}
+                  {filterStatus === "SAP_HET_HAN" && "🟡 Sắp hết hạn"}
+                  {filterStatus === "HET_HAN" && "🔴 Hết hạn"}
+                  {filterStatus === "DA_GIA_HAN" && "🟢 Đã gia hạn"}
+                  <button onClick={() => setFilterStatus("")} className="ml-1 text-blue-500 hover:text-blue-700">×</button>
+                </span>
+              )}
+              {filterPaymentStatus && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-1 text-green-700">
+                  {filterPaymentStatus === "DA_THANH_TOAN" ? "✅ Đã thanh toán" : "⏳ Chưa thanh toán"}
+                  <button onClick={() => setFilterPaymentStatus("")} className="ml-1 text-green-500 hover:text-green-700">×</button>
+                </span>
+              )}
+              {filterExpiresWithinDays && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-1 text-orange-700">
+                  ⏰ Hết hạn trong {filterExpiresWithinDays} ngày
+                  <button onClick={() => setFilterExpiresWithinDays("")} className="ml-1 text-orange-500 hover:text-orange-700">×</button>
+                </span>
+              )}
             </div>
           )}
         </ComponentCard>

@@ -101,6 +101,11 @@ export async function getMaintainContracts(params: {
   hospitalId?: number;
   careId?: number; // Filter by CustomerCareHospital ID
   picUserId?: number;
+  status?: string; // Filter: DANG_HOAT_DONG, SAP_HET_HAN, HET_HAN, DA_GIA_HAN
+  paymentStatus?: string; // Filter: CHUA_THANH_TOAN, DA_THANH_TOAN
+  expiresWithinDays?: number; // Filter: contracts expiring within X days
+  startDateFrom?: string; // Filter: start date from (ISO format)
+  startDateTo?: string; // Filter: start date to (ISO format)
   sortBy?: string;
   sortDir?: string;
   page?: number;
