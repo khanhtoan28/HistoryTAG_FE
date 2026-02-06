@@ -12,6 +12,7 @@ import toast from "react-hot-toast";
 import Pagination from "../../components/common/Pagination";
 import TetCelebration from "../../components/common/TetCelebration";
 import FlowerFall from "../../components/common/FlowerFall";
+import CSKHReport from "../../components/reports/CSKHReport";
 
 
 // ExcelJS is heavy; import dynamically inside export functions to reduce initial bundle size
@@ -2344,6 +2345,11 @@ export default function SuperAdminHome() {
               </div>
             </div>
           </div>
+        </section>
+
+        {/* CSKH Report Section */}
+        <section className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100 w-full">
+          <CSKHReport />
         </section>
 
         {/* Employee Performance Report */}
