@@ -742,7 +742,18 @@ export default function SuperAdminHome() {
       }
 
       const combinedUsers = (() => {
-        const baseUsers = (allUsers as UserResponseDTO[]).filter((u) => ((u.team ?? '').toString().toUpperCase() === normalizedTeam));
+        // ✅ Check cả team chính (u.team) VÀ availableTeams (mảng multi-team)
+        // Nếu user thuộc team qua availableTeams thì cũng phải được include
+        const baseUsers = (allUsers as UserResponseDTO[]).filter((u) => {
+          // Check primary team
+          if ((u.team ?? '').toString().toUpperCase() === normalizedTeam) return true;
+          if ((u.primaryTeam ?? '').toString().toUpperCase() === normalizedTeam) return true;
+          // Check availableTeams array (multi-team support)
+          if (Array.isArray(u.availableTeams)) {
+            return u.availableTeams.some(t => (t ?? '').toString().toUpperCase() === normalizedTeam);
+          }
+          return false;
+        });
         const extraUsers: UserResponseDTO[] = [];
         if (needsITSupport) {
           extraUsers.push(
