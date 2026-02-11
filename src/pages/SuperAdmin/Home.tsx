@@ -785,6 +785,20 @@ export default function SuperAdminHome() {
         ]
           .map((id) => (id != null ? Number(id) : null))
           .filter((id): id is number => Number.isFinite(id));
+        
+        // ✅ Also check picDeploymentIds (array) - tasks can have multiple PICs
+        const picIdsArray = (task as any)?.picDeploymentIds;
+        if (Array.isArray(picIdsArray)) {
+          picIdsArray.forEach((id: any) => {
+            if (id != null) {
+              const numId = Number(id);
+              if (Number.isFinite(numId) && !candidateIds.includes(numId)) {
+                candidateIds.push(numId);
+              }
+            }
+          });
+        }
+        
         if (candidateIds.length === 0) return false;
         return candidateIds.some((id) => teamUserIdsSet.has(id));
       };

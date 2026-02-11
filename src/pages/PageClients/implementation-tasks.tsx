@@ -2788,6 +2788,27 @@ const ImplementationTasksPage: React.FC = () => {
 
       // Province đã có trong subLabel từ endpoint, không cần fetch thêm
       setHospitalsWithTasks(finalList);
+
+      // ✅ Merge PICs từ tasks vào picOptions (giống bên bảo trì)
+      setPicOptions(prev => {
+        const optionMap = new Map<string, { id: string; label: string }>();
+        prev.forEach(opt => optionMap.set(String(opt.id), opt));
+        // Thêm PICs từ aggregated task data
+        for (const [, aggregated] of acc.entries()) {
+          const picIdsArr = Array.from(aggregated.picDeploymentIds);
+          const picNamesArr = Array.from(aggregated.picDeploymentNames);
+          picIdsArr.forEach((picId, idx) => {
+            const idStr = String(picId).trim();
+            if (idStr && !optionMap.has(idStr)) {
+              const name = picNamesArr[idx] || "";
+              if (name) optionMap.set(idStr, { id: idStr, label: name });
+            }
+          });
+        }
+        const merged = Array.from(optionMap.values());
+        merged.sort((a, b) => a.label.localeCompare(b.label, "vi", { sensitivity: "base" }));
+        return merged;
+      });
     } catch (e: any) {
       setError(e.message || "Lỗi tải danh sách bệnh viện");
     } finally {
@@ -3355,8 +3376,9 @@ const ImplementationTasksPage: React.FC = () => {
                           <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã bệnh viện</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/Thành phố</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã BV</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/Thành</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phụ trách chính</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phụ trách triển khai</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượng task</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
@@ -3385,6 +3407,19 @@ const ImplementationTasksPage: React.FC = () => {
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.hospitalCode || "—"}</td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.subLabel || "—"}</td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{hospital.personInChargeName || "—"}</td>
+                                  <td className="px-6 py-4 text-sm text-gray-500">
+                                    {hospital.picDeploymentNames && hospital.picDeploymentNames.length > 0
+                                      ? (
+                                        <div className="flex flex-wrap gap-1">
+                                          {hospital.picDeploymentNames.map((name, i) => (
+                                            <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                                              {name}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )
+                                      : hospital.personInChargeName || "—"}
+                                  </td>
                                   <td className="px-6 py-6 whitespace-nowrap text-sm align-top">
                                     <div className="flex flex-col items-start gap-1">
                                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{(hospital.acceptedCount ?? 0)}/{hospital.taskCount ?? 0} task</span>

@@ -707,11 +707,86 @@ const ImplementSuperTaskPage: React.FC = () => {
             allAccepted,
             acceptedFromBusiness,
             hasBusinessPlaceholder: Boolean(s.hasBusinessPlaceholder) || pendingPlaceholder > 0,
-            picDeploymentIds: [] as string[], // PIC aggregation would require additional query - can be added later if needed
+            picDeploymentIds: [] as string[],
             picDeploymentNames: [] as string[],
           };
         })
         .filter((h: any) => h.taskCount > 0 || h.acceptedFromBusiness); // Show hospitals with tasks or previously accepted from business
+
+      // ✅ Fetch tasks để aggregate PICs theo task (giống bên admin implementation)
+      try {
+        const taskParams = new URLSearchParams({ page: "0", size: "500", sortBy: "id", sortDir: "asc" });
+        const taskRes = await fetch(`${API_ROOT}/api/v1/superadmin/implementation/tasks?${taskParams.toString()}`, {
+          method: "GET",
+          headers,
+          credentials: "include",
+        });
+        if (taskRes.ok) {
+          const taskPayload = await taskRes.json();
+          const allTasks = Array.isArray(taskPayload?.content) ? taskPayload.content : Array.isArray(taskPayload) ? taskPayload : [];
+          
+          // Aggregate PICs per hospital from tasks
+          const hospitalPicMap = new Map<string, { picIds: Set<string>; picNames: Set<string> }>();
+          for (const t of allTasks) {
+            const hospitalName = String(t?.hospitalName || "").trim();
+            const hospitalId = t?.hospitalId != null ? Number(t.hospitalId) : null;
+            if (!hospitalName) continue;
+            const key = hospitalId != null ? `id-${hospitalId}` : `name-${hospitalName}`;
+            const entry = hospitalPicMap.get(key) || { picIds: new Set<string>(), picNames: new Set<string>() };
+            
+            // Collect from picDeploymentIds/Names arrays
+            if (Array.isArray(t.picDeploymentIds)) {
+              t.picDeploymentIds.forEach((id: any) => { if (id != null) entry.picIds.add(String(id)); });
+            }
+            if (Array.isArray(t.picDeploymentNames)) {
+              t.picDeploymentNames.forEach((name: any) => {
+                const n = String(name || "").trim();
+                if (n) entry.picNames.add(n);
+              });
+            }
+            // Fallback: singular picDeploymentId/Name
+            if (!Array.isArray(t.picDeploymentIds) && t.picDeploymentId != null) {
+              entry.picIds.add(String(t.picDeploymentId));
+            }
+            if (!Array.isArray(t.picDeploymentNames) && t.picDeploymentName) {
+              const n = String(t.picDeploymentName).trim();
+              if (n) entry.picNames.add(n);
+            }
+            hospitalPicMap.set(key, entry);
+          }
+          
+          // Merge PICs into mapped hospitals
+          for (const item of mapped) {
+            const key = item.id != null ? `id-${item.id}` : `name-${item.label}`;
+            const pics = hospitalPicMap.get(key);
+            if (pics) {
+              (item as any).picDeploymentIds = Array.from(pics.picIds);
+              (item as any).picDeploymentNames = Array.from(pics.picNames);
+            }
+          }
+          
+          // Merge PICs từ tasks vào picOptions
+          setPicOptions(prev => {
+            const optionMap = new Map<string, { id: string; label: string }>();
+            prev.forEach(opt => optionMap.set(String(opt.id), opt));
+            for (const [, pics] of hospitalPicMap.entries()) {
+              const idsArr = Array.from(pics.picIds);
+              const namesArr = Array.from(pics.picNames);
+              idsArr.forEach((picId, idx) => {
+                if (picId && !optionMap.has(picId)) {
+                  const name = namesArr[idx] || "";
+                  if (name) optionMap.set(picId, { id: picId, label: name });
+                }
+              });
+            }
+            const merged = Array.from(optionMap.values());
+            merged.sort((a, b) => a.label.localeCompare(b.label, "vi", { sensitivity: "base" }));
+            return merged;
+          });
+        }
+      } catch (err) {
+        console.debug("Failed to fetch tasks for PIC aggregation", err);
+      }
 
       // Handle pending transfers (maintain existing logic for transfer state persistence)
       for (const item of mapped) {
@@ -1021,7 +1096,32 @@ const ImplementSuperTaskPage: React.FC = () => {
           .map((id) => picOptionLabelMap.get(String(id))?.toLowerCase().trim())
           .filter((v): v is string => Boolean(v))
       );
+      // Tạo map từ picOptions để lookup name → ID
+      const picNameToIdMap = new Map<string, string>();
+      picOptions.forEach(opt => {
+        picNameToIdMap.set(String(opt.label).trim().toLowerCase(), String(opt.id));
+      });
       list = list.filter((h) => {
+        // ✅ Check by task-level picDeploymentIds (giống bên admin implementation)
+        const picIds = h.picDeploymentIds || [];
+        const hasMatchingTaskId = picIds.some((id: any) => {
+          const idStr = String(id).trim();
+          return selectedIds.has(idStr) || selectedIds.has(String(Number(id)));
+        });
+        if (hasMatchingTaskId) return true;
+        
+        // ✅ Check by task-level picDeploymentNames
+        const picNames = h.picDeploymentNames || [];
+        const hasMatchingTaskName = picNames.some((name: any) => {
+          const nameStr = String(name).trim().toLowerCase();
+          if (selectedNames.has(nameStr)) return true;
+          const idFromName = picNameToIdMap.get(nameStr);
+          if (idFromName && selectedIds.has(idFromName)) return true;
+          return false;
+        });
+        if (hasMatchingTaskName) return true;
+        
+        // Fallback: check hospital-level personInChargeId/Name
         const picId = h.personInChargeId != null ? String(h.personInChargeId) : null;
         if (picId && selectedIds.has(picId)) return true;
         const name = h.personInChargeName?.toLowerCase().trim();
@@ -1604,8 +1704,9 @@ const ImplementSuperTaskPage: React.FC = () => {
                       <tr>
                         <th className="px-6 w-10 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STT</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên bệnh viện</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã bệnh viện</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/Thành phố</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã BV</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tỉnh/thành </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phụ trách chính</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phụ trách triển khai</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượng task</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
@@ -1654,8 +1755,21 @@ const ImplementSuperTaskPage: React.FC = () => {
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                 {hospital.subLabel || "—"}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                 {hospital.personInChargeName || "—"}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-600">
+                                {hospital.picDeploymentNames && hospital.picDeploymentNames.length > 0
+                                  ? (
+                                    <div className="flex flex-wrap gap-1">
+                                      {hospital.picDeploymentNames.map((name, i) => (
+                                        <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                                          {name}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )
+                                  : hospital.personInChargeName || "—"}
                               </td>
                               <td className="px-6 py-6 whitespace-nowrap text-sm align-top">
                                 <div className="flex flex-col items-start gap-1">
