@@ -42,7 +42,6 @@ export default function ForgotPasswordForm() {
     try {
       await forgotPassword({ email: email.trim() });
       toast.success("Email khôi phục mật khẩu đã được gửi!");
-      // Tự động chuyển sang trang reset password
       navigate("/reset-password");
     } catch (ex: unknown) {
       const e = ex as any;
@@ -56,42 +55,31 @@ export default function ForgotPasswordForm() {
     }
   };
 
-  const FIELD_CLASS =
-    "w-full h-12 px-5 text-[16px] font-medium text-gray-900 placeholder-gray-500 rounded-lg border";
-
-  const errorStyle =
-    "border-red-500 ring-2 ring-red-400/30 focus:ring-red-400/50";
-  const normalStyle =
-    "border-gray-200 focus:ring-2 focus:ring-blue-400/40 focus:border-blue-400";
-
   return (
-    <div className="auth-bg flex flex-col w-full text-white min-h-screen justify-center items-center py-12">
-      <div className="w-full max-w-[720px] px-6">
-        <div className="mb-6 text-center sm:text-left flex items-center gap-4">
-          <div className="flex-none">
-            <div className="flame-logo" aria-hidden />
-          </div>
-          <div>
-            <h1 className="mb-2 font-semibold text-white text-[28px] sm:text-3xl">
-              Quên mật khẩu
-            </h1>
-            <p className="mt-2 text-blue-100/80">
-              Nhập email của bạn để nhận link đặt lại mật khẩu
-            </p>
-          </div>
-        </div>
+    <div className="w-full max-w-md mx-auto">
+      {/* Header */}
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold text-white mb-2">
+          Quên mật khẩu
+        </h1>
+        <p className="text-blue-100 text-sm">
+          Nhập email của bạn để nhận link đặt lại mật khẩu
+        </p>
+      </div>
 
-        <div className="auth-card mx-auto bg-white/6 backdrop-blur-md border border-white/10 rounded-2xl p-8 shadow-xl">
-          <form onSubmit={onSubmit} noValidate className="space-y-5">
+      {/* Form Card */}
+      <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-8 shadow-2xl">
+        <form onSubmit={onSubmit} noValidate className="space-y-6">
           {err && (
-            <div className="text-sm text-red-600 bg-red-100/80 border border-red-300 rounded p-2">
+            <div className="bg-red-500/20 border border-red-400/50 text-red-100 text-sm rounded-lg p-3">
               {err}
             </div>
           )}
 
-          <div className="space-y-2 field-row group">
-            <Label className="text-white">
-              Email <span className="text-red-500">*</span>
+          {/* Email Field */}
+          <div className="space-y-2">
+            <Label className="text-white/90 text-sm font-medium">
+              Email <span className="text-red-400">*</span>
             </Label>
             <Input
               type="email"
@@ -107,37 +95,39 @@ export default function ForgotPasswordForm() {
               autoComplete="email"
               aria-invalid={!!fieldErr.email}
               aria-describedby="email-error"
-              className={`${FIELD_CLASS} ${fieldErr.email ? errorStyle : normalStyle}`}
+              className={`w-full h-12 px-4 text-gray-900 bg-white/95 border rounded-lg transition-all ${
+                fieldErr.email
+                  ? "border-red-400 ring-2 ring-red-400/30"
+                  : "border-white/30 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/30"
+              }`}
             />
             {fieldErr.email && (
-              <p id="email-error" className="text-sm text-red-400">
+              <p id="email-error" className="text-sm text-red-300">
                 {fieldErr.email}
               </p>
             )}
           </div>
 
-          <div>
-            <Button
-              className="neon-btn w-full py-3 text-base font-semibold rounded-lg disabled:opacity-50"
-              disabled={loading}
-              type="submit"
-            >
-              {loading ? "Đang gửi..." : "Gửi email"}
-            </Button>
-          </div>
-          </form>
-        </div>
-
-        <div className="mt-5 text-center">
-          <Link
-            to="/signin"
-            className="text-sm text-blue-200 hover:text-white underline"
+          {/* Submit Button */}
+          <Button
+            className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={loading}
+            type="submit"
           >
-            ← Quay lại đăng nhập
-          </Link>
-        </div>
+            {loading ? "Đang gửi..." : "Gửi email khôi phục"}
+          </Button>
+        </form>
+      </div>
+
+      {/* Back to login */}
+      <div className="mt-5 text-center">
+        <Link
+          to="/signin"
+          className="text-sm text-blue-300 hover:text-blue-200 transition-colors"
+        >
+          ← Quay lại đăng nhập
+        </Link>
       </div>
     </div>
   );
 }
-

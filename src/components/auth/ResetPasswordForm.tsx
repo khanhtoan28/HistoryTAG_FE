@@ -78,10 +78,8 @@ export default function ResetPasswordForm() {
         newPassword: form.newPassword,
         confirmPassword: form.confirmPassword,
       });
-      // show animated success panel before redirecting
       toast.success("Đặt lại mật khẩu thành công!");
       setSuccess(true);
-      // wait briefly to show animation then navigate
       setTimeout(() => {
         navigate("/signin");
       }, 1500);
@@ -97,42 +95,55 @@ export default function ResetPasswordForm() {
     }
   };
 
-  const FIELD_CLASS =
-    "w-full h-12 px-5 text-[16px] font-medium text-gray-900 placeholder-gray-500 rounded-lg border";
+  const inputClass = (hasError: boolean) =>
+    `w-full h-12 px-4 text-gray-900 bg-white/95 border rounded-lg transition-all ${
+      hasError
+        ? "border-red-400 ring-2 ring-red-400/30"
+        : "border-white/30 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/30"
+    }`;
 
-  const errorStyle =
-    "border-red-500 ring-2 ring-red-400/30 focus:ring-red-400/50";
-  const normalStyle =
-    "border-gray-200 focus:ring-2 focus:ring-blue-400/40 focus:border-blue-400";
+  if (success) {
+    return (
+      <div className="w-full max-w-md mx-auto text-center">
+        <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-10 shadow-2xl">
+          <div className="flex justify-center mb-4">
+            <svg className="w-16 h-16 text-green-400" viewBox="0 0 52 52" fill="none">
+              <circle cx="26" cy="26" r="25" stroke="currentColor" strokeWidth="2" />
+              <path d="M14 27l7 7 17-17" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Thành công!</h2>
+          <p className="text-blue-100 text-sm">Đang chuyển về trang đăng nhập...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="auth-bg flex flex-col w-full text-white min-h-screen justify-center items-center py-12">
-      <div className="w-full max-w-[720px] px-6">
-        <div className="mb-6 text-center sm:text-left flex items-center gap-4">
-          <div className="flex-none">
-            <div className="flame-logo" aria-hidden />
-          </div>
-          <div>
-            <h1 className="mb-2 font-semibold text-white text-[28px] sm:text-3xl">
-              Đặt lại mật khẩu
-            </h1>
-            <p className="mt-2 text-blue-100/80">
-              Nhập mật khẩu mới của bạn
-            </p>
-          </div>
-        </div>
+    <div className="w-full max-w-md mx-auto">
+      {/* Header */}
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold text-white mb-2">
+          Đặt lại mật khẩu
+        </h1>
+        <p className="text-blue-100 text-sm">
+          Nhập mật khẩu mới của bạn
+        </p>
+      </div>
 
-        <div className="auth-card mx-auto bg-white/6 backdrop-blur-md border border-white/10 rounded-2xl p-8 shadow-xl">
-          <form onSubmit={onSubmit} noValidate className="space-y-5">
+      {/* Form Card */}
+      <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-8 shadow-2xl">
+        <form onSubmit={onSubmit} noValidate className="space-y-6">
           {err && (
-            <div className="text-sm text-red-600 bg-red-100/80 border border-red-300 rounded p-2">
+            <div className="bg-red-500/20 border border-red-400/50 text-red-100 text-sm rounded-lg p-3">
               {err}
             </div>
           )}
 
-          <div className="space-y-2 field-row group">
-            <Label className="text-white">
-              Mã xác nhận <span className="text-red-500">*</span>
+          {/* Token Field */}
+          <div className="space-y-2">
+            <Label className="text-white/90 text-sm font-medium">
+              Mã xác nhận <span className="text-red-400">*</span>
             </Label>
             <Input
               placeholder="Nhập mã xác nhận"
@@ -140,18 +151,19 @@ export default function ResetPasswordForm() {
               onChange={onChange("token")}
               aria-invalid={!!fieldErr.token}
               aria-describedby="token-error"
-              className={`${FIELD_CLASS} ${fieldErr.token ? errorStyle : normalStyle}`}
+              className={inputClass(!!fieldErr.token)}
             />
             {fieldErr.token && (
-              <p id="token-error" className="text-sm text-red-400">
+              <p id="token-error" className="text-sm text-red-300">
                 {fieldErr.token}
               </p>
             )}
           </div>
 
-          <div className="space-y-2 field-row group">
-            <Label className="text-white">
-              Mật khẩu mới <span className="text-red-500">*</span>
+          {/* New Password Field */}
+          <div className="space-y-2">
+            <Label className="text-white/90 text-sm font-medium">
+              Mật khẩu mới <span className="text-red-400">*</span>
             </Label>
             <div className="relative">
               <Input
@@ -162,30 +174,32 @@ export default function ResetPasswordForm() {
                 autoComplete="new-password"
                 aria-invalid={!!fieldErr.newPassword}
                 aria-describedby="password-error"
-                className={`${FIELD_CLASS} ${fieldErr.newPassword ? errorStyle : normalStyle}`}
+                className={`${inputClass(!!fieldErr.newPassword)} pr-12`}
               />
-              <span
+              <button
+                type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute z-30 -translate-y-1/2 cursor-pointer right-4 top-1/2"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
                 aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
               >
                 {showPassword ? (
-                  <EyeIcon className="fill-gray-300 size-5" />
+                  <EyeIcon className="fill-gray-500 size-5" />
                 ) : (
-                  <EyeCloseIcon className="fill-gray-300 size-5" />
+                  <EyeCloseIcon className="fill-gray-500 size-5" />
                 )}
-              </span>
+              </button>
             </div>
             {fieldErr.newPassword && (
-              <p id="password-error" className="text-sm text-red-400">
+              <p id="password-error" className="text-sm text-red-300">
                 {fieldErr.newPassword}
               </p>
             )}
           </div>
 
-          <div className="space-y-2 field-row group">
-            <Label className="text-white">
-              Xác nhận mật khẩu <span className="text-red-500">*</span>
+          {/* Confirm Password Field */}
+          <div className="space-y-2">
+            <Label className="text-white/90 text-sm font-medium">
+              Xác nhận mật khẩu <span className="text-red-400">*</span>
             </Label>
             <div className="relative">
               <Input
@@ -196,61 +210,48 @@ export default function ResetPasswordForm() {
                 autoComplete="new-password"
                 aria-invalid={!!fieldErr.confirmPassword}
                 aria-describedby="confirm-password-error"
-                className={`${FIELD_CLASS} ${fieldErr.confirmPassword ? errorStyle : normalStyle}`}
+                className={`${inputClass(!!fieldErr.confirmPassword)} pr-12`}
               />
-              <span
+              <button
+                type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute z-30 -translate-y-1/2 cursor-pointer right-4 top-1/2"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
                 aria-label={showConfirmPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
               >
                 {showConfirmPassword ? (
-                  <EyeIcon className="fill-gray-300 size-5" />
+                  <EyeIcon className="fill-gray-500 size-5" />
                 ) : (
-                  <EyeCloseIcon className="fill-gray-300 size-5" />
+                  <EyeCloseIcon className="fill-gray-500 size-5" />
                 )}
-              </span>
+              </button>
             </div>
             {fieldErr.confirmPassword && (
-              <p id="confirm-password-error" className="text-sm text-red-400">
+              <p id="confirm-password-error" className="text-sm text-red-300">
                 {fieldErr.confirmPassword}
               </p>
             )}
           </div>
 
-          <div>
-            <Button
-              className="neon-btn w-full py-3 text-base font-semibold rounded-lg disabled:opacity-50"
-              disabled={loading}
-              type="submit"
-            >
-              {loading ? "Đang xử lý..." : "Đặt lại mật khẩu"}
-            </Button>
-          </div>
-          </form>
-
-          {success && (
-            <div className="success-overlay" role="status" aria-live="polite">
-              <div className="success-card">
-                <svg className="checkmark" viewBox="0 0 52 52" aria-hidden>
-                  <circle cx="26" cy="26" r="25" fill="none" />
-                  <path d="M14 27l7 7 17-17" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <div className="mt-3 text-lg font-semibold text-white">Đặt lại mật khẩu thành công!</div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="mt-5 text-center">
-          <button
-            onClick={() => navigate("/signin")}
-            className="text-sm text-blue-200 hover:text-white underline"
+          {/* Submit Button */}
+          <Button
+            className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={loading}
+            type="submit"
           >
-            ← Quay lại đăng nhập
-          </button>
-        </div>
+            {loading ? "Đang xử lý..." : "Đặt lại mật khẩu"}
+          </Button>
+        </form>
+      </div>
+
+      {/* Back to login */}
+      <div className="mt-5 text-center">
+        <button
+          onClick={() => navigate("/signin")}
+          className="text-sm text-blue-300 hover:text-blue-200 transition-colors"
+        >
+          ← Quay lại đăng nhập
+        </button>
       </div>
     </div>
   );
 }
-
