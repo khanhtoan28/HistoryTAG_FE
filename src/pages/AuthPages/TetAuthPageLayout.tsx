@@ -1,6 +1,6 @@
 // TetAuthPageLayout.tsx – Giao diện Tết Bính Ngọ 2026
 // Import vào SignIn.tsx thay cho AuthPageLayout.tsx, hết Tết đổi lại.
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 
 /* ───────────────────── CSS keyframes ───────────────────── */
@@ -78,6 +78,76 @@ const tetStyles = `
 .mini-fw-1 { animation: miniFw1 var(--fw-dur) ease-out var(--fw-delay) infinite; }
 .mini-fw-2 { animation: miniFw2 var(--fw-dur) ease-out var(--fw-delay) infinite; }
 .mini-fw-3 { animation: miniFw3 var(--fw-dur) ease-out var(--fw-delay) infinite; }
+
+/* 🧧 Lì xì rơi */
+@keyframes envelopeFall {
+  0%   { transform: translateY(0) rotate(0deg) scale(0.6); opacity: 0; }
+  3%   { opacity: 1; transform: translateY(2vh) rotate(2deg) scale(1); }
+  25%  { transform: translateY(25vh) rotate(-6deg) scale(1); opacity: 1; }
+  50%  { transform: translateY(50vh) rotate(8deg) scale(1); opacity: 1; }
+  75%  { transform: translateY(75vh) rotate(-4deg) scale(1); opacity: 1; }
+  92%  { opacity: 1; }
+  100% { transform: translateY(100vh) rotate(6deg) scale(0.9); opacity: 0; }
+}
+@keyframes envelopeGlow {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(255, 215, 0, 0.4)); }
+  50%  { filter: drop-shadow(0 0 16px rgba(255, 215, 0, 0.9)); }
+}
+.tet-envelope-track {
+  position: absolute;
+  top: 0;
+  z-index: 100;
+  pointer-events: none;
+  animation: envelopeFall var(--env-dur) ease-in-out var(--env-delay) forwards;
+  will-change: transform, opacity;
+}
+.tet-envelope-btn {
+  cursor: pointer;
+  pointer-events: auto;
+  animation: envelopeGlow 1.5s ease-in-out infinite;
+  transition: transform 0.15s, filter 0.15s;
+  position: relative;
+}
+.tet-envelope-btn:hover { transform: scale(1.2); filter: drop-shadow(0 0 20px rgba(255, 215, 0, 1)) brightness(1.15); }
+.tet-envelope-btn:active { transform: scale(0.9); }
+
+/* 🎁 Prize popup */
+@keyframes prizePopIn {
+  0%   { transform: scale(0) rotate(-10deg); opacity: 0; }
+  50%  { transform: scale(1.1) rotate(2deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+@keyframes prizeShine {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+@keyframes confettiBurst {
+  0%   { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+  60%  { opacity: 1; }
+  100% { transform: translate(var(--dx, 40px), var(--dy, -60px)) rotate(360deg) scale(0.3); opacity: 0; }
+}
+.prize-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+}
+.prize-card {
+  animation: prizePopIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  position: relative;
+}
+.prize-amount {
+  background: linear-gradient(90deg, #FFD700, #FFF8DC, #FFD700, #FFA500, #FFD700);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: prizeShine 2s linear infinite;
+}
+.confetti-piece {
+  position: absolute;
+  width: 8px; height: 8px;
+  border-radius: 2px;
+  animation: confettiBurst 1s ease-out forwards;
+}
 `;
 
 /* ───────────────────── Hoa mai SVG ───────────────────── */
@@ -224,6 +294,213 @@ function MiniFireworks({ count = 8 }: { count?: number }) {
   );
 }
 
+/* ───────────────────── 🧧 Phong bì lì xì SVG ───────────────────── */
+function EnvelopeSVG({ size = 48 }: { size?: number }) {
+  return (
+    <svg width={size} height={size * 1.15} viewBox="0 0 80 92" fill="none">
+      {/* Thân phong bì */}
+      <rect x="4" y="12" width="72" height="76" rx="6" fill="#DC2626" stroke="#B91C1C" strokeWidth="2" />
+      {/* Gradient sáng */}
+      <rect x="4" y="12" width="72" height="76" rx="6" fill="url(#envGrad)" />
+      {/* Nắp phong bì */}
+      <path d="M4 18 C4 14 6 12 10 12 L70 12 C74 12 76 14 76 18 L40 42 Z" fill="#EF4444" stroke="#B91C1C" strokeWidth="1.5" />
+      {/* Viền vàng trang trí */}
+      <rect x="12" y="30" width="56" height="48" rx="4" fill="none" stroke="#FFD700" strokeWidth="1.5" />
+      {/* Chữ 福 */}
+      <text x="40" y="62" textAnchor="middle" fontSize="28" fontWeight="bold" fill="#FFD700" fontFamily="serif" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.3)" }}>福</text>
+      {/* Shine */}
+      <ellipse cx="26" cy="28" rx="8" ry="4" fill="white" opacity="0.15" transform="rotate(-20 26 28)" />
+      <defs>
+        <linearGradient id="envGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#FF6B6B" stopOpacity="0.3" />
+          <stop offset="50%" stopColor="transparent" stopOpacity="0" />
+          <stop offset="100%" stopColor="#991B1B" stopOpacity="0.2" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
+/* ───────────────────── 🎁 Bảng giải thưởng lì xì ───────────────────── */
+type PrizeItem = { label: string; isMoney: boolean; weight: number };
+
+const PRIZE_TABLE: PrizeItem[] = [
+  { label: "Một cái nịt ", isMoney: false, weight: 35 },
+  { label: "Hai cái nịt", isMoney: false, weight: 10 },
+  { label: "Ba cái nịt", isMoney: true, weight: 20 },
+  { label: "Bốn cái nịt", isMoney: true, weight: 14 },
+  { label: "Năm cái nịt", isMoney: true, weight: 9 },
+  { label: "Sáu cái nịt", isMoney: true, weight: 6 },
+  { label: "200,000đ", isMoney: true, weight: 4 },
+  { label: "500,000đ", isMoney: true, weight: 2 },
+];
+
+function pickPrize(): PrizeItem {
+  const total = PRIZE_TABLE.reduce((s, p) => s + p.weight, 0);
+  let rand = Math.random() * total;
+  for (const p of PRIZE_TABLE) {
+    rand -= p.weight;
+    if (rand <= 0) return p;
+  }
+  return PRIZE_TABLE[0];
+}
+
+const CONFETTI_COLORS = ["#FFD700", "#FF6B6B", "#FF69B4", "#44FFFF", "#FFA500", "#7C3AED", "#10B981"];
+
+/* ───────────────────── 🎊 Popup mở lì xì ───────────────────── */
+function PrizePopup({ prize, onClose }: { prize: PrizeItem; onClose: () => void }) {
+  const confetti = Array.from({ length: 20 }, (_, i) => ({
+    id: i,
+    color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+    left: `${20 + Math.random() * 60}%`,
+    top: `${20 + Math.random() * 40}%`,
+    delay: Math.random() * 0.4,
+    angle: Math.random() * 360,
+    dx: (Math.random() - 0.5) * 120,
+    dy: -(30 + Math.random() * 80),
+  }));
+
+  return (
+    <div className="prize-overlay" onClick={onClose}>
+      <div
+        className="prize-card bg-gradient-to-br from-red-700 via-red-600 to-red-800 rounded-3xl p-8 max-w-sm w-[90vw] text-center shadow-2xl border-2 border-yellow-500/60"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Confetti */}
+        {prize.isMoney && confetti.map((c) => (
+          <div
+            key={c.id}
+            className="confetti-piece"
+            style={{
+              left: c.left,
+              top: c.top,
+              backgroundColor: c.color,
+              animationDelay: `${c.delay}s`,
+              transform: `rotate(${c.angle}deg)`,
+              "--dx": `${c.dx}px`,
+              "--dy": `${c.dy}px`,
+            } as React.CSSProperties}
+          />
+        ))}
+
+        {/* Phong bì mở */}
+        <div className="mb-4">
+          <span className="text-6xl">🧧</span>
+        </div>
+
+        <p className="text-yellow-300/80 text-sm font-medium mb-2 tracking-wider">
+          {prize.isMoney ? "🎉 CHÚC MỪNG! BẠN NHẬN ĐƯỢC" : ""}
+        </p>
+
+        <h2 className={`text-3xl font-extrabold mb-4 ${prize.isMoney ? "prize-amount" : "text-yellow-200"}`}>
+          {prize.label}
+        </h2>
+
+        {prize.isMoney && (
+          <p className="text-yellow-100/60 text-xs mb-4">
+            * Giải thưởng mang tính chất vui Tết, chúc bạn năm mới phát tài! 🐴
+          </p>
+        )}
+
+        <button
+          onClick={onClose}
+          className="mt-2 px-8 py-2.5 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-red-900 font-bold rounded-full shadow-lg hover:shadow-xl transition-all text-sm"
+        >
+          {prize.isMoney ? "Nhận lì xì 🎊" : "Đóng ✨"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────── 🧧 Hệ thống lì xì rơi ───────────────────── */
+type FallingEnvelope = {
+  id: number;
+  left: number;     // %
+  duration: number;  // seconds
+  delay: number;     // seconds
+  size: number;
+};
+
+function LuckyEnvelopes() {
+  const [envelopes, setEnvelopes] = useState<FallingEnvelope[]>([]);
+  const [prize, setPrize] = useState<PrizeItem | null>(null);
+  const nextId = useRef(0);
+
+  const spawnEnvelope = useCallback(() => {
+    const env: FallingEnvelope = {
+      id: nextId.current++,
+      left: 8 + Math.random() * 80,
+      duration: 8 + Math.random() * 6, // 8-14s fall
+      delay: 0,
+      size: 40 + Math.random() * 16, // 40-56px
+    };
+    setEnvelopes((prev) => [...prev, env]);
+
+    // Auto-remove after animation
+    setTimeout(() => {
+      setEnvelopes((prev) => prev.filter((e) => e.id !== env.id));
+    }, (env.duration + env.delay) * 1000 + 500);
+  }, []);
+
+  // Spawn envelopes at random intervals
+  useEffect(() => {
+    // Spawn first one very quickly so user sees it
+    const t1 = setTimeout(spawnEnvelope, 1500);
+    // Spawn a second one shortly after
+    const t2 = setTimeout(spawnEnvelope, 4000);
+
+    // Then keep spawning at regular intervals
+    const interval = setInterval(() => {
+      spawnEnvelope();
+    }, 7000 + Math.random() * 5000); // every 7-12s
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearInterval(interval);
+    };
+  }, [spawnEnvelope]);
+
+  const handleClick = (envId: number) => {
+    // Remove the clicked envelope
+    setEnvelopes((prev) => prev.filter((e) => e.id !== envId));
+    // Pick a prize
+    setPrize(pickPrize());
+  };
+
+  return (
+    <>
+      {envelopes.map((env) => (
+        <div
+          key={env.id}
+          className="tet-envelope-track"
+          style={{
+            left: `${env.left}%`,
+            "--env-dur": `${env.duration}s`,
+            "--env-delay": `${env.delay}s`,
+          } as React.CSSProperties}
+        >
+          <div
+            className="tet-envelope-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleClick(env.id);
+            }}
+            role="button"
+            tabIndex={0}
+            title="🧧 Bấm nhận lì xì!"
+          >
+            <EnvelopeSVG size={env.size} />
+          </div>
+        </div>
+      ))}
+
+      {prize && <PrizePopup prize={prize} onClose={() => setPrize(null)} />}
+    </>
+  );
+}
+
 /* ───────────────────── MAIN LAYOUT ───────────────────── */
 export default function TetAuthLayout({ children }: { children: React.ReactNode }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -269,6 +546,8 @@ export default function TetAuthLayout({ children }: { children: React.ReactNode 
               background: "linear-gradient(135deg, #7F1D1D 0%, #991B1B 30%, #B91C1C 60%, #7F1D1D 100%)",
             }}
           >
+            {/* 🧧 Lì xì rơi */}
+            <LuckyEnvelopes />
             {/* 🎆 Pháo hoa mini */}
             <MiniFireworks count={8} />
             {/* Falling mai petals */}
