@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { FiX, FiSave, FiSearch, FiUser, FiCalendar, FiTag, FiAlertTriangle, FiEye } from "react-icons/fi";
 import { searchHospitals } from "../../../api/business.api";
-import { getCustomerCareUserOptions, createCustomerCare, updateCustomerCare, CustomerCareCreateRequestDTO, CustomerCareUpdateRequestDTO, getCustomerTypes, getActiveCareTasksByHospitalId, CustomerCareResponseDTO } from "../../../api/customerCare.api";
+import { getCustomerCareUserOptions, createCustomerCare, updateCustomerCare, changeCustomerCareStatus, CustomerCareCreateRequestDTO, CustomerCareUpdateRequestDTO, getCustomerTypes, getActiveCareTasksByHospitalId, CustomerCareResponseDTO } from "../../../api/customerCare.api";
 
 export interface AddHospitalToCareFormData {
   hospitalId: number | null;
   hospitalName: string;
   careType: string;
+  status?: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
   priority: "HIGH" | "MEDIUM" | "LOW";
   reason: string;
   assignedUserId: number | null;
@@ -50,6 +51,13 @@ const careTypes = [
   { value: "CONTRACT_EXPIRY", label: "Hợp đồng sắp hết hạn" },
 ];
 
+const careStatuses = [
+  { value: "PENDING", label: "Chờ xử lý", color: "text-gray-600", icon: "⏳" },
+  { value: "IN_PROGRESS", label: "Đang xử lý", color: "text-blue-600", icon: "🔄" },
+  { value: "COMPLETED", label: "Hoàn thành", color: "text-green-600", icon: "✅" },
+  { value: "CANCELLED", label: "Hủy bỏ", color: "text-red-600", icon: "❌" },
+];
+
 export default function AddHospitalToCareForm({
   isOpen,
   onClose,
@@ -85,6 +93,7 @@ export default function AddHospitalToCareForm({
         hospitalId: editingData.hospitalId,
         hospitalName: editingData.hospitalName,
         careType: editingData.careType,
+        status: editingData.status,
         priority: editingData.priority,
         reason: editingData.reason,
         assignedUserId: editingData.assignedUserId,
@@ -280,6 +289,11 @@ export default function AddHospitalToCareForm({
           customerType: formData.customerType || undefined,
         };
         await updateCustomerCare(editingData.id, updatePayload);
+
+        // Nếu status thay đổi, gọi API đổi trạng thái
+        if (formData.status && formData.status !== editingData.status) {
+          await changeCustomerCareStatus(editingData.id, formData.status);
+        }
       } else {
         // Create new care
         const createPayload: CustomerCareCreateRequestDTO = {
@@ -468,6 +482,54 @@ export default function AddHospitalToCareForm({
               ))}
             </select>
           </div>
+
+          {/* Trạng thái (chỉ hiển thị khi sửa) */}
+          {editingData && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Trạng thái
+              </label>
+              <div className="flex flex-wrap gap-3">
+                {careStatuses.map((s) => (
+                  <label
+                    key={s.value}
+                    className={`flex items-center gap-2 cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                      formData.status === s.value
+                        ? s.value === "COMPLETED"
+                          ? "border-green-500 bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300 dark:border-green-600"
+                          : s.value === "IN_PROGRESS"
+                          ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-600"
+                          : s.value === "CANCELLED"
+                          ? "border-red-500 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300 dark:border-red-600"
+                          : "border-gray-500 bg-gray-50 text-gray-700 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-500"
+                        : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="status"
+                      value={s.value}
+                      checked={formData.status === s.value}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          status: e.target.value as AddHospitalToCareFormData["status"],
+                        })
+                      }
+                      className="sr-only"
+                    />
+                    <span>{s.icon}</span>
+                    <span>{s.label}</span>
+                  </label>
+                ))}
+              </div>
+              {formData.status === "COMPLETED" && formData.status !== editingData.status && (
+                <p className="mt-2 text-xs text-green-600 dark:text-green-400">
+                  ✓ Case sẽ được đánh dấu hoàn thành và resolved khi lưu.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Ưu tiên */}
           <div>

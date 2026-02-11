@@ -1179,6 +1179,7 @@ export default function HospitalCareList() {
                                     hospitalId: careDetail.hospitalId,
                                     hospitalName: careDetail.hospitalName || hospital.name,
                                     careType: careDetail.careType || "",
+                                    status: (careDetail.status as AddHospitalToCareFormData["status"]) || "PENDING",
                                     priority: (careDetail.priority as "HIGH" | "MEDIUM" | "LOW") || hospital.priority,
                                     reason: careDetail.reason || "",
                                     assignedUserId: careDetail.assignedUser?.id || null,

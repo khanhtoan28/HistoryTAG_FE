@@ -102,6 +102,7 @@ export default function HospitalDetailView({ isOpen, onClose, hospitalId }: Hosp
             hospitalId: careDetail.hospitalId,
             hospitalName: careDetail.hospitalName || `Hospital #${careDetail.hospitalId}`,
             careType: careDetail.careType || "",
+            status: (careDetail.status as AddHospitalToCareFormData["status"]) || "PENDING",
             priority: (careDetail.priority as "HIGH" | "MEDIUM" | "LOW") || "MEDIUM",
             reason: careDetail.reason || "",
             assignedUserId: careDetail.assignedUser?.id || null,

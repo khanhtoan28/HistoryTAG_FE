@@ -7,7 +7,7 @@ import Chart from "react-apexcharts";
 import { ApexOptions } from "apexcharts";
 import { getSummaryReport, type SuperAdminSummaryDTO, HardwareAPI, getAllImplementationTasks, getAllDevTasks, getAllMaintenanceTasks, getAllUsers, UserResponseDTO, ImplementationTaskResponseDTO, DevTaskResponseDTO, MaintenanceTaskResponseDTO } from "../../api/superadmin.api";
 import { getBusinesses } from "../../api/business.api";
-import { getAuthToken } from "../../api/client";
+import api, { getAuthToken } from "../../api/client";
 import toast from "react-hot-toast";
 import Pagination from "../../components/common/Pagination";
 import TetCelebration from "../../components/common/TetCelebration";
@@ -75,6 +75,7 @@ export default function SuperAdminHome() {
     totalCompleted?: number;
     totalLate?: number;
     totalReceived?: number;
+    totalTransferred?: number;
     avgProcessingHours?: number;
   };
   const [reportYear, setReportYear] = useState<number>(new Date().getFullYear());
@@ -85,27 +86,67 @@ export default function SuperAdminHome() {
   const [reportData, setReportData] = useState<EmployeePerf[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
 
-  // load departments list (unique departments from users)
+  // load users ONCE on mount → extract departments, teams, and cache for reuse
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
         const uResp = await getAllUsers({ page: 0, size: 10000 });
-        const uList = Array.isArray(uResp) ? (uResp as any[]) : (uResp as any)?.content ?? [];
+        const uList = Array.isArray(uResp) ? (uResp as UserResponseDTO[]) : (uResp as any)?.content ?? [];
+        if (!mounted) return;
+        // departments (for employee perf filter)
         const deps = Array.from(new Set(uList.map((u: any) => (u?.department ?? null)).filter(Boolean))).sort();
-        if (mounted) setDepartments(deps as string[]);
+        setDepartments(deps as string[]);
+        // teams (for team dropdown)
+        const teams = Array.from(new Set(uList.map((u) => u.team).filter(Boolean))).sort() as string[];
+        setAvailableTeams(teams);
+        // cache for reuse in loadTeamProfile
+        setAllUsersCache(uList as UserResponseDTO[]);
       } catch (err) {
-        // console.warn('Failed to load departments', err);
+        // console.warn('Failed to load users on mount', err);
+        if (mounted) {
+          setAvailableTeams([]);
+          setAllUsersCache([]);
+        }
       }
     })();
     return () => { mounted = false; };
   }, []);
+  // Background: fetch hospital transfer map once on mount (non-blocking, with sessionStorage cache)
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const hResp = await api.get('/api/v1/auth/hospitals', { params: { page: 0, size: 10000 } });
+        const hData = hResp.data;
+        const hList: any[] = Array.isArray(hData) ? hData : hData?.content ?? [];
+        const tMap = new Map<string, { transferred: boolean; transferredAt: string | null }>();
+        hList.forEach((h: any) => {
+          const name = String(h?.name ?? '').trim();
+          if (name) tMap.set(name, {
+            transferred: Boolean(h?.transferredToMaintenance),
+            transferredAt: h?.transferredAt ?? null,
+          });
+        });
+        if (mounted) {
+          setHospitalTransferMap(tMap);
+          // Persist to sessionStorage for instant load next time
+          try { sessionStorage.setItem('hospitalTransferMap', JSON.stringify(Array.from(tMap.entries()))); } catch { /* ignore */ }
+        }
+      } catch (err) {
+        console.warn('Background hospital transfer map load failed', err);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
   // Team profile states (changed from hospital to team)
   const [selectedTeam, setSelectedTeam] = useState<string>('');
   const [availableTeams, setAvailableTeams] = useState<string[]>([]);
   const [profileLoading, setProfileLoading] = useState(false);
   const [hasLoadedProfile, setHasLoadedProfile] = useState(false);
   const [profileUsers, setProfileUsers] = useState<UserResponseDTO[]>([]);
+  const [allUsersCache, setAllUsersCache] = useState<UserResponseDTO[]>([]);
   const [profileImplTasks, setProfileImplTasks] = useState<ImplementationTaskResponseDTO[]>([]);
   const [profileDevTasks, setProfileDevTasks] = useState<DevTaskResponseDTO[]>([]);
   const [profileMaintTasks, setProfileMaintTasks] = useState<MaintenanceTaskResponseDTO[]>([]);
@@ -127,6 +168,38 @@ export default function SuperAdminHome() {
   // Profile status filter (for "Báo cáo chi tiết theo từng viện")
   const [profileStatusFilter, setProfileStatusFilter] = useState<string>('all');
   const [profilePicFilter, setProfilePicFilter] = useState<string>('all');
+  const [profileTransferFilter, setProfileTransferFilter] = useState<string>('all');
+  // Map: hospitalName → { transferred, transferredAt } (from Hospital entity, fetched lazily on mount)
+  const [hospitalTransferMap, setHospitalTransferMap] = useState<Map<string, { transferred: boolean; transferredAt: string | null }>>(() => {
+    // Restore from sessionStorage for instant display
+    try {
+      const cached = sessionStorage.getItem('hospitalTransferMap');
+      if (cached) {
+        const parsed = JSON.parse(cached) as [string, { transferred: boolean; transferredAt: string | null }][];
+        return new Map(parsed);
+      }
+    } catch { /* ignore */ }
+    return new Map();
+  });
+  // Helper: check if a hospital is transferred to maintenance as of a given end date
+  const isHospitalTransferred = useCallback((hName: string, endDate?: string | null): boolean => {
+    const entry = hospitalTransferMap.get(hName);
+    if (!entry) return false;
+    if (!entry.transferred) return false;
+    // If no endDate filter, just return current transferred status
+    if (!endDate) return true;
+    // If hospital has no transferredAt recorded (legacy), assume transferred
+    if (!entry.transferredAt) return true;
+    // Check: transferredAt <= endDate
+    const transferDate = new Date(entry.transferredAt);
+    const filterEnd = new Date(endDate);
+    if (Number.isNaN(transferDate.getTime())) return true;
+    if (Number.isNaN(filterEnd.getTime())) return true;
+    // Set filterEnd to end of day for fair comparison
+    filterEnd.setHours(23, 59, 59, 999);
+    return transferDate <= filterEnd;
+  }, [hospitalTransferMap]);
+
   const normalizedSelectedTeam = selectedTeam.trim().toUpperCase();
   const isSalesSelected = normalizedSelectedTeam === 'SALES' || normalizedSelectedTeam === 'KINH DOANH';
   
@@ -167,6 +240,7 @@ export default function SuperAdminHome() {
     setProfileDateTo('');
     setProfileStatusFilter('all');
     setProfilePicFilter('all');
+    setProfileTransferFilter('all');
     setDetailCurrentPage(0);
   }, []);
   useEffect(() => {
@@ -289,9 +363,10 @@ export default function SuperAdminHome() {
     }
   }, []);
 
-  // load on mount
+  // load on mount (deferred by 2s to reduce initial connection contention)
   useEffect(() => {
-    void loadBusinessReport();
+    const timer = setTimeout(() => { void loadBusinessReport(); }, 2000);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -525,24 +600,22 @@ export default function SuperAdminHome() {
     }
   }, [hwGroupBy, hwTopN]);
 
-  useEffect(() => { void loadHardwareReport(); }, [hwGroupBy, hwTopN]);
+  // Defer hardware report: mount-time load delayed by 4s to free up browser connections for more critical data.
+  // Subsequent changes to groupBy/topN trigger immediately.
+  const hwMountedRef = useRef(false);
+  useEffect(() => {
+    if (!hwMountedRef.current) {
+      // First mount: delay to avoid hogging browser connection pool (max 6 per domain)
+      hwMountedRef.current = true;
+      const timer = setTimeout(() => { void loadHardwareReport(); }, 4000);
+      return () => clearTimeout(timer);
+    }
+    // Subsequent changes: load immediately
+    void loadHardwareReport();
+  }, [hwGroupBy, hwTopN]);
 
   // Load available teams
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const uResp = await getAllUsers({ page: 0, size: 10000 });
-        const uList = Array.isArray(uResp) ? (uResp as UserResponseDTO[]) : (uResp as any)?.content ?? [];
-        const teams = Array.from(new Set(uList.map((u) => u.team).filter(Boolean))).sort() as string[];
-        if (mounted) setAvailableTeams(teams);
-      } catch (err) {
-        // console.warn('Failed to load teams', err);
-        if (mounted) setAvailableTeams([]);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
+  // ← getAllUsers mount effect MERGED into the single effect above (line ~89) to avoid duplicate API call
 
   useEffect(() => {
     // Reset filters when switching teams to avoid showing stale data
@@ -635,21 +708,26 @@ export default function SuperAdminHome() {
       };
 
       try {
-        const uResp = await getAllUsers({ page: 0, size: 10000 });
-        const uList = Array.isArray(uResp) ? (uResp as UserResponseDTO[]) : (uResp as any)?.content ?? [];
-        allUsers = uList as UserResponseDTO[];
-        const teamUsers = (allUsers as UserResponseDTO[]).filter((u) => {
+        // Reuse cached users loaded for team dropdown to avoid refetching 10k users on every click.
+        if (allUsersCache.length > 0) {
+          allUsers = allUsersCache;
+        } else {
+          const uResp = await getAllUsers({ page: 0, size: 10000 });
+          const uList = Array.isArray(uResp) ? (uResp as UserResponseDTO[]) : (uResp as any)?.content ?? [];
+          allUsers = uList as UserResponseDTO[];
+          setAllUsersCache(allUsers);
+        }
+
+        const teamUsers = allUsers.filter((u) => {
           const userTeam = (u.team ?? '').toString().toUpperCase();
           return userTeam === normalizedTeam;
         });
         const extraUsers: UserResponseDTO[] = [];
         if (needsITSupport) {
-          extraUsers.push(
-            ...(allUsers as UserResponseDTO[]).filter((u) => isITDepartmentUser(u) || isSuperAdminUser(u))
-          );
+          extraUsers.push(...allUsers.filter((u) => isITDepartmentUser(u) || isSuperAdminUser(u)));
         }
         if (isSalesLikeTeam) {
-          extraUsers.push(...(allUsers as UserResponseDTO[]).filter((u) => isSuperAdminUser(u)));
+          extraUsers.push(...allUsers.filter((u) => isSuperAdminUser(u)));
         }
         const userMap = new Map<number | string, UserResponseDTO>();
         [...teamUsers, ...extraUsers].forEach((u) => {
@@ -711,16 +789,16 @@ export default function SuperAdminHome() {
         return candidateIds.some((id) => teamUserIdsSet.has(id));
       };
 
-      // tasks - use server-side filtering
+      // tasks - use server-side filtering (including team filter to reduce N+1 backend overhead)
       const filterParams: any = {
         page: 0,
         size: 10000, // Load all filtered results
         sortBy: 'startDate',
-        sortDir: 'desc'
+        sortDir: 'desc',
+        team: team, // ← KEY OPTIMIZATION: let backend filter by team → much fewer records → much fewer N+1 queries
       };
       // Add date range filter if set (convert to ISO format for backend)
       if (profileDateFrom) {
-        // Convert date input (YYYY-MM-DD) to ISO datetime (YYYY-MM-DDTHH:mm:ss)
         filterParams.startDateFrom = `${profileDateFrom}T00:00:00`;
       }
       if (profileDateTo) {
@@ -735,36 +813,77 @@ export default function SuperAdminHome() {
       if (profileStatusFilter && profileStatusFilter !== 'all') {
         filterParams.status = profileStatusFilter;
       }
-      
-      if (!isSalesLikeTeam) {
-        try {
-          const impl = await getAllImplementationTasks(filterParams);
-          const implList = Array.isArray(impl) ? (impl as ImplementationTaskResponseDTO[]) : (impl as any)?.content ?? [];
-          const filteredImpl = (implList as ImplementationTaskResponseDTO[]).filter((t) => taskMatchesTeam(t as any));
-          setProfileImplTasks(filteredImpl);
-        } catch (err) { console.warn('impl load', err); setProfileImplTasks([]); }
-        try {
-          const dev = await getAllDevTasks({ page: 0, size: 10000 });
-          const devList = Array.isArray(dev) ? (dev as DevTaskResponseDTO[]) : (dev as any)?.content ?? [];
-          const filtered = (devList as DevTaskResponseDTO[]).filter((t) => taskMatchesTeam(t as any));
-          setProfileDevTasks(filtered);
-        } catch (err) { console.warn('dev load', err); setProfileDevTasks([]); }
-        try {
-          const m = await getAllMaintenanceTasks({ page: 0, size: 10000 });
-          const mList = Array.isArray(m) ? (m as MaintenanceTaskResponseDTO[]) : (m as any)?.content ?? [];
-          const filtered = (mList as MaintenanceTaskResponseDTO[]).filter((t) => taskMatchesTeam(t as any));
-          setProfileMaintTasks(filtered);
-        } catch (err) { console.warn('maint load', err); setProfileMaintTasks([]); }
+
+      // ═══ Run ALL remaining API calls in PARALLEL for speed ═══
+      const parallelPromises: Promise<any>[] = [];
+      const isDevOnlyTeam = normalizedTeam.includes('DEV') || normalizedTeam.includes('PHÁT TRIỂN') || normalizedTeam.includes('PHATTRIEN');
+      const isMaintOnlyTeam = normalizedTeam.includes('MAINT') || normalizedTeam.includes('BẢO TRÌ') || normalizedTeam.includes('BAOTRI');
+      const isImplOnlyTeam = normalizedTeam.includes('DEPLOY') || normalizedTeam.includes('TRIỂN KHAI') || normalizedTeam.includes('TRIENKHAI');
+      const isStrictSingleTeam = isDevOnlyTeam || isMaintOnlyTeam || isImplOnlyTeam;
+
+      // Promise 0: Implementation tasks
+      const implPromise = !isSalesLikeTeam && (!isStrictSingleTeam || isImplOnlyTeam)
+        ? getAllImplementationTasks(filterParams).catch((err: any) => { console.warn('impl load', err); return null; })
+        : Promise.resolve(null);
+      parallelPromises.push(implPromise);
+
+      // Promise 1: Dev tasks
+      const devPromise = !isSalesLikeTeam && (!isStrictSingleTeam || isDevOnlyTeam)
+        ? getAllDevTasks({ page: 0, size: 10000 }).catch((err: any) => { console.warn('dev load', err); return null; })
+        : Promise.resolve(null);
+      parallelPromises.push(devPromise);
+
+      // Promise 2: Maintenance tasks
+      const maintPromise = !isSalesLikeTeam && (!isStrictSingleTeam || isMaintOnlyTeam)
+        ? getAllMaintenanceTasks({ page: 0, size: 10000 }).catch((err: any) => { console.warn('maint load', err); return null; })
+        : Promise.resolve(null);
+      parallelPromises.push(maintPromise);
+
+      // Promise 3: Businesses
+      const bizPromise = isSalesLikeTeam
+        ? getBusinesses({ page: 0, size: 10000 } as any).catch((err: any) => { console.warn('business load', err); return null; })
+        : Promise.resolve(null);
+      parallelPromises.push(bizPromise);
+
+      // Promise 4: Hardware
+      const hwPromise = HardwareAPI.getAllHardware({ size: 10000 } as any).catch((err: any) => { console.warn('hardware load', err); return null; });
+      parallelPromises.push(hwPromise);
+
+      // Hospital transfer map is now pre-fetched on mount (background effect) → no need to fetch here
+
+      // Await all in parallel
+      const [implResult, devResult, maintResult, bizResult, hwResult] = await Promise.all(parallelPromises);
+
+      // Process implementation tasks
+      if (!isSalesLikeTeam && implResult != null) {
+        const implList = Array.isArray(implResult) ? (implResult as ImplementationTaskResponseDTO[]) : (implResult as any)?.content ?? [];
+        const filteredImpl = (implList as ImplementationTaskResponseDTO[]).filter((t) => taskMatchesTeam(t as any));
+        setProfileImplTasks(filteredImpl);
       } else {
         setProfileImplTasks([]);
+      }
+
+      // Process dev tasks
+      if (!isSalesLikeTeam && devResult != null) {
+        const devList = Array.isArray(devResult) ? (devResult as DevTaskResponseDTO[]) : (devResult as any)?.content ?? [];
+        const filtered = (devList as DevTaskResponseDTO[]).filter((t) => taskMatchesTeam(t as any));
+        setProfileDevTasks(filtered);
+      } else {
         setProfileDevTasks([]);
+      }
+
+      // Process maintenance tasks
+      if (!isSalesLikeTeam && maintResult != null) {
+        const mList = Array.isArray(maintResult) ? (maintResult as MaintenanceTaskResponseDTO[]) : (maintResult as any)?.content ?? [];
+        const filtered = (mList as MaintenanceTaskResponseDTO[]).filter((t) => taskMatchesTeam(t as any));
+        setProfileMaintTasks(filtered);
+      } else {
         setProfileMaintTasks([]);
       }
 
-      // businesses - filter by team users
-      try {
-        const b = await getBusinesses({ page: 0, size: 10000 } as any);
-        const bList = Array.isArray(b) ? (b as Array<Record<string, unknown>>) : (b as any)?.content ?? [];
+      // Process businesses
+      if (bizResult != null) {
+        const bList = Array.isArray(bizResult) ? (bizResult as Array<Record<string, unknown>>) : (bizResult as any)?.content ?? [];
         const filteredBusinesses = isSalesLikeTeam
           ? bList
           : bList.filter((item) => {
@@ -808,19 +927,21 @@ export default function SuperAdminHome() {
             return Array.from(map.values());
           });
         }
-      } catch (err) { console.warn('business load', err); setProfileBusinesses([]); }
+      } else {
+        setProfileBusinesses([]);
+      }
 
-      // preload hardware map so we can display names instead of ids
-      try {
-        const hwResp = await HardwareAPI.getAllHardware({ size: 10000 } as any);
-        const hwList = Array.isArray(hwResp) ? (hwResp as any[]) : (hwResp as any)?.content ?? [];
+      // Process hardware
+      if (hwResult != null) {
+        const hwList = Array.isArray(hwResult) ? (hwResult as any[]) : (hwResult as any)?.content ?? [];
         const map: Record<string, string> = {};
         hwList.forEach((h: any) => { map[String(h.id)] = (h.name ?? h.hardwareName ?? h.label ?? String(h.id)); });
         setHardwareMap(map);
-      } catch (err) {
-        // console.warn('hardware map load failed', err);
+      } else {
         setHardwareMap({});
       }
+
+      // Hospital transfer map is pre-fetched on mount (background) → already in state
 
     } catch (err) {
       console.error('loadTeamProfile failed', err);
@@ -840,6 +961,14 @@ export default function SuperAdminHome() {
     if (teamUpper === 'SALES' || teamUpper.includes('KINH DOANH') || teamUpper.includes('KINHDOANH')) return 'Kinh doanh';
     if (teamUpper === 'CUSTOMER_SERVICE' || teamUpper.includes('CHĂM SÓC KHÁCH HÀNG') || teamUpper.includes('CHAMSOCKHACHHANG')) return 'CSKH';
     return team; // Return original if no match
+  };
+
+  const translateDepartment = (dept: string): string => {
+    const d = dept.toUpperCase();
+    if (d === 'IT') return 'IT';
+    if (d === 'ACCOUNTING') return 'Kế toán';
+    if (d === 'BUSINESS') return 'Kinh doanh';
+    return dept;
   };
 
     const translateStatus = (s?: string | null): string => {
@@ -1373,6 +1502,27 @@ export default function SuperAdminHome() {
         return dateB - dateA;
       })
     }));
+
+    // Compute effective end date for transfer filter (date range > quarter/year > no filter)
+    let transferFilterEndDate: string | null = null;
+    if (profileDateTo) {
+      transferFilterEndDate = profileDateTo;
+    } else if (profileYear) {
+      const qEnd: Record<string, string> = { Q1: '-03-31', Q2: '-06-30', Q3: '-09-30', Q4: '-12-31' };
+      transferFilterEndDate = profileQuarter !== 'all' && qEnd[profileQuarter]
+        ? `${profileYear}${qEnd[profileQuarter]}`
+        : `${profileYear}-12-31`;
+    }
+
+    // Apply transfer-to-maintenance filter at hospital group level
+    const transferFiltered = profileTransferFilter === 'all' ? sortedGroups : sortedGroups.filter(group => {
+      const hName = group.hospitalName;
+      // Check hospital-level flag (with date awareness), fallback to task-level
+      const isTransferred = hospitalTransferMap.has(hName)
+        ? isHospitalTransferred(hName, transferFilterEndDate)
+        : group.tasks.some(t => Boolean((t as any).transferredToMaintenance));
+      return profileTransferFilter === 'transferred' ? isTransferred : !isTransferred;
+    });
     
     // Apply pagination by hospital groups - ensure no group is split across pages
     // Count tasks across all groups to determine pagination
@@ -1386,7 +1536,7 @@ export default function SuperAdminHome() {
     };
     const paginatedGroups: GroupedTask[] = [];
     
-    for (const group of sortedGroups) {
+    for (const group of transferFiltered) {
       const groupStartIndex = currentTaskIndex;
       const groupEndIndex = currentTaskIndex + group.tasks.length;
       
@@ -1432,7 +1582,7 @@ export default function SuperAdminHome() {
     }
     
     return paginatedGroups;
-  }, [profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, profileDateFrom, profileDateTo, implStatusFilter, devStatusFilter, maintStatusFilter, profileStatusFilter, detailCurrentPage, detailItemsPerPage, profilePicFilter, profileUsers, isSalesSelected, displayedBusinesses, salesFilteredBusinesses, normalizedSelectedTeam]);
+  }, [profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, profileDateFrom, profileDateTo, implStatusFilter, devStatusFilter, maintStatusFilter, profileStatusFilter, detailCurrentPage, detailItemsPerPage, profilePicFilter, profileUsers, isSalesSelected, displayedBusinesses, salesFilteredBusinesses, normalizedSelectedTeam, profileTransferFilter, hospitalTransferMap, isHospitalTransferred]);
 
   // Calculate total items BEFORE pagination (same logic as tasksByHospital but without pagination)
   const detailTotalItemsComputed = useMemo(() => {
@@ -1544,10 +1694,40 @@ export default function SuperAdminHome() {
           ...maintTasksPicFiltered.map(t => ({ ...t, type: 'Bảo trì' as const, hospitalName: (t as any).hospitalName, startDate: (t as any).startDate ?? (t as any).receivedDate ?? (t as any).createdDate, completionDate: (t as any).completionDate ?? (t as any).endDate, status: (t as any).status, name: t.name, picName: (t as any).picDeploymentName ?? (t as any).picName ?? '—' }))
         );
       }
+
+      // Apply transfer-to-maintenance filter (with date awareness)
+      if (profileTransferFilter !== 'all') {
+        // Compute effective end date for transfer filter
+        let tEndDate: string | null = null;
+        if (profileDateTo) {
+          tEndDate = profileDateTo;
+        } else if (profileYear) {
+          const qEnd: Record<string, string> = { Q1: '-03-31', Q2: '-06-30', Q3: '-09-30', Q4: '-12-31' };
+          tEndDate = profileQuarter !== 'all' && qEnd[profileQuarter]
+            ? `${profileYear}${qEnd[profileQuarter]}`
+            : `${profileYear}-12-31`;
+        }
+        const localTransferMap = new Map<string, boolean>();
+        allTasks.forEach(task => {
+          const hName = task.hospitalName || 'Không xác định';
+          if (!localTransferMap.has(hName)) {
+            const fromEntity = hospitalTransferMap.has(hName) ? isHospitalTransferred(hName, tEndDate) : null;
+            localTransferMap.set(hName, fromEntity ?? Boolean((task as any).transferredToMaintenance));
+          } else if (Boolean((task as any).transferredToMaintenance) && !localTransferMap.get(hName)) {
+            if (!hospitalTransferMap.has(hName)) localTransferMap.set(hName, true);
+          }
+        });
+        const wantTransferred = profileTransferFilter === 'transferred';
+        const filtered = allTasks.filter(task => {
+          const hName = task.hospitalName || 'Không xác định';
+          return (localTransferMap.get(hName) ?? false) === wantTransferred;
+        });
+        return filtered.length;
+      }
       
       return allTasks.length;
     }
-  }, [isSalesSelected, salesFilteredBusinesses, profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, profileDateFrom, profileDateTo, implStatusFilter, devStatusFilter, maintStatusFilter, profileStatusFilter, profilePicFilter, profileUsers, normalizedSelectedTeam]);
+  }, [isSalesSelected, salesFilteredBusinesses, profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, profileDateFrom, profileDateTo, implStatusFilter, devStatusFilter, maintStatusFilter, profileStatusFilter, profilePicFilter, profileUsers, normalizedSelectedTeam, profileTransferFilter, hospitalTransferMap, isHospitalTransferred]);
 
   // All tasks by hospital (without pagination) - used for Excel export
   // Same filtering logic as tasksByHospital but returns all groups without pagination
@@ -1670,7 +1850,7 @@ export default function SuperAdminHome() {
       grouped.get(hospitalName)!.push(task);
     });
 
-    return Array.from(grouped.entries()).map(([hospitalName, tasks]) => ({
+    const sortedGroups = Array.from(grouped.entries()).map(([hospitalName, tasks]) => ({
       hospitalName,
       tasks: tasks.sort((a, b) => {
         const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
@@ -1678,7 +1858,28 @@ export default function SuperAdminHome() {
         return dateB - dateA;
       })
     }));
-  }, [profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, profileDateFrom, profileDateTo, implStatusFilter, devStatusFilter, maintStatusFilter, profileStatusFilter, profilePicFilter, profileUsers, isSalesSelected, normalizedSelectedTeam]);
+
+    // Apply transfer-to-maintenance filter at hospital group level (with date awareness)
+    if (profileTransferFilter !== 'all') {
+      let tEndDate: string | null = null;
+      if (profileDateTo) {
+        tEndDate = profileDateTo;
+      } else if (profileYear) {
+        const qEnd: Record<string, string> = { Q1: '-03-31', Q2: '-06-30', Q3: '-09-30', Q4: '-12-31' };
+        tEndDate = profileQuarter !== 'all' && qEnd[profileQuarter]
+          ? `${profileYear}${qEnd[profileQuarter]}`
+          : `${profileYear}-12-31`;
+      }
+      return sortedGroups.filter(group => {
+        const hName = group.hospitalName;
+        const isTransferred = hospitalTransferMap.has(hName)
+          ? isHospitalTransferred(hName, tEndDate)
+          : group.tasks.some(t => Boolean((t as any).transferredToMaintenance));
+        return profileTransferFilter === 'transferred' ? isTransferred : !isTransferred;
+      });
+    }
+    return sortedGroups;
+  }, [profileImplTasks, profileDevTasks, profileMaintTasks, profileQuarter, profileYear, profileDateFrom, profileDateTo, implStatusFilter, devStatusFilter, maintStatusFilter, profileStatusFilter, profilePicFilter, profileUsers, isSalesSelected, normalizedSelectedTeam, profileTransferFilter, hospitalTransferMap, isHospitalTransferred]);
 
   // Update pagination totals when computed value changes
   useEffect(() => {
@@ -2457,6 +2658,7 @@ export default function SuperAdminHome() {
                         <th className="px-2 py-1 text-center">Hoàn thành</th>
                         <th className="px-2 py-1 text-center">Quá hạn</th>
                         <th className="px-2 py-1 text-center">Đã tiếp nhận</th>
+                        <th className="px-2 py-1 text-center">Viện nghiệm thu</th>
                         <th className="px-2 py-1 text-center">TB xử lý (h)</th>
                       </tr>
                     </thead>
@@ -2465,13 +2667,14 @@ export default function SuperAdminHome() {
                         <tr key={`${r.userId ?? idx}`} className={`border-t odd:bg-white even:bg-gray-50 hover:bg-gray-100`}>
                           <td className="px-2 py-2 align-middle text-center">{r.userId ?? '—'}</td>
                           <td className="px-2 py-2 align-middle text-center">{r.fullName ?? '—'}</td>
-                          <td className="px-2 py-2 align-middle text-center">{r.team ?? '—'}</td>
-                          <td className="px-2 py-2 align-middle text-center">{r.department ?? '—'}</td>
+                          <td className="px-2 py-2 align-middle text-center">{r.team ? translateTeamName(r.team) : '—'}</td>
+                          <td className="px-2 py-2 align-middle text-center">{r.department ? translateDepartment(r.department) : '—'}</td>
                           <td className="px-2 py-2 align-middle text-center">{r.totalAssigned ?? 0}</td>
                           <td className="px-2 py-2 align-middle text-center">{r.totalInProgress ?? 0}</td>
                           <td className="px-2 py-2 align-middle text-center">{r.totalCompleted ?? 0}</td>
                           <td className="px-2 py-2 align-middle text-center">{r.totalLate ?? 0}</td>
                           <td className="px-2 py-2 align-middle text-center">{r.totalReceived ?? 0}</td>
+                          <td className="px-2 py-2 align-middle text-center">{r.totalTransferred ?? 0}</td>
                           <td className="px-2 py-2 align-middle text-center">{r.avgProcessingHours != null ? (Math.round(r.avgProcessingHours * 100) / 100) : '—'}</td>
                         </tr>
                       ))}
@@ -2714,6 +2917,18 @@ export default function SuperAdminHome() {
                         ))}
                     </select>
                 </div>
+                <div className="flex-shrink-0">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tình trạng</label>
+                  <select
+                    value={profileTransferFilter}
+                    onChange={(e) => { setProfileTransferFilter(e.target.value); setDetailCurrentPage(0); }}
+                    className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white w-48 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="all">Tất cả</option>
+                    <option value="transferred">Nghiệm thu</option>
+                    <option value="not_transferred">Chưa nghiệm thu</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -2925,7 +3140,7 @@ export default function SuperAdminHome() {
                   <div className="mb-6 mt-4 rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-sm font-medium text-gray-700">Tổng quan công việc theo bệnh viện</h3>
-                      <div className="text-xs text-gray-500">Tổng: {detailTotalItems} công việc</div>
+                      <div className="text-xs text-gray-500">Tổng: {detailTotalItems} công việc / {allTasksByHospital.length} viện</div>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="min-w-full text-sm table-fixed">
@@ -2993,7 +3208,7 @@ export default function SuperAdminHome() {
                                 <tr className="bg-gray-100 hover:bg-gray-200 cursor-pointer" onClick={toggleCollapse}>
                                   <td colSpan={7} className="px-3 py-2">
                                     <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2">
+                                      <div className="flex items-center gap-2 flex-wrap">
                                         <span className="text-sm font-semibold text-gray-900">
                                           <svg className={`w-4 h-4 inline-block mr-2 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -3001,6 +3216,17 @@ export default function SuperAdminHome() {
                                           {group.hospitalName}
                                         </span>
                                         <span className="text-xs text-gray-500">Tổng: {group.tasks.length} công việc</span>
+                                        {(() => {
+                                          const entry = hospitalTransferMap.get(group.hospitalName);
+                                          if (!entry?.transferred) return null;
+                                          const at = entry.transferredAt;
+                                          const dateStr = at ? new Date(at).toLocaleDateString('vi-VN') : null;
+                                          return (
+                                            <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                                               Nghiệm thu{dateStr ? ` ${dateStr}` : ''}
+                                            </span>
+                                          );
+                                        })()}
                                       </div>
                                     </div>
                                   </td>
