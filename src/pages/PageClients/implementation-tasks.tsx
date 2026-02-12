@@ -414,6 +414,10 @@ function RemoteSelect({
             if (!open) setOpen(true);
           }}
           onFocus={() => setOpen(true)}
+          onBlur={() => {
+            // Delay nhỏ để onMouseDown trên option kịp fire trước khi đóng
+            setTimeout(() => setOpen(false), 150);
+          }}
           onKeyDown={(e) => {
             if (!open) return;
             if (e.key === "ArrowDown") {
@@ -851,12 +855,16 @@ function TaskFormModal({
               />
 
               <div className="col-span-2">
-                <Field label="Người phụ trách (PIC)" required>
+                {/* Dùng <div> thay vì <Field> (<label>) để tránh label forward click vào nút ✕ */}
+                <div className="grid gap-1">
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    Người phụ trách (PIC) <span className="text-red-500">*</span>
+                  </span>
                   <div className="flex flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                       {picOpts.map((pic, index) => (
                         <div key={pic._uid} className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs border ${index === 0
-                          ? "bg-blue-100 border-blue-200 text-blue-800 font-bold" // Người chính màu xanh
+                          ? "bg-blue-100 border-blue-200 text-blue-800 font-bold"
                           : "bg-gray-50 dark:bg-gray-800 border-gray-200 text-gray-700"
                           }`}>
 
@@ -885,7 +893,6 @@ function TaskFormModal({
                         excludeIds={picOpts.map(p => p.id)}
                         onChange={(selected) => {
                           if (selected) {
-                            // Kiểm tra xem PIC đã được chọn chưa
                             const alreadySelected = picOpts.some(p => p.id === selected.id);
                             if (!alreadySelected) {
                               const newPic = { ...selected, _uid: `pic-${Date.now()}-${selected.id}-${Math.random().toString(36).substring(2, 9)}` };
@@ -903,7 +910,7 @@ function TaskFormModal({
                       />
                     </div>
                   </div>
-                </Field>
+                </div>
               </div>
 
               {/* Removed fields: quantity, agency, HIS, hardware, API URL, BHYT */}
