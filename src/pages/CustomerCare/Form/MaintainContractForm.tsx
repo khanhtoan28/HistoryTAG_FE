@@ -59,7 +59,7 @@ export type WarrantyContractForm = {
   startDate?: string | null;
   endDate?: string | null;
   kioskQuantity?: number | "";
-  paymentStatus: "CHUA_THANH_TOAN" | "DA_THANH_TOAN";
+  paymentStatus: "CHUA_THANH_TOAN" | "DA_THANH_TOAN" | "THANH_TOAN_HET";
   paidAmount?: number | "";
 };
 
@@ -866,13 +866,28 @@ export default function MaintainContractForm({
                     className="w-full rounded-xl border-2 border-gray-300 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50"
                     value={form.paymentStatus || "CHUA_THANH_TOAN"}
                     onChange={(e) => {
-                      const next = (e.target.value || "CHUA_THANH_TOAN") as "CHUA_THANH_TOAN" | "DA_THANH_TOAN";
-                      setForm((s) => ({
-                        ...s,
-                        paymentStatus: next,
-                        paidAmount: next === "DA_THANH_TOAN" ? s.paidAmount : "",
-                      }));
-                      if (next !== "DA_THANH_TOAN") {
+                      const next = (e.target.value || "CHUA_THANH_TOAN") as "CHUA_THANH_TOAN" | "DA_THANH_TOAN" | "THANH_TOAN_HET";
+                      if (next === "THANH_TOAN_HET") {
+                        // Thanh toán hết → tự gán paidAmount = totalPrice
+                        const total = typeof form.totalPrice === "number" ? form.totalPrice : 0;
+                        setForm((s) => ({
+                          ...s,
+                          paymentStatus: next,
+                          paidAmount: total > 0 ? total : "",
+                        }));
+                        setPaidAmountDisplay(total > 0 ? formatNumber(total) : "");
+                      } else if (next === "DA_THANH_TOAN") {
+                        setForm((s) => ({
+                          ...s,
+                          paymentStatus: next,
+                          paidAmount: s.paidAmount,
+                        }));
+                      } else {
+                        setForm((s) => ({
+                          ...s,
+                          paymentStatus: next,
+                          paidAmount: "",
+                        }));
                         setPaidAmountDisplay("");
                       }
                     }}
@@ -880,27 +895,31 @@ export default function MaintainContractForm({
                   >
                     <option value="CHUA_THANH_TOAN">Chưa thanh toán</option>
                     <option value="DA_THANH_TOAN">Đã thanh toán</option>
+                    <option value="THANH_TOAN_HET">Thanh toán hết</option>
                   </select>
                 </div>
 
-                {((form.paymentStatus || "CHUA_THANH_TOAN") === "DA_THANH_TOAN") && (
+                {((form.paymentStatus || "CHUA_THANH_TOAN") === "DA_THANH_TOAN" || form.paymentStatus === "THANH_TOAN_HET") && (
                   <div>
                     <label className="mb-2 block text-sm font-semibold text-gray-700">
-                      Số tiền thanh toán*
+                      {form.paymentStatus === "THANH_TOAN_HET" ? "Số tiền thanh toán (= Tổng tiền HĐ)" : "Số tiền thanh toán*"}
                     </label>
                     <input
-                      required
+                      required={form.paymentStatus === "DA_THANH_TOAN"}
                       type="text"
                       className={`w-full rounded-xl border-2 px-5 py-3 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-gray-50 ${
-                        paidAmountError ? "border-red-500" : "border-gray-300"
+                        paidAmountError ? "border-red-500" : form.paymentStatus === "THANH_TOAN_HET" ? "border-green-400 bg-green-50" : "border-gray-300"
                       }`}
                       value={paidAmountDisplay ?? (form.paidAmount ? formatNumber(form.paidAmount as any) : '')}
                       onChange={(e) => handlePaidAmountChange(e.target.value)}
                       onBlur={handlePaidAmountBlur}
                       onFocus={handlePaidAmountFocus}
                       placeholder="Nhập số tiền đã thanh toán..."
+                      disabled={form.paymentStatus === "THANH_TOAN_HET" || isViewing || !canEdit}
                     />
-                    {paidAmountError ? (
+                    {form.paymentStatus === "THANH_TOAN_HET" ? (
+                      <p className="mt-1 text-xs text-green-600"></p>
+                    ) : paidAmountError ? (
                       <p className="mt-1 text-xs text-red-500">{paidAmountError}</p>
                     ) : (
                       <p className="mt-1 text-xs text-gray-500">Ví dụ: 1.000.000</p>

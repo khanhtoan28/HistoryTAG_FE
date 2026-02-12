@@ -436,7 +436,7 @@ export default function HospitalDetailView() {
             daysLeft: c.daysLeft || undefined,
             kioskQuantity: c.kioskQuantity || null,
             paidAmount: typeof c.paidAmount === 'number' ? c.paidAmount : (c.paidAmount ? Number(c.paidAmount) : null),
-            paymentStatus: c.paymentStatus ? (c.paymentStatus === "DA_THANH_TOAN" ? "DA_THANH_TOAN" : "CHUA_THANH_TOAN") : "CHUA_THANH_TOAN",
+            paymentStatus: c.paymentStatus ? (c.paymentStatus === "THANH_TOAN_HET" ? "THANH_TOAN_HET" : c.paymentStatus === "DA_THANH_TOAN" ? "DA_THANH_TOAN" : "CHUA_THANH_TOAN") : "CHUA_THANH_TOAN",
           }));
           
           console.log("Mapped contracts:", contracts);

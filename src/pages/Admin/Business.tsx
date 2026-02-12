@@ -19,7 +19,8 @@ import {
   CheckCircleIcon,
   TaskIcon,
 } from '../../icons';
-import { FiCheckCircle, FiXCircle } from 'react-icons/fi';
+import { FiCheckCircle, FiXCircle, FiDownload } from 'react-icons/fi';
+import ExcelJS from 'exceljs';
 import { motion, AnimatePresence } from 'framer-motion';
 import Pagination from '../../components/common/Pagination';
 import ComponentCard from '../../components/common/ComponentCard';
@@ -84,6 +85,10 @@ const BusinessPage: React.FC = () => {
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [bankName, setBankName] = useState<string>('');
   const [bankContactPerson, setBankContactPerson] = useState<string>('');
+  const [paymentStatusValue, setPaymentStatusValue] = useState<'CHUA_THANH_TOAN' | 'DA_THANH_TOAN' | 'THANH_TOAN_HET'>('CHUA_THANH_TOAN');
+  const [paidAmount, setPaidAmount] = useState<number | ''>('');
+  const [paidAmountDisplay, setPaidAmountDisplay] = useState<string>('');
+  const [exporting, setExporting] = useState(false);
   const [notes, setNotes] = useState<string>('');
   const [attachments, setAttachments] = useState<Array<{ url: string; fileName: string }>>([]);
   const [uploadingFile, setUploadingFile] = useState<boolean>(false);
@@ -110,6 +115,8 @@ const BusinessPage: React.FC = () => {
     notes?: string | null;
     attachments?: Array<{ url: string; fileName: string }>;
     implementationCompleted?: boolean | null;
+    paymentStatus?: string | null;
+    paidAmount?: number | null;
   };
 
   function formatDateShort(value?: string | null) {
@@ -220,6 +227,7 @@ const BusinessPage: React.FC = () => {
   const [filterStartTo, setFilterStartTo] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterSearch, setFilterSearch] = useState<string>('');
+  const [filterPaymentStatus, setFilterPaymentStatus] = useState<string>('ALL');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [viewItem, setViewItem] = useState<BusinessItem | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -311,6 +319,7 @@ const BusinessPage: React.FC = () => {
       const trimmedSearch = filterSearch.trim();
       if (trimmedSearch) params.search = trimmedSearch;
       if (filterStatus && filterStatus !== 'ALL') params.status = filterStatus;
+      if (filterPaymentStatus && filterPaymentStatus !== 'ALL') params.paymentStatus = filterPaymentStatus;
       if (filterPicId) params.picUserId = filterPicId;
       console.debug('[Business] loadList params', params);
       const res = await getBusinesses(params);
@@ -358,6 +367,8 @@ const BusinessPage: React.FC = () => {
           notes: c['notes'] ?? null,
           attachments: Array.isArray(c['attachments']) ? c['attachments'] : [],
           implementationCompleted: Boolean(c['implementationCompleted']),
+          paymentStatus: (c['paymentStatus'] ?? c['payment_status'] ?? null) as string | null,
+          paidAmount: c['paidAmount'] != null ? Number(String(c['paidAmount'])) : null,
         } as BusinessItem;
       });
       const locallyFiltered = applyLocalDateFilter(normalized);
@@ -657,6 +668,10 @@ const BusinessPage: React.FC = () => {
   }, [filterStatus, scheduleReload]);
 
   React.useEffect(() => {
+    scheduleReload({ resetPage: true });
+  }, [filterPaymentStatus, scheduleReload]);
+
+  React.useEffect(() => {
     if (!initialDateAppliedRef.current) {
       initialDateAppliedRef.current = true;
       return;
@@ -710,6 +725,7 @@ const BusinessPage: React.FC = () => {
     setFilterStartFrom('');
     setFilterStartTo('');
     setFilterStatus('ALL');
+    setFilterPaymentStatus('ALL');
     setFilterSearch('');
     setFilterPicId(null);
     scheduleReload({ resetPage: true });
@@ -775,6 +791,17 @@ const BusinessPage: React.FC = () => {
     // if (!selectedHardwareId) errors.selectedHardwareId = 'Vui lòng chọn phần cứng';
     if (businessPicOptionsState.length > 0 && !selectedPicId) errors.selectedPicId = 'Vui lòng chọn người phụ trách';
     if (!quantity || quantity < 1) errors.quantity = 'Số lượng phải lớn hơn hoặc bằng 1';
+    // Validate paid amount khi trạng thái thanh toán là DA_THANH_TOAN
+    if (paymentStatusValue === 'DA_THANH_TOAN') {
+      if (paidAmount === '' || paidAmount <= 0) {
+        errors.paidAmount = 'Khi trạng thái là "Đã thanh toán", số tiền phải lớn hơn 0';
+      } else {
+        const total = computeTotal();
+        if (total > 0 && paidAmount > total) {
+          errors.paidAmount = 'Số tiền thanh toán không được vượt quá thành tiền';
+        }
+      }
+    }
 
     // Ensure startDate is set (default to now) so backend always receives a start date
     const finalStart = startDateValue && startDateValue.trim() !== '' ? startDateValue : nowDateTimeLocal();
@@ -842,6 +869,11 @@ const BusinessPage: React.FC = () => {
       bankContactPerson: bankContactPerson?.trim() || null,
       unitPrice: finalUnitPrice,
       unitPriceNet: unitPriceNet !== '' ? Number(unitPriceNet) : null,
+      paymentStatus: paymentStatusValue,
+      paidAmount:
+        paymentStatusValue === 'THANH_TOAN_HET'
+          ? (finalUnitPrice != null && quantity ? finalUnitPrice * (typeof quantity === 'number' ? quantity : 0) : null)
+          : (paymentStatusValue === 'DA_THANH_TOAN' && typeof paidAmount === 'number' ? paidAmount : null),
       notes: notes?.trim() || null,
       attachmentUrls: attachments.map(a => a.url),
     };
@@ -1010,6 +1042,247 @@ const BusinessPage: React.FC = () => {
     const price = unitPrice !== '' ? Number(unitPrice) : (selectedHardwarePrice ?? 0);
     if (price === 0) return 0;
     return price * (Number(quantity) || 0);
+  }
+
+  async function exportExcel() {
+    setExporting(true);
+    try {
+      // Fetch ALL items matching current filters (no pagination)
+      const params: Record<string, unknown> = { page: 0, size: 99999 };
+      const trimmedSearch = filterSearch.trim();
+      if (trimmedSearch) params.search = trimmedSearch;
+      if (filterStatus && filterStatus !== 'ALL') params.status = filterStatus;
+      if (filterPaymentStatus && filterPaymentStatus !== 'ALL') params.paymentStatus = filterPaymentStatus;
+      if (filterPicId) params.picUserId = filterPicId;
+      const startFromParam = normalizeDateForStart(filterStartFrom);
+      const startToParam = normalizeDateForEnd(filterStartTo);
+      if (startFromParam) params.startDateFrom = startFromParam;
+      if (startToParam) params.startDateTo = startToParam;
+
+      const res = await getBusinesses(params as any);
+      const content = Array.isArray(res?.content) ? res.content : (Array.isArray(res) ? res : []);
+      // Normalize
+      const allItems = (content as Array<Record<string, unknown>>).map((c) => {
+        const unit = c['unitPrice'] ?? c['unit_price'];
+        const total = c['totalPrice'] ?? c['total_price'];
+        const comm = c['commission'];
+        const qty = c['quantity'] ?? c['qty'] ?? c['amount'];
+        const start = (c['startDate'] ?? c['start_date']) as string | undefined | null;
+        const completion = (c['completionDate'] ?? c['finishDate'] ?? c['completion_date']) as string | undefined | null;
+        const warrantyEnd = (c['warrantyEndDate'] ?? c['warranty_end_date']) as string | undefined | null;
+        const picRaw = c['picUser'] ?? c['pic_user'] ?? null;
+        let picLabel = '';
+        if (picRaw && typeof picRaw === 'object') {
+          const pr = picRaw as Record<string, unknown>;
+          picLabel = String(pr['label'] ?? pr['name'] ?? '');
+        }
+        return {
+          name: c['name'] as string ?? '',
+          hospitalLabel: ((c['hospital'] as any)?.label ?? (c['hospital'] as any)?.name ?? '') as string,
+          picLabel,
+          hardwareLabel: ((c['hardware'] as any)?.label ?? (c['hardware'] as any)?.name ?? '') as string,
+          quantity: qty != null ? Number(String(qty)) : null,
+          unitPrice: unit != null ? Number(String(unit)) : null,
+          unitPriceNet: c['unitPriceNet'] != null ? Number(String(c['unitPriceNet'])) : null,
+          totalPrice: total != null ? Number(String(total)) : null,
+          commission: comm != null ? Number(String(comm)) : null,
+          status: (c['status'] ?? '') as string,
+          startDate: start ?? null,
+          completionDate: completion ?? null,
+          warrantyEndDate: warrantyEnd ?? null,
+          bankName: (c['bankName'] ?? c['bank_name'] ?? '') as string,
+          bankContactPerson: (c['bankContactPerson'] ?? c['bank_contact_person'] ?? '') as string,
+          paymentStatus: (c['paymentStatus'] ?? c['payment_status'] ?? 'CHUA_THANH_TOAN') as string,
+          paidAmount: c['paidAmount'] != null ? Number(String(c['paidAmount'])) : null,
+          implementationCompleted: Boolean(c['implementationCompleted']),
+        };
+      });
+
+      if (allItems.length === 0) {
+        hotToast.error('Không có dữ liệu để xuất');
+        setExporting(false);
+        return;
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Kinh doanh');
+      const colCount = 15;
+
+      // ── Title row ──
+      const titleRow = worksheet.addRow(Array(colCount).fill(''));
+      titleRow.height = 32;
+      worksheet.mergeCells(1, 1, 1, colCount);
+      const titleCell = titleRow.getCell(1);
+      titleCell.value = 'BÁO CÁO KINH DOANH';
+      titleCell.font = { bold: true, size: 14, color: { argb: 'FF1A237E' } };
+      titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+      titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE3F2FD' } };
+
+      // ── Filter info row ──
+      const filterParts: string[] = [];
+      if (trimmedSearch) filterParts.push(`Tìm kiếm: "${trimmedSearch}"`);
+      if (filterPicId) {
+        const picName = businessPicOptionsState.find(p => p.id === filterPicId)?.label || String(filterPicId);
+        filterParts.push(`Người phụ trách: ${picName}`);
+      }
+      if (filterStartFrom || filterStartTo) filterParts.push(`Thời gian: ${formatFilterDateLabel(filterStartFrom)} - ${formatFilterDateLabel(filterStartTo)}`);
+      if (filterStatus && filterStatus !== 'ALL') {
+        filterParts.push(`Trạng thái: ${statusLabel(filterStatus)}`);
+      }
+      if (filterPaymentStatus && filterPaymentStatus !== 'ALL') {
+        const payLabel = filterPaymentStatus === 'THANH_TOAN_HET' ? 'Thanh toán hết' : filterPaymentStatus === 'DA_THANH_TOAN' ? 'Đã thanh toán' : 'Chưa thanh toán';
+        filterParts.push(`Thanh toán: ${payLabel}`);
+      }
+      if (filterParts.length > 0) {
+        const filterRow = worksheet.addRow(Array(colCount).fill(''));
+        worksheet.mergeCells(worksheet.rowCount, 1, worksheet.rowCount, colCount);
+        const fc = filterRow.getCell(1);
+        fc.value = `Bộ lọc: ${filterParts.join(' | ')}`;
+        fc.font = { italic: true, size: 10, color: { argb: 'FF666666' } };
+        fc.alignment = { vertical: 'middle', horizontal: 'left' };
+      }
+
+      // Spacer
+      worksheet.addRow([]);
+
+      // ── Header row ──
+      const headers = [
+        'STT', 'Bệnh viện', 'Mã hợp đồng', 'Người phụ trách', 'Phần cứng',
+        'SL', 'Thanh toán', 'Trạng thái', 'Đơn giá', 'Thành tiền',
+        'Đã thanh toán', 'Còn lại', 'Hoa hồng', 'Đơn vị tài trợ', 'Bảo hành đến',
+      ];
+      const headerRow = worksheet.addRow(headers);
+      headerRow.height = 28;
+      for (let col = 1; col <= colCount; col++) {
+        const cell = headerRow.getCell(col);
+        cell.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1976D2' } };
+        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+      }
+
+      // Column widths
+      const widths = [6, 35, 18, 22, 20, 8, 18, 16, 18, 18, 18, 18, 18, 22, 16];
+      widths.forEach((w, i) => { worksheet.getColumn(i + 1).width = w; });
+
+      // ── Data rows ──
+      allItems.forEach((item, index) => {
+        const totalPrice = item.totalPrice ?? 0;
+        const paid = typeof item.paidAmount === 'number' ? item.paidAmount : 0;
+        const remaining = totalPrice - paid;
+
+        const payLabel = item.paymentStatus === 'THANH_TOAN_HET'
+          ? 'Thanh toán hết'
+          : item.paymentStatus === 'DA_THANH_TOAN'
+            ? 'Đã thanh toán'
+            : 'Chưa thanh toán';
+
+        const sLabel = statusLabel(item.status);
+
+        const row = worksheet.addRow([
+          index + 1,
+          item.hospitalLabel,
+          item.name,
+          item.picLabel,
+          item.hardwareLabel,
+          item.quantity ?? '',
+          payLabel,
+          sLabel,
+          item.unitPrice ?? 0,
+          totalPrice,
+          paid,
+          remaining,
+          item.commission ?? 0,
+          item.bankName,
+          item.warrantyEndDate ? formatDateShort(item.warrantyEndDate) : '',
+        ]);
+        row.height = 22;
+
+        for (let col = 1; col <= colCount; col++) {
+          const cell = row.getCell(col);
+          cell.alignment = { vertical: 'middle', horizontal: col === 1 || col === 6 ? 'center' : 'left', wrapText: col === 2 };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+            right: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+          };
+          if (index % 2 === 1) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F5F5' } };
+          }
+        }
+
+        // Number format for currency columns (9=Đơn giá, 10=Thành tiền, 11=Đã TT, 12=Còn lại, 13=Hoa hồng)
+        for (const colIdx of [9, 10, 11, 12, 13]) {
+          row.getCell(colIdx).numFmt = '#,##0';
+          row.getCell(colIdx).alignment = { vertical: 'middle', horizontal: 'right' };
+        }
+
+        // Color coding for status
+        const statusCell = row.getCell(8);
+        if (item.status === 'CONTRACTED') {
+          statusCell.font = { color: { argb: 'FF16A34A' }, bold: true };
+        } else if (item.status === 'CANCELLED') {
+          statusCell.font = { color: { argb: 'FFDC2626' }, bold: true };
+        } else {
+          statusCell.font = { color: { argb: 'FF2563EB' } };
+        }
+
+        // Color coding for payment status
+        const payCell = row.getCell(7);
+        if (item.paymentStatus === 'THANH_TOAN_HET') {
+          payCell.font = { color: { argb: 'FF059669' }, bold: true };
+        } else if (item.paymentStatus === 'DA_THANH_TOAN') {
+          payCell.font = { color: { argb: 'FF16A34A' } };
+        } else {
+          payCell.font = { color: { argb: 'FF9CA3AF' } };
+        }
+      });
+
+      // ── Summary row ──
+      worksheet.addRow([]);
+      const summaryRow = worksheet.addRow([
+        '', '', '', '', '', '',
+        '', `Tổng: ${allItems.length} hợp đồng`,
+        '',
+        allItems.reduce((s, i) => s + (i.totalPrice ?? 0), 0),
+        allItems.reduce((s, i) => s + (typeof i.paidAmount === 'number' ? i.paidAmount : 0), 0),
+        allItems.reduce((s, i) => s + ((i.totalPrice ?? 0) - (typeof i.paidAmount === 'number' ? i.paidAmount : 0)), 0),
+        allItems.reduce((s, i) => s + (i.commission ?? 0), 0),
+        '', '',
+      ]);
+      summaryRow.height = 26;
+      for (let col = 1; col <= colCount; col++) {
+        const cell = summaryRow.getCell(col);
+        cell.font = { bold: true, size: 11 };
+        cell.border = { top: { style: 'medium' }, bottom: { style: 'medium' }, left: { style: 'thin' }, right: { style: 'thin' } };
+      }
+      for (const colIdx of [9, 10, 11, 12, 13]) {
+        summaryRow.getCell(colIdx).numFmt = '#,##0';
+        summaryRow.getCell(colIdx).alignment = { vertical: 'middle', horizontal: 'right' };
+      }
+      summaryRow.getCell(8).alignment = { vertical: 'middle', horizontal: 'right' };
+
+      // ── Generate & download ──
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+      a.download = `kinh_doanh_${dateStr}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      hotToast.success(`Xuất Excel thành công (${allItems.length} hợp đồng)`);
+    } catch (e: any) {
+      console.error('Export Excel error:', e);
+      hotToast.error(e?.message || 'Xuất Excel thất bại');
+    } finally {
+      setExporting(false);
+    }
   }
 
   // Helper functions để format số với dấu chấm phân cách hàng nghìn
@@ -1341,6 +1614,16 @@ const BusinessPage: React.FC = () => {
       } else setSelectedHardwarePrice(null);
       setBankName(res.bankName ?? '');
       setBankContactPerson(res.bankContactPerson ?? '');
+      // Load payment status
+      const remotePaymentStatus = (res.paymentStatus ?? (res as any).payment_status ?? 'CHUA_THANH_TOAN') as 'CHUA_THANH_TOAN' | 'DA_THANH_TOAN' | 'THANH_TOAN_HET';
+      setPaymentStatusValue(remotePaymentStatus);
+      if (res.paidAmount != null) {
+        setPaidAmount(Number(res.paidAmount));
+        setPaidAmountDisplay(formatNumber(Number(res.paidAmount)));
+      } else {
+        setPaidAmount('');
+        setPaidAmountDisplay('');
+      }
       setNotes(res.notes ?? '');
       setAttachments(Array.isArray(res.attachments) ? res.attachments : []);
       setFieldErrors({});
@@ -1763,6 +2046,9 @@ const BusinessPage: React.FC = () => {
               setHospitalDropdownOpen(false);
               setBankName('');
               setBankContactPerson('');
+              setPaymentStatusValue('CHUA_THANH_TOAN');
+              setPaidAmount('');
+              setPaidAmountDisplay('');
               setNotes('');
               setAttachments([]);
               setShowModal(true);
@@ -1775,144 +2061,172 @@ const BusinessPage: React.FC = () => {
         )}
       </div>
       <ComponentCard title="Tìm kiếm & Lọc">
-        <div className="flex flex-wrap items-center gap-3">
-          <input
-            type="text"
-            placeholder="Tìm theo mã hợp đồng / bệnh viện"
-            value={filterSearch}
-            onChange={(e) => setFilterSearch(e.target.value)}
-            className="rounded-full border border-gray-200 px-4 py-2.5 text-sm shadow-sm min-w-[240px] focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
-          />
-          <div className="relative" ref={dateFilterRef}>
-            <button
-              type="button"
-              onClick={() => {
-                setPendingFilterStart(filterStartFrom);
-                setPendingFilterEnd(filterStartTo);
-                setDateFilterOpen((prev) => !prev);
-              }}
-              className="rounded-full border border-gray-200 px-4 py-2.5 text-sm shadow-sm hover:bg-gray-50 transition flex items-center gap-2"
-            >
-              <span>📅</span>
-              <span>Lọc theo thời gian</span>
-            </button>
-            {dateFilterOpen && (
-              <div className="absolute z-40 mt-2 w-72 rounded-xl border border-gray-200 bg-white shadow-xl p-4 space-y-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Bắt đầu từ</label>
-                  <input
-                    type="date"
-                    value={pendingFilterStart}
-                    onChange={(e) => setPendingFilterStart(e.target.value)}
-                    ref={pendingStartInputRef}
-                    onFocus={(e) => {
-                      if (typeof e.currentTarget.showPicker === 'function') {
-                        e.currentTarget.showPicker();
-                      }
-                    }}
-                    onClick={(e) => {
-                      if (typeof e.currentTarget.showPicker === 'function') {
-                        e.currentTarget.showPicker();
-                      }
-                    }}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 cursor-pointer"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Đến</label>
-                  <input
-                    type="date"
-                    value={pendingFilterEnd}
-                    onChange={(e) => setPendingFilterEnd(e.target.value)}
-                    ref={pendingEndInputRef}
-                    onFocus={(e) => {
-                      if (typeof e.currentTarget.showPicker === 'function') {
-                        e.currentTarget.showPicker();
-                      }
-                    }}
-                    onClick={(e) => {
-                      if (typeof e.currentTarget.showPicker === 'function') {
-                        e.currentTarget.showPicker();
-                      }
-                    }}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 cursor-pointer"
-                  />
-                </div>
-                <div className="flex items-center justify-between pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPendingFilterStart('');
-                      setPendingFilterEnd('');
-                    }}
-                    className="text-sm text-gray-500 hover:text-gray-700"
-                  >
-                    Xóa chọn
-                  </button>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setDateFilterOpen(false)}
-                      className="px-3 py-1.5 text-sm rounded-full border border-gray-300 text-gray-600 hover:bg-gray-50"
-                    >
-                      Đóng
-                    </button>
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              type="text"
+              placeholder="Tìm theo mã hợp đồng / bệnh viện"
+              value={filterSearch}
+              onChange={(e) => setFilterSearch(e.target.value)}
+              className="rounded-full border border-gray-200 px-4 py-2.5 text-sm shadow-sm min-w-[240px] focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
+            />
+            <div className="relative" ref={dateFilterRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingFilterStart(filterStartFrom);
+                  setPendingFilterEnd(filterStartTo);
+                  setDateFilterOpen((prev) => !prev);
+                }}
+                className="rounded-full border border-gray-200 px-4 py-2.5 text-sm shadow-sm hover:bg-gray-50 transition flex items-center gap-2"
+              >
+                <span>📅</span>
+                <span>Lọc theo thời gian</span>
+              </button>
+              {dateFilterOpen && (
+                <div className="absolute z-40 mt-2 w-72 rounded-xl border border-gray-200 bg-white shadow-xl p-4 space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Bắt đầu từ</label>
+                    <input
+                      type="date"
+                      value={pendingFilterStart}
+                      onChange={(e) => setPendingFilterStart(e.target.value)}
+                      ref={pendingStartInputRef}
+                      onFocus={(e) => {
+                        if (typeof e.currentTarget.showPicker === 'function') {
+                          e.currentTarget.showPicker();
+                        }
+                      }}
+                      onClick={(e) => {
+                        if (typeof e.currentTarget.showPicker === 'function') {
+                          e.currentTarget.showPicker();
+                        }
+                      }}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Đến</label>
+                    <input
+                      type="date"
+                      value={pendingFilterEnd}
+                      onChange={(e) => setPendingFilterEnd(e.target.value)}
+                      ref={pendingEndInputRef}
+                      onFocus={(e) => {
+                        if (typeof e.currentTarget.showPicker === 'function') {
+                          e.currentTarget.showPicker();
+                        }
+                      }}
+                      onClick={(e) => {
+                        if (typeof e.currentTarget.showPicker === 'function') {
+                          e.currentTarget.showPicker();
+                        }
+                      }}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between pt-2">
                     <button
                       type="button"
                       onClick={() => {
-                        setDateFilterOpen(false);
-                        setFilterStartFrom(pendingFilterStart);
-                        setFilterStartTo(pendingFilterEnd);
+                        setPendingFilterStart('');
+                        setPendingFilterEnd('');
                       }}
-                      className="px-3 py-1.5 text-sm rounded-full bg-blue-600 text-white hover:bg-blue-700"
+                      className="text-sm text-gray-500 hover:text-gray-700"
                     >
-                      Lọc
+                      Xóa chọn
                     </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setDateFilterOpen(false)}
+                        className="px-3 py-1.5 text-sm rounded-full border border-gray-300 text-gray-600 hover:bg-gray-50"
+                      >
+                        Đóng
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDateFilterOpen(false);
+                          setFilterStartFrom(pendingFilterStart);
+                          setFilterStartTo(pendingFilterEnd);
+                        }}
+                        className="px-3 py-1.5 text-sm rounded-full bg-blue-600 text-white hover:bg-blue-700"
+                      >
+                        Lọc
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Người phụ trách</span>
+              <FilterPersonInChargeSelect
+                value={filterPicId ? String(filterPicId) : ''}
+                onChange={(v) => setFilterPicId(v ? Number(v) : null)}
+                options={businessPicOptionsState.map(opt => ({
+                  id: opt.id,
+                  name: opt.label,
+                  phone: (opt as any).phone || null,
+                }))}
+              />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">Trạng thái</span>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
-            >
-              <option value="ALL">— Tất cả —</option>
-              <option value="CARING">Đang chăm sóc</option>
-              <option value="CONTRACTED">Ký hợp đồng</option>
-              <option value="CANCELLED">Hủy</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">Người phụ trách</span>
-            <FilterPersonInChargeSelect
-              value={filterPicId ? String(filterPicId) : ''}
-              onChange={(v) => setFilterPicId(v ? Number(v) : null)}
-              options={businessPicOptionsState.map(opt => ({
-                id: opt.id,
-                name: opt.label,
-                phone: (opt as any).phone || null,
-              }))}
-            />
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              onClick={applyFilters}
-              className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700 transition"
-            >
-              <span>Lọc</span>
-            </button>
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
-            >
-              <span>Xóa</span>
-            </button>
+          <div className="flex mt-4 flex-wrap items-center gap-3 mt-6">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Trạng thái HĐ</span>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="rounded-full border border-gray-200 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition min-w-[150px]"
+              >
+                <option value="ALL">— Tất cả —</option>
+                <option value="CARING">Đang chăm sóc</option>
+                <option value="CONTRACTED">Ký hợp đồng</option>
+                <option value="CANCELLED">Hủy</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Thanh toán</span>
+              <select
+                value={filterPaymentStatus}
+                onChange={(e) => setFilterPaymentStatus(e.target.value)}
+                className="rounded-full border border-gray-200 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition min-w-[150px]"
+              >
+                <option value="ALL">— Tất cả —</option>
+                <option value="CHUA_THANH_TOAN">Chưa thanh toán</option>
+                <option value="DA_THANH_TOAN">Đã thanh toán</option>
+                <option value="THANH_TOAN_HET">Thanh toán hết</option>
+              </select>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
+              >
+                <span>Xóa</span>
+              </button>
+              <button
+                type="button"
+                onClick={exportExcel}
+                disabled={exporting}
+                className="inline-flex items-center gap-2 rounded-full bg-green-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {exporting ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                    <span>Đang xuất...</span>
+                  </>
+                ) : (
+                  <>
+                    <FiDownload className="h-4 w-4" />
+                    <span>Xuất Excel</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
         <div className="mt-4 text-sm font-semibold text-gray-700">
@@ -2334,7 +2648,80 @@ const BusinessPage: React.FC = () => {
                       </div>
                       {fieldErrors.unitPriceNet && <div className="mt-1 text-sm text-red-600">{fieldErrors.unitPriceNet}</div>}
                     </div>
-                    
+
+                    {/* Trạng thái thanh toán */}
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Trạng thái thanh toán</label>
+                      <select
+                        value={paymentStatusValue}
+                        onChange={(e) => {
+                          const next = e.target.value as 'CHUA_THANH_TOAN' | 'DA_THANH_TOAN' | 'THANH_TOAN_HET';
+                          setPaymentStatusValue(next);
+                          if (next === 'THANH_TOAN_HET') {
+                            // Auto-fill paidAmount = totalPrice (unitPrice * quantity)
+                            const total = computeTotal();
+                            setPaidAmount(total > 0 ? total : '');
+                            setPaidAmountDisplay(total > 0 ? formatNumber(total) : '');
+                          } else if (next === 'DA_THANH_TOAN') {
+                            // Keep current paidAmount or reset
+                            if (paidAmount === '') {
+                              setPaidAmountDisplay('');
+                            }
+                          } else {
+                            setPaidAmount('');
+                            setPaidAmountDisplay('');
+                          }
+                        }}
+                        className="w-full rounded border px-3 py-2"
+                      >
+                        <option value="CHUA_THANH_TOAN">Chưa thanh toán</option>
+                        <option value="DA_THANH_TOAN">Đã thanh toán</option>
+                        <option value="THANH_TOAN_HET">Thanh toán hết</option>
+                      </select>
+                    </div>
+
+                    {/* Số tiền thanh toán - chỉ hiện khi DA_THANH_TOAN hoặc THANH_TOAN_HET */}
+                    {(paymentStatusValue === 'DA_THANH_TOAN' || paymentStatusValue === 'THANH_TOAN_HET') && (
+                      <div>
+                        <label className="block text-sm font-medium mb-1">
+                          {paymentStatusValue === 'THANH_TOAN_HET' ? 'Số tiền thanh toán (= Thành tiền)' : 'Số tiền thanh toán*'}
+                        </label>
+                        <input
+                          type="text"
+                          required={paymentStatusValue === 'DA_THANH_TOAN'}
+                          disabled={paymentStatusValue === 'THANH_TOAN_HET'}
+                          value={paidAmountDisplay || (paidAmount !== '' ? formatNumber(paidAmount) : '')}
+                          onChange={(e) => {
+                            const parsed = parseFormattedNumber(e.target.value);
+                            setPaidAmount(parsed);
+                            if (parsed !== '') {
+                              setPaidAmountDisplay(formatNumber(parsed));
+                            } else {
+                              setPaidAmountDisplay('');
+                            }
+                            clearFieldError('paidAmount');
+                          }}
+                          onBlur={() => {
+                            if (paidAmount !== '') {
+                              setPaidAmountDisplay(formatNumber(paidAmount));
+                            } else {
+                              setPaidAmountDisplay('');
+                            }
+                          }}
+                          onFocus={() => {
+                            if (paidAmount !== '') {
+                              setPaidAmountDisplay(formatNumber(paidAmount));
+                            }
+                          }}
+                          placeholder="Nhập số tiền đã thanh toán"
+                          className={`w-full rounded border px-3 py-2 ${
+                            fieldErrors.paidAmount ? 'border-red-500' : paymentStatusValue === 'THANH_TOAN_HET' ? 'border-green-400 bg-green-50' : ''
+                          }`}
+                        />
+                        {fieldErrors.paidAmount && <div className="mt-1 text-sm text-red-600">{fieldErrors.paidAmount}</div>}
+                      </div>
+                    )}
+
                     <div className="col-span-2 grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium mb-1">Ngày bắt đầu</label>
@@ -2346,7 +2733,7 @@ const BusinessPage: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium mb-1">Ngày hoàn thành</label>
+                        <label className="block text-sm font-medium mb-1">Ngày ký hợp đồng</label>
                         <input 
                           type="datetime-local" 
                           value={completionDateValue} 
@@ -2535,113 +2922,215 @@ const BusinessPage: React.FC = () => {
           )}
 
           <div>
-            <ComponentCard title="Danh sách Kinh doanh">
-              <div className="space-y-4">
-                {items.map((it) => (
-                  <div key={it.id}
-                    className={`flex items-start gap-4 p-4 bg-white border border-gray-100 rounded-lg shadow-sm transition-all duration-150 ${hoveredId === it.id ? 'shadow-lg scale-101 bg-indigo-50 border-green-400' : 'hover:shadow hover:border-green-300'}`}
-                    onMouseEnter={() => setHoveredId(it.id)} onMouseLeave={() => setHoveredId(null)}
-                  >
-                    <div className="flex-shrink-0">
-                      <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-gray-50 text-sm font-semibold text-gray-700">{formatBusinessId(it.id)}</div>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-lg font-semibold text-blue-800">{it.hospital?.label ?? '—'}</div>
-                          <div className="text-sm">
-                            <span className="text-gray-500">Mã hợp đồng: </span>
-                            <span className="font-medium text-blue-600">{it.name ?? '—'}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {renderStatusBadge(it.status)}
-                          {it.implementationCompleted && it.status === 'CONTRACTED' && (
-                            <span className="inline-block px-3 py-1 rounded-full text-sm font-medium bg-emerald-100 text-emerald-700">
-                              Đã nghiệm thu
-                            </span>
-                          )}
-                          {renderWarrantyStatusBadge(it.warrantyEndDate)}
-                        </div>
-                      </div>
-
-                      <div className="mt-2 grid grid-cols-2 md:grid-cols-2 gap-3 text-sm text-gray-600">
-                        <div>Điện thoại: <div className="font-medium text-gray-800">{it.hospitalPhone ?? '—'}</div></div>
-                        <div>Phần cứng: <div className="font-medium text-gray-800">{it.hardware?.label ?? '—'}</div> 
-                        </div>
-                        <div>Thời hạn bảo hành: <div className="font-medium text-gray-800">{it.warrantyEndDate ? formatDateShort(it.warrantyEndDate) : '—'}</div></div>
-                        <div className="col-span-2 md:col-span-2">Người phụ trách:
-                          <div className="font-medium text-gray-800">
-                            {it.picUser?.label ?? '—'}
-                            {it.picUser?.subLabel ? <span className="ml-2 text-xs text-gray-500">{it.picUser?.subLabel}</span> : null}
-                          </div>
-                        </div>
-                        {it.bankName && (
-                          <div className="col-span-2 md:col-span-2">Đơn vị tài trợ: <div className="font-medium text-gray-800">{it.bankName}</div></div>
-                        )}
-                      </div>
-
-                      <div className="mt-3 flex items-center justify-between text-sm text-gray-700">
-                        <div className="flex items-center gap-6">
-                          <div>Số lượng: <span className="font-medium">{it.quantity ?? '—'}</span></div>
-                          <div>Đơn giá (Gross): <span className="font-medium">{it.unitPrice != null ? it.unitPrice.toLocaleString() + ' ₫' : '—'}</span></div>
-                          <div>Thành tiền: <span className="font-semibold">{it.totalPrice != null ? it.totalPrice.toLocaleString() + ' ₫' : '—'}</span></div>
-                        </div>
-                        <div />
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-end gap-2">
-                      <button onClick={() => openView(it)} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-100 text-blue-600 bg-white hover:bg-blue-50">
-                        <EyeIcon style={{ width: 16, height: 16 }} />
-                        <span className="text-sm">Xem</span>
-                      </button>
-                      {canManage && !(it.status === 'CONTRACTED' && !isSuperAdmin) && (
-                        <button onClick={() => { if (it.status === 'CONTRACTED' && !isSuperAdmin) { setToast({ message: 'Không thể sửa dự án đã ký hợp đồng', type: 'error' }); return; } openEditModal(it.id); }} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-yellow-100 text-orange-600 bg-yellow-50 hover:bg-yellow-100">
-                          <PencilIcon style={{ width: 16, height: 16 }} />
-                          <span className="text-sm">Sửa</span>
-                        </button>
-                      )}
-                      {canManage && !(it.status === 'CONTRACTED' && !isSuperAdmin) && (
-                        <button onClick={() => { if (it.status === 'CONTRACTED' && !isSuperAdmin) { setToast({ message: 'Không thể xóa dự án đã ký hợp đồng', type: 'error' }); return; } handleDelete(it.id); }} disabled={deletingId === it.id} className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${deletingId === it.id ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed' : 'border-red-100 text-red-600 bg-red-50 hover:bg-red-100'}`}>
-                          <TrashBinIcon style={{ width: 16, height: 16 }} />
-                          <span className="text-sm">Xóa</span>
-                        </button>
-                      )}                      
-                    </div>
-                  </div>
-                ))}
-                {items.length === 0 && (
-                  <div className="py-12 text-center text-gray-400">
-                    <div className="flex flex-col items-center">
-                      <svg
-                        className="mb-3 h-12 w-12 text-gray-300"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="1.5"
-                          d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
-                        />
-                      </svg>
-                      <span className="text-sm">Không có dữ liệu</span>
-                    </div>
-                  </div>
-                )}
+            <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+              <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-800">
+                <h3 className="text-base font-medium text-gray-800 dark:text-white/90">
+                  Danh sách Kinh doanh
+                </h3>
               </div>
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-              onPageChange={(p) => setCurrentPage(p)}
-              onItemsPerPageChange={(s) => { setItemsPerPage(s); setCurrentPage(0); }}
-              showItemsPerPage={true}
-            />
-            </ComponentCard>
+              <div className="overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full divide-y divide-gray-200 dark:divide-gray-800">
+                    <thead className="bg-gray-50 dark:bg-gray-800/50">
+                      <tr>
+                        <th className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">STT</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Bệnh viện</th>
+                        <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Mã hợp đồng</th>
+                        <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Người phụ trách</th>
+                        <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Phần cứng</th>
+                        <th className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">SL</th>
+                        <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Thanh toán</th>
+                        <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Trạng thái</th>
+                        <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Đơn giá</th>
+                        <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Thành tiền</th>
+                        <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Còn lại</th>
+                        <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Bảo hành</th>
+                        <th className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                      {items.length === 0 ? (
+                        <tr>
+                          <td colSpan={13} className="px-3 py-12 text-center text-gray-500 dark:text-gray-400">
+                            <div className="flex flex-col items-center">
+                              <svg className="mb-3 h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                              </svg>
+                              <span className="text-sm">Không có dữ liệu</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        items.map((it, index) => {
+                          const stt = currentPage * itemsPerPage + index + 1;
+                          return (
+                            <tr
+                              key={it.id}
+                              className="transition hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                              onMouseEnter={() => setHoveredId(it.id)}
+                              onMouseLeave={() => setHoveredId(null)}
+                            >
+                              {/* STT */}
+                              <td className="whitespace-nowrap px-4 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
+                                {stt}
+                              </td>
+                              {/* Bệnh viện */}
+                              <td className="min-w-[180px] px-4 py-3">
+                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                  {it.hospital?.label ?? '—'}
+                                </div>
+                                {it.hospitalPhone && (
+                                  <div className="text-xs text-gray-500 mt-0.5">{it.hospitalPhone}</div>
+                                )}
+                              </td>
+                              {/* Mã hợp đồng */}
+                              <td className="whitespace-nowrap px-4 py-3">
+                                <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                                  {it.name ?? '—'}
+                                </span>
+                              </td>
+                              {/* Người phụ trách */}
+                              <td className="whitespace-nowrap px-4 py-3 min-w-[140px]">
+                                <div className="text-sm text-gray-700 dark:text-gray-300">
+                                  <div className="font-medium">{it.picUser?.label ?? '—'}</div>
+                                  {it.picUser?.subLabel && (
+                                    <div className="text-xs text-gray-500">{it.picUser.subLabel}</div>
+                                  )}
+                                </div>
+                              </td>
+                              {/* Phần cứng */}
+                              <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                                {it.hardware?.label ?? '—'}
+                              </td>
+                              {/* SL */}
+                              <td className="whitespace-nowrap px-4 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
+                                {it.quantity ?? '—'}
+                              </td>
+                              {/* Thanh toán */}
+                              <td className="whitespace-nowrap px-4 py-3">
+                                {it.paymentStatus === 'THANH_TOAN_HET' ? (
+                                  <div className="flex flex-col gap-1">
+                                    <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800">
+                                      Thanh toán hết
+                                    </span>
+                                    {typeof it.paidAmount === 'number' && (
+                                      <span className="text-xs text-center text-gray-600">
+                                        {it.paidAmount.toLocaleString('vi-VN')} ₫
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : it.paymentStatus === 'DA_THANH_TOAN' ? (
+                                  <div className="flex flex-col gap-1">
+                                    <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-100 text-green-700">
+                                      Đã thanh toán
+                                    </span>
+                                    {typeof it.paidAmount === 'number' && (
+                                      <span className="text-xs text-center text-gray-600">
+                                        {it.paidAmount.toLocaleString('vi-VN')} ₫
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-700">
+                                    Chưa thanh toán
+                                  </span>
+                                )}
+                              </td>
+                              {/* Trạng thái */}
+                              <td className="whitespace-nowrap px-4 py-3">
+                                <div className="flex flex-col gap-1">
+                                  {renderStatusBadge(it.status)}
+                                  {it.implementationCompleted && (it.status ?? '').toUpperCase() === 'CONTRACTED' && (
+                                    <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700">
+                                      Đã nghiệm thu
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              {/* Đơn giá */}
+                              <td className="whitespace-nowrap px-4 py-3 text-left text-sm text-gray-700 dark:text-gray-300">
+                                {it.unitPrice != null ? it.unitPrice.toLocaleString('vi-VN') + ' ₫' : '—'}
+                              </td>
+                              {/* Thành tiền */}
+                              <td className="whitespace-nowrap px-4 py-3 text-left text-sm font-semibold text-gray-900 dark:text-white">
+                                {it.totalPrice != null ? it.totalPrice.toLocaleString('vi-VN') + ' ₫' : '—'}
+                              </td>
+                              {/* Còn lại */}
+                              <td className="whitespace-nowrap px-4 py-3 text-left text-sm text-gray-700 dark:text-gray-300">
+                                {(() => {
+                                  const total = it.totalPrice ?? 0;
+                                  const paid = (typeof it.paidAmount === 'number' ? it.paidAmount : 0);
+                                  const remaining = total - paid;
+                                  if (total === 0 && paid === 0) return '—';
+                                  return (
+                                    <span className={remaining <= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                                      {remaining <= 0 ? '0 ₫' : remaining.toLocaleString('vi-VN') + ' ₫'}
+                                    </span>
+                                  );
+                                })()}
+                              </td>
+                              {/* Bảo hành */}
+                              <td className="whitespace-nowrap px-4 py-3">
+                                <div className="flex flex-col gap-1">
+                                  {it.warrantyEndDate ? (
+                                    <span className="text-sm text-gray-700 dark:text-gray-300">{formatDateShort(it.warrantyEndDate)}</span>
+                                  ) : (
+                                    <span className="text-sm text-gray-400">—</span>
+                                  )}
+                                  {renderWarrantyStatusBadge(it.warrantyEndDate)}
+                                </div>
+                              </td>
+                              {/* Thao tác */}
+                              <td className="whitespace-nowrap px-4 py-3">
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    title="Xem chi tiết"
+                                    onClick={() => openView(it)}
+                                    className="rounded-lg p-1.5 text-gray-500 transition hover:bg-blue-100 hover:text-blue-600"
+                                  >
+                                    <EyeIcon style={{ width: 18, height: 18 }} />
+                                  </button>
+                                  {canManage && !(it.status === 'CONTRACTED' && !isSuperAdmin) && (
+                                    <button
+                                      title="Sửa"
+                                      onClick={() => { if (it.status === 'CONTRACTED' && !isSuperAdmin) { setToast({ message: 'Không thể sửa dự án đã ký hợp đồng', type: 'error' }); return; } openEditModal(it.id); }}
+                                      className="rounded-lg p-1.5 text-gray-500 transition hover:bg-yellow-100 hover:text-orange-600"
+                                    >
+                                      <PencilIcon style={{ width: 18, height: 18 }} />
+                                    </button>
+                                  )}
+                                  {canManage && !(it.status === 'CONTRACTED' && !isSuperAdmin) && (
+                                    <button
+                                      title="Xóa"
+                                      onClick={() => { if (it.status === 'CONTRACTED' && !isSuperAdmin) { setToast({ message: 'Không thể xóa dự án đã ký hợp đồng', type: 'error' }); return; } handleDelete(it.id); }}
+                                      disabled={deletingId === it.id}
+                                      className={`rounded-lg p-1.5 transition ${deletingId === it.id ? 'text-gray-400 cursor-not-allowed' : 'text-gray-500 hover:bg-red-100 hover:text-red-600'}`}
+                                    >
+                                      <TrashBinIcon style={{ width: 18, height: 18 }} />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalItems={totalItems}
+                  itemsPerPage={itemsPerPage}
+                  onPageChange={(p) => setCurrentPage(p)}
+                  onItemsPerPageChange={(s) => { setItemsPerPage(s); setCurrentPage(0); }}
+                  showItemsPerPage={true}
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -2725,24 +3214,54 @@ const BusinessPage: React.FC = () => {
                         value={
                           <div>
                             <span className="font-semibold text-gray-900">{Math.round(Number(viewItem.commission)).toLocaleString()} VND</span>
-                            {/* {viewItem.totalPrice && (
-                              <span className="ml-2 text-sm text-gray-500">
-                                ({((Number(viewItem.commission) / Number(viewItem.totalPrice)) * 100).toFixed(2).replace(/\.00$/, '')}%)
-                              </span>
-                            )} */}
                           </div>
                         } 
                       />
                     )}
+                    <DetailField 
+                      label="Trạng thái thanh toán" 
+                      value={
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          viewItem.paymentStatus === 'THANH_TOAN_HET' ? 'bg-emerald-100 text-emerald-800' :
+                          viewItem.paymentStatus === 'DA_THANH_TOAN' ? 'bg-green-100 text-green-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {viewItem.paymentStatus === 'THANH_TOAN_HET' ? 'Thanh toán hết' :
+                           viewItem.paymentStatus === 'DA_THANH_TOAN' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+                        </span>
+                      }
+                    />
+                    {typeof viewItem.paidAmount === 'number' && viewItem.paidAmount > 0 && (
+                      <DetailField 
+                        label="Đã thanh toán" 
+                        value={<span className="font-semibold text-gray-900">{viewItem.paidAmount.toLocaleString('vi-VN')} ₫</span>}
+                      />
+                    )}
+                    {(() => {
+                      const total = viewItem.totalPrice ?? 0;
+                      const paid = typeof viewItem.paidAmount === 'number' ? viewItem.paidAmount : 0;
+                      const remaining = total - paid;
+                      return (
+                        <DetailField 
+                          label="Còn lại" 
+                          value={
+                            <span className={`font-semibold ${remaining <= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {remaining <= 0 ? '0 ₫' : remaining.toLocaleString('vi-VN') + ' ₫'}
+                            </span>
+                          }
+                        />
+                      );
+                    })()}
                   </div>
                 </div>
+                <hr className="my-3 border-gray-200" />
 
                 {/* Timeline Section */}
                 <div>
                   <h4 className="text-xs font-semibold text-black uppercase tracking-wider mb-3">Timeline</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     {viewItem.startDate && <DetailField label="Ngày bắt đầu" value={formatDateShort(viewItem.startDate)} />}
-                    {viewItem.completionDate && <DetailField label="Ngày hoàn thành" value={formatDateShort(viewItem.completionDate)} />}
+                    {viewItem.completionDate && <DetailField label="Ngày ký hợp đồng" value={formatDateShort(viewItem.completionDate)} />}
                     {viewItem.warrantyStartDate && <DetailField label="Ngày bắt đầu bảo hành" value={formatDateShort(viewItem.warrantyStartDate)} />}
                     {viewItem.warrantyEndDate && <DetailField label="Ngày hết hạn bảo hành" value={formatDateShort(viewItem.warrantyEndDate)} />}
                   </div>

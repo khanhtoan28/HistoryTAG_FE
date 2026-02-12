@@ -50,7 +50,7 @@ export type MaintainContractResponseDTO = {
   daysLeft?: number | null; // Số ngày còn lại (có thể âm nếu quá hạn)
   createdAt?: string | null;
   updatedAt?: string | null;
-  paymentStatus: "CHUA_THANH_TOAN" | "DA_THANH_TOAN";
+  paymentStatus: "CHUA_THANH_TOAN" | "DA_THANH_TOAN" | "THANH_TOAN_HET";
   paidAmount?: number | null; // Số tiền đã thanh toán
 };
 
@@ -67,7 +67,7 @@ export type MaintainContractRequestDTO = {
   startDate?: string | null;
   endDate?: string | null;
   linkedContractId?: number | null; // ID hợp đồng liên kết (nếu có)
-  paymentStatus: "CHUA_THANH_TOAN" | "DA_THANH_TOAN";
+  paymentStatus: "CHUA_THANH_TOAN" | "DA_THANH_TOAN" | "THANH_TOAN_HET";
   paidAmount?: number | null; // Số tiền đã thanh toán
 };
 

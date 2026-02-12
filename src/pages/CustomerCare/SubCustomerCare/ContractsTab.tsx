@@ -425,8 +425,8 @@ export default function ContractsTab({
         yearlyPrice: contractDetail.yearlyPrice || '',
         totalPrice: contractDetail.totalPrice || '',
         kioskQuantity: contractDetail.kioskQuantity || '',
-        paymentStatus: (paymentStatus === "DA_THANH_TOAN" ? "DA_THANH_TOAN" : "CHUA_THANH_TOAN"),
-        paidAmount: (paymentStatus === "DA_THANH_TOAN" ? paidAmount : ""),
+        paymentStatus: (paymentStatus === "DA_THANH_TOAN" ? "DA_THANH_TOAN" : paymentStatus === "THANH_TOAN_HET" ? "THANH_TOAN_HET" : "CHUA_THANH_TOAN") as "CHUA_THANH_TOAN" | "DA_THANH_TOAN" | "THANH_TOAN_HET",
+        paidAmount: (paymentStatus === "DA_THANH_TOAN" || paymentStatus === "THANH_TOAN_HET" ? paidAmount : ""),
         startDate: startDateFormatted,
         endDate: endDateFormatted,
       });
@@ -436,7 +436,7 @@ export default function ContractsTab({
       setTotalPriceDisplay(contractDetail.totalPrice ? formatNumber(contractDetail.totalPrice) : '');
       
       // Set display value cho paidAmount
-      if (paymentStatus === "DA_THANH_TOAN" && paidAmount !== '') {
+      if ((paymentStatus === "DA_THANH_TOAN" || paymentStatus === "THANH_TOAN_HET") && paidAmount !== '') {
         setPaidAmountDisplay(formatNumber(paidAmount as any));
       } else {
         setPaidAmountDisplay('');
@@ -534,7 +534,7 @@ export default function ContractsTab({
           picUser: c.picUser || null,
           kioskQuantity: c.kioskQuantity || null,
           paidAmount: typeof c.paidAmount === 'number' ? c.paidAmount : (c.paidAmount ? Number(c.paidAmount) : null),
-          paymentStatus: c.paymentStatus ? (c.paymentStatus === "DA_THANH_TOAN" ? "DA_THANH_TOAN" : "CHUA_THANH_TOAN") : "CHUA_THANH_TOAN",
+          paymentStatus: c.paymentStatus ? (c.paymentStatus === "THANH_TOAN_HET" ? "THANH_TOAN_HET" : c.paymentStatus === "DA_THANH_TOAN" ? "DA_THANH_TOAN" : "CHUA_THANH_TOAN") : "CHUA_THANH_TOAN",
         }));
         onContractsChange(updatedContracts);
       } else {
@@ -876,7 +876,9 @@ export default function ContractsTab({
         totalPrice: totalPriceNum,
         kioskQuantity: form.kioskQuantity && typeof form.kioskQuantity === "number" ? form.kioskQuantity : (form.kioskQuantity === "" ? null : Number(form.kioskQuantity)),
         paymentStatus: form.paymentStatus || "CHUA_THANH_TOAN",
-        paidAmount: (form.paymentStatus === "DA_THANH_TOAN" && typeof form.paidAmount === "number") ? form.paidAmount : null,
+        paidAmount: form.paymentStatus === "THANH_TOAN_HET"
+          ? (typeof form.totalPrice === "number" ? form.totalPrice : null)
+          : (form.paymentStatus === "DA_THANH_TOAN" && typeof form.paidAmount === "number") ? form.paidAmount : null,
         startDate: formatDateTimeForBackend(form.startDate),
         endDate: formatDateTimeForBackend(form.endDate),
         linkedContractId: renewingContractId || null, // Link với hợp đồng gốc nếu đang gia hạn
@@ -925,7 +927,7 @@ export default function ContractsTab({
           picUser: c.picUser || null,
           kioskQuantity: c.kioskQuantity || null,
           paidAmount: typeof c.paidAmount === 'number' ? c.paidAmount : (c.paidAmount ? Number(c.paidAmount) : null),
-          paymentStatus: c.paymentStatus ? (c.paymentStatus === "DA_THANH_TOAN" ? "DA_THANH_TOAN" : "CHUA_THANH_TOAN") : "CHUA_THANH_TOAN",
+          paymentStatus: c.paymentStatus ? (c.paymentStatus === "THANH_TOAN_HET" ? "THANH_TOAN_HET" : c.paymentStatus === "DA_THANH_TOAN" ? "DA_THANH_TOAN" : "CHUA_THANH_TOAN") : "CHUA_THANH_TOAN",
         }));
         onContractsChange(updatedContracts);
       }
@@ -1203,7 +1205,18 @@ export default function ContractsTab({
                       {contract.value}
                     </td>
                     <td className="py-3 px-4">
-                      {contract.paymentStatus === "DA_THANH_TOAN" ? (
+                      {contract.paymentStatus === "THANH_TOAN_HET" ? (
+                        <div className="flex flex-col gap-1">
+                          <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800">
+                             Thanh toán hết
+                          </span>
+                          {typeof contract.paidAmount === "number" && contract.paidAmount > 0 && (
+                            <span className="text-xs text-center text-gray-600">
+                              {formatCurrency(contract.paidAmount)}
+                            </span>
+                          )}
+                        </div>
+                      ) : contract.paymentStatus === "DA_THANH_TOAN" ? (
                         <div className="flex flex-col gap-1">
                           <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-100 text-green-700">
                             Đã thanh toán

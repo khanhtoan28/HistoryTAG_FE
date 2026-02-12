@@ -42,7 +42,7 @@ interface Contract {
   daysLeft?: number;
   kioskQuantity?: number | null;
   paidAmount?: number | null;
-  paymentStatus?: "CHUA_THANH_TOAN" | "DA_THANH_TOAN";
+  paymentStatus?: "CHUA_THANH_TOAN" | "DA_THANH_TOAN" | "THANH_TOAN_HET";
 }
 
 interface Hospital {
@@ -449,7 +449,7 @@ export default function HospitalCareList() {
                   daysLeft: c.daysLeft !== undefined && c.daysLeft !== null ? c.daysLeft : undefined,
                   kioskQuantity: c.kioskQuantity || null,
                   paidAmount: typeof c.paidAmount === 'number' ? c.paidAmount : (c.paidAmount ? Number(c.paidAmount) : null),
-                  paymentStatus: c.paymentStatus ? (c.paymentStatus === "DA_THANH_TOAN" ? "DA_THANH_TOAN" : "CHUA_THANH_TOAN") : "CHUA_THANH_TOAN",
+                  paymentStatus: c.paymentStatus ? (c.paymentStatus === "THANH_TOAN_HET" ? "THANH_TOAN_HET" : c.paymentStatus === "DA_THANH_TOAN" ? "DA_THANH_TOAN" : "CHUA_THANH_TOAN") : "CHUA_THANH_TOAN",
                 };
               });
               
@@ -1076,8 +1076,8 @@ export default function HospitalCareList() {
                           {(() => {
                             if (!hospital.contracts || hospital.contracts.length === 0) return "-";
                             const totalPaid = hospital.contracts.reduce((sum: number, c: Contract) => {
-                              // Chỉ tính số tiền thanh toán khi paymentStatus === "DA_THANH_TOAN"
-                              if (c.paymentStatus === "DA_THANH_TOAN" && typeof c.paidAmount === 'number' && c.paidAmount > 0) {
+                              // Chỉ tính số tiền thanh toán khi đã thanh toán
+                              if ((c.paymentStatus === "DA_THANH_TOAN" || c.paymentStatus === "THANH_TOAN_HET") && typeof c.paidAmount === 'number' && c.paidAmount > 0) {
                                 return sum + c.paidAmount;
                               }
                               return sum;

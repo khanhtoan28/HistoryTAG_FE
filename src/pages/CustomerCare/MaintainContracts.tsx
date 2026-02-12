@@ -4,9 +4,10 @@ import ComponentCard from "../../components/common/ComponentCard";
 import PageMeta from "../../components/common/PageMeta";
 import Pagination from "../../components/common/Pagination";
 import { AiOutlineEye, AiOutlineEdit, AiOutlineDelete } from "react-icons/ai";
-import { FiUser, FiClock, FiCalendar, FiDollarSign, FiFileText, FiEye, FiEdit3, FiTrash2, FiArrowUp, FiArrowDown, FiX, FiBriefcase, FiTag, FiCheckCircle, FiAlertCircle } from "react-icons/fi";
+import { FiUser, FiClock, FiCalendar, FiDollarSign, FiFileText, FiEye, FiEdit3, FiTrash2, FiArrowUp, FiArrowDown, FiX, FiBriefcase, FiTag, FiCheckCircle, FiAlertCircle, FiDownload } from "react-icons/fi";
 import { FaHospitalAlt } from "react-icons/fa";
 import toast from "react-hot-toast";
+import ExcelJS from "exceljs";
 import {
   createMaintainContract,
   updateMaintainContract,
@@ -158,7 +159,7 @@ export default function MaintainContractsPage() {
       const rolesStr = localStorage.getItem("roles") || sessionStorage.getItem("roles");
       if (rolesStr) {
         const roles = JSON.parse(rolesStr);
-        const isSuperAdmin = Array.isArray(roles) && roles.some((r: string) => 
+        const isSuperAdmin = Array.isArray(roles) && roles.some((r: string) =>
           r === "SUPERADMIN" || r === "SUPER_ADMIN" || r === "Super Admin"
         );
         if (isSuperAdmin) return true;
@@ -177,6 +178,19 @@ export default function MaintainContractsPage() {
       return false;
     }
   })();
+
+  // Detail Field Component for CRM-style view (hides empty fields)
+  function DetailField({ label, value }: { label: string; value?: React.ReactNode | string | null }) {
+    if (!value || value === '—' || (typeof value === 'string' && value.trim() === '')) {
+      return null; // Hide empty fields
+    }
+    return (
+      <div>
+        <div className="text-xs font-medium text-gray-500 mb-1.5">{label}</div>
+        <div className="text-sm text-gray-900">{typeof value === 'string' ? value : value}</div>
+      </div>
+    );
+  }
 
   const [items, setItems] = useState<WarrantyContract[]>([]);
   const [loading, setLoading] = useState(false);
@@ -276,7 +290,7 @@ export default function MaintainContractsPage() {
 
   function fillForm(item: WarrantyContract) {
     const yearlyPrice = typeof item.yearlyPrice === 'number' ? item.yearlyPrice : (item.yearlyPrice ? Number(item.yearlyPrice) : "");
-    
+
     // Parse startDate trực tiếp từ ISO string để tránh timezone conversion
     let startDateForInput: string | null = null;
     if (item.startDate) {
@@ -305,7 +319,7 @@ export default function MaintainContractsPage() {
         startDateForInput = null;
       }
     }
-    
+
     // Parse endDate tương tự startDate
     let endDateForInput: string | null = null;
     if (item.endDate) {
@@ -337,7 +351,7 @@ export default function MaintainContractsPage() {
     const paidAmount = typeof (item as any).paidAmount === 'number'
       ? (item as any).paidAmount
       : ((item as any).paidAmount ? Number((item as any).paidAmount) : "");
-    
+
     setForm({
       contractCode: item.contractCode || "",
       picUserId: item.picUser?.id,
@@ -346,8 +360,8 @@ export default function MaintainContractsPage() {
       yearlyPrice: yearlyPrice,
       totalPrice: totalPrice,
       kioskQuantity: item.kioskQuantity || "",
-      paymentStatus: (paymentStatus === "DA_THANH_TOAN" ? "DA_THANH_TOAN" : "CHUA_THANH_TOAN"),
-      paidAmount: (paymentStatus === "DA_THANH_TOAN" ? paidAmount : ""),
+      paymentStatus: (paymentStatus === "DA_THANH_TOAN" ? "DA_THANH_TOAN" : paymentStatus === "THANH_TOAN_HET" ? "THANH_TOAN_HET" : "CHUA_THANH_TOAN") as "CHUA_THANH_TOAN" | "DA_THANH_TOAN" | "THANH_TOAN_HET",
+      paidAmount: (paymentStatus === "DA_THANH_TOAN" || paymentStatus === "THANH_TOAN_HET" ? paidAmount : ""),
       startDate: startDateForInput,
       endDate: endDateForInput,
     });
@@ -363,7 +377,7 @@ export default function MaintainContractsPage() {
       setTotalPriceDisplay('');
     }
 
-    if (paymentStatus === "DA_THANH_TOAN" && paidAmount !== '') {
+    if ((paymentStatus === "DA_THANH_TOAN" || paymentStatus === "THANH_TOAN_HET") && paidAmount !== '') {
       setPaidAmountDisplay(formatNumber(paidAmount as any));
     } else {
       setPaidAmountDisplay('');
@@ -445,12 +459,12 @@ export default function MaintainContractsPage() {
       };
       if (debouncedQSearch.trim()) params.search = debouncedQSearch.trim();
       if (qPicUserId) params.picUserId = Number(qPicUserId);
-      
+
       // ✅ New filters
       if (filterStatus) params.status = filterStatus;
       if (filterPaymentStatus) params.paymentStatus = filterPaymentStatus;
       if (filterExpiresWithinDays) params.expiresWithinDays = Number(filterExpiresWithinDays);
-      
+
       // ✅ Date range filter
       if (filterStartFrom) params.startDateFrom = normalizeDateForStart(filterStartFrom);
       if (filterStartTo) params.startDateTo = normalizeDateForEnd(filterStartTo);
@@ -471,6 +485,222 @@ export default function MaintainContractsPage() {
   useEffect(() => {
     fetchList();
   }, [page, size, debouncedQSearch, qPicUserId, filterStartFrom, filterStartTo, filterStatus, filterPaymentStatus, filterExpiresWithinDays, sortBy, sortDir]);
+
+  // ========== EXPORT EXCEL ==========
+  const [exporting, setExporting] = useState(false);
+
+  async function exportExcel() {
+    setExporting(true);
+    try {
+      // Fetch ALL items matching current filters (no pagination)
+      const params: any = {
+        page: 0,
+        size: 99999,
+        sortBy,
+        sortDir,
+      };
+      if (debouncedQSearch.trim()) params.search = debouncedQSearch.trim();
+      if (qPicUserId) params.picUserId = Number(qPicUserId);
+      if (filterStatus) params.status = filterStatus;
+      if (filterPaymentStatus) params.paymentStatus = filterPaymentStatus;
+      if (filterExpiresWithinDays) params.expiresWithinDays = Number(filterExpiresWithinDays);
+      if (filterStartFrom) params.startDateFrom = normalizeDateForStart(filterStartFrom);
+      if (filterStartTo) params.startDateTo = normalizeDateForEnd(filterStartTo);
+
+      const data = await getMaintainContracts(params);
+      const allItems: WarrantyContract[] = data.content || [];
+
+      if (allItems.length === 0) {
+        toast.error("Không có dữ liệu để xuất");
+        setExporting(false);
+        return;
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Hợp đồng bảo trì");
+
+      const colCount = 13;
+
+      // ── Title row ──
+      const titleRow = worksheet.addRow(Array(colCount).fill(""));
+      titleRow.height = 32;
+      worksheet.mergeCells(1, 1, 1, colCount);
+      const titleCell = titleRow.getCell(1);
+      titleCell.value = "BÁO CÁO HỢP ĐỒNG BẢO TRÌ";
+      titleCell.font = { bold: true, size: 14, color: { argb: "FF1A237E" } };
+      titleCell.alignment = { vertical: "middle", horizontal: "center" };
+      titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE3F2FD" } };
+
+      // ── Filter info row ──
+      const filterParts: string[] = [];
+      if (debouncedQSearch.trim()) filterParts.push(`Tìm kiếm: "${debouncedQSearch.trim()}"`);
+      if (qPicUserId) {
+        const picName = picOptions.find(p => String(p.id) === String(qPicUserId))?.label || qPicUserId;
+        filterParts.push(`Người phụ trách: ${picName}`);
+      }
+      if (filterStartFrom || filterStartTo) filterParts.push(`Ngày ký HĐ: ${formatFilterDateLabel(filterStartFrom)} - ${formatFilterDateLabel(filterStartTo)}`);
+      if (filterStatus) {
+        const statusLabel = statusConfig[filterStatus]?.label || filterStatus;
+        filterParts.push(`Trạng thái HĐ: ${statusLabel}`);
+      }
+      if (filterPaymentStatus) {
+        const payLabel = filterPaymentStatus === "THANH_TOAN_HET" ? "Thanh toán hết" : filterPaymentStatus === "DA_THANH_TOAN" ? "Đã thanh toán" : "Chưa thanh toán";
+        filterParts.push(`Thanh toán: ${payLabel}`);
+      }
+      if (filterExpiresWithinDays) filterParts.push(`Hết hạn trong: ${filterExpiresWithinDays} ngày`);
+
+      if (filterParts.length > 0) {
+        const filterRow = worksheet.addRow(Array(colCount).fill(""));
+        worksheet.mergeCells(worksheet.rowCount, 1, worksheet.rowCount, colCount);
+        const fc = filterRow.getCell(1);
+        fc.value = `Bộ lọc: ${filterParts.join(" | ")}`;
+        fc.font = { italic: true, size: 10, color: { argb: "FF666666" } };
+        fc.alignment = { vertical: "middle", horizontal: "left" };
+      }
+
+      // Empty spacer row
+      worksheet.addRow([]);
+
+      // ── Header row ──
+      const headers = [
+        "STT", "Bệnh viện", "Mã hợp đồng", "Người phụ trách",
+        "Thời hạn", "Số Kiosk BT", "Ngày ký HĐ", "Ngày hết hạn HĐ",
+        "Trạng thái", "Thanh toán", "Tổng tiền", "Đã thanh toán", "Còn lại",
+      ];
+      const headerRow = worksheet.addRow(headers);
+      headerRow.height = 28;
+      for (let col = 1; col <= colCount; col++) {
+        const cell = headerRow.getCell(col);
+        cell.font = { bold: true, size: 11, color: { argb: "FFFFFFFF" } };
+        cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1976D2" } };
+        cell.border = {
+          top: { style: "thin" }, left: { style: "thin" },
+          bottom: { style: "thin" }, right: { style: "thin" },
+        };
+      }
+
+      // Column widths
+      const widths = [6, 35, 18, 22, 14, 12, 16, 16, 16, 18, 18, 18, 18];
+      widths.forEach((w, i) => { worksheet.getColumn(i + 1).width = w; });
+
+      // ── Data rows ──
+      allItems.forEach((item, index) => {
+        const totalPrice = item.totalPrice || 0;
+        const paidAmount = typeof item.paidAmount === "number" ? item.paidAmount : 0;
+        const remaining = totalPrice - paidAmount;
+
+        const statusLabel = statusConfig[item.status]?.label || item.status || "";
+        const payLabel = item.paymentStatus === "THANH_TOAN_HET"
+          ? "Thanh toán hết"
+          : item.paymentStatus === "DA_THANH_TOAN"
+            ? "Đã thanh toán"
+            : "Chưa thanh toán";
+
+        const row = worksheet.addRow([
+          index + 1,
+          item.hospital?.label || "",
+          item.contractCode || "",
+          item.picUser?.label || "",
+          item.durationYears || "",
+          typeof item.kioskQuantity === "number" ? item.kioskQuantity : "",
+          fmtDate(item.startDate),
+          fmtDate(item.endDate),
+          statusLabel,
+          payLabel,
+          totalPrice,
+          paidAmount,
+          remaining,
+        ]);
+        row.height = 22;
+
+        for (let col = 1; col <= colCount; col++) {
+          const cell = row.getCell(col);
+          cell.alignment = { vertical: "middle", horizontal: col === 1 ? "center" : "left", wrapText: col === 2 };
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFE0E0E0" } },
+            left: { style: "thin", color: { argb: "FFE0E0E0" } },
+            bottom: { style: "thin", color: { argb: "FFE0E0E0" } },
+            right: { style: "thin", color: { argb: "FFE0E0E0" } },
+          };
+          // Alternate row background
+          if (index % 2 === 1) {
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F5F5" } };
+          }
+        }
+
+        // Number format for currency columns (11=Tổng tiền, 12=Đã TT, 13=Còn lại)
+        for (const colIdx of [11, 12, 13]) {
+          row.getCell(colIdx).numFmt = '#,##0';
+          row.getCell(colIdx).alignment = { vertical: "middle", horizontal: "right" };
+        }
+
+        // Color coding for status
+        const statusCell = row.getCell(9);
+        if (item.status === "HET_HAN") {
+          statusCell.font = { color: { argb: "FFDC2626" }, bold: true };
+        } else if (item.status === "SAP_HET_HAN") {
+          statusCell.font = { color: { argb: "FFD97706" }, bold: true };
+        } else if (item.status === "DA_GIA_HAN") {
+          statusCell.font = { color: { argb: "FF16A34A" } };
+        }
+
+        // Color coding for payment status
+        const payCell = row.getCell(10);
+        if (item.paymentStatus === "THANH_TOAN_HET") {
+          payCell.font = { color: { argb: "FF059669" }, bold: true };
+        } else if (item.paymentStatus === "DA_THANH_TOAN") {
+          payCell.font = { color: { argb: "FF16A34A" } };
+        } else {
+          payCell.font = { color: { argb: "FF9CA3AF" } };
+        }
+      });
+
+      // ── Summary row ──
+      worksheet.addRow([]);
+      const summaryRow = worksheet.addRow([
+        "", "", "", "", "", "", "", "",
+        `Tổng: ${allItems.length} hợp đồng`, "",
+        allItems.reduce((s, i) => s + (i.totalPrice || 0), 0),
+        allItems.reduce((s, i) => s + (typeof i.paidAmount === "number" ? i.paidAmount : 0), 0),
+        allItems.reduce((s, i) => s + ((i.totalPrice || 0) - (typeof i.paidAmount === "number" ? i.paidAmount : 0)), 0),
+      ]);
+      summaryRow.height = 26;
+      for (let col = 1; col <= colCount; col++) {
+        const cell = summaryRow.getCell(col);
+        cell.font = { bold: true, size: 11 };
+        cell.border = {
+          top: { style: "medium" }, bottom: { style: "medium" },
+          left: { style: "thin" }, right: { style: "thin" },
+        };
+      }
+      for (const colIdx of [11, 12, 13]) {
+        summaryRow.getCell(colIdx).numFmt = '#,##0';
+        summaryRow.getCell(colIdx).alignment = { vertical: "middle", horizontal: "right" };
+      }
+      summaryRow.getCell(9).alignment = { vertical: "middle", horizontal: "right" };
+
+      // ── Generate & download ──
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+      a.download = `hop_dong_bao_tri_${dateStr}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success(`Xuất Excel thành công (${allItems.length} hợp đồng)`);
+    } catch (e: any) {
+      console.error("Export Excel error:", e);
+      toast.error(e?.message || "Xuất Excel thất bại");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   // Handle column sorting
   const handleSort = (column: string) => {
@@ -714,10 +944,12 @@ export default function MaintainContractsPage() {
       endDate: endDateForPayload,
       paymentStatus: form.paymentStatus || "CHUA_THANH_TOAN",
       paidAmount:
-        (form.paymentStatus === "DA_THANH_TOAN" && typeof form.paidAmount === "number")
-          ? form.paidAmount
-          : null,
-      
+        (form.paymentStatus === "THANH_TOAN_HET" && typeof form.totalPrice === "number")
+          ? form.totalPrice
+          : (form.paymentStatus === "DA_THANH_TOAN" && typeof form.paidAmount === "number")
+            ? form.paidAmount
+            : null,
+
       // careId không có trong trang này, backend sẽ tự tìm từ hospitalId
     };
 
@@ -727,14 +959,14 @@ export default function MaintainContractsPage() {
         setLoading(true);
         const existingContracts = await getMaintainContracts({ hospitalId: form.hospitalId, page: 0, size: 1 });
         setLoading(false);
-        const hasExisting = (existingContracts.content && existingContracts.content.length > 0) || 
-                           (Array.isArray(existingContracts) && existingContracts.length > 0);
-        
+        const hasExisting = (existingContracts.content && existingContracts.content.length > 0) ||
+          (Array.isArray(existingContracts) && existingContracts.length > 0);
+
         if (hasExisting) {
-          const hospitalName = selectedHospital?.label || 
-                              hospitalOptions.find(h => h.id === form.hospitalId)?.label || 
-                              items.find(h => h.hospital?.id === form.hospitalId)?.hospital?.label ||
-                              "bệnh viện này";
+          const hospitalName = selectedHospital?.label ||
+            hospitalOptions.find(h => h.id === form.hospitalId)?.label ||
+            items.find(h => h.hospital?.id === form.hospitalId)?.hospital?.label ||
+            "bệnh viện này";
           setHospitalNameForConfirm(hospitalName);
           setPendingSubmit({ payload, isEditing: false });
           setConfirmCreateOpen(true);
@@ -773,7 +1005,7 @@ export default function MaintainContractsPage() {
       console.error("Error saving warranty contract:", e);
       const errorMessage = e?.response?.data?.message || e?.message || "Lưu thất bại";
       if (e?.response?.status === 401 || e?.response?.status === 403) {
-        const msg = e?.response?.status === 401 
+        const msg = e?.response?.status === 401
           ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
           : "Bạn không có quyền thực hiện thao tác này.";
         setError(msg);
@@ -792,7 +1024,7 @@ export default function MaintainContractsPage() {
     setConfirmCreateOpen(false);
     setLoading(true);
     setError(null);
-    
+
     try {
       // Kiểm tra token trước khi gửi request
       const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
@@ -860,7 +1092,7 @@ export default function MaintainContractsPage() {
     // Lưu giá trị số
     setForm((s) => ({ ...s, yearlyPrice: parsed }));
   }
-  
+
   function handlePriceBlur() {
     // Format lại khi blur
     if (form.yearlyPrice !== '' && typeof form.yearlyPrice === 'number') {
@@ -869,7 +1101,7 @@ export default function MaintainContractsPage() {
       setYearlyPriceDisplay('');
     }
   }
-  
+
   function handlePriceFocus() {
     // Khi focus, hiển thị giá trị đã format
     if (form.yearlyPrice !== '' && typeof form.yearlyPrice === 'number') {
@@ -884,7 +1116,7 @@ export default function MaintainContractsPage() {
     setTotalPriceDisplay(value);
     const parsed = parseFormattedNumber(value);
     setForm((s) => ({ ...s, totalPrice: parsed }));
-    
+
     // Re-validate paid amount khi total price thay đổi
     if (typeof form.paidAmount === "number" && typeof parsed === "number" && form.paidAmount > parsed) {
       setPaidAmountError("Số tiền thanh toán không được vượt quá tổng tiền hợp đồng");
@@ -912,7 +1144,7 @@ export default function MaintainContractsPage() {
     setPaidAmountDisplay(value);
     const parsed = parseFormattedNumber(value);
     setForm((s) => ({ ...s, paidAmount: parsed }));
-    
+
     // Validation real-time: kiểm tra số tiền thanh toán không vượt quá tổng tiền
     if (typeof parsed === "number" && typeof form.totalPrice === "number" && parsed > form.totalPrice) {
       setPaidAmountError("Số tiền thanh toán không được vượt quá tổng tiền hợp đồng");
@@ -1048,9 +1280,8 @@ export default function MaintainContractsPage() {
             ) : (
               <>
                 <div
-                  className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 border-b border-gray-100 ${
-                    !value ? "bg-blue-50" : ""
-                  }`}
+                  className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 border-b border-gray-100 ${!value ? "bg-blue-50" : ""
+                    }`}
                   onMouseDown={(e) => {
                     e.preventDefault();
                     onChange("");
@@ -1063,9 +1294,8 @@ export default function MaintainContractsPage() {
                 {displayOptions.map((opt, idx) => (
                   <div
                     key={opt.id}
-                    className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 ${
-                      idx === highlight ? "bg-gray-100" : ""
-                    } ${String(opt.id) === value ? "bg-blue-50" : ""}`}
+                    className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 ${idx === highlight ? "bg-gray-100" : ""
+                      } ${String(opt.id) === value ? "bg-blue-50" : ""}`}
                     onMouseEnter={() => setHighlight(idx)}
                     onMouseDown={(e) => {
                       e.preventDefault();
@@ -1089,9 +1319,8 @@ export default function MaintainContractsPage() {
                   filteredOptions.slice(7).map((opt, idx) => (
                     <div
                       key={opt.id}
-                      className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 ${
-                        idx + 7 === highlight ? "bg-gray-100" : ""
-                      } ${String(opt.id) === value ? "bg-blue-50" : ""}`}
+                      className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 ${idx + 7 === highlight ? "bg-gray-100" : ""
+                        } ${String(opt.id) === value ? "bg-blue-50" : ""}`}
                       onMouseEnter={() => setHighlight(idx + 7)}
                       onMouseDown={(e) => {
                         e.preventDefault();
@@ -1130,8 +1359,8 @@ export default function MaintainContractsPage() {
               className="rounded-xl border border-blue-500 bg-blue-500 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-blue-600 hover:shadow-md flex items-center gap-2"
               onClick={onCreate}
             >
-            <PlusIcon style={{ width: 18, height: 18, fill: 'white' }} />
-            <span>Thêm mới</span>
+              <PlusIcon style={{ width: 18, height: 18, fill: 'white' }} />
+              <span>Thêm mới</span>
             </button>
           )}
         </div>
@@ -1275,8 +1504,9 @@ export default function MaintainContractsPage() {
                 className="rounded-full border border-gray-200 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition min-w-[150px]"
               >
                 <option value="">Tất cả</option>
-                <option value="DA_THANH_TOAN">✅ Đã thanh toán</option>
-                <option value="CHUA_THANH_TOAN">⏳ Chưa thanh toán</option>
+                <option value="THANH_TOAN_HET"> Thanh toán hết</option>
+                <option value="DA_THANH_TOAN"> Đã thanh toán</option>
+                <option value="CHUA_THANH_TOAN"> Chưa thanh toán</option>
               </select>
             </div>
             {/* Hết hạn trong X ngày */}
@@ -1322,6 +1552,24 @@ export default function MaintainContractsPage() {
               >
                 <span>Xóa</span>
               </button>
+              <button
+                type="button"
+                onClick={exportExcel}
+                disabled={exporting || loading || items.length === 0}
+                className="inline-flex items-center gap-2 rounded-full bg-green-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {exporting ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    <span>Đang xuất...</span>
+                  </>
+                ) : (
+                  <>
+                    <FiDownload className="h-4 w-4" />
+                    <span>Xuất Excel</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
           <div className="mt-4 text-sm font-semibold text-gray-700">
@@ -1348,7 +1596,7 @@ export default function MaintainContractsPage() {
               )}
               {filterPaymentStatus && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-1 text-green-700">
-                  {filterPaymentStatus === "DA_THANH_TOAN" ? "✅ Đã thanh toán" : "⏳ Chưa thanh toán"}
+                  {filterPaymentStatus === "THANH_TOAN_HET" ? " Thanh toán hết" : filterPaymentStatus === "DA_THANH_TOAN" ? " Đã thanh toán" : " Chưa thanh toán"}
                   <button onClick={() => setFilterPaymentStatus("")} className="ml-1 text-green-500 hover:text-green-700">×</button>
                 </span>
               )}
@@ -1374,7 +1622,7 @@ export default function MaintainContractsPage() {
               <table className="w-full divide-y divide-gray-200 dark:divide-gray-800">
                 <thead className="bg-gray-50 dark:bg-gray-800/50">
                   <tr>
-                    <th 
+                    <th
                       className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
                       onClick={() => handleSort("id")}
                     >
@@ -1383,7 +1631,7 @@ export default function MaintainContractsPage() {
                         {renderSortIcon("id")}
                       </div>
                     </th>
-                    <th 
+                    <th
                       className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
                       onClick={() => handleSort("hospital")}
                     >
@@ -1392,7 +1640,7 @@ export default function MaintainContractsPage() {
                         {renderSortIcon("hospital")}
                       </div>
                     </th>
-                    <th 
+                    <th
                       className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
                       onClick={() => handleSort("contractCode")}
                     >
@@ -1401,7 +1649,7 @@ export default function MaintainContractsPage() {
                         {renderSortIcon("contractCode")}
                       </div>
                     </th>
-                    <th 
+                    <th
                       className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
                       onClick={() => handleSort("picUser")}
                     >
@@ -1410,7 +1658,7 @@ export default function MaintainContractsPage() {
                         {renderSortIcon("picUser")}
                       </div>
                     </th>
-                    <th 
+                    <th
                       className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
                       onClick={() => handleSort("durationYears")}
                     >
@@ -1424,7 +1672,7 @@ export default function MaintainContractsPage() {
                     >
                       Số Kiosk BT
                     </th>
-                    <th 
+                    <th
                       className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
                       onClick={() => handleSort("startDate")}
                     >
@@ -1433,7 +1681,7 @@ export default function MaintainContractsPage() {
                         {renderSortIcon("startDate")}
                       </div>
                     </th>
-                    <th 
+                    <th
                       className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
                       onClick={() => handleSort("endDate")}
                     >
@@ -1442,7 +1690,7 @@ export default function MaintainContractsPage() {
                         {renderSortIcon("endDate")}
                       </div>
                     </th>
-                    <th 
+                    <th
                       className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
                       onClick={() => handleSort("status")}
                     >
@@ -1463,7 +1711,7 @@ export default function MaintainContractsPage() {
                     {/* <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                       Giá (1 năm)
                     </th> */}
-                    <th 
+                    <th
                       className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition"
                       onClick={() => handleSort("totalPrice")}
                     >
@@ -1599,7 +1847,18 @@ export default function MaintainContractsPage() {
                           </td>
                           {/* Thanh toán */}
                           <td className="whitespace-nowrap px-4 py-3">
-                            {item.paymentStatus === "DA_THANH_TOAN" ? (
+                            {item.paymentStatus === "THANH_TOAN_HET" ? (
+                              <div className="flex flex-col gap-1">
+                                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800">
+                                  Thanh toán hết
+                                </span>
+                                {typeof item.paidAmount === "number" && (
+                                  <span className="text-xs text-center text-gray-600">
+                                    {formatCurrency(item.paidAmount)}
+                                  </span>
+                                )}
+                              </div>
+                            ) : item.paymentStatus === "DA_THANH_TOAN" ? (
                               <div className="flex flex-col gap-1">
                                 <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-100 text-green-700">
                                   Đã thanh toán
@@ -1738,268 +1997,106 @@ export default function MaintainContractsPage() {
                   </div>
                 ) : viewing ? (
                   <div className="p-6">
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                      
-                      {/* Main Content */}
-                      <div className="lg:col-span-2 space-y-6">
-                        
-                        {/* Thông tin hợp đồng */}
-                        <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-                            <h2 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                              <FiBriefcase className="h-4 w-4 text-blue-600" />
-                              Thông tin hợp đồng
-                            </h2>
-                          </div>
-                          <div className="p-4 space-y-4">
-                            
-                            {/* Mã hợp đồng */}
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                                Mã hợp đồng
-                              </label>
-                              <p className="text-sm font-medium text-gray-900 dark:text-white">
-                                {viewing.contractCode || "—"}
-                              </p>
-                            </div>
-
-                            <div className="border-t border-gray-200 dark:border-gray-700"></div>
-
-                            {/* Bệnh viện */}
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                                Bệnh viện
-                              </label>
-                              <p className="text-sm font-medium text-gray-900 dark:text-white">
-                                {viewing.hospital?.label || "—"}
-                              </p>
-                            </div>
-
-                            <div className="border-t border-gray-200 dark:border-gray-700"></div>
-
-                            {/* Người phụ trách */}
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                                Người phụ trách
-                              </label>
-                              <p className="text-sm text-gray-900 dark:text-white">
-                                {viewing.picUser?.label || "—"}
-                                {viewing.picUser?.subLabel && (
-                                  <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
-                                    ({viewing.picUser.subLabel})
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-
-                            <div className="border-t border-gray-200 dark:border-gray-700"></div>
-
-                            {/* Thời hạn */}
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                                Thời hạn
-                              </label>
-                              <p className="text-sm text-gray-900 dark:text-white">
-                                {viewing.durationYears || "—"}
-                              </p>
-                            </div>
-
-                            <div className="border-t border-gray-200 dark:border-gray-700"></div>
-
-                            {/* Giá/năm */}
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                                Giá/năm
-                              </label>
-                              <p className="text-sm font-medium text-green-600 dark:text-green-400">
-                                {formatCurrency(viewing.yearlyPrice)}
-                              </p>
-                            </div>
-
-                            <div className="border-t border-gray-200 dark:border-gray-700"></div>
-
-                            {/* Tổng tiền */}
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                                Tổng tiền
-                              </label>
-                              <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                                {formatCurrency(viewing.totalPrice)}
-                              </p>
-                            </div>
-
-                            <div className="border-t border-gray-200 dark:border-gray-700"></div>
-
-                            {/* Ngày bắt đầu */}
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                                Ngày bắt đầu
-                              </label>
-                              <div className="flex items-center gap-2">
-                                <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
-                                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                                  {fmt(viewing.startDate)}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="border-t border-gray-200 dark:border-gray-700"></div>
-
-                            {/* Ngày kết thúc */}
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                                Ngày kết thúc
-                              </label>
-                              <div className="flex items-center gap-2">
-                                <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
-                                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                                  {fmt(viewing.endDate)}
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Trạng thái hợp đồng */}
-                            {(viewing as any).status && (
-                              <>
-                                <div className="border-t border-gray-200 dark:border-gray-700"></div>
-                                <div>
-                                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                                    Trạng thái hợp đồng
-                                  </label>
-                                  <div className="flex flex-wrap gap-2">
-                                    {(() => {
-                                      const status = (viewing as any).status;
-                                      const config = statusConfig[status] || statusConfig.DANG_HOAT_DONG;
-                                      return (
-                                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${config.bgColor} ${config.textColor} border ${config.borderColor || 'border-transparent'}`}>
-                                          {config.label}
-                                        </span>
-                                      );
-                                    })()}
-                                  </div>
-                                </div>
-                              </>
-                            )}
-
-                            {/* Trạng thái thanh toán */}
-                            {((viewing as any).paymentStatus || (viewing as any).paidAmount) && (
-                              <>
-                                <div className="border-t border-gray-200 dark:border-gray-700"></div>
-                                <div>
-                                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                                    Trạng thái thanh toán
-                                  </label>
-                                  <div className="space-y-2">
-                                    {((viewing as any).paymentStatus === "DA_THANH_TOAN") ? (
-                                      <div className="flex items-center gap-2">
-                                        <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300">
-                                          <FiCheckCircle className="h-3 w-3 mr-1" />
-                                          Đã thanh toán
-                                        </span>
-                                        {typeof (viewing as any).paidAmount === 'number' && (viewing as any).paidAmount > 0 && (
-                                          <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                            {formatCurrency((viewing as any).paidAmount)}
-                                          </span>
-                                        )}
-                                      </div>
-                                    ) : (
-                                      <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                                        <FiAlertCircle className="h-3 w-3 mr-1" />
-                                        Chưa thanh toán
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </>
-                            )}
-
-                          </div>
-                        </div>
-
-                      </div>
-
-                      {/* Sidebar */}
-                      <div className="space-y-4">
-                        
-                        {/* Thông tin người phụ trách */}
-                        {viewing.picUser && (
-                          <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-                              <h2 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                                <FiUser className="h-4 w-4 text-blue-600" />
-                                Người phụ trách
-                              </h2>
-                            </div>
-                            <div className="p-4">
-                              <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-sm font-semibold dark:bg-blue-900/20 dark:text-blue-400">
-                                  {viewing.picUser.label?.charAt(0).toUpperCase() || "—"}
-                                </div>
-                                <div>
-                                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                                    {viewing.picUser.label || "—"}
-                                  </p>
-                                  {viewing.picUser.subLabel && (
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                      {viewing.picUser.subLabel}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Thông tin thời gian */}
-                        <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-                            <h2 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                              <FiCalendar className="h-4 w-4 text-blue-600" />
-                              Thời gian
-                            </h2>
-                          </div>
-                          <div className="p-4 space-y-3">
-                            
-                            {/* Ngày bắt đầu */}
-                            {viewing.startDate && (
+                    <div className="space-y-5">
+                      {/* Thông tin chung */}
+                      <div>
+                        <h4 className="text-xs font-semibold text-black uppercase tracking-wider mb-3">Thông tin chung</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <DetailField label="Mã hợp đồng" value={viewing.contractCode} />
+                          <DetailField label="Bệnh viện" value={viewing.hospital?.label} />
+                          <DetailField
+                            label="Người phụ trách"
+                            value={viewing.picUser?.label ? (
                               <div>
-                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                                  Ngày ký HD
-                                </label>
-                                <div className="flex items-center gap-2">
-                                  <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
-                                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                                    {fmt(viewing.startDate)}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Ngày kết thúc */}
-                            {viewing.endDate && (
-                              <>
-                                {viewing.startDate && (
-                                  <div className="border-t border-gray-200 dark:border-gray-700"></div>
+                                <div className="font-medium text-gray-900">{viewing.picUser.label}</div>
+                                {viewing.picUser.subLabel && (
+                                  <div className="text-sm text-gray-500 mt-0.5">{viewing.picUser.subLabel}</div>
                                 )}
-                                <div>
-                                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                                    Ngày hết hạn HD
-                                  </label>
-                                  <div className="flex items-center gap-2">
-                                    <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
-                                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                                      {fmt(viewing.endDate)}
-                                    </p>
-                                  </div>
-                                </div>
-                              </>
-                            )}
-
-                          </div>
+                              </div>
+                            ) : null}
+                          />
+                          <DetailField label="Thời hạn" value={viewing.durationYears} />
+                          {(viewing as any).status && (
+                            <DetailField
+                              label="Trạng thái hợp đồng"
+                              value={
+                                (() => {
+                                  const status = (viewing as any).status;
+                                  const config = statusConfig[status] || statusConfig.DANG_HOAT_DONG;
+                                  return (
+                                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${config.bgColor} ${config.textColor} border ${config.borderColor || 'border-transparent'}`}>
+                                      {config.label}
+                                    </span>
+                                  );
+                                })()
+                              }
+                            />
+                          )}
                         </div>
-
                       </div>
+                      <hr className="my-3 border-gray-200" />
 
+                      {/* Thông tin tài chính */}
+                      <div>
+                        <h4 className="text-xs font-semibold text-black uppercase tracking-wider mb-3">Thông tin tài chính</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {viewing.yearlyPrice != null && (
+                            <DetailField
+                              label="Giá/năm"
+                              value={<span className="font-semibold text-gray-900">{formatCurrency(viewing.yearlyPrice)}</span>}
+                            />
+                          )}
+                          {viewing.totalPrice != null && (
+                            <DetailField
+                              label="Tổng tiền"
+                              value={<span className="font-semibold text-lg text-gray-900">{formatCurrency(viewing.totalPrice)}</span>}
+                            />
+                          )}
+                          <DetailField
+                            label="Trạng thái thanh toán"
+                            value={
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${(viewing as any).paymentStatus === 'THANH_TOAN_HET' ? 'bg-emerald-100 text-emerald-800' :
+                                (viewing as any).paymentStatus === 'DA_THANH_TOAN' ? 'bg-green-100 text-green-700' :
+                                  'bg-gray-100 text-gray-700'
+                                }`}>
+                                {(viewing as any).paymentStatus === 'THANH_TOAN_HET' ? 'Thanh toán hết' :
+                                  (viewing as any).paymentStatus === 'DA_THANH_TOAN' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+                              </span>
+                            }
+                          />
+                          {typeof (viewing as any).paidAmount === 'number' && (viewing as any).paidAmount > 0 && (
+                            <DetailField
+                              label="Đã thanh toán"
+                              value={<span className="font-semibold text-gray-900">{formatCurrency((viewing as any).paidAmount)}</span>}
+                            />
+                          )}
+                          {(() => {
+                            const total = viewing.totalPrice ?? 0;
+                            const paid = typeof (viewing as any).paidAmount === 'number' ? (viewing as any).paidAmount : 0;
+                            const remaining = total - paid;
+                            return (
+                              <DetailField
+                                label="Còn lại"
+                                value={
+                                  <span className={`font-semibold ${remaining <= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {remaining <= 0 ? '0 ₫' : formatCurrency(remaining)}
+                                  </span>
+                                }
+                              />
+                            );
+                          })()}
+                        </div>
+                      </div>
+                      <hr className="my-3 border-gray-200" />
+
+                      {/* Timeline */}
+                      <div>
+                        <h4 className="text-xs font-semibold text-black uppercase tracking-wider mb-3">Timeline</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {viewing.startDate && <DetailField label="Ngày ký HD" value={fmt(viewing.startDate)} />}
+                          {viewing.endDate && <DetailField label="Ngày hết hạn HD" value={fmt(viewing.endDate)} />}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ) : (
