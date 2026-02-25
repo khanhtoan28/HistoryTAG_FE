@@ -42,6 +42,8 @@ import MaintainContractsPage from "./pages/CustomerCare/MaintainContracts";
 import HospitalCareList from "./pages/CustomerCare/HospitalCareList";
 import HospitalDetailView from "./pages/CustomerCare/View/HospitalDetailView";
 import HospitalDetail from "./pages/CustomerCare/HospitalDetail";
+import LogOT from "./pages/PageClients/LogOT";
+import SuperAdminLogOT from "./pages/SuperAdmin/LogOT";
 import { AuthProvider } from "./contexts/AuthContext";
 
 // Helper to check SuperAdmin role
@@ -162,6 +164,7 @@ export default function App() {
             <Route path="/superadmin/calendar/maintenance" element={<MaintenanceCalendar />} />
             <Route path="/superadmin/hospital-care" element={<HospitalCareList />} />
             <Route path="/superadmin/hospital-care/:id" element={<HospitalDetail />} />
+            <Route path="/superadmin/log-ot" element={<SuperAdminLogOT />} />
 
           </Route>
 
@@ -204,6 +207,7 @@ export default function App() {
             <Route path="/line-chart" element={<LineChart />} />
             <Route path="/bar-chart" element={<BarChart />} />
             <Route path="/notifications" element={<AllNotificationsPage />} />
+            <Route path="/log-ot" element={<LogOT />} />
           </Route>
 
           {/* Auth Layout */}

@@ -197,6 +197,38 @@ export default function UserDropdown() {
           </li>
         </ul>
 
+        {/* Log OT
+        <DropdownItem
+          onItemClick={closeDropdown}
+          tag="a"
+          to={isSuperAdmin ? "/superadmin/log-ot" : "/log-ot"}
+          className="flex items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 18 18"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M9 2.25V15.75"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M3.75 9H14.25"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          Log OT
+        </DropdownItem> */}
+
         {/* Nút Đăng xuất */}
         <button
           onClick={handleSignOut}

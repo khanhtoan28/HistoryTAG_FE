@@ -15,6 +15,7 @@ import {
   DollarLineIcon,
   BoltIcon,
   CalenderIcon,
+  TimeIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 
@@ -85,6 +86,11 @@ const navItems: NavItem[] = [
       { name: "Chăm sóc khách hàng", path: "/superadmin/hospital-care", pro: false },
       // { name: "Viện có hợp đồng", path: "/superadmin/hospitals-with-contracts", pro: false },
     ],
+  },
+  {
+    name: "Log OT",
+    icon: <TimeIcon />,
+    path: "/superadmin/log-ot",
   },
 ];
 

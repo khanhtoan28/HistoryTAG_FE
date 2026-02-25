@@ -13,6 +13,7 @@ import {
   DocsIcon,
   BoxIconLine,
   TaskIcon,
+  TimeIcon,
 } from "../icons";
 import { UserIcon } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
@@ -80,6 +81,11 @@ const navItems: NavItem[] = [
     subItems: [
       { name: "Chăm sóc khách hàng", path: "/admin/hospital-care", pro: false },
     ],
+  },
+  {
+    name: "Log OT",
+    icon: <TimeIcon />,
+    path: "/log-ot",
   },
 ];
 
