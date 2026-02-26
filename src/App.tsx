@@ -34,6 +34,7 @@ import Agencies from "./pages/SuperAdmin/Agencies";
 import Hardware from "./pages/SuperAdmin/Hardware";
 import SuperAdminProfile from "./pages/SuperAdmin/Profile";
 import ImplementSuperTaskPage from "./pages/SuperAdmin/implementsuper-task";
+import ListHospitalImplementation from "./pages/implementationTaskNew/ListHospitalImplementation";
 import DevSuperTaskPage from "./pages/SuperAdmin/devsupertask";
 import MaintenanceSuperTaskPage from "./pages/SuperAdmin/maintenacesuper-task";
 import AllNotificationsPage from "./pages/Notifications/AllNotificationsPage";
@@ -150,6 +151,7 @@ export default function App() {
             <Route path="/superadmin/hardware" element={<Hardware />} />
             {/* SuperAdmin-specific task pages */}
             <Route path="/superadmin/implementation-tasks" element={<ImplementSuperTaskPage />} />
+            <Route path="/superadmin/implementation-tasks-new" element={<ListHospitalImplementation />} />
             <Route path="/superadmin/dev-tasks" element={<DevSuperTaskPage />} />
             <Route path="/superadmin/maintenance-tasks" element={<MaintenanceSuperTaskPage />} />
             <Route path="/superadmin/profile" element={<SuperAdminProfile />} />
@@ -185,6 +187,7 @@ export default function App() {
             <Route path="/calendar/deployment" element={<DeploymentCalendar />} />
             <Route path="/calendar/maintenance" element={<MaintenanceCalendar />} />
             <Route path="/implementation-tasks" element={<ImplementationTasksPage />} />
+            <Route path="/implementation-tasks-new" element={<ListHospitalImplementation />} />
             <Route path="/dev-tasks" element={<DevTasksPage />} />
             <Route path="/maintenance-tasks" element={<MaintenanceTasksPage />} />
 

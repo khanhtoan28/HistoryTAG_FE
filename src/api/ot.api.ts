@@ -128,6 +128,7 @@ export type OTAdminRequestDetailResponseDTO = {
   totalMinutes?: number;
   hours: number;
   monthlyNotes?: string;
+  rejectReason?: string;
   entries: OTEntryResponseDTO[];
 };
 

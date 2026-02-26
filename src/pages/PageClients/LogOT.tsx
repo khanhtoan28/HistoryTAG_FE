@@ -117,6 +117,7 @@ function mapDetailToEntries(detail: OTAdminRequestDetailResponseDTO): OTEntry[] 
 export default function LogOT() {
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[0]?.value || "01/2026");
   const [status, setStatus] = useState("draft");
+  const [rejectReason, setRejectReason] = useState("");
   const [requestId, setRequestId] = useState<number | null>(null);
   const [entries, setEntries] = useState<OTEntry[]>([]);
   const [notes, setNotes] = useState("");
@@ -143,6 +144,7 @@ export default function LogOT() {
       setRequestId(detail.id);
       setStatus(detail.status || "draft");
       setNotes(detail.monthlyNotes || "");
+      setRejectReason(detail.rejectReason || "");
       setEntries(mapDetailToEntries(detail));
     } catch (error) {
       console.error("Load admin OT by period failed", error);
@@ -150,6 +152,7 @@ export default function LogOT() {
       setEntries([]);
       setStatus("draft");
       setNotes("");
+      setRejectReason("");
       toast.error("Không tải được dữ liệu OT. Vui lòng thử lại.");
     } finally {
       setLoading(false);
@@ -330,6 +333,23 @@ export default function LogOT() {
             </div>
           </div>
         </div>
+
+        {status === "rejected" && rejectReason && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-900/10">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400">
+                <InfoIcon className="size-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-semibold text-red-800 dark:text-red-200">Lý do từ chối</h3>
+                <p className="mt-1 text-sm text-red-700 dark:text-red-300">{rejectReason}</p>
+                <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+                  Vui lòng chỉnh sửa theo góp ý trên rồi gửi lại phiếu phê duyệt.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:col-span-8">

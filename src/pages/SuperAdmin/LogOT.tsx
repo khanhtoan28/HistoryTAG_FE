@@ -80,6 +80,10 @@ function formatDeptLabel(dept: string | undefined): string {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+  draft: {
+    label: "Bản nháp",
+    className: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+  },
   submitted: {
     label: "Đã gửi",
     className: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
@@ -186,6 +190,7 @@ export default function SuperAdminLogOT() {
           month: monthParams.month,
           department: selectedDept || undefined,
           search: search.trim() || undefined,
+          status: "submitted",
           page: currentPage,
           size: itemsPerPage,
         }),
@@ -605,7 +610,7 @@ export default function SuperAdminLogOT() {
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                 {!loadingList && requests.map((row, idx) => {
                   const stt = (currentPage - 1) * itemsPerPage + idx + 1;
-                  const statusCfg = STATUS_CONFIG[row.status] || STATUS_CONFIG.submitted;
+                  const statusCfg = STATUS_CONFIG[row.status] ?? { label: row.status, className: "bg-gray-100 text-gray-700" };
                   const isSubmitted = row.status === "submitted";
                   const failedReason = failedReasons.get(row.id);
                   return (
