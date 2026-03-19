@@ -45,6 +45,7 @@ import HospitalDetailView from "./pages/CustomerCare/View/HospitalDetailView";
 import HospitalDetail from "./pages/CustomerCare/HospitalDetail";
 import LogOT from "./pages/PageClients/LogOT";
 import SuperAdminLogOT from "./pages/SuperAdmin/LogOT";
+import MapHospitals from "./pages/Utility/MapHospitals";
 import { AuthProvider } from "./contexts/AuthContext";
 
 // Helper to check SuperAdmin role
@@ -167,6 +168,7 @@ export default function App() {
             <Route path="/superadmin/hospital-care" element={<HospitalCareList />} />
             <Route path="/superadmin/hospital-care/:id" element={<HospitalDetail />} />
             <Route path="/superadmin/log-ot" element={<SuperAdminLogOT />} />
+            <Route path="/superadmin/utility/map-hospitals" element={<MapHospitals />} />
 
           </Route>
 
@@ -211,6 +213,7 @@ export default function App() {
             <Route path="/bar-chart" element={<BarChart />} />
             <Route path="/notifications" element={<AllNotificationsPage />} />
             <Route path="/log-ot" element={<LogOT />} />
+            <Route path="/utility/map-hospitals" element={<MapHospitals />} />
           </Route>
 
           {/* Auth Layout */}

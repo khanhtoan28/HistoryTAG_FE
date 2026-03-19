@@ -88,6 +88,11 @@ const navItems: NavItem[] = [
     icon: <TimeIcon />,
     path: "/log-ot",
   },
+  {
+    name: "Tiện ích",
+    icon: <PlugInIcon />,
+    subItems: [{ name: "Bản đồ bệnh viện", path: "/utility/map-hospitals", pro: false }],
+  },
 ];
 
 // Danh sách mục điều hướng “Khác”

@@ -93,6 +93,11 @@ const navItems: NavItem[] = [
     icon: <TimeIcon />,
     path: "/superadmin/log-ot",
   },
+  {
+    name: "Tiện ích",
+    icon: <PlugInIcon />,
+    subItems: [{ name: "Bản đồ bệnh viện", path: "/superadmin/utility/map-hospitals", pro: false }],
+  },
 ];
 
 const SuperAdminSidebar: React.FC = () => {
